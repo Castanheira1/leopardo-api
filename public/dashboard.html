@@ -1,0 +1,192 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Leopardo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>🐆 LEOPARDO</h1>
+            <div class="nav-links">
+                <span id="userName"></span>
+                <button onclick="logout()" class="btn btn-secondary">Sair</button>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="dashboard">
+            <h2>Minhas Viagens</h2>
+            <div class="card">
+                <h3>Nova Viagem</h3>
+                <form id="viagemForm">
+                    <button type="button" onclick="buscarDisponiveis()" class="btn btn-secondary">Buscar Veículos Disponíveis</button>
+                    <div id="veiculosDisponiveis" class="veiculos-list"></div>
+                    <div class="form-group">
+                        <label for="justificativa">Justificativa</label>
+                        <textarea id="justificativa" rows="3" required placeholder="Descreva o motivo do uso do veículo"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Solicitar Veículo</button>
+                    <p class="info-text">Você terá 30 minutos para retirar o veículo após a solicitação</p>
+                </form>
+            </div>
+            <div class="card">
+                <h3>Minhas Viagens</h3>
+                <div id="viagensList"></div>
+            </div>
+            <div id="message" class="message"></div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+    <script>
+        checkAuth();
+        const user = JSON.parse(localStorage.getItem('user'));
+        document.getElementById('userName').textContent = user.nome;
+        let veiculoSelecionado = null;
+
+        async function buscarDisponiveis() {
+            try {
+                const response = await fetchWithAuth('/api/viagens/disponiveis');
+                const veiculos = await response.json();
+                const container = document.getElementById('veiculosDisponiveis');
+                if (veiculos.length === 0) {
+                    container.innerHTML = '<p class="no-data">Nenhum veículo disponível no momento</p>';
+                    return;
+                }
+                container.innerHTML = '<h4>Selecione um veículo:</h4>' + veiculos.map(v => `
+                    <div class="veiculo-item ${veiculoSelecionado === v.id ? 'selected' : ''}" onclick="selecionarVeiculo(${v.id})">
+                        ${v.foto ? `<img src="${v.foto}" class="thumb" alt="${v.modelo}">` : ''}
+                        <div class="veiculo-info">
+                            <strong>${v.modelo}</strong> - ${v.placa}
+                            ${veiculoSelecionado === v.id ? '<span class="check-icon">✓</span>' : ''}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                showMessage('Erro ao buscar veículos', 'error');
+            }
+        }
+
+        function selecionarVeiculo(id) {
+            veiculoSelecionado = id;
+            buscarDisponiveis();
+        }
+
+        document.getElementById('viagemForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!veiculoSelecionado) {
+                showMessage('Selecione um veículo', 'error');
+                return;
+            }
+            const justificativa = document.getElementById('justificativa').value;
+            try {
+                const response = await fetchWithAuth('/api/viagens', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        veiculo_id: veiculoSelecionado,
+                        justificativa
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage('Viagem solicitada! Você tem 30 minutos para retirar o veículo.', 'success');
+                    document.getElementById('viagemForm').reset();
+                    document.getElementById('veiculosDisponiveis').innerHTML = '';
+                    veiculoSelecionado = null;
+                    carregarViagens();
+                } else {
+                    showMessage(data.error || 'Erro na solicitação', 'error');
+                }
+            } catch (error) {
+                showMessage('Erro ao solicitar viagem', 'error');
+            }
+        });
+
+        async function carregarViagens() {
+            try {
+                const response = await fetchWithAuth('/api/minhas-viagens');
+                const viagens = await response.json();
+                const container = document.getElementById('viagensList');
+                if (viagens.length === 0) {
+                    container.innerHTML = '<p class="no-data">Você ainda não tem viagens</p>';
+                    return;
+                }
+                container.innerHTML = viagens.map(v => {
+                    let statusTexto = '';
+                    if (v.status === 'pendente') statusTexto = 'AGUARDANDO RETIRADA';
+                    if (v.status === 'em_uso') statusTexto = 'EM USO';
+                    if (v.status === 'concluido') statusTexto = 'CONCLUÍDA';
+                    if (v.status === 'expirado') statusTexto = 'EXPIRADA';
+
+                    let contadorHtml = '';
+                    if (v.status === 'pendente' && v.segundos_desde_criacao) {
+                        const segundosRestantes = Math.max(0, 1800 - v.segundos_desde_criacao);
+                        const minutos = Math.floor(segundosRestantes / 60);
+                        const segundos = Math.floor(segundosRestantes % 60);
+                        contadorHtml = `<p class="countdown" data-viagem-id="${v.id}" data-segundos="${segundosRestantes}">⏱️ Tempo restante: <strong>${minutos}m ${segundos}s</strong></p>`;
+                    }
+
+                    return `
+                    <div class="agendamento-item status-${v.status}">
+                        <div class="agendamento-header">
+                            <strong>${v.modelo} - ${v.placa}</strong>
+                            <span class="badge badge-${v.status}">${statusTexto}</span>
+                        </div>
+                        <p><strong>Justificativa:</strong> ${v.justificativa || '—'}</p>
+                        ${v.data_inicio ? `<p><strong>Início:</strong> ${formatDate(v.data_inicio)}</p>` : ''}
+                        ${v.data_fim ? `<p><strong>Fim:</strong> ${formatDate(v.data_fim)}</p>` : ''}
+                        ${v.status === 'concluido' && v.tempo_horas ? `<p><strong>Duração:</strong> ${v.tempo_dias > 0 ? v.tempo_dias + ' dias ' : ''}${Math.round((v.tempo_horas % 24) * 10) / 10}h</p>` : ''}
+                        ${contadorHtml}
+                    </div>
+                `}).join('');
+
+                iniciarContadores();
+            } catch (error) {
+                showMessage('Erro ao carregar viagens', 'error');
+            }
+        }
+
+        function iniciarContadores() {
+            const contadores = document.querySelectorAll('.countdown');
+            contadores.forEach(el => {
+                const segundosInicial = parseInt(el.dataset.segundos);
+                let segundosRestantes = segundosInicial;
+
+                const interval = setInterval(() => {
+                    segundosRestantes--;
+                    if (segundosRestantes <= 0) {
+                        clearInterval(interval);
+                        el.innerHTML = '<span class="text-danger">EXPIRADO</span>';
+                        carregarViagens();
+                        return;
+                    }
+                    
+                    const min = Math.floor(segundosRestantes / 60);
+                    const seg = segundosRestantes % 60;
+                    el.innerHTML = `⏱️ Tempo restante: <strong>${min}m ${seg}s</strong>`;
+                }, 1000);
+            });
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('pt-BR');
+        }
+
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            setTimeout(() => {
+                messageDiv.className = 'message';
+                messageDiv.textContent = '';
+            }, 5000);
+        }
+
+        carregarViagens();
+        setInterval(carregarViagens, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,472 @@
+﻿/* RESET BÁSICO */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* PALETA */
+:root {
+    --vale-blue: #003d6d;
+    --vale-blue-dark: #002748;
+    --vale-cyan: #00a9ce;
+    --vale-cyan-dark: #0087a8;
+    --vale-green: #22c55e;
+    --bg-body-from: #f8fafc;
+    --bg-body-to: #e2e8f0;
+    --text-main: #1e293b;
+    --gray-soft: #e2e8f0;
+}
+
+/* BODY */
+body {
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(135deg, var(--bg-body-from) 0%, var(--bg-body-to) 100%);
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+/* NAVBAR */
+.navbar {
+    background: var(--vale-blue);
+    color: #fff;
+    padding: 0.9rem 0;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+}
+
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-logo-icon {
+    font-size: 1.6rem;
+}
+
+.nav-title-group h1 {
+    font-size: 1.45rem;
+    font-weight: 700;
+}
+
+.nav-title-group p {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 0.9rem;
+}
+
+/* CONTAINER PRINCIPAL */
+.container {
+    max-width: 1200px;
+    margin: 24px auto 40px;
+    padding: 0 16px 40px;
+}
+
+/* CARD-GERAL DO DASHBOARD */
+.dashboard {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+    overflow: hidden;
+}
+
+/* TABS */
+.tabs {
+    display: flex;
+    gap: 4px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.tab-btn {
+    padding: 14px 22px;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: var(--vale-blue);
+    background: #eff3f9;
+}
+
+.tab-btn.active {
+    color: var(--vale-blue);
+    background: #ffffff;
+    border-bottom: 3px solid var(--vale-cyan);
+}
+
+/* CONTEÚDO DAS TABS */
+.tab-content {
+    display: none;
+    padding: 28px 24px 32px;
+    min-height: 60vh;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* CARDS GENÉRICOS */
+.card {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 22px 20px;
+    margin-bottom: 22px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    border: 1px solid #e2e8f0;
+}
+
+.card h3,
+.card h4 {
+    color: var(--vale-blue);
+    margin-bottom: 18px;
+    font-weight: 600;
+    font-size: 1.2rem;
+}
+
+/* GRID DAS ESTATÍSTICAS (FICA BONITO NO DESKTOP) */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 18px;
+    margin-bottom: 22px;
+}
+
+/* CARD DE NÚMEROS GRANDES */
+.stat-card {
+    background: linear-gradient(135deg, var(--vale-blue) 0%, var(--vale-blue-dark) 100%);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 20px 18px;
+    text-align: center;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.stat-icon {
+    font-size: 1.6rem;
+    opacity: 0.95;
+}
+
+.stat-card h3 {
+    margin: 0;
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.stat-card p {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.92;
+}
+
+/* TOP USERS EM CARD BRANCO, OCUPANDO LINHA TODA */
+.top-users-card {
+    grid-column: 1 / -1;
+    background: #ffffff;
+    color: var(--text-main);
+}
+
+/* LISTA TOP USERS */
+.top-users-card ol {
+    padding-left: 22px;
+}
+
+/* ITENS DE VEÍCULO */
+.veiculo-item {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.veiculo-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+
+.veiculo-item img {
+    width: 120px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.veiculo-item .info {
+    flex: 1;
+}
+
+.veiculo-item .info strong {
+    font-size: 1.05rem;
+    color: var(--vale-blue);
+}
+
+.veiculo-item .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* AGENDAMENTOS */
+.agendamento-item {
+    background: #ffffff;
+    border-radius: 12px;
+    border-left: 4px solid var(--vale-cyan);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.agendamento-item.in-progress {
+    border-left-color: #facc15;
+}
+
+.agendamento-item.completed {
+    border-left-color: var(--vale-green);
+    opacity: 0.96;
+}
+
+.agendamento-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.agendamento-actions {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* FORMULÁRIOS */
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+}
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--vale-blue);
+    font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 11px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--vale-cyan);
+    box-shadow: 0 0 0 3px rgba(0, 169, 206, 0.25);
+}
+
+/* BOTÕES */
+.btn {
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.btn:active {
+    transform: translateY(1px);
+    box-shadow: none;
+}
+
+.btn-primary {
+    background: var(--vale-cyan);
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(0, 169, 206, 0.35);
+}
+
+.btn-primary:hover {
+    background: var(--vale-cyan-dark);
+}
+
+.btn-secondary {
+    background: #64748b;
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    background: #475569;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+.btn-success {
+    background: var(--vale-green);
+    color: #fff;
+}
+
+.btn-success:hover {
+    background: #16a34a;
+}
+
+.btn-sm {
+    padding: 7px 14px;
+    font-size: 0.8rem;
+}
+
+/* MENSAGENS */
+.message {
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin: 18px 0;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.message.success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #22c55e;
+}
+
+.message.error {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #ef4444;
+}
+
+/* BADGES */
+.badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-ativo {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.badge-inativo {
+    background: #e5e7eb;
+    color: #4b5563;
+}
+
+.badge-in-progress {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+/* RESPONSIVO */
+@media (max-width: 768px) {
+    .nav-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .tab-content {
+        padding: 22px 16px 26px;
+    }
+
+    .veiculo-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .veiculo-item img {
+        width: 100%;
+        max-width: 260px;
+        height: 160px;
+    }
+
+    .veiculo-item .actions {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .btn-sm {
+        flex: 1 1 45%;
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .nav-title-group h1 {
+        font-size: 1.25rem;
+    }
+
+    .card {
+        padding: 18px 14px;
+    }
+
+    .stat-card h3 {
+        font-size: 2rem;
+    }
+}

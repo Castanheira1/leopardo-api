@@ -1,0 +1,433 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEOPARDO - Painel Administrativo</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="app.js"></script>
+</head>
+<body>
+<nav class="navbar">
+    <div class="nav-container">
+        <h1><i class="fas fa-paw"></i> Leopardo Admin</h1>
+        <div class="nav-links">
+            <span id="userName">Admin</span>
+            <button id="logoutBtn" class="btn btn-danger">Sair</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="dashboard">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('stats', event)">Dashboard</button>
+            <button class="tab-btn" onclick="showTab('pendentes', event)">Pendentes</button>
+            <button class="tab-btn" onclick="showTab('em-uso', event)">Em Uso</button>
+            <button class="tab-btn" onclick="showTab('veiculos', event)">Veículos</button>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="stats" class="tab-content active">
+            <h2>Estatísticas Gerais</h2>
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <i class="fas fa-car stat-icon"></i>
+                    <h3 id="totalVeiculos">0</h3>
+                    <p>Total Veículos</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-check-circle stat-icon"></i>
+                    <h3 id="veiculosAtivos">0</h3>
+                    <p>Veículos Ativos</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-users stat-icon"></i>
+                    <h3 id="totalUsuarios">0</h3>
+                    <p>Total Usuários</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-clock stat-icon"></i>
+                    <h3 id="viagensPendentes">0</h3>
+                    <p>Pendentes</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-road stat-icon"></i>
+                    <h3 id="viagensEmUso">0</h3>
+                    <p>Em Uso</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-check stat-icon"></i>
+                    <h3 id="viagensConcluidas">0</h3>
+                    <p>Concluídas</p>
+                </div>
+            </section>
+            <button onclick="exportarXLSX()" class="btn btn-primary">
+                <i class="fas fa-download"></i> Exportar Histórico Excel
+            </button>
+        </div>
+
+        <!-- Pendentes -->
+        <div id="pendentes" class="tab-content">
+            <div class="card">
+                <h3>Viagens Pendentes (Aguardando Retirada)</h3>
+                <div id="pendentesList">Carregando...</div>
+            </div>
+        </div>
+
+        <!-- Em Uso -->
+        <div id="em-uso" class="tab-content">
+            <div class="card">
+                <h3>Viagens Em Uso</h3>
+                <div id="emUsoList">Carregando...</div>
+            </div>
+        </div>
+
+        <!-- Veículos -->
+        <div id="veiculos" class="tab-content">
+            <div class="card">
+                <h3>Cadastrar Novo Veículo</h3>
+                <form id="veiculoForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Modelo</label>
+                            <input type="text" name="modelo" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Placa</label>
+                            <input type="text" name="placa" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Foto</label>
+                        <input type="file" name="foto" accept="image/*">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Cadastrar</button>
+                </form>
+            </div>
+            <div class="card">
+                <h3>Veículos Cadastrados</h3>
+                <div id="veiculosList">Carregando...</div>
+            </div>
+            <div class="card" style="margin-top: 30px; border: 2px solid #dc2626;">
+                <h3 style="color: #dc2626;"><i class="fas fa-key"></i> Resetar Senha de Usuário</h3>
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="resetMatricula" placeholder="Matrícula do usuário" style="padding: 12px; font-size: 16px; flex: 1; min-width: 200px;">
+                    <button onclick="resetarSenhaUsuario()" class="btn btn-danger">Resetar para 123456</button>
+                </div>
+                <p style="margin-top: 8px; color: #666; font-size: 14px;">
+                    A senha será alterada para <strong>123456</strong>. O usuário troca depois.
+                </p>
+            </div>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+</div>
+
+<script>
+    // exige admin
+    checkAuth(true);
+    document.getElementById('userName').textContent =
+        JSON.parse(localStorage.getItem('user') || '{}').nome || 'Admin';
+
+    function showTab(tab, e) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tab).classList.add('active');
+        e.target.classList.add('active');
+
+        if (tab === 'stats') carregarStats();
+        if (tab === 'pendentes') carregarPendentes();
+        if (tab === 'em-uso') carregarEmUso();
+        if (tab === 'veiculos') carregarVeiculos();
+    }
+
+    async function carregarStats() {
+        const r = await fetchWithAuth('/api/admin/stats');
+        const d = await r.json();
+        document.getElementById('totalVeiculos').textContent = d.totalVeiculos || 0;
+        document.getElementById('veiculosAtivos').textContent = d.veiculosAtivos || 0;
+        document.getElementById('totalUsuarios').textContent = d.totalUsuarios || 0;
+        document.getElementById('viagensPendentes').textContent = d.viagensPendentes || 0;
+        document.getElementById('viagensEmUso').textContent = d.viagensEmUso || 0;
+        document.getElementById('viagensConcluidas').textContent = d.viagensConcluidas || 0;
+    }
+
+    async function carregarPendentes() {
+        const r = await fetchWithAuth('/api/admin/viagens/pendentes');
+        const v = await r.json();
+        const el = document.getElementById('pendentesList');
+
+        if (!v.length) {
+            el.innerHTML = '<p class="no-data">Nenhuma viagem pendente</p>';
+            return;
+        }
+
+        el.innerHTML =
+            `<table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Veículo</th>
+                    <th>Usuário</th>
+                    <th>Justificativa</th>
+                    <th>Tempo Restante</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>` +
+            v.map(g => {
+                // minutos_passados vem do backend
+                const segundosRestantes = Math.max(
+                    0,
+                    Math.round(30 * 60 - g.minutos_passados * 60)
+                );
+                const minRestantes = Math.floor(segundosRestantes / 60);
+                const segRestantes = segundosRestantes % 60;
+                const classeTempo =
+                    minRestantes <= 5 ? 'danger' :
+                        minRestantes <= 10 ? 'warning' : '';
+
+                return `
+                  <tr>
+                    <td>${g.modelo} - ${g.placa}</td>
+                    <td>${g.nome}<br><small>${g.matricula}</small></td>
+                    <td>${g.justificativa}</td>
+                    <td class="${classeTempo}">
+                      <span class="countdown-admin"
+                            data-segundos="${segundosRestantes}">
+                        <strong>${minRestantes}m ${segRestantes}s</strong>
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn btn-success btn-sm"
+                              onclick="darStart(${g.id})">
+                        START
+                      </button>
+                    </td>
+                  </tr>`;
+            }).join('') +
+            `</tbody></table>`;
+
+        iniciarContadoresAdmin();
+    }
+
+    function iniciarContadoresAdmin() {
+        const contadores = document.querySelectorAll('.countdown-admin');
+
+        contadores.forEach(el => {
+            let segundosRestantes = parseInt(el.dataset.segundos, 10);
+
+            const interval = setInterval(() => {
+                segundosRestantes--;
+
+                if (segundosRestantes <= 0) {
+                    clearInterval(interval);
+                    el.innerHTML =
+                        '<span style="color:#ef4444;font-weight:bold;">EXPIRADO</span>';
+                    return;
+                }
+
+                const min = Math.floor(segundosRestantes / 60);
+                const seg = segundosRestantes % 60;
+                el.innerHTML = `<strong>${min}m ${seg}s</strong>`;
+
+                const td = el.closest('td');
+                if (min <= 5) {
+                    td.className = 'danger';
+                } else if (min <= 10) {
+                    td.className = 'warning';
+                } else {
+                    td.className = '';
+                }
+            }, 1000);
+        });
+    }
+
+    async function carregarEmUso() {
+        const r = await fetchWithAuth('/api/admin/viagens/em-uso');
+        const v = await r.json();
+        const el = document.getElementById('emUsoList');
+
+        if (!v.length) {
+            el.innerHTML = '<p class="no-data">Nenhuma viagem em uso</p>';
+            return;
+        }
+
+        el.innerHTML =
+            `<table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Veículo</th>
+                    <th>Usuário</th>
+                    <th>Justificativa</th>
+                    <th>Início</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>` +
+            v.map(g => `
+              <tr>
+                <td>${g.modelo} - ${g.placa}</td>
+                <td>${g.nome}<br><small>${g.matricula}</small></td>
+                <td>${g.justificativa}</td>
+                <td>${g.data_inicio_br
+                    ? new Date(g.data_inicio_br).toLocaleString('pt-BR')
+                    : '—'}</td>
+                <td>
+                  <button class="btn btn-danger btn-sm"
+                          onclick="darStop(${g.id})">
+                    STOP
+                  </button>
+                </td>
+              </tr>`).join('') +
+            `</tbody></table>`;
+    }
+
+    async function darStart(id) {
+        if (!confirm("Confirmar retirada do veículo?")) return;
+        const r = await fetchWithAuth(`/api/admin/viagens/${id}/start`, {method: 'POST'});
+        showMessage(r.ok ? "Viagem iniciada!" : "Erro ao iniciar",
+            r.ok ? "success" : "error");
+        if (r.ok) {
+            carregarPendentes();
+            carregarEmUso();
+            carregarStats();
+        }
+    }
+
+    async function darStop(id) {
+        if (!confirm("Confirmar devolução do veículo?")) return;
+        const r = await fetchWithAuth(`/api/admin/viagens/${id}/stop`, {method: 'POST'});
+        showMessage(r.ok ? "Viagem finalizada!" : "Erro ao finalizar",
+            r.ok ? "success" : "error");
+        if (r.ok) {
+            carregarEmUso();
+            carregarStats();
+        }
+    }
+
+    function exportarXLSX() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showMessage('Token não encontrado. Faça login novamente.', 'error');
+            return;
+        }
+        const url =
+            `${window.location.origin}/api/admin/viagens/export-xlsx?token=${encodeURIComponent(token)}`;
+        window.open(url, '_blank');
+    }
+
+    document.getElementById('veiculoForm').onsubmit = async e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const r = await fetchWithAuth('/api/veiculos', {
+            method: 'POST',
+            body: fd
+        });
+        const data = await r.json();
+        showMessage(r.ok ? "Veículo cadastrado!" : (data.error || "Erro"),
+            r.ok ? "success" : "error");
+        if (r.ok) {
+            e.target.reset();
+            carregarVeiculos();
+            carregarStats();
+        }
+    };
+
+    async function carregarVeiculos() {
+        const r = await fetchWithAuth('/api/veiculos');
+        const v = await r.json();
+        const el = document.getElementById('veiculosList');
+
+        el.innerHTML = v.length
+            ? v.map(c => `
+                <div class="veiculo-item">
+                    <div class="info">
+                        <strong>${c.modelo}</strong> - ${c.placa.toUpperCase()}<br>
+                        ${c.foto
+                ? `<img src="${c.foto}?t=${Date.now()}" class="thumb">`
+                : '<em>Sem foto</em>'}
+                        <span class="badge badge-${c.ativo ? 'ativo' : 'inativo'}">
+                            ${c.ativo ? 'ATIVO' : 'INATIVO'}
+                        </span>
+                    </div>
+                    <div class="actions">
+                        <button onclick="toggleVeiculo(${c.id})"
+                                class="btn btn-secondary btn-sm">
+                            ${c.ativo ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button onclick="excluirVeiculo(${c.id})"
+                                class="btn btn-danger btn-sm">
+                            Excluir
+                        </button>
+                    </div>
+                </div>`).join('')
+            : '<p class="no-data">Nenhum veículo</p>';
+    }
+
+    async function toggleVeiculo(id) {
+        const r = await fetchWithAuth(`/api/veiculos/${id}/toggle`, {method: 'PATCH'});
+        const d = await r.json();
+        showMessage(r.ok ? "Status alterado" : (d.error || "Erro"),
+            r.ok ? "success" : "error");
+        if (r.ok) {
+            carregarVeiculos();
+            carregarStats();
+        }
+    }
+
+    async function excluirVeiculo(id) {
+        if (!confirm("Excluir permanentemente?")) return;
+        const r = await fetchWithAuth(`/api/veiculos/${id}`, {method: 'DELETE'});
+        showMessage(r.ok ? "Excluído!" : "Erro",
+            r.ok ? "success" : "error");
+        if (r.ok) {
+            carregarVeiculos();
+            carregarStats();
+        }
+    }
+
+    async function resetarSenhaUsuario() {
+        const matricula = document.getElementById('resetMatricula').value.trim();
+        if (!matricula) return showMessage('Digite a matrícula', 'error');
+        if (!confirm(`Resetar senha do usuário ${matricula} para 123456?`)) return;
+        const r = await fetchWithAuth('/api/admin/reset-senha', {
+            method: 'POST',
+            body: JSON.stringify({ matricula })
+        });
+        const d = await r.json();
+        showMessage(r.ok ? d.message : (d.error || 'Erro'), r.ok ? 'success' : 'error');
+        if (r.ok) document.getElementById('resetMatricula').value = '';
+    }
+
+    function showMessage(txt, type = "success") {
+        const m = document.getElementById('message');
+        m.textContent = txt;
+        m.className = `message ${type}`;
+        setTimeout(() => {
+            m.className = "message";
+            m.textContent = "";
+        }, 4000);
+    }
+
+    document.getElementById('logoutBtn').onclick = () => {
+        localStorage.clear();
+        location.href = '/';
+    };
+
+    // inicial
+    carregarStats();
+
+    // auto refresh
+    setInterval(() => {
+        const activeTab = document.querySelector('.tab-content.active')?.id;
+        if (activeTab === 'pendentes') carregarPendentes();
+        if (activeTab === 'em-uso') carregarEmUso();
+        if (activeTab === 'stats') carregarStats();
+    }, 30000);
+</script>
+</body>
+</html>

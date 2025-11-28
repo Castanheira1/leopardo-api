@@ -1,0 +1,100 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro - Leopardo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <div class="logo">
+                <h1>🚗 LEOPARDO</h1>
+                <p>Criar Nova Conta</p>
+            </div>
+
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="nome">Nome Completo</label>
+                    <input type="text" id="nome" name="nome" required placeholder="Digite seu nome completo">
+                </div>
+
+                <div class="form-group">
+                    <label for="funcao">Função</label>
+                    <input type="text" id="funcao" name="funcao" required placeholder="Ex: Analista, Gerente">
+                </div>
+
+                <div class="form-group">
+                    <label for="matricula">Matrícula</label>
+                    <input type="text" id="matricula" name="matricula" required placeholder="6-10 dígitos" pattern="[0-9]{6,10}">
+                    <small>Apenas números, 6 a 10 dígitos</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="senha">Senha</label>
+                    <input type="password" id="senha" name="senha" required placeholder="Mínimo 8 caracteres" minlength="8">
+                    <small>Mínimo 8 caracteres, com maiúscula, minúscula e número</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmarSenha">Confirmar Senha</label>
+                    <input type="password" id="confirmarSenha" name="confirmarSenha" required placeholder="Digite a senha novamente">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Criar Conta</button>
+
+                <div class="links">
+                    <a href="index.html">Já tenho conta</a>
+                </div>
+            </form>
+
+            <div id="message" class="message"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const nome = document.getElementById('nome').value;
+            const funcao = document.getElementById('funcao').value;
+            const matricula = document.getElementById('matricula').value;
+            const senha = document.getElementById('senha').value;
+            const confirmarSenha = document.getElementById('confirmarSenha').value;
+            const messageDiv = document.getElementById('message');
+
+            if (senha !== confirmarSenha) {
+                messageDiv.className = 'message error';
+                messageDiv.textContent = 'As senhas não coincidem';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome, funcao, matricula, senha })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.className = 'message success';
+                    messageDiv.textContent = 'Conta criada com sucesso! Redirecionando...';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 2000);
+                } else {
+                    messageDiv.className = 'message error';
+                    messageDiv.textContent = data.error || 'Erro ao criar conta';
+                }
+            } catch (error) {
+                messageDiv.className = 'message error';
+                messageDiv.textContent = 'Erro de conexão com o servidor';
+            }
+        });
+    </script>
+</body>
+</html>
