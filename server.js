@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
@@ -11,14 +11,26 @@ const jwt = require("jsonwebtoken");
 const ExcelJS = require('exceljs');
 const { Storage } = require('@google-cloud/storage');
 
-// Configuração da chave GCP (Render / Railway / etc)
-if (process.env.GCP_SERVICE_ACCOUNT_KEY) {
-  const gcpKeyPath = path.join(__dirname, 'gcp-key.json');
-  fs.writeFileSync(gcpKeyPath, process.env.GCP_SERVICE_ACCOUNT_KEY);
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = gcpKeyPath;
-}
-
 require("dotenv").config();
+
+// Google Cloud Storage (opcional)
+let gcsStorage = null;
+const bucketName = process.env.GCS_BUCKET_NAME;
+
+if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
+  try {
+    const credentials = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY);
+    if (credentials.private_key) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
+    gcsStorage = new Storage({ credentials });
+    console.log("✅ GCS configurado");
+  } catch (err) {
+    console.error("❌ Erro GCS:", err.message);
+  }
+} else {
+  console.log("⚠️ GCS não configurado");
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,22 +56,23 @@ pool.connect()
   .then(client => { console.log("✅ Conectado ao PostgreSQL"); client.release(); })
   .catch(err => console.log("Erro ao conectar:", err.message));
 
-// Google Cloud Storage
-const gcsStorage = new Storage();
-const bucketName = process.env.GCS_BUCKET_NAME;
-
 const uploadToGCS = async (file) => {
-  if (!file) return null;
+  if (!file || !gcsStorage || !bucketName) return null;
 
-  const gcsFileName = `uploads/${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
-  const blob = gcsStorage.bucket(bucketName).file(gcsFileName);
+  try {
+    const gcsFileName = `uploads/${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+    const blob = gcsStorage.bucket(bucketName).file(gcsFileName);
 
-  await blob.save(file.buffer, {
-    contentType: file.mimetype,
-    public: true,
-  });
+    await blob.save(file.buffer, {
+      contentType: file.mimetype,
+      public: true,
+    });
 
-  return `https://storage.googleapis.com/${bucketName}/${gcsFileName}`;
+    return `https://storage.googleapis.com/${bucketName}/${gcsFileName}`;
+  } catch (err) {
+    console.error("Erro upload GCS:", err.message);
+    return null;
+  }
 };
 
 const upload = multer({
@@ -459,7 +472,6 @@ app.get("/api/admin/stats", verificarAuth, verificarAdmin, async (req, res) => {
   }
 });
 
-// NOVA ROTA: ADMIN RESETAR SENHA POR MATRÍCULA
 app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, res) => {
   const { matricula } = req.body;
   if (!matricula || matricula.length < 6) {
@@ -467,7 +479,7 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   }
 
   try {
-    const novaSenha = '123456'; // senha padrão
+    const novaSenha = '123456';
     const senha_hash = await bcrypt.hash(novaSenha, 10);
 
     const { rowCount } = await pool.query(
@@ -489,11 +501,9 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   }
 });
 
-// Servir front-end
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-// Tratamento global de erros
 app.use((err, req, res, next) => {
   console.error("ERRO GLOBAL:", err.message);
   res.status(500).json({ error: "Erro interno no servidor" });
