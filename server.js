@@ -11,25 +11,27 @@ const jwt = require("jsonwebtoken");
 const ExcelJS = require('exceljs');
 const { Storage } = require('@google-cloud/storage');
 
-require("dotenv").config();
-
-// Google Cloud Storage (opcional)
+    // Carrega variáveis de ambiente primeiro
+    require("dotenv").config();
+// Configuração do Google Cloud Storage
+// Inicializa as variáveis depois de carregar o .env. Apenas cria o cliente
+// se houver chave de serviço e nome do bucket definidos nas variáveis de ambiente.
 let gcsStorage = null;
 const bucketName = process.env.GCS_BUCKET_NAME;
-
 if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
   try {
     const credentials = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY);
+    // Corrige quebras de linha escapadas na chave privada
     if (credentials.private_key) {
       credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
     }
     gcsStorage = new Storage({ credentials });
-    console.log("✅ GCS configurado");
+    console.log('✅ GCS configurado');
   } catch (err) {
-    console.error("❌ Erro GCS:", err.message);
+    console.error('❌ Erro ao configurar GCS:', err.message);
   }
 } else {
-  console.log("⚠️ GCS não configurado");
+  console.log('⚠️ GCS não configurado');
 }
 
 const app = express();
@@ -56,21 +58,22 @@ pool.connect()
   .then(client => { console.log("✅ Conectado ao PostgreSQL"); client.release(); })
   .catch(err => console.log("Erro ao conectar:", err.message));
 
-const uploadToGCS = async (file) => {
-  if (!file || !gcsStorage || !bucketName) return null;
+// Removido: inicialização antiga do Google Cloud Storage.
+// A configuração segura do GCS (gcsStorageSafe / bucketNameSafe) já ocorre no início do arquivo.
 
+const uploadToGCS = async (file) => {
+  // Usa as variáveis gcsStorage e bucketName. Retorna null se não configurado ou se não houver arquivo.
+  if (!file || !gcsStorage || !bucketName) return null;
   try {
     const gcsFileName = `uploads/${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
     const blob = gcsStorage.bucket(bucketName).file(gcsFileName);
-
     await blob.save(file.buffer, {
       contentType: file.mimetype,
       public: true,
     });
-
     return `https://storage.googleapis.com/${bucketName}/${gcsFileName}`;
   } catch (err) {
-    console.error("Erro upload GCS:", err.message);
+    console.error('Erro upload GCS:', err.message);
     return null;
   }
 };
@@ -187,10 +190,14 @@ app.post("/api/veiculos", verificarAuth, verificarAdmin, upload.single("foto"), 
       [modelo, placa.toUpperCase(), fotoUrl]
     );
     res.json(rows[0]);
-  } catch (err) {
-    console.error("Erro ao cadastrar veículo:", err.message);
-    res.status(500).json({ error: err.detail || "Erro ao cadastrar veículo" });
-  }
+      } catch (err) {
+        // 23505 é erro de duplicidade de chave (placa já cadastrada)
+        if (err.code === '23505') {
+          return res.status(400).json({ error: "Placa já cadastrada" });
+        }
+        console.error("Erro ao cadastrar veículo:", err.message);
+        res.status(500).json({ error: err.detail || "Erro ao cadastrar veículo" });
+      }
 });
 
 app.get("/api/veiculos", verificarAuth, async (req, res) => {
@@ -472,6 +479,7 @@ app.get("/api/admin/stats", verificarAuth, verificarAdmin, async (req, res) => {
   }
 });
 
+// NOVA ROTA: ADMIN RESETAR SENHA POR MATRÍCULA
 app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, res) => {
   const { matricula } = req.body;
   if (!matricula || matricula.length < 6) {
@@ -479,7 +487,7 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   }
 
   try {
-    const novaSenha = '123456';
+    const novaSenha = '123456'; // senha padrão
     const senha_hash = await bcrypt.hash(novaSenha, 10);
 
     const { rowCount } = await pool.query(
@@ -501,9 +509,11 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   }
 });
 
+// Servir front-end
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
+// Tratamento global de erros
 app.use((err, req, res, next) => {
   console.error("ERRO GLOBAL:", err.message);
   res.status(500).json({ error: "Erro interno no servidor" });
