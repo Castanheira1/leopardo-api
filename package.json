@@ -4,7 +4,7 @@
   "description": "Sistema de agendamento de veículos corporativos",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --openssl-legacy-provider server.js",
     "dev": "nodemon server.js",
     "test": "jest --coverage"
   },
