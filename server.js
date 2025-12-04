@@ -11,28 +11,29 @@ const jwt = require("jsonwebtoken");
 const ExcelJS = require('exceljs');
 const { Storage } = require('@google-cloud/storage');
 
-    // Carrega variáveis de ambiente primeiro
+    // Configuração da chave GCP removida. A chave agora é lida diretamente via variáveis de ambiente.
+
     require("dotenv").config();
-// Configuração do Google Cloud Storage
-// Inicializa as variáveis depois de carregar o .env. Apenas cria o cliente
-// se houver chave de serviço e nome do bucket definidos nas variáveis de ambiente.
-let gcsStorage = null;
-const bucketName = process.env.GCS_BUCKET_NAME;
-if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
-  try {
-    const credentials = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY);
-    // Corrige quebras de linha escapadas na chave privada
-    if (credentials.private_key) {
-      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+
+    // Configuração segura do Google Cloud Storage
+    // Inicializa o cliente do GCS apenas se houver chave e bucket definidos.
+    let gcsStorage = null;
+    const bucketName = process.env.GCS_BUCKET_NAME;
+    if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
+      try {
+        const credentials = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY);
+        // Corrige as quebras de linha da chave privada (vêm escapadas no .env)
+        if (credentials.private_key) {
+          credentials.private_key = credentials.private_key.split("\\n").join("\n");
+        }
+        gcsStorage = new Storage({ credentials });
+        console.log("✅ GCS configurado");
+      } catch (err) {
+        console.error("❌ Erro ao configurar GCS:", err.message);
+      }
+    } else {
+      console.log("⚠️ GCS não configurado");
     }
-    gcsStorage = new Storage({ credentials });
-    console.log('✅ GCS configurado');
-  } catch (err) {
-    console.error('❌ Erro ao configurar GCS:', err.message);
-  }
-} else {
-  console.log('⚠️ GCS não configurado');
-}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -58,11 +59,11 @@ pool.connect()
   .then(client => { console.log("✅ Conectado ao PostgreSQL"); client.release(); })
   .catch(err => console.log("Erro ao conectar:", err.message));
 
-// Removido: inicialização antiga do Google Cloud Storage.
-// A configuração segura do GCS (gcsStorageSafe / bucketNameSafe) já ocorre no início do arquivo.
+    // Google Cloud Storage
+    // A inicialização de gcsStorage e bucketName agora acontece após o carregamento do .env.
 
 const uploadToGCS = async (file) => {
-  // Usa as variáveis gcsStorage e bucketName. Retorna null se não configurado ou se não houver arquivo.
+  // Retorna null se não houver arquivo ou se o GCS não estiver configurado
   if (!file || !gcsStorage || !bucketName) return null;
   try {
     const gcsFileName = `uploads/${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
@@ -190,14 +191,14 @@ app.post("/api/veiculos", verificarAuth, verificarAdmin, upload.single("foto"), 
       [modelo, placa.toUpperCase(), fotoUrl]
     );
     res.json(rows[0]);
-      } catch (err) {
-        // 23505 é erro de duplicidade de chave (placa já cadastrada)
-        if (err.code === '23505') {
-          return res.status(400).json({ error: "Placa já cadastrada" });
-        }
-        console.error("Erro ao cadastrar veículo:", err.message);
-        res.status(500).json({ error: err.detail || "Erro ao cadastrar veículo" });
-      }
+  } catch (err) {
+    // Erro 23505 indica violação de chave única (placa duplicada)
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Placa já cadastrada' });
+    }
+    console.error('Erro ao cadastrar veículo:', err.message);
+    res.status(500).json({ error: err.detail || 'Erro ao cadastrar veículo' });
+  }
 });
 
 app.get("/api/veiculos", verificarAuth, async (req, res) => {
