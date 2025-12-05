@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -350,8 +350,8 @@
                         ${c.foto
                 ? `<img src="${c.foto}?t=${Date.now()}" class="thumb">`
                 : '<em>Sem foto</em>'}
-                        <span class="badge badge-${c.ativo ? 'ativo' : 'inativo'}">
-                            ${c.ativo ? 'ATIVO' : 'INATIVO'}
+                        <span class="badge badge-${c.em_uso ? 'em-uso' : c.ativo ? 'ativo' : 'inativo'}">
+                            ${c.em_uso ? 'EM USO' : c.ativo ? 'ATIVO' : 'INATIVO'}
                         </span>
                     </div>
                     <div class="actions">
