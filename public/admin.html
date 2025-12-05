@@ -29,7 +29,6 @@
             <button class="tab-btn" onclick="showTab('veiculos', event)">Veículos</button>
         </div>
 
-        <!-- Dashboard -->
         <div id="stats" class="tab-content active">
             <h2>Estatísticas Gerais</h2>
             <section class="stats-grid">
@@ -69,7 +68,6 @@
             </button>
         </div>
 
-        <!-- Pendentes -->
         <div id="pendentes" class="tab-content">
             <div class="card">
                 <h3>Viagens Pendentes (Aguardando Retirada)</h3>
@@ -77,7 +75,6 @@
             </div>
         </div>
 
-        <!-- Em Uso -->
         <div id="em-uso" class="tab-content">
             <div class="card">
                 <h3>Viagens Em Uso</h3>
@@ -85,7 +82,6 @@
             </div>
         </div>
 
-        <!-- Veículos -->
         <div id="veiculos" class="tab-content">
             <div class="card">
                 <h3>Cadastrar Novo Veículo</h3>
@@ -128,7 +124,6 @@
 </div>
 
 <script>
-    // exige admin
     checkAuth(true);
     document.getElementById('userName').textContent =
         JSON.parse(localStorage.getItem('user') || '{}').nome || 'Admin';
@@ -179,7 +174,6 @@
                 </thead>
                 <tbody>` +
             v.map(g => {
-                // minutos_passados vem do backend
                 const segundosRestantes = Math.max(
                     0,
                     Math.round(30 * 60 - g.minutos_passados * 60)
@@ -274,7 +268,7 @@
                 <td>${g.nome}<br><small>${g.matricula}</small></td>
                 <td>${g.justificativa}</td>
                 <td>${g.data_inicio_br
-                    ? new Date(g.data_inicio_br).toLocaleString('pt-BR')
+                    ? new Date(g.data_inicio_br).toLocaleString('pt-BR', {timeZone: 'America/Sao_Paulo'})
                     : '—'}</td>
                 <td>
                   <button class="btn btn-danger btn-sm"
@@ -418,10 +412,8 @@
         location.href = '/';
     };
 
-    // inicial
     carregarStats();
 
-    // auto refresh
     setInterval(() => {
         const activeTab = document.querySelector('.tab-content.active')?.id;
         if (activeTab === 'pendentes') carregarPendentes();
