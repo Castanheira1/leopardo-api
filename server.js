@@ -56,7 +56,7 @@ if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
       timeout: 30000
     });
 
-    console.log("Google Cloud Storage inicializado CORRETAMENTE (Render 2025 OK)");
+    console.log("Google Cloud Storage inicializado CORRETAMENTE");
   } catch (err) {
     console.error("FALHA AO INICIAR GCS:", err.message);
     gcsStorage = null;
@@ -247,7 +247,7 @@ app.get("/api/admin/viagens/pendentes", verificarAuth, verificarAdmin, async (re
 app.get("/api/admin/viagens/em-uso", verificarAuth, verificarAdmin, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT v.*, ve.modelo, ve.placa, u.nome, u.matricula,
-           v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_inicio_br
+           TO_CHAR(v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY, HH24:MI:SS') as data_inicio_br
     FROM viagens v JOIN veiculos ve ON v.veiculo_id = ve.id
     JOIN usuarios u ON v.usuario_id = u.id
     WHERE v.status='em_uso' ORDER BY v.data_inicio
@@ -275,58 +275,111 @@ app.post("/api/admin/viagens/:id/stop", verificarAuth, verificarAdmin, async (re
 app.get("/api/admin/viagens/export-xlsx", verificarAuth, verificarAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.nome, u.matricula, ve.modelo, ve.placa, v.justificativa,
-        v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_inicio_br,
-        v.data_fim AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_fim_br,
+      SELECT u.nome, u.matricula, u.funcao, ve.modelo, ve.placa, v.justificativa, v.status,
+        TO_CHAR(v.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as solicitado_em,
+        TO_CHAR(v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as data_inicio_br,
+        TO_CHAR(v.data_fim AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as data_fim_br,
         v.tempo_dias, v.tempo_horas
       FROM viagens v
       JOIN usuarios u ON v.usuario_id = u.id
       JOIN veiculos ve ON v.veiculo_id = ve.id
       WHERE v.status = 'concluido'
-      ORDER BY v.data_inicio DESC
+      ORDER BY v.data_fim DESC
     `);
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Viagens');
+    workbook.creator = 'LEOPARDO';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Histórico de Viagens', {
+      properties: { tabColor: { argb: '003D6D' } },
+      views: [{ state: 'frozen', ySplit: 2 }]
+    });
+
+    sheet.mergeCells('A1:I1');
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = 'LEOPARDO - Relatório de Viagens Concluídas';
+    titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003D6D' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getRow(1).height = 35;
 
     sheet.columns = [
-      { header: 'Nome', key: 'nome', width: 25 },
-      { header: 'Matrícula', key: 'matricula', width: 12 },
-      { header: 'Veículo', key: 'modelo', width: 20 },
-      { header: 'Placa', key: 'placa', width: 12 },
-      { header: 'Justificativa', key: 'justificativa', width: 35 },
-      { header: 'Data Início', key: 'data_inicio', width: 20 },
-      { header: 'Data Fim', key: 'data_fim', width: 20 },
-      { header: 'Duração', key: 'duracao', width: 15 }
+      { key: 'nome', width: 30 },
+      { key: 'matricula', width: 12 },
+      { key: 'funcao', width: 20 },
+      { key: 'veiculo', width: 22 },
+      { key: 'placa', width: 12 },
+      { key: 'justificativa', width: 40 },
+      { key: 'inicio', width: 18 },
+      { key: 'fim', width: 18 },
+      { key: 'duracao', width: 14 }
     ];
 
-    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003D6D' } };
-    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+    const headerRow = sheet.getRow(2);
+    headerRow.values = ['Colaborador', 'Matrícula', 'Função', 'Veículo', 'Placa', 'Justificativa', 'Início', 'Fim', 'Duração'];
+    headerRow.height = 25;
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF003D6D' } },
+        bottom: { style: 'thin', color: { argb: 'FF003D6D' } },
+        left: { style: 'thin', color: { argb: 'FF003D6D' } },
+        right: { style: 'thin', color: { argb: 'FF003D6D' } }
+      };
+    });
 
     rows.forEach((row, idx) => {
-      const dataInicio = row.data_inicio_br ? new Date(row.data_inicio_br).toLocaleString('pt-BR') : '—';
-      const dataFim = row.data_fim_br ? new Date(row.data_fim_br).toLocaleString('pt-BR') : '—';
-      const duracao = row.tempo_horas ? `${row.tempo_dias || 0}d ${Math.round((row.tempo_horas % 24) * 10) / 10}h` : '—';
+      let duracao = '—';
+      if (row.tempo_horas) {
+        const horas = Math.floor(row.tempo_horas);
+        const minutos = Math.round((row.tempo_horas - horas) * 60);
+        duracao = `${horas}h ${minutos}min`;
+      }
 
-      sheet.addRow({
+      const dataRow = sheet.addRow({
         nome: row.nome,
         matricula: row.matricula,
-        modelo: row.modelo,
+        funcao: row.funcao || '—',
+        veiculo: row.modelo,
         placa: row.placa,
         justificativa: row.justificativa,
-        data_inicio: dataInicio,
-        data_fim: dataFim,
+        inicio: row.data_inicio_br || '—',
+        fim: row.data_fim_br || '—',
         duracao: duracao
       });
 
-      const currentRow = sheet.getRow(idx + 2);
-      currentRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF' } };
-      currentRow.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+      dataRow.height = 22;
+      const isEven = idx % 2 === 0;
+
+      dataRow.eachCell((cell, colNumber) => {
+        cell.font = { name: 'Arial', size: 10 };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isEven ? 'FFF8FAFC' : 'FFFFFFFF' }
+        };
+        cell.border = {
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: colNumber <= 2 ? 'left' : 'center' };
+      });
     });
 
+    sheet.addRow([]);
+    const footerRow = sheet.addRow([`Gerado em: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} | Total: ${rows.length} viagens`]);
+    sheet.mergeCells(`A${footerRow.number}:I${footerRow.number}`);
+    footerRow.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF666666' } };
+    footerRow.getCell(1).alignment = { horizontal: 'right' };
+
+    sheet.autoFilter = { from: 'A2', to: 'I2' };
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=viagens.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename=leopardo_viagens_${new Date().toISOString().split('T')[0]}.xlsx`);
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
