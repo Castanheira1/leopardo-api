@@ -1,4 +1,4 @@
-﻿/* RESET BÁSICO */
+/* RESET BÁSICO */
 * {
     margin: 0;
     padding: 0;
@@ -416,6 +416,11 @@ body {
 .badge-inativo {
     background: #e5e7eb;
     color: #4b5563;
+}
+
+.badge-em-uso {
+    background: #f59e0b;
+    color: #fff;
 }
 
 .badge-in-progress {
