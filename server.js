@@ -11,14 +11,12 @@ const jwt = require("jsonwebtoken");
 const ExcelJS = require("exceljs");
 const { Storage } = require("@google-cloud/storage");
 
-// 1) CARREGAR .env PRIMEIRO
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// CORREÇÃO DO PROXY (Render, Railway, etc)
 app.set("trust proxy", 1);
 
 if (!JWT_SECRET) {
@@ -32,7 +30,6 @@ app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 2) BANCO
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
@@ -42,21 +39,16 @@ pool.connect()
   .then(client => { console.log("Conectado ao PostgreSQL"); client.release(); })
   .catch(err => console.log("Erro ao conectar:", err.message));
 
-// 3) GCP — VERSÃO QUE FUNCIONA NO RENDER 2025 (OpenSSL 3 fix definitivo)
 let gcsStorage = null;
 const bucketName = process.env.GCS_BUCKET_NAME;
 
 if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
   try {
     const gcpKeyPath = path.join(__dirname, "gcp-key.json");
-    
-    // Recria sempre (Render limpa o disco)
     fs.writeFileSync(gcpKeyPath, process.env.GCP_SERVICE_ACCOUNT_KEY.trim());
     console.log("Arquivo gcp-key.json criado com sucesso");
-
     process.env.GOOGLE_APPLICATION_CREDENTIALS = gcpKeyPath;
 
-    // ESSA CONFIGURAÇÃO RESOLVE O ERRO DECODER NO NODE 18+
     gcsStorage = new Storage({
       keyFilename: gcpKeyPath,
       projectId: JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY).project_id,
@@ -70,25 +62,19 @@ if (process.env.GCP_SERVICE_ACCOUNT_KEY && bucketName) {
     gcsStorage = null;
   }
 } else {
-  console.warn("GCP_SERVICE_ACCOUNT_KEY ou GCS_BUCKET_NAME ausente → upload de fotos desativado");
+  console.warn("GCP_SERVICE_ACCOUNT_KEY ou GCS_BUCKET_NAME ausente");
 }
 
-// 4) UPLOAD PRA GCS (nunca mais derruba a API)
 const uploadToGCS = async (file) => {
   if (!file) return null;
   if (!gcsStorage || !bucketName) {
-    console.warn("GCS indisponível → veículo salvo sem foto");
+    console.warn("GCS indisponível");
     return null;
   }
   try {
     const gcsFileName = `uploads/${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
     const blob = gcsStorage.bucket(bucketName).file(gcsFileName);
-
-    await blob.save(file.buffer, {
-      contentType: file.mimetype,
-      public: true,
-    });
-
+    await blob.save(file.buffer, { contentType: file.mimetype, public: true });
     const url = `https://storage.googleapis.com/${bucketName}/${gcsFileName}`;
     console.log("Upload OK:", url);
     return url;
@@ -98,7 +84,6 @@ const uploadToGCS = async (file) => {
   }
 };
 
-// 5) MULTER
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -108,15 +93,16 @@ const upload = multer({
       : cb(new Error("Apenas imagens"), false),
 });
 
-// 6) AUTH
 const verificarAuth = (req, res, next) => {
-  const token = (req.headers.authorization || "").replace("Bearer ", "") || req.query.token;
+  const auth = req.headers.authorization || "";
+  const tokenHeader = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  const token = tokenHeader || req.query.token;
   if (!token) return res.status(401).json({ error: "Token não fornecido" });
   try {
     req.user = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
     next();
   } catch {
-    return res.status(401).json({ error: "Token inválido ou expirado" });
+    return res.status(401).json({ error: "Token inválido" });
   }
 };
 
@@ -125,7 +111,6 @@ const verificarAdmin = (req, res, next) => {
   next();
 };
 
-// 7) EXPIRA VIAGENS PENDENTES
 setInterval(async () => {
   try {
     await pool.query(`
@@ -137,29 +122,27 @@ setInterval(async () => {
   }
 }, 60000);
 
-// ======================== ROTAS ========================
-
 app.post("/api/register", async (req, res) => {
   const { nome, funcao, matricula, senha } = req.body;
   if (!nome || !matricula || !senha) return res.status(400).json({ error: "Preencha todos os campos" });
 
   try {
-    if ((await pool.query("SELECT 1 FROM usuarios WHERE matricula = $1", [matricula])).rowCount)
-      return res.status(400).json({ error: "Matrícula já existe" });
+    const check = await pool.query("SELECT id FROM usuarios WHERE matricula = $1", [matricula]);
+    if (check.rows.length > 0) return res.status(400).json({ error: "Matrícula já cadastrada" });
 
-    const hash = await bcrypt.hash(senha, 10);
+    const senha_hash = await bcrypt.hash(senha, 10);
     const is_admin = matricula === "000000";
 
     const { rows } = await pool.query(
-      "INSERT INTO usuarios (nome, matricula, senha_hash, funcao, is_admin) VALUES ($1,$2,$3,$4,$5) RETURNING id, nome, matricula, is_admin",
-      [nome, matricula, hash, funcao || null, is_admin]
+      "INSERT INTO usuarios (nome, matricula, senha_hash, funcao, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, matricula, is_admin",
+      [nome, matricula, senha_hash, funcao || null, is_admin]
     );
 
     const token = jwt.sign({ id: rows[0].id, matricula, is_admin }, JWT_SECRET, { algorithm: "HS256", expiresIn: "8h" });
     res.json({ success: true, token, user: rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erro ao registrar" });
+    res.status(500).json({ error: "Erro ao criar conta" });
   }
 });
 
@@ -186,7 +169,6 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// CADASTRO DE VEÍCULO (COM FOTO NO GCS)
 app.post("/api/veiculos", verificarAuth, verificarAdmin, upload.single("foto"), async (req, res) => {
   const { modelo, placa } = req.body;
   if (!modelo || !placa) return res.status(400).json({ error: "Modelo e placa obrigatórios" });
@@ -200,12 +182,11 @@ app.post("/api/veiculos", verificarAuth, verificarAdmin, upload.single("foto"), 
     );
     res.json(rows[0]);
   } catch (err) {
-    console.error("Erro ao salvar veículo:", err);
+    console.error("Erro ao cadastrar veículo:", err.message);
     res.status(500).json({ error: "Erro ao cadastrar veículo" });
   }
 });
 
-// (o resto das rotas você já tinha perfeito, deixei igual)
 app.get("/api/veiculos", verificarAuth, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT v.*, EXISTS(SELECT 1 FROM viagens WHERE veiculo_id = v.id AND status IN ('pendente','em_uso')) as em_uso
@@ -245,7 +226,7 @@ app.post("/api/viagens", verificarAuth, async (req, res) => {
 
 app.get("/api/minhas-viagens", verificarAuth, async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT v.*, ve.modelo, ve.placa, EXTRACT(EPOCH FROM (NOW() - v.created_at)) as segundos
+    SELECT v.*, ve.modelo, ve.placa, EXTRACT(EPOCH FROM (NOW() - v.created_at)) as segundos_desde_criacao
     FROM viagens v JOIN veiculos ve ON v.veiculo_id = ve.id
     WHERE v.usuario_id = $1 ORDER BY v.created_at DESC
   `, [req.user.id]);
@@ -255,7 +236,7 @@ app.get("/api/minhas-viagens", verificarAuth, async (req, res) => {
 app.get("/api/admin/viagens/pendentes", verificarAuth, verificarAdmin, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT v.*, ve.modelo, ve.placa, u.nome, u.matricula,
-           EXTRACT(EPOCH FROM (NOW() - v.created_at))/60 as minutos
+           EXTRACT(EPOCH FROM (NOW() - v.created_at))/60 as minutos_passados
     FROM viagens v JOIN veiculos ve ON v.veiculo_id = ve.id
     JOIN usuarios u ON v.usuario_id = u.id
     WHERE v.status='pendente' ORDER BY v.created_at
@@ -291,6 +272,69 @@ app.post("/api/admin/viagens/:id/stop", verificarAuth, verificarAdmin, async (re
   rows.length ? res.json(rows[0]) : res.status(404).json({ error: "Não encontrada" });
 });
 
+app.get("/api/admin/viagens/export-xlsx", verificarAuth, verificarAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT u.nome, u.matricula, ve.modelo, ve.placa, v.justificativa,
+        v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_inicio_br,
+        v.data_fim AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_fim_br,
+        v.tempo_dias, v.tempo_horas
+      FROM viagens v
+      JOIN usuarios u ON v.usuario_id = u.id
+      JOIN veiculos ve ON v.veiculo_id = ve.id
+      WHERE v.status = 'concluido'
+      ORDER BY v.data_inicio DESC
+    `);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Viagens');
+
+    sheet.columns = [
+      { header: 'Nome', key: 'nome', width: 25 },
+      { header: 'Matrícula', key: 'matricula', width: 12 },
+      { header: 'Veículo', key: 'modelo', width: 20 },
+      { header: 'Placa', key: 'placa', width: 12 },
+      { header: 'Justificativa', key: 'justificativa', width: 35 },
+      { header: 'Data Início', key: 'data_inicio', width: 20 },
+      { header: 'Data Fim', key: 'data_fim', width: 20 },
+      { header: 'Duração', key: 'duracao', width: 15 }
+    ];
+
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003D6D' } };
+    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    rows.forEach((row, idx) => {
+      const dataInicio = row.data_inicio_br ? new Date(row.data_inicio_br).toLocaleString('pt-BR') : '—';
+      const dataFim = row.data_fim_br ? new Date(row.data_fim_br).toLocaleString('pt-BR') : '—';
+      const duracao = row.tempo_horas ? `${row.tempo_dias || 0}d ${Math.round((row.tempo_horas % 24) * 10) / 10}h` : '—';
+
+      sheet.addRow({
+        nome: row.nome,
+        matricula: row.matricula,
+        modelo: row.modelo,
+        placa: row.placa,
+        justificativa: row.justificativa,
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        duracao: duracao
+      });
+
+      const currentRow = sheet.getRow(idx + 2);
+      currentRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF' } };
+      currentRow.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=viagens.xlsx');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao exportar XLSX" });
+  }
+});
+
 app.get("/api/admin/stats", verificarAuth, verificarAdmin, async (req, res) => {
   const [a,b,c,d,e,f] = await Promise.all([
     pool.query("SELECT COUNT(*) FROM veiculos"),
@@ -318,16 +362,14 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   rowCount ? res.json({ success: true, message: "Senha resetada para 123456" }) : res.status(404).json({ error: "Usuário não encontrado" });
 });
 
-// FRONT-END
 app.use(express.static(path.join(__dirname, "public")));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-// ERRO GLOBAL
 app.use((err, req, res, next) => {
   console.error("ERRO GLOBAL:", err);
   res.status(500).json({ error: "Erro interno do servidor" });
 });
 
 app.listen(PORT, () => {
-  console.log(`API RODANDO NA PORTA ${PORT} — TUDO FUNCIONANDO, PORRA!`);
+  console.log(`API RODANDO NA PORTA ${PORT}`);
 });
