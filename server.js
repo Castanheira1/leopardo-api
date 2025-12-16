@@ -273,7 +273,8 @@ app.post("/api/viagens", verificarAuth, async (req, res) => {
 app.get("/api/minhas-viagens", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT v.*, ve.modelo, ve.placa
+      SELECT v.*, ve.modelo, ve.placa,
+             EXTRACT(EPOCH FROM (NOW() - v.created_at)) as segundos_desde_criacao
       FROM viagens v
       JOIN veiculos ve ON v.veiculo_id = ve.id
       WHERE v.usuario_id = $1
@@ -477,7 +478,7 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   }
 
   try {
-    const novaSenha = '12345678';
+    const novaSenha = '123456';
     const senha_hash = await bcrypt.hash(novaSenha, 10);
 
     const { rowCount } = await pool.query(
