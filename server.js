@@ -7,14 +7,16 @@ const rateLimit = require("express-rate-limit");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const ExcelJS = require('exceljs');
-const { createClient } = require('@supabase/supabase-js');
+const { createClient } = require("@supabase/supabase-js");
 
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || "veiculos";
+// Raio (km) de proximidade para considerar origem/destino "perto"
+const RAIO_KM = Number(process.env.RAIO_MATCH_KM || 3);
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -22,9 +24,9 @@ if (!JWT_SECRET) {
 }
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 600 }));
 app.use(cors({ origin: "*" }));
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 const pool = new Pool({
@@ -33,37 +35,31 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then(client => { console.log("Conectado ao PostgreSQL"); client.release(); })
-  .catch(err => console.log("Erro ao conectar:", err.message));
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); })
+  .catch((err) => console.log("Erro ao conectar:", err.message));
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-const uploadToSupabase = async (file) => {
+// Upload genérico para o Supabase Storage (mesmo mecanismo das fotos de carro)
+const uploadToSupabase = async (file, pasta = "") => {
   if (!file) return null;
-
   try {
-    const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
-    
-    const { data, error } = await supabase.storage
-      .from('veiculos')
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false
-      });
+    const prefixo = pasta ? `${pasta.replace(/\/$/, "")}/` : "";
+    const fileName = `${prefixo}${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname) || ".jpg"}`;
+
+    const { error } = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .upload(fileName, file.buffer, { contentType: file.mimetype, upsert: false });
 
     if (error) {
       console.error("Erro upload Supabase:", error.message);
       return null;
     }
 
-    const { data: urlData } = supabase.storage
-      .from('veiculos')
-      .getPublicUrl(fileName);
-
-    console.log("Upload OK:", urlData.publicUrl);
+    const { data: urlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(fileName);
     return urlData.publicUrl;
   } catch (err) {
     console.error("Erro upload:", err.message);
@@ -73,7 +69,7 @@ const uploadToSupabase = async (file) => {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 6 * 1024 * 1024 },
   fileFilter: (req, file, cb) =>
     ["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(file.mimetype)
       ? cb(null, true)
@@ -98,21 +94,34 @@ const verificarAdmin = (req, res, next) => {
   next();
 };
 
+// Expressão Haversine (km) entre uma coluna (latCol/lngCol) e parâmetros $i/$j
+const haversine = (latCol, lngCol, pLat, pLng) => `
+  (6371 * acos(LEAST(1, GREATEST(-1,
+    cos(radians(${pLat})) * cos(radians(${latCol})) * cos(radians(${lngCol}) - radians(${pLng}))
+    + sin(radians(${pLat})) * sin(radians(${latCol}))
+  ))))`;
+
+// Marca pedidos "para agora" antigos como cancelados (limpeza leve)
 setInterval(async () => {
   try {
     await pool.query(`
-      UPDATE viagens
-      SET status = 'expirado'
-      WHERE status = 'pendente'
-      AND created_at < NOW() - INTERVAL '30 minutes'
+      UPDATE pedidos SET status = 'cancelado'
+      WHERE status = 'aberto' AND horario IS NULL
+      AND created_at < NOW() - INTERVAL '3 hours'
     `);
   } catch (err) {
-    console.error("Erro ao expirar viagens:", err);
+    console.error("Erro ao expirar pedidos:", err.message);
   }
-}, 60000);
+}, 5 * 60 * 1000);
 
+/* ============================ CONFIG ============================ */
+app.get("/api/config", (req, res) => {
+  res.json({ mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });
+});
+
+/* ============================ AUTH ============================ */
 app.post("/api/register", async (req, res) => {
-  const { nome, funcao, matricula, senha } = req.body;
+  const { nome, funcao, matricula, telefone, senha } = req.body;
   if (!nome || !matricula || !senha) {
     return res.status(400).json({ error: "Nome, matrícula e senha são obrigatórios" });
   }
@@ -127,8 +136,10 @@ app.post("/api/register", async (req, res) => {
     const is_admin = matricula === "000000";
 
     const { rows } = await pool.query(
-      "INSERT INTO usuarios (nome, matricula, senha_hash, funcao, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, matricula, is_admin",
-      [nome, matricula, senha_hash, funcao || null, is_admin]
+      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, is_admin)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, nome, matricula, telefone, is_admin`,
+      [nome, matricula, senha_hash, funcao || null, telefone || null, is_admin]
     );
 
     const token = jwt.sign({ id: rows[0].id, matricula, is_admin }, JWT_SECRET, { expiresIn: "8h" });
@@ -159,7 +170,10 @@ app.post("/api/login", async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, nome: user.nome, matricula: user.matricula, is_admin: user.is_admin }
+      user: {
+        id: user.id, nome: user.nome, matricula: user.matricula,
+        telefone: user.telefone, is_admin: user.is_admin,
+      },
     });
   } catch (err) {
     console.error(err);
@@ -167,175 +181,467 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.post("/api/veiculos", verificarAuth, verificarAdmin, upload.single("foto"), async (req, res) => {
-  const { modelo, placa } = req.body;
-  if (!modelo || !placa) return res.status(400).json({ error: "Modelo e placa são obrigatórios" });
-
-  const fotoUrl = await uploadToSupabase(req.file);
-
+app.get("/api/perfil", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "INSERT INTO veiculos (modelo, placa, foto, ativo) VALUES ($1, $2, $3, true) RETURNING *",
-      [modelo, placa.toUpperCase(), fotoUrl]
+      "SELECT id, nome, funcao, matricula, telefone, is_admin FROM usuarios WHERE id = $1",
+      [req.user.id]
     );
     res.json(rows[0]);
   } catch (err) {
-    console.error("Erro ao cadastrar veículo:", err.message);
-    res.status(500).json({ error: err.detail || "Erro ao cadastrar veículo" });
+    res.status(500).json({ error: "Erro ao carregar perfil" });
   }
 });
 
-app.get("/api/veiculos", verificarAuth, async (req, res) => {
-  const { rows } = await pool.query(`
-    SELECT v.*, 
-           EXISTS(SELECT 1 FROM viagens WHERE veiculo_id = v.id AND status IN ('pendente', 'em_uso')) as em_uso
-    FROM veiculos v 
-    ORDER BY v.id DESC
-  `);
-  res.json(rows);
-});
-
-app.patch("/api/veiculos/:id/toggle", verificarAuth, verificarAdmin, async (req, res) => {
-  const { id } = req.params;
+app.patch("/api/perfil", verificarAuth, async (req, res) => {
+  const { telefone, nome, funcao } = req.body;
   try {
     const { rows } = await pool.query(
-      "UPDATE veiculos SET ativo = NOT ativo WHERE id = $1 RETURNING *",
-      [id]
+      `UPDATE usuarios SET
+         telefone = COALESCE($1, telefone),
+         nome = COALESCE($2, nome),
+         funcao = COALESCE($3, funcao)
+       WHERE id = $4
+       RETURNING id, nome, funcao, matricula, telefone, is_admin`,
+      [telefone || null, nome || null, funcao || null, req.user.id]
     );
-    if (rows.length === 0) return res.status(404).json({ error: "Veículo não encontrado" });
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erro ao alterar status" });
+    res.status(500).json({ error: "Erro ao atualizar perfil" });
   }
 });
 
-app.delete("/api/veiculos/:id", verificarAuth, verificarAdmin, async (req, res) => {
-  const { id } = req.params;
+/* ============================ FOTOS ============================ */
+// Recebe a foto capturada ao vivo pela câmera e devolve a URL pública.
+// A pasta separa selfies/carros dentro do mesmo bucket.
+app.post("/api/fotos", verificarAuth, upload.single("foto"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Foto é obrigatória" });
+  const pasta = ["selfies", "carros"].includes(req.body.tipo) ? req.body.tipo : "outros";
+  const url = await uploadToSupabase(req.file, pasta);
+  if (!url) return res.status(500).json({ error: "Falha ao salvar a foto" });
+  res.json({ url });
+});
+
+/* ====================== HABILITAÇÃO MOTORISTA ====================== */
+app.get("/api/habilitacao/hoje", verificarAuth, async (req, res) => {
   try {
-    const { rows, rowCount } = await pool.query(
-      "DELETE FROM veiculos WHERE id = $1 RETURNING foto",
-      [id]
+    const { rows } = await pool.query(
+      `SELECT * FROM habilitacoes_motorista
+       WHERE motorista_id = $1 AND data = CURRENT_DATE AND status = 'ativa'
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.user.id]
     );
-    if (rowCount === 0) return res.status(404).json({ error: "Veículo não encontrado" });
-    
-    if (rows[0].foto) {
-      const fileName = rows[0].foto.split('/').pop();
-      await supabase.storage.from('veiculos').remove([fileName]);
-    }
-    
-    res.json({ success: true, message: "Veículo excluído com sucesso" });
+    res.json(rows[0] || null);
   } catch (err) {
-    console.error("Erro ao excluir veículo:", err.message);
-    res.status(500).json({ error: "Erro ao excluir veículo" });
+    console.error(err);
+    res.status(500).json({ error: "Erro ao verificar habilitação" });
   }
 });
 
-app.get("/api/viagens/disponiveis", verificarAuth, async (req, res) => {
+app.post("/api/habilitacao", verificarAuth, async (req, res) => {
+  const {
+    placa, tag,
+    foto_carro_url, foto_carro_lat, foto_carro_lng, foto_carro_em,
+    selfie_url, selfie_lat, selfie_lng, selfie_em,
+  } = req.body;
+
+  if (!placa) return res.status(400).json({ error: "Placa é obrigatória" });
+  if (!foto_carro_url) return res.status(400).json({ error: "Foto do carro é obrigatória" });
+  if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória" });
+
   try {
-    const { rows } = await pool.query(`
-      SELECT v.id, v.modelo, v.placa, v.foto
-      FROM veiculos v
-      WHERE v.ativo = true
-      AND v.id NOT IN (
-        SELECT veiculo_id FROM viagens
-        WHERE status IN ('pendente', 'em_uso')
-      )
-      ORDER BY v.modelo
-    `);
+    // Encerra habilitações anteriores do dia (troca de carro)
+    await pool.query(
+      `UPDATE habilitacoes_motorista SET status = 'encerrada'
+       WHERE motorista_id = $1 AND data = CURRENT_DATE AND status = 'ativa'`,
+      [req.user.id]
+    );
+
+    const { rows } = await pool.query(
+      `INSERT INTO habilitacoes_motorista
+         (motorista_id, placa, tag,
+          foto_carro_url, foto_carro_lat, foto_carro_lng, foto_carro_em,
+          selfie_url, selfie_lat, selfie_lng, selfie_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        req.user.id, placa.toUpperCase().trim(), tag || null,
+        foto_carro_url, foto_carro_lat || null, foto_carro_lng || null, foto_carro_em || new Date(),
+        selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
+      ]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao registrar habilitação" });
+  }
+});
+
+const habilitacaoAtiva = async (userId) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM habilitacoes_motorista
+     WHERE motorista_id = $1 AND data = CURRENT_DATE AND status = 'ativa'
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  return rows[0] || null;
+};
+
+/* ============================ CARONAS ============================ */
+app.post("/api/caronas", verificarAuth, async (req, res) => {
+  const {
+    origem_texto, origem_lat, origem_lng,
+    destino_texto, destino_lat, destino_lng,
+    horario, vagas, observacao,
+  } = req.body;
+
+  if (origem_lat == null || origem_lng == null || destino_lat == null || destino_lng == null) {
+    return res.status(400).json({ error: "Origem e destino são obrigatórios" });
+  }
+
+  try {
+    const hab = await habilitacaoAtiva(req.user.id);
+    if (!hab) return res.status(403).json({ error: "Ative o modo motorista (foto do carro + selfie) antes de oferecer carona" });
+
+    const { rows } = await pool.query(
+      `INSERT INTO caronas
+         (motorista_id, habilitacao_id, origem_texto, origem_lat, origem_lng,
+          destino_texto, destino_lat, destino_lng, horario, vagas, observacao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        req.user.id, hab.id, origem_texto || null, origem_lat, origem_lng,
+        destino_texto || null, destino_lat, destino_lng,
+        horario || null, vagas || 1, observacao || null,
+      ]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao oferecer carona" });
+  }
+});
+
+// Lista caronas ativas; se ?lat&lng informados, calcula distância da origem
+app.get("/api/caronas", verificarAuth, async (req, res) => {
+  const { lat, lng } = req.query;
+  try {
+    const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
+    const params = lat && lng ? [lat, lng] : [];
+    const orderBy = lat && lng ? "dist_origem ASC" : "c.created_at DESC";
+
+    const { rows } = await pool.query(
+      `SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url ${dist}
+       FROM caronas c
+       JOIN usuarios u ON c.motorista_id = u.id
+       LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+       WHERE c.status = 'ativa'
+       ORDER BY ${orderBy}`,
+      params
+    );
     res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erro ao buscar veículos disponíveis" });
+    res.status(500).json({ error: "Erro ao listar caronas" });
   }
 });
 
+app.delete("/api/caronas/:id", verificarAuth, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE caronas SET status = 'cancelada'
+       WHERE id = $1 AND motorista_id = $2 AND status = 'ativa'`,
+      [req.params.id, req.user.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: "Carona não encontrada" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao cancelar carona" });
+  }
+});
+
+/* ============================ PEDIDOS ============================ */
+app.post("/api/pedidos", verificarAuth, async (req, res) => {
+  const {
+    origem_texto, origem_lat, origem_lng,
+    destino_texto, destino_lat, destino_lng,
+    horario, observacao,
+    selfie_url, selfie_lat, selfie_lng, selfie_em,
+  } = req.body;
+
+  if (origem_lat == null || origem_lng == null || destino_lat == null || destino_lng == null) {
+    return res.status(400).json({ error: "Origem e destino são obrigatórios" });
+  }
+  if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória para pedir carona" });
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO pedidos
+         (passageiro_id, origem_texto, origem_lat, origem_lng,
+          destino_texto, destino_lat, destino_lng, horario, observacao,
+          selfie_url, selfie_lat, selfie_lng, selfie_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING *`,
+      [
+        req.user.id, origem_texto || null, origem_lat, origem_lng,
+        destino_texto || null, destino_lat, destino_lng, horario || null, observacao || null,
+        selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
+      ]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao criar pedido" });
+  }
+});
+
+app.get("/api/pedidos", verificarAuth, async (req, res) => {
+  const { lat, lng } = req.query;
+  try {
+    const dist = lat && lng ? `, ${haversine("p.destino_lat", "p.destino_lng", "$1", "$2")} AS dist_destino` : "";
+    const params = lat && lng ? [lat, lng] : [];
+    const orderBy = lat && lng ? "dist_destino ASC" : "p.created_at DESC";
+
+    const { rows } = await pool.query(
+      `SELECT p.*, u.nome AS passageiro_nome ${dist}
+       FROM pedidos p
+       JOIN usuarios u ON p.passageiro_id = u.id
+       WHERE p.status = 'aberto'
+       ORDER BY ${orderBy}`,
+      params
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar pedidos" });
+  }
+});
+
+app.delete("/api/pedidos/:id", verificarAuth, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE pedidos SET status = 'cancelado'
+       WHERE id = $1 AND passageiro_id = $2 AND status = 'aberto'`,
+      [req.params.id, req.user.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: "Pedido não encontrado" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao cancelar pedido" });
+  }
+});
+
+/* ============================ MATCH ============================ */
+// Caronas que combinam com um pedido (origem perto E destino perto)
+app.get("/api/caronas/match", verificarAuth, async (req, res) => {
+  const { pedido_id } = req.query;
+  if (!pedido_id) return res.status(400).json({ error: "pedido_id obrigatório" });
+  try {
+    const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedido_id])).rows[0];
+    if (!ped) return res.status(404).json({ error: "Pedido não encontrado" });
+
+    const { rows } = await pool.query(
+      `SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url,
+              ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem,
+              ${haversine("c.destino_lat", "c.destino_lng", "$3", "$4")} AS dist_destino
+       FROM caronas c
+       JOIN usuarios u ON c.motorista_id = u.id
+       LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+       WHERE c.status = 'ativa' AND c.motorista_id <> $5
+         AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $6
+         AND ${haversine("c.destino_lat", "c.destino_lng", "$3", "$4")} <= $6
+         AND (c.horario IS NULL OR $7::timestamp IS NULL
+              OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
+       ORDER BY (dist_origem + dist_destino) ASC`,
+      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao buscar caronas" });
+  }
+});
+
+// Pedidos que combinam com uma carona (origem perto E destino perto)
+app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
+  const { carona_id } = req.query;
+  if (!carona_id) return res.status(400).json({ error: "carona_id obrigatório" });
+  try {
+    const car = (await pool.query("SELECT * FROM caronas WHERE id = $1", [carona_id])).rows[0];
+    if (!car) return res.status(404).json({ error: "Carona não encontrada" });
+
+    const { rows } = await pool.query(
+      `SELECT p.*, u.nome AS passageiro_nome,
+              ${haversine("p.origem_lat", "p.origem_lng", "$1", "$2")} AS dist_origem,
+              ${haversine("p.destino_lat", "p.destino_lng", "$3", "$4")} AS dist_destino
+       FROM pedidos p
+       JOIN usuarios u ON p.passageiro_id = u.id
+       WHERE p.status = 'aberto' AND p.passageiro_id <> $5
+         AND ${haversine("p.origem_lat", "p.origem_lng", "$1", "$2")} <= $6
+         AND ${haversine("p.destino_lat", "p.destino_lng", "$3", "$4")} <= $6
+         AND (p.horario IS NULL OR $7::timestamp IS NULL
+              OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
+       ORDER BY (dist_origem + dist_destino) ASC`,
+      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao buscar pedidos" });
+  }
+});
+
+/* ============================ PROPOSTAS ============================ */
+app.post("/api/propostas", verificarAuth, async (req, res) => {
+  const { carona_id, pedido_id, mensagem, selfie_url, selfie_lat, selfie_lng, selfie_em } = req.body;
+  if (!carona_id && !pedido_id) return res.status(400).json({ error: "Informe carona_id ou pedido_id" });
+
+  try {
+    let para_usuario_id, dadosSelfie = {};
+
+    if (carona_id) {
+      // Passageiro pedindo uma vaga numa carona -> precisa de selfie
+      if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória para pedir vaga" });
+      const car = (await pool.query("SELECT * FROM caronas WHERE id = $1 AND status = 'ativa'", [carona_id])).rows[0];
+      if (!car) return res.status(404).json({ error: "Carona indisponível" });
+      if (car.motorista_id === req.user.id) return res.status(400).json({ error: "Você é o motorista desta carona" });
+      para_usuario_id = car.motorista_id;
+      dadosSelfie = { selfie_url, selfie_lat, selfie_lng, selfie_em: selfie_em || new Date() };
+    } else {
+      // Motorista oferecendo carona a um pedido -> precisa de habilitação ativa
+      const hab = await habilitacaoAtiva(req.user.id);
+      if (!hab) return res.status(403).json({ error: "Ative o modo motorista antes de oferecer carona" });
+      const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1 AND status = 'aberto'", [pedido_id])).rows[0];
+      if (!ped) return res.status(404).json({ error: "Pedido indisponível" });
+      if (ped.passageiro_id === req.user.id) return res.status(400).json({ error: "Este pedido é seu" });
+      para_usuario_id = ped.passageiro_id;
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO propostas
+         (de_usuario_id, para_usuario_id, carona_id, pedido_id, mensagem,
+          selfie_url, selfie_lat, selfie_lng, selfie_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING *`,
+      [
+        req.user.id, para_usuario_id, carona_id || null, pedido_id || null, mensagem || null,
+        dadosSelfie.selfie_url || null, dadosSelfie.selfie_lat || null,
+        dadosSelfie.selfie_lng || null, dadosSelfie.selfie_em || null,
+      ]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao enviar proposta" });
+  }
+});
+
+app.get("/api/propostas", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT pr.*,
+              du.nome AS de_nome, pu.nome AS para_nome,
+              CASE WHEN pr.status = 'aceito' THEN du.telefone ELSE NULL END AS de_telefone,
+              CASE WHEN pr.status = 'aceito' THEN pu.telefone ELSE NULL END AS para_telefone,
+              c.origem_texto AS c_origem, c.destino_texto AS c_destino, c.horario AS c_horario,
+              p.origem_texto AS p_origem, p.destino_texto AS p_destino, p.horario AS p_horario,
+              v.id AS viagem_id
+       FROM propostas pr
+       JOIN usuarios du ON pr.de_usuario_id = du.id
+       JOIN usuarios pu ON pr.para_usuario_id = pu.id
+       LEFT JOIN caronas c ON pr.carona_id = c.id
+       LEFT JOIN pedidos p ON pr.pedido_id = p.id
+       LEFT JOIN viagens v ON v.proposta_id = pr.id
+       WHERE pr.de_usuario_id = $1 OR pr.para_usuario_id = $1
+       ORDER BY pr.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows.map((r) => ({ ...r, sou_destinatario: r.para_usuario_id === req.user.id })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar propostas" });
+  }
+});
+
+app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE propostas SET status = 'aceito'
+       WHERE id = $1 AND para_usuario_id = $2 AND status = 'pendente'
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "Proposta não encontrada" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao aceitar proposta" });
+  }
+});
+
+app.post("/api/propostas/:id/recusar", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE propostas SET status = 'recusado'
+       WHERE id = $1 AND para_usuario_id = $2 AND status = 'pendente'
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "Proposta não encontrada" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao recusar proposta" });
+  }
+});
+
+/* ============================ VIAGENS ============================ */
+// Inicia a viagem a partir de uma proposta aceita (apenas o motorista inicia)
 app.post("/api/viagens", verificarAuth, async (req, res) => {
-  const { veiculo_id, justificativa } = req.body;
-  if (!veiculo_id || !justificativa) {
-    return res.status(400).json({ error: "Veículo e justificativa são obrigatórios" });
-  }
+  const { proposta_id } = req.body;
+  if (!proposta_id) return res.status(400).json({ error: "proposta_id obrigatório" });
 
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO viagens (usuario_id, veiculo_id, justificativa, status)
-       VALUES ($1, $2, $3, 'pendente')
-       RETURNING *`,
-      [req.user.id, veiculo_id, justificativa]
-    );
-    res.json(rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao solicitar viagem" });
-  }
-});
+    const pr = (await pool.query("SELECT * FROM propostas WHERE id = $1 AND status = 'aceito'", [proposta_id])).rows[0];
+    if (!pr) return res.status(404).json({ error: "Proposta não aceita ou inexistente" });
 
-app.get("/api/minhas-viagens", verificarAuth, async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT v.*, ve.modelo, ve.placa,
-             EXTRACT(EPOCH FROM (NOW() - v.created_at)) as segundos_desde_criacao
-      FROM viagens v
-      JOIN veiculos ve ON v.veiculo_id = ve.id
-      WHERE v.usuario_id = $1
-      ORDER BY v.created_at DESC
-    `, [req.user.id]);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar viagens" });
-  }
-});
+    const existente = (await pool.query("SELECT id FROM viagens WHERE proposta_id = $1", [proposta_id])).rows[0];
+    if (existente) return res.json({ id: existente.id, jaExistia: true });
 
-app.get("/api/admin/viagens/pendentes", verificarAuth, verificarAdmin, async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT v.*, ve.modelo, ve.placa, u.nome, u.matricula,
-             EXTRACT(EPOCH FROM (NOW() - v.created_at))/60 as minutos_passados
-      FROM viagens v
-      JOIN veiculos ve ON v.veiculo_id = ve.id
-      JOIN usuarios u ON v.usuario_id = u.id
-      WHERE v.status = 'pendente'
-      ORDER BY v.created_at ASC
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar pendentes" });
-  }
-});
-
-app.get("/api/admin/viagens/em-uso", verificarAuth, verificarAdmin, async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT v.*, ve.modelo, ve.placa, u.nome, u.matricula,
-             v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_inicio_br
-      FROM viagens v
-      JOIN veiculos ve ON v.veiculo_id = ve.id
-      JOIN usuarios u ON v.usuario_id = u.id
-      WHERE v.status = 'em_uso'
-      ORDER BY v.data_inicio ASC
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar em uso" });
-  }
-});
-
-app.post("/api/admin/viagens/:id/start", verificarAuth, verificarAdmin, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const { rows } = await pool.query(
-      `UPDATE viagens
-       SET status = 'em_uso', data_inicio = NOW()
-       WHERE id = $1 AND status = 'pendente'
-       RETURNING *`,
-      [id]
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Viagem não encontrada ou já iniciada" });
+    // Define motorista / passageiro e a fonte (carona ou pedido)
+    let motorista_id, passageiro_id, fonte;
+    if (pr.carona_id) {
+      // passageiro (de) pediu vaga ao motorista (para)
+      motorista_id = pr.para_usuario_id; passageiro_id = pr.de_usuario_id;
+      fonte = (await pool.query("SELECT * FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
+    } else {
+      // motorista (de) ofereceu ao passageiro (para)
+      motorista_id = pr.de_usuario_id; passageiro_id = pr.para_usuario_id;
+      fonte = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
     }
+
+    if (req.user.id !== motorista_id) {
+      return res.status(403).json({ error: "Apenas o motorista inicia a viagem" });
+    }
+
+    const hab = await habilitacaoAtiva(motorista_id);
+
+    const { rows } = await pool.query(
+      `INSERT INTO viagens
+         (proposta_id, carona_id, pedido_id, motorista_id, passageiro_id, habilitacao_id,
+          origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING *`,
+      [
+        pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
+        fonte?.origem_texto || null, fonte?.origem_lat || null, fonte?.origem_lng || null,
+        fonte?.destino_texto || null, fonte?.destino_lat || null, fonte?.destino_lng || null,
+      ]
+    );
+
+    // Marca a oferta/pedido como em atendimento
+    if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'concluida' WHERE id = $1", [pr.carona_id]);
+    if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
+
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -343,22 +649,66 @@ app.post("/api/admin/viagens/:id/start", verificarAuth, verificarAdmin, async (r
   }
 });
 
-app.post("/api/admin/viagens/:id/stop", verificarAuth, verificarAdmin, async (req, res) => {
-  const { id } = req.params;
+// Recebe lote de pontos GPS durante o trajeto (rastreamento ao vivo)
+app.post("/api/viagens/:id/pontos", verificarAuth, async (req, res) => {
+  const { pontos } = req.body;
+  if (!Array.isArray(pontos) || pontos.length === 0) return res.status(400).json({ error: "Sem pontos" });
+
   try {
-    const { rows } = await pool.query(
-      `UPDATE viagens
-       SET status = 'concluido',
-           data_fim = NOW(),
-           tempo_dias = EXTRACT(DAY FROM (NOW() - data_inicio)),
-           tempo_horas = EXTRACT(EPOCH FROM (NOW() - data_inicio))/3600
-       WHERE id = $1 AND status = 'em_uso'
-       RETURNING *`,
-      [id]
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Viagem não encontrada ou já finalizada" });
+    const v = (await pool.query("SELECT * FROM viagens WHERE id = $1", [req.params.id])).rows[0];
+    if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
+    if (![v.motorista_id, v.passageiro_id].includes(req.user.id)) {
+      return res.status(403).json({ error: "Sem permissão" });
     }
+
+    const values = [];
+    const params = [];
+    pontos.slice(0, 500).forEach((p, i) => {
+      const base = i * 3;
+      values.push(`($${base + 1}, $${base + 2}, $${base + 3})`);
+      params.push(req.params.id, p.lat, p.lng);
+    });
+
+    await pool.query(
+      `INSERT INTO viagem_pontos (viagem_id, lat, lng) VALUES ${values.join(",")}`,
+      params
+    );
+    res.json({ success: true, gravados: Math.min(pontos.length, 500) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao gravar rota" });
+  }
+});
+
+app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
+  try {
+    const v = (await pool.query("SELECT * FROM viagens WHERE id = $1", [req.params.id])).rows[0];
+    if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
+    if (req.user.id !== v.motorista_id) return res.status(403).json({ error: "Apenas o motorista finaliza" });
+
+    // Distância total somando os trechos consecutivos (Haversine via LAG)
+    const distQ = await pool.query(
+      `WITH p AS (
+         SELECT lat, lng,
+                LAG(lat) OVER (ORDER BY registrado_em) AS plat,
+                LAG(lng) OVER (ORDER BY registrado_em) AS plng
+         FROM viagem_pontos WHERE viagem_id = $1)
+       SELECT COALESCE(SUM(
+         6371 * acos(LEAST(1, GREATEST(-1,
+           cos(radians(plat)) * cos(radians(lat)) * cos(radians(lng) - radians(plng))
+           + sin(radians(plat)) * sin(radians(lat))
+         )))
+       ), 0) AS km
+       FROM p WHERE plat IS NOT NULL`,
+      [req.params.id]
+    );
+
+    const km = Math.round(Number(distQ.rows[0].km) * 100) / 100;
+    const { rows } = await pool.query(
+      `UPDATE viagens SET status = 'concluida', finalizada_em = NOW(), distancia_km = $2
+       WHERE id = $1 RETURNING *`,
+      [req.params.id, km]
+    );
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -366,140 +716,109 @@ app.post("/api/admin/viagens/:id/stop", verificarAuth, verificarAdmin, async (re
   }
 });
 
-app.get("/api/admin/viagens/export-xlsx", verificarAuth, verificarAdmin, async (req, res) => {
+app.get("/api/viagens", verificarAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query(`
-      SELECT 
-        u.nome, 
-        u.matricula, 
-        ve.modelo, 
-        ve.placa, 
-        v.justificativa,
-        v.data_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_inicio_br,
-        v.data_fim AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo' as data_fim_br,
-        v.tempo_dias,
-        v.tempo_horas
-      FROM viagens v
-      JOIN usuarios u ON v.usuario_id = u.id
-      JOIN veiculos ve ON v.veiculo_id = ve.id
-      WHERE v.status = 'concluido'
-      ORDER BY v.data_inicio DESC
-    `);
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Viagens');
-
-    worksheet.columns = [
-      { header: 'Nome', key: 'nome', width: 25 },
-      { header: 'Matrícula', key: 'matricula', width: 12 },
-      { header: 'Veículo', key: 'modelo', width: 20 },
-      { header: 'Placa', key: 'placa', width: 12 },
-      { header: 'Justificativa', key: 'justificativa', width: 35 },
-      { header: 'Data Início', key: 'data_inicio', width: 20 },
-      { header: 'Data Fim', key: 'data_fim', width: 20 },
-      { header: 'Duração', key: 'duracao', width: 15 }
-    ];
-
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF003D6D' }
-    };
-    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-
-    rows.forEach((row, idx) => {
-      const dataInicio = row.data_inicio_br ? new Date(row.data_inicio_br).toLocaleString('pt-BR') : '—';
-      const dataFim = row.data_fim_br ? new Date(row.data_fim_br).toLocaleString('pt-BR') : '—';
-      const duracao = row.tempo_horas ? `${row.tempo_dias || 0}d ${Math.round((row.tempo_horas % 24) * 10) / 10}h` : '—';
-
-      worksheet.addRow({
-        nome: row.nome,
-        matricula: row.matricula,
-        modelo: row.modelo,
-        placa: row.placa,
-        justificativa: row.justificativa,
-        data_inicio: dataInicio,
-        data_fim: dataFim,
-        duracao: duracao
-      });
-
-      const currentRow = worksheet.getRow(idx + 2);
-      currentRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: idx % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF' }
-      };
-      currentRow.border = {
-        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-      };
-    });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=viagens.xlsx');
-
-    await workbook.xlsx.write(res);
-    res.end();
+    const { rows } = await pool.query(
+      `SELECT v.*, m.nome AS motorista_nome, pa.nome AS passageiro_nome,
+              (SELECT COUNT(*) FROM viagem_pontos vp WHERE vp.viagem_id = v.id) AS qtd_pontos
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       JOIN usuarios pa ON v.passageiro_id = pa.id
+       WHERE v.motorista_id = $1 OR v.passageiro_id = $1
+       ORDER BY v.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erro ao exportar XLSX" });
+    res.status(500).json({ error: "Erro ao listar viagens" });
   }
 });
 
-app.get("/api/admin/stats", verificarAuth, verificarAdmin, async (req, res) => {
+app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
   try {
-    const [v, va, u, vp, vu, vc] = await Promise.all([
-      pool.query("SELECT COUNT(*) FROM veiculos"),
-      pool.query("SELECT COUNT(*) FROM veiculos WHERE ativo = true"),
+    const v = (await pool.query(
+      `SELECT v.*, m.nome AS motorista_nome, m.telefone AS motorista_telefone,
+              pa.nome AS passageiro_nome, pa.telefone AS passageiro_telefone,
+              h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url AS motorista_selfie,
+              pr.selfie_url AS passageiro_selfie, pd.selfie_url AS pedido_selfie
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       JOIN usuarios pa ON v.passageiro_id = pa.id
+       LEFT JOIN habilitacoes_motorista h ON v.habilitacao_id = h.id
+       LEFT JOIN propostas pr ON v.proposta_id = pr.id
+       LEFT JOIN pedidos pd ON v.pedido_id = pd.id
+       WHERE v.id = $1`,
+      [req.params.id]
+    )).rows[0];
+
+    if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
+    if (!req.user.is_admin && ![v.motorista_id, v.passageiro_id].includes(req.user.id)) {
+      return res.status(403).json({ error: "Sem permissão" });
+    }
+
+    const pontos = (await pool.query(
+      "SELECT lat, lng, registrado_em FROM viagem_pontos WHERE viagem_id = $1 ORDER BY registrado_em ASC",
+      [req.params.id]
+    )).rows;
+
+    res.json({ ...v, pontos });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar viagem" });
+  }
+});
+
+/* ============================ ADMIN ============================ */
+app.get("/api/admin/overview", verificarAuth, verificarAdmin, async (req, res) => {
+  try {
+    const [u, c, p, vEm, vCon] = await Promise.all([
       pool.query("SELECT COUNT(*) FROM usuarios"),
-      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'pendente'"),
-      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'em_uso'"),
-      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'concluido'")
+      pool.query("SELECT COUNT(*) FROM caronas WHERE status = 'ativa'"),
+      pool.query("SELECT COUNT(*) FROM pedidos WHERE status = 'aberto'"),
+      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'em_andamento'"),
+      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'concluida'"),
     ]);
+    const viagens = (await pool.query(
+      `SELECT v.id, v.status, v.distancia_km, v.iniciada_em,
+              m.nome AS motorista_nome, pa.nome AS passageiro_nome
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       JOIN usuarios pa ON v.passageiro_id = pa.id
+       ORDER BY v.created_at DESC LIMIT 50`
+    )).rows;
 
     res.json({
-      totalVeiculos: +v.rows[0].count,
-      veiculosAtivos: +va.rows[0].count,
       totalUsuarios: +u.rows[0].count,
-      viagensPendentes: +vp.rows[0].count,
-      viagensEmUso: +vu.rows[0].count,
-      viagensConcluidas: +vc.rows[0].count
+      caronasAtivas: +c.rows[0].count,
+      pedidosAbertos: +p.rows[0].count,
+      viagensEmAndamento: +vEm.rows[0].count,
+      viagensConcluidas: +vCon.rows[0].count,
+      viagens,
     });
   } catch (err) {
-    console.error("Erro stats:", err);
-    res.status(500).json({ error: "Erro ao carregar estatísticas" });
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar painel" });
   }
 });
 
 app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, res) => {
   const { matricula } = req.body;
-  if (!matricula || matricula.length < 6) {
-    return res.status(400).json({ error: 'Matrícula inválida' });
-  }
-
+  if (!matricula || matricula.length < 6) return res.status(400).json({ error: "Matrícula inválida" });
   try {
-    const novaSenha = '123456';
-    const senha_hash = await bcrypt.hash(novaSenha, 10);
-
+    const senha_hash = await bcrypt.hash("123456", 10);
     const { rowCount } = await pool.query(
-      'UPDATE usuarios SET senha_hash = $1 WHERE matricula = $2',
+      "UPDATE usuarios SET senha_hash = $1 WHERE matricula = $2",
       [senha_hash, matricula.trim()]
     );
-
-    if (rowCount === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
-
-    res.json({ 
-      success: true, 
-      message: `Senha do usuário ${matricula} resetada para: ${novaSenha}` 
-    });
+    if (rowCount === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+    res.json({ success: true, message: `Senha de ${matricula} resetada para: 123456` });
   } catch (err) {
-    console.error('Erro ao resetar senha:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    res.status(500).json({ error: "Erro interno" });
   }
 });
 
+/* ============================ ESTÁTICOS ============================ */
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
@@ -509,5 +828,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`API rodando em http://localhost:${PORT}`);
+  console.log(`Leopardo Carona rodando em http://localhost:${PORT}`);
 });

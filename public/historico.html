@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Histórico - Vagão</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-left">
+                <span class="nav-logo-icon">🚃</span>
+                <div class="nav-title-group">
+                    <h1>VAGÃO</h1>
+                    <p>Histórico de viagens</p>
+                </div>
+            </div>
+            <div class="nav-links">
+                <span id="userName"></span>
+                <a href="dashboard.html" class="btn btn-secondary btn-sm">Voltar</a>
+                <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h3>Minhas viagens</h3>
+            <p class="cam-hint">Cada viagem guarda a rota percorrida e as fotos de segurança (selfies e foto do carro) com data e local — registro para sua proteção.</p>
+            <div id="listaViagens"></div>
+        </div>
+
+        <div id="detalhe" class="card" style="display:none;">
+            <h3>Detalhe da viagem</h3>
+            <div id="detalheInfo"></div>
+            <div id="mapDetalhe" class="map-box"></div>
+            <h4>Fotos de segurança</h4>
+            <div id="fotosSeg" class="fotos-grid"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+    checkAuth();
+    const user = JSON.parse(localStorage.getItem('user'));
+    document.getElementById('userName').textContent = `Olá, ${user.nome.split(' ')[0]}!`;
+
+    async function carregar() {
+        const r = await fetchWithAuth('/api/viagens');
+        const viagens = await r.json();
+        const div = document.getElementById('listaViagens');
+        if (!viagens.length) { div.innerHTML = '<p class="cam-hint">Nenhuma viagem ainda.</p>'; return; }
+        div.innerHTML = viagens.map(v => `
+            <div class="ride-item">
+                <div class="ride-info">
+                    <strong>${v.origem_texto || 'Origem'} → ${v.destino_texto || 'Destino'}</strong><br>
+                    <small>Motorista: ${v.motorista_nome} • Passageiro: ${v.passageiro_nome}</small><br>
+                    <small>${fmtData(v.iniciada_em)} • ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''} • ${v.qtd_pontos} pontos GPS</small>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="ver(${v.id})">Ver rota e fotos</button>
+            </div>`).join('');
+    }
+
+    async function ver(id) {
+        const r = await fetchWithAuth('/api/viagens/' + id);
+        const v = await r.json();
+        document.getElementById('detalhe').style.display = 'block';
+        document.getElementById('detalheInfo').innerHTML = `
+            <p><strong>Rota:</strong> ${v.origem_texto || '—'} → ${v.destino_texto || '—'}</p>
+            <p><strong>Motorista:</strong> ${v.motorista_nome} ${v.placa ? '• ' + v.placa : ''} ${v.tag ? '(TAG ' + v.tag + ')' : ''}</p>
+            <p><strong>Passageiro:</strong> ${v.passageiro_nome}</p>
+            <p><strong>Início:</strong> ${fmtData(v.iniciada_em)} • <strong>Fim:</strong> ${fmtData(v.finalizada_em)} • <strong>Distância:</strong> ${v.distancia_km || 0} km</p>`;
+
+        const g = await carregarMaps();
+        const pts = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
+        const centro = pts[0] || (v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 });
+        const map = new g.maps.Map(document.getElementById('mapDetalhe'), { center: centro, zoom: 14 });
+        if (pts.length) {
+            new g.maps.Polyline({ path: pts, strokeColor: '#00a9ce', strokeWeight: 5, map });
+            new g.maps.Marker({ position: pts[0], map, label: 'A' });
+            new g.maps.Marker({ position: pts[pts.length - 1], map, label: 'B' });
+        }
+
+        const fotos = [
+            { url: v.foto_carro_url, t: 'Carro ' + (v.placa || ''), em: v.foto_carro_em },
+            { url: v.motorista_selfie, t: 'Selfie motorista' },
+            { url: v.passageiro_selfie || v.pedido_selfie, t: 'Selfie passageiro' },
+        ].filter(f => f.url);
+        document.getElementById('fotosSeg').innerHTML = fotos.map(f => `
+            <div class="foto-card">
+                <img src="${f.url}">
+                <small>${f.t}${f.em ? ' • ' + fmtData(f.em) : ''}</small>
+            </div>`).join('') || '<p class="cam-hint">Sem fotos registradas.</p>';
+
+        document.getElementById('detalhe').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    carregar();
+    </script>
+</body>
+</html>

@@ -1,192 +1,511 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Leopardo</title>
+    <title>Vagão - Carona</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <h1>🐆 LEOPARDO</h1>
+            <div class="nav-left">
+                <span class="nav-logo-icon">🚃</span>
+                <div class="nav-title-group">
+                    <h1>VAGÃO</h1>
+                    <p>Carona entre colaboradores</p>
+                </div>
+            </div>
             <div class="nav-links">
                 <span id="userName"></span>
-                <button onclick="logout()" class="btn btn-secondary">Sair</button>
+                <a href="historico.html" class="btn btn-secondary btn-sm">Histórico</a>
+                <button onclick="abrirPerfil()" class="btn btn-secondary btn-sm">Perfil</button>
+                <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
             </div>
         </div>
     </nav>
+
     <div class="container">
-        <div class="dashboard">
-            <h2>Minhas Viagens</h2>
-            <div class="card">
-                <h3>Nova Viagem</h3>
-                <form id="viagemForm">
-                    <button type="button" onclick="buscarDisponiveis()" class="btn btn-secondary">Buscar Veículos Disponíveis</button>
-                    <div id="veiculosDisponiveis" class="veiculos-list"></div>
-                    <div class="form-group">
-                        <label for="justificativa">Justificativa</label>
-                        <textarea id="justificativa" rows="3" required placeholder="Descreva o motivo do uso do veículo"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Solicitar Veículo</button>
-                    <p class="info-text">Você terá 30 minutos para retirar o veículo após a solicitação</p>
-                </form>
-            </div>
-            <div class="card">
-                <h3>Minhas Viagens</h3>
-                <div id="viagensList"></div>
-            </div>
-            <div id="message" class="message"></div>
+        <!-- Aviso de telefone faltando -->
+        <div id="avisoTelefone" class="message error" style="display:none;">
+            Cadastre seu telefone/WhatsApp no <a href="#" onclick="abrirPerfil();return false;">Perfil</a> para combinar caronas.
         </div>
+
+        <!-- Status do modo motorista -->
+        <div class="card hab-card">
+            <div class="hab-info">
+                <strong>Modo motorista:</strong>
+                <span id="habStatus">verificando...</span>
+            </div>
+            <div class="hab-actions">
+                <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar / atualizar</button>
+                <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar de carro</button>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="showTab('tabPedir', this)">🙋 Pedir carona</button>
+                <button class="tab-btn" onclick="showTab('tabOferecer', this)">🚗 Oferecer carona</button>
+                <button class="tab-btn" onclick="showTab('tabPropostas', this)">🤝 Propostas <span id="badgeProp" class="badge badge-em-uso" style="display:none;"></span></button>
+                <button class="tab-btn" onclick="showTab('tabViagem', this)" id="tabBtnViagem" style="display:none;">🧭 Viagem</button>
+            </div>
+
+            <!-- ============ PEDIR CARONA (passageiro) ============ -->
+            <div id="tabPedir" class="tab-content active">
+                <div class="card">
+                    <h3>Pedir carona</h3>
+                    <p class="cam-hint">Sua localização é a origem. Toque no mapa ou busque o destino.</p>
+                    <input id="destPedInput" class="map-search" placeholder="🔎 Buscar destino...">
+                    <div id="mapPed" class="map-box"></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Horário (vazio = agora)</label>
+                            <input type="datetime-local" id="horaPed">
+                        </div>
+                        <div class="form-group">
+                            <label>Observação</label>
+                            <input type="text" id="obsPed" placeholder="Ex: levo mochila, saída do portão 2">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="pedirCarona()">📸 Tirar selfie e pedir carona</button>
+                </div>
+                <div class="card">
+                    <h3>Caronas que combinam</h3>
+                    <div id="listaCaronasMatch"><p class="cam-hint">Crie um pedido para ver caronas próximas, ou veja todas abaixo.</p></div>
+                    <button class="btn btn-secondary btn-sm" onclick="listarTodasCaronas()">Ver todas as caronas ativas</button>
+                    <div id="listaCaronasTodas"></div>
+                </div>
+            </div>
+
+            <!-- ============ OFERECER CARONA (motorista) ============ -->
+            <div id="tabOferecer" class="tab-content">
+                <div class="card">
+                    <h3>Oferecer carona</h3>
+                    <p class="cam-hint">Requer modo motorista ativo (selfie + foto do carro).</p>
+                    <input id="destOfeInput" class="map-search" placeholder="🔎 Buscar destino...">
+                    <div id="mapOfe" class="map-box"></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Horário (vazio = agora)</label>
+                            <input type="datetime-local" id="horaOfe">
+                        </div>
+                        <div class="form-group">
+                            <label>Vagas</label>
+                            <input type="number" id="vagasOfe" min="1" max="6" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Observação</label>
+                            <input type="text" id="obsOfe" placeholder="Ex: passo pela portaria">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="oferecerCarona()">Publicar carona</button>
+                </div>
+                <div class="card">
+                    <h3>Pedidos que combinam</h3>
+                    <div id="listaPedidosMatch"><p class="cam-hint">Publique uma carona para ver pedidos próximos, ou veja todos abaixo.</p></div>
+                    <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos os pedidos abertos</button>
+                    <div id="listaPedidosTodos"></div>
+                </div>
+            </div>
+
+            <!-- ============ PROPOSTAS ============ -->
+            <div id="tabPropostas" class="tab-content">
+                <div class="card">
+                    <h3>Propostas</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="loadPropostas()">Atualizar</button>
+                    <div id="listaPropostas"></div>
+                </div>
+            </div>
+
+            <!-- ============ VIAGEM EM ANDAMENTO ============ -->
+            <div id="tabViagem" class="tab-content">
+                <div class="card">
+                    <h3>Viagem em andamento</h3>
+                    <div id="viagemInfo"></div>
+                    <div id="mapViagem" class="map-box"></div>
+                    <div id="viagemControles"></div>
+                </div>
+            </div>
+        </div>
+        <div id="message" class="message" style="display:none;"></div>
     </div>
+
     <script src="app.js"></script>
     <script>
-        checkAuth();
-        const user = JSON.parse(localStorage.getItem('user'));
-        document.getElementById('userName').textContent = user.nome;
-        let veiculoSelecionado = null;
+    checkAuth();
+    let user = JSON.parse(localStorage.getItem('user'));
+    document.getElementById('userName').textContent = `Olá, ${user.nome.split(' ')[0]}!`;
 
-        async function buscarDisponiveis() {
-            try {
-                const response = await fetchWithAuth('/api/viagens/disponiveis');
-                const veiculos = await response.json();
-                const container = document.getElementById('veiculosDisponiveis');
-                if (veiculos.length === 0) {
-                    container.innerHTML = '<p class="no-data">Nenhum veículo disponível no momento</p>';
-                    return;
-                }
-                container.innerHTML = '<h4>Selecione um veículo:</h4>' + veiculos.map(v => `
-                    <div class="veiculo-item ${veiculoSelecionado === v.id ? 'selected' : ''}" onclick="selecionarVeiculo(${v.id})">
-                        ${v.foto ? `<img src="${v.foto}" class="thumb" alt="${v.modelo}">` : ''}
-                        <div class="veiculo-info">
-                            <strong>${v.modelo}</strong> - ${v.placa}
-                            ${veiculoSelecionado === v.id ? '<span class="check-icon">✓</span>' : ''}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                showMessage('Erro ao buscar veículos', 'error');
-            }
+    let habHoje = null;
+    let g = null;             // google namespace
+    let selPed = null, selOfe = null;
+    let trackState = null;    // { viagemId, watchId, buffer, timer, polyline, map }
+
+    /* -------- util -------- */
+    function msg(texto, tipo = 'success') {
+        const m = document.getElementById('message');
+        m.style.display = 'block';
+        m.className = 'message ' + tipo;
+        m.textContent = texto;
+        setTimeout(() => { m.style.display = 'none'; }, 5000);
+    }
+    function showTab(id, btn) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (btn) btn.classList.add('active');
+        if (id === 'tabPedir' && !selPed) initMapPedir();
+        if (id === 'tabOferecer' && !selOfe) initMapOferecer();
+        if (id === 'tabPropostas') loadPropostas();
+    }
+
+    /* -------- perfil / telefone -------- */
+    function checarTelefone() {
+        document.getElementById('avisoTelefone').style.display = user.telefone ? 'none' : 'block';
+    }
+    async function abrirPerfil() {
+        const tel = prompt('Telefone / WhatsApp (com DDD):', user.telefone || '');
+        if (tel === null) return;
+        const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel }) });
+        const d = await r.json();
+        if (r.ok) { user = { ...user, telefone: d.telefone }; localStorage.setItem('user', JSON.stringify(user)); checarTelefone(); msg('Telefone atualizado'); }
+        else msg(d.error || 'Erro', 'error');
+    }
+
+    /* -------- habilitação motorista -------- */
+    async function carregarHabilitacao() {
+        const r = await fetchWithAuth('/api/habilitacao/hoje');
+        habHoje = await r.json();
+        const el = document.getElementById('habStatus');
+        if (habHoje) {
+            el.innerHTML = `✅ ativo hoje — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
+        } else {
+            el.textContent = '❌ inativo — ative para oferecer carona';
+        }
+    }
+
+    async function ativarMotorista(trocar) {
+        if (habHoje && !trocar) { msg('Modo motorista já está ativo hoje'); return; }
+        try {
+            msg('Abrindo câmera para a selfie...');
+            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie do motorista (ao vivo)' });
+            const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do carro com a placa dianteira' });
+
+            const placa = prompt('Confirme/edite a placa lida:', carro.placa || '');
+            if (!placa) { msg('Placa é obrigatória', 'error'); return; }
+            const tag = prompt('TAG do veículo (identificador interno, preenchimento manual):', '');
+
+            const body = {
+                placa, tag,
+                foto_carro_url: carro.url, foto_carro_lat: carro.lat, foto_carro_lng: carro.lng, foto_carro_em: carro.em,
+                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+            };
+            const r = await fetchWithAuth('/api/habilitacao', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            habHoje = d;
+            await carregarHabilitacao();
+            msg('Modo motorista ativado!');
+        } catch (e) {
+            if (e.message !== 'cancelado') msg(e.message, 'error');
+        }
+    }
+
+    /* -------- seletor de rota (mapa) -------- */
+    async function criarSeletor(mapId, inputId) {
+        g = await carregarMaps();
+        let origem = null;
+        try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 13, streetViewControl: false, mapTypeControl: false });
+
+        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, label: 'A', title: 'Origem (arraste se quiser)' });
+        let destino = null;
+        const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
+
+        function setDestino(pos, texto) {
+            destino = { lat: pos.lat, lng: pos.lng, texto: texto || '' };
+            mkDestino.setPosition(pos);
+            map.panTo(pos);
         }
 
-        function selecionarVeiculo(id) {
-            veiculoSelecionado = id;
-            buscarDisponiveis();
-        }
+        map.addListener('click', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
 
-        document.getElementById('viagemForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!veiculoSelecionado) {
-                showMessage('Selecione um veículo', 'error');
-                return;
-            }
-            const justificativa = document.getElementById('justificativa').value;
-            try {
-                const response = await fetchWithAuth('/api/viagens', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        veiculo_id: veiculoSelecionado,
-                        justificativa
-                    })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    showMessage('Viagem solicitada! Você tem 30 minutos para retirar o veículo.', 'success');
-                    document.getElementById('viagemForm').reset();
-                    document.getElementById('veiculosDisponiveis').innerHTML = '';
-                    veiculoSelecionado = null;
-                    carregarViagens();
-                } else {
-                    showMessage(data.error || 'Erro na solicitação', 'error');
-                }
-            } catch (error) {
-                showMessage('Erro ao solicitar viagem', 'error');
-            }
+        const ac = new g.maps.places.Autocomplete(document.getElementById(inputId), { fields: ['geometry', 'name', 'formatted_address'] });
+        ac.bindTo('bounds', map);
+        ac.addListener('place_changed', () => {
+            const p = ac.getPlace();
+            if (p.geometry) setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.formatted_address || p.name);
         });
 
-        async function carregarViagens() {
-            try {
-                const response = await fetchWithAuth('/api/minhas-viagens');
-                const viagens = await response.json();
-                const container = document.getElementById('viagensList');
-                if (viagens.length === 0) {
-                    container.innerHTML = '<p class="no-data">Você ainda não tem viagens</p>';
-                    return;
-                }
-                container.innerHTML = viagens.map(v => {
-                    let statusTexto = '';
-                    if (v.status === 'pendente') statusTexto = 'AGUARDANDO RETIRADA';
-                    if (v.status === 'em_uso') statusTexto = 'EM USO';
-                    if (v.status === 'concluido') statusTexto = 'CONCLUÍDA';
-                    if (v.status === 'expirado') statusTexto = 'EXPIRADA';
+        return {
+            getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
+            getDestino: () => destino,
+        };
+    }
+    async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); }
+    async function initMapOferecer() { selOfe = await criarSeletor('mapOfe', 'destOfeInput'); }
 
-                    let contadorHtml = '';
-                    if (v.status === 'pendente' && v.segundos_desde_criacao) {
-                        const segundosRestantes = Math.max(0, 1800 - v.segundos_desde_criacao);
-                        const minutos = Math.floor(segundosRestantes / 60);
-                        const segundos = Math.floor(segundosRestantes % 60);
-                        contadorHtml = `<p class="countdown" data-viagem-id="${v.id}" data-segundos="${segundosRestantes}">⏱️ Tempo restante: <strong>${minutos}m ${segundos}s</strong></p>`;
-                    }
+    function horarioISO(id) {
+        const v = document.getElementById(id).value;
+        return v ? new Date(v).toISOString() : null;
+    }
 
-                    return `
-                    <div class="agendamento-item status-${v.status}">
-                        <div class="agendamento-header">
-                            <strong>${v.modelo} - ${v.placa}</strong>
-                            <span class="badge badge-${v.status}">${statusTexto}</span>
-                        </div>
-                        <p><strong>Justificativa:</strong> ${v.justificativa || '—'}</p>
-                        ${v.data_inicio ? `<p><strong>Início:</strong> ${formatDate(v.data_inicio)}</p>` : ''}
-                        ${v.data_fim ? `<p><strong>Fim:</strong> ${formatDate(v.data_fim)}</p>` : ''}
-                        ${v.status === 'concluido' && v.tempo_horas ? `<p><strong>Duração:</strong> ${v.tempo_dias > 0 ? v.tempo_dias + ' dias ' : ''}${Math.round((v.tempo_horas % 24) * 10) / 10}h</p>` : ''}
-                        ${contadorHtml}
-                    </div>
-                `}).join('');
+    /* -------- pedir carona -------- */
+    async function pedirCarona() {
+        if (!user.telefone) return msg('Cadastre seu telefone no Perfil primeiro', 'error');
+        const dest = selPed && selPed.getDestino();
+        if (!dest) return msg('Escolha o destino no mapa', 'error');
+        const origem = selPed.getOrigem();
+        try {
+            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie (segurança da viagem)' });
+            const body = {
+                origem_lat: origem.lat, origem_lng: origem.lng,
+                destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
+                horario: horarioISO('horaPed'), observacao: document.getElementById('obsPed').value,
+                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+            };
+            const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            msg('Pedido criado! Veja as caronas que combinam.');
+            matchCaronas(d.id);
+        } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
+    }
 
-                iniciarContadores();
-            } catch (error) {
-                showMessage('Erro ao carregar viagens', 'error');
+    async function matchCaronas(pedidoId) {
+        const r = await fetchWithAuth('/api/caronas/match?pedido_id=' + pedidoId);
+        const caronas = await r.json();
+        const div = document.getElementById('listaCaronasMatch');
+        if (!caronas.length) { div.innerHTML = '<p class="cam-hint">Nenhuma carona compatível agora. Aguarde um motorista oferecer.</p>'; return; }
+        div.innerHTML = caronas.map(c => cardCarona(c, true)).join('');
+    }
+    async function listarTodasCaronas() {
+        const o = selPed ? selPed.getOrigem() : null;
+        const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
+        const r = await fetchWithAuth('/api/caronas' + q);
+        const caronas = await r.json();
+        document.getElementById('listaCaronasTodas').innerHTML = caronas.length
+            ? caronas.map(c => cardCarona(c, true)).join('')
+            : '<p class="cam-hint">Nenhuma carona ativa.</p>';
+    }
+    function cardCarona(c, comBotao) {
+        const dist = c.dist_origem != null ? ` • origem a ${Number(c.dist_origem).toFixed(1)} km` : '';
+        return `<div class="ride-item">
+            ${c.foto_carro_url ? `<img src="${c.foto_carro_url}" class="ride-thumb">` : ''}
+            <div class="ride-info">
+                <strong>${c.motorista_nome}</strong> ${c.placa ? '• ' + c.placa : ''} ${c.tag ? '(TAG ' + c.tag + ')' : ''}<br>
+                <small>📍 ${c.destino_texto || 'destino no mapa'} • 🕒 ${fmtHorario(c.horario)} • vagas: ${c.vagas}${dist}</small>
+                ${c.observacao ? `<br><small>"${c.observacao}"</small>` : ''}
+            </div>
+            ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Pedir vaga</button>` : ''}
+        </div>`;
+    }
+    async function pedirVaga(caronaId) {
+        if (!user.telefone) return msg('Cadastre seu telefone no Perfil primeiro', 'error');
+        try {
+            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie para pedir a vaga' });
+            const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({
+                carona_id: caronaId, selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+            }) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            msg('Vaga solicitada! Aguarde o aceite do motorista.');
+        } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
+    }
+
+    /* -------- oferecer carona -------- */
+    async function oferecerCarona() {
+        if (!user.telefone) return msg('Cadastre seu telefone no Perfil primeiro', 'error');
+        if (!habHoje) { msg('Ative o modo motorista primeiro', 'error'); return ativarMotorista(false); }
+        const dest = selOfe && selOfe.getDestino();
+        if (!dest) return msg('Escolha o destino no mapa', 'error');
+        const origem = selOfe.getOrigem();
+        const body = {
+            origem_lat: origem.lat, origem_lng: origem.lng,
+            destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
+            horario: horarioISO('horaOfe'), vagas: +document.getElementById('vagasOfe').value || 1,
+            observacao: document.getElementById('obsOfe').value,
+        };
+        const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg('Carona publicada! Veja os pedidos que combinam.');
+        matchPedidos(d.id);
+    }
+    async function matchPedidos(caronaId) {
+        const r = await fetchWithAuth('/api/pedidos/match?carona_id=' + caronaId);
+        const pedidos = await r.json();
+        const div = document.getElementById('listaPedidosMatch');
+        div.innerHTML = pedidos.length ? pedidos.map(p => cardPedido(p)).join('')
+            : '<p class="cam-hint">Nenhum pedido compatível agora.</p>';
+    }
+    async function listarTodosPedidos() {
+        const o = selOfe ? selOfe.getOrigem() : null;
+        const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
+        const r = await fetchWithAuth('/api/pedidos' + q);
+        const pedidos = await r.json();
+        document.getElementById('listaPedidosTodos').innerHTML = pedidos.length
+            ? pedidos.map(p => cardPedido(p)).join('') : '<p class="cam-hint">Nenhum pedido aberto.</p>';
+    }
+    function cardPedido(p) {
+        const dist = p.dist_destino != null ? ` • destino a ${Number(p.dist_destino).toFixed(1)} km` : '';
+        return `<div class="ride-item">
+            ${p.selfie_url ? `<img src="${p.selfie_url}" class="ride-thumb">` : ''}
+            <div class="ride-info">
+                <strong>${p.passageiro_nome}</strong><br>
+                <small>📍 ${p.destino_texto || 'destino no mapa'} • 🕒 ${fmtHorario(p.horario)}${dist}</small>
+                ${p.observacao ? `<br><small>"${p.observacao}"</small>` : ''}
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="oferecerAoPedido(${p.id})">Oferecer carona</button>
+        </div>`;
+    }
+    async function oferecerAoPedido(pedidoId) {
+        if (!habHoje) { msg('Ative o modo motorista primeiro', 'error'); return ativarMotorista(false); }
+        const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: pedidoId }) });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg('Carona oferecida! Aguarde o aceite do passageiro.');
+    }
+
+    /* -------- propostas -------- */
+    async function loadPropostas() {
+        const r = await fetchWithAuth('/api/propostas');
+        const props = await r.json();
+        const pendentesRecebidas = props.filter(p => p.sou_destinatario && p.status === 'pendente').length;
+        const badge = document.getElementById('badgeProp');
+        badge.style.display = pendentesRecebidas ? 'inline-block' : 'none';
+        badge.textContent = pendentesRecebidas;
+
+        const div = document.getElementById('listaPropostas');
+        if (!props.length) { div.innerHTML = '<p class="cam-hint">Nenhuma proposta ainda.</p>'; return; }
+        div.innerHTML = props.map(p => cardProposta(p)).join('');
+    }
+    function cardProposta(p) {
+        const tipo = p.carona_id ? 'Vaga em carona' : 'Oferta para pedido';
+        const outro = p.sou_destinatario ? p.de_nome : p.para_nome;
+        const tel = p.sou_destinatario ? p.de_telefone : p.para_telefone;
+        const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
+        const souMotorista = (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
+
+        let acoes = '';
+        if (p.status === 'pendente' && p.sou_destinatario) {
+            acoes = `<button class="btn btn-success btn-sm" onclick="aceitarProposta(${p.id})">Aceitar</button>
+                     <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
+        } else if (p.status === 'aceito') {
+            const wpp = linkWhatsApp(tel);
+            acoes = `<span class="badge badge-ativo">aceito</span>
+                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">📱 ${tel}</a>` : ''}`;
+            if (p.viagem_id) {
+                acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Abrir viagem</button>`;
+            } else if (souMotorista) {
+                acoes += ` <button class="btn btn-primary btn-sm" onclick="iniciarViagem(${p.id})">Iniciar viagem</button>`;
             }
+        } else if (p.status === 'recusado') {
+            acoes = `<span class="badge badge-inativo">recusado</span>`;
         }
 
-        function iniciarContadores() {
-            const contadores = document.querySelectorAll('.countdown');
-            contadores.forEach(el => {
-                const segundosInicial = parseInt(el.dataset.segundos);
-                let segundosRestantes = segundosInicial;
+        return `<div class="ride-item">
+            ${p.selfie_url ? `<img src="${p.selfie_url}" class="ride-thumb">` : ''}
+            <div class="ride-info">
+                <strong>${outro}</strong> <small>(${tipo})</small><br>
+                <small>${rota}</small>
+                ${p.mensagem ? `<br><small>"${p.mensagem}"</small>` : ''}
+            </div>
+            <div class="ride-actions">${acoes}</div>
+        </div>`;
+    }
+    async function aceitarProposta(id) {
+        const r = await fetchWithAuth('/api/propostas/' + id + '/aceitar', { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg('Proposta aceita! Contato liberado.');
+        loadPropostas();
+    }
+    async function recusarProposta(id) {
+        const r = await fetchWithAuth('/api/propostas/' + id + '/recusar', { method: 'POST' });
+        if (r.ok) { msg('Proposta recusada'); loadPropostas(); }
+    }
 
-                const interval = setInterval(() => {
-                    segundosRestantes--;
-                    if (segundosRestantes <= 0) {
-                        clearInterval(interval);
-                        el.innerHTML = '<span class="text-danger">EXPIRADO</span>';
-                        carregarViagens();
-                        return;
-                    }
-                    
-                    const min = Math.floor(segundosRestantes / 60);
-                    const seg = segundosRestantes % 60;
-                    el.innerHTML = `⏱️ Tempo restante: <strong>${min}m ${seg}s</strong>`;
-                }, 1000);
-            });
+    /* -------- viagem + rastreamento ao vivo -------- */
+    async function iniciarViagem(propostaId) {
+        const r = await fetchWithAuth('/api/viagens', { method: 'POST', body: JSON.stringify({ proposta_id: propostaId }) });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg('Viagem iniciada! Rastreando rota...');
+        abrirViagem(d.id, true);
+    }
+
+    async function abrirViagem(viagemId) {
+        document.getElementById('tabBtnViagem').style.display = 'inline-block';
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tabViagem').classList.add('active');
+
+        const r = await fetchWithAuth('/api/viagens/' + viagemId);
+        const v = await r.json();
+        const ehMotorista = v.motorista_id === user.id;
+
+        document.getElementById('viagemInfo').innerHTML = `
+            <p><strong>Motorista:</strong> ${v.motorista_nome} ${v.placa ? '• ' + v.placa : ''} ${v.tag ? '(TAG ' + v.tag + ')' : ''}</p>
+            <p><strong>Passageiro:</strong> ${v.passageiro_nome}</p>
+            <p><strong>Status:</strong> ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}</p>`;
+
+        g = await carregarMaps();
+        const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14 });
+        const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
+        const polyline = new g.maps.Polyline({ path, strokeColor: '#00a9ce', strokeWeight: 5, map });
+
+        const ctrl = document.getElementById('viagemControles');
+        if (v.status === 'em_andamento' && ehMotorista) {
+            ctrl.innerHTML = `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Finalizar viagem</button>`;
+            iniciarTracking(viagemId, map, polyline);
+        } else {
+            ctrl.innerHTML = v.status === 'concluida' ? '<span class="badge badge-ativo">Viagem concluída</span>' : '<span class="cam-hint">Acompanhe pelo histórico ao concluir.</span>';
         }
+    }
 
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleString('pt-BR');
+    function iniciarTracking(viagemId, map, polyline) {
+        if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        trackState = { viagemId, buffer: [], polyline, map };
+        localStorage.setItem('viagemAtiva', viagemId);
+
+        trackState.watchId = navigator.geolocation.watchPosition((pos) => {
+            const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            trackState.buffer.push(pt);
+            polyline.getPath().push(new g.maps.LatLng(pt.lat, pt.lng));
+            map.panTo(pt);
+        }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
+
+        trackState.timer = setInterval(enviarPontos, 15000);
+    }
+    async function enviarPontos() {
+        if (!trackState || !trackState.buffer.length) return;
+        const pontos = trackState.buffer.splice(0, trackState.buffer.length);
+        await fetchWithAuth('/api/viagens/' + trackState.viagemId + '/pontos', { method: 'POST', body: JSON.stringify({ pontos }) });
+    }
+    async function finalizarViagem(viagemId) {
+        await enviarPontos();
+        if (trackState) {
+            if (trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+            clearInterval(trackState.timer);
         }
+        localStorage.removeItem('viagemAtiva');
+        const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg(`Viagem concluída! ${d.distancia_km || 0} km registrados.`);
+        document.getElementById('viagemControles').innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
+    }
 
-        function showMessage(text, type) {
-            const messageDiv = document.getElementById('message');
-            messageDiv.className = `message ${type}`;
-            messageDiv.textContent = text;
-            setTimeout(() => {
-                messageDiv.className = 'message';
-                messageDiv.textContent = '';
-            }, 5000);
-        }
-
-        carregarViagens();
-        setInterval(carregarViagens, 30000);
+    /* -------- init -------- */
+    (async function init() {
+        checarTelefone();
+        await carregarHabilitacao();
+        await loadPropostas();
+        await initMapPedir();
+    })();
     </script>
 </body>
 </html>

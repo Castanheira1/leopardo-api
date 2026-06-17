@@ -1,69 +1,74 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro - Leopardo</title>
+    <title>Registro - Leopardo Carona</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <div class="login-box">
-            <div class="logo">
-                <h1>🚗 LEOPARDO</h1>
-                <p>Criar Nova Conta</p>
+        <div class="login-box card" style="max-width:460px;margin:40px auto;">
+            <div class="logo" style="text-align:center;margin-bottom:18px;">
+                <h1>🐆 LEOPARDO CARONA</h1>
+                <p>Criar nova conta</p>
             </div>
 
             <form id="registerForm">
                 <div class="form-group">
                     <label for="nome">Nome Completo</label>
-                    <input type="text" id="nome" name="nome" required placeholder="Digite seu nome completo">
+                    <input type="text" id="nome" required placeholder="Digite seu nome completo">
                 </div>
 
                 <div class="form-group">
                     <label for="funcao">Função</label>
-                    <input type="text" id="funcao" name="funcao" required placeholder="Ex: Analista, Gerente">
+                    <input type="text" id="funcao" placeholder="Ex: Analista, Gerente">
                 </div>
 
                 <div class="form-group">
                     <label for="matricula">Matrícula</label>
-                    <input type="text" id="matricula" name="matricula" required placeholder="6-10 dígitos" pattern="[0-9]{6,10}">
+                    <input type="text" id="matricula" required placeholder="6-10 dígitos" pattern="[0-9]{6,10}">
                     <small>Apenas números, 6 a 10 dígitos</small>
                 </div>
 
                 <div class="form-group">
+                    <label for="telefone">Telefone / WhatsApp</label>
+                    <input type="tel" id="telefone" required placeholder="Ex: (94) 99999-9999">
+                    <small>Usado para combinar a carona após o aceite</small>
+                </div>
+
+                <div class="form-group">
                     <label for="senha">Senha</label>
-                    <input type="password" id="senha" name="senha" required placeholder="Mínimo 6 caracteres" minlength="6">
-                    <small>Mínimo 6 caracteres</small>
+                    <input type="password" id="senha" required placeholder="Mínimo 6 caracteres" minlength="6">
                 </div>
 
                 <div class="form-group">
                     <label for="confirmarSenha">Confirmar Senha</label>
-                    <input type="password" id="confirmarSenha" name="confirmarSenha" required placeholder="Digite a senha novamente">
+                    <input type="password" id="confirmarSenha" required placeholder="Digite a senha novamente">
                 </div>
 
-                <button type="submit" class="btn btn-primary">Criar Conta</button>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Criar Conta</button>
 
-                <div class="links">
+                <div class="links" style="text-align:center;margin-top:14px;">
                     <a href="index.html">Já tenho conta</a>
                 </div>
             </form>
 
-            <div id="message" class="message"></div>
+            <div id="message" class="message" style="display:none;"></div>
         </div>
     </div>
 
     <script>
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const nome = document.getElementById('nome').value;
             const funcao = document.getElementById('funcao').value;
             const matricula = document.getElementById('matricula').value;
+            const telefone = document.getElementById('telefone').value;
             const senha = document.getElementById('senha').value;
             const confirmarSenha = document.getElementById('confirmarSenha').value;
             const messageDiv = document.getElementById('message');
+            messageDiv.style.display = 'block';
 
             if (senha !== confirmarSenha) {
                 messageDiv.className = 'message error';
@@ -75,18 +80,16 @@
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nome, funcao, matricula, senha })
+                    body: JSON.stringify({ nome, funcao, matricula, telefone, senha })
                 });
-
                 const data = await response.json();
 
                 if (response.ok) {
                     messageDiv.className = 'message success';
                     messageDiv.textContent = 'Conta criada com sucesso! Redirecionando...';
-                    
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 2000);
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
                 } else {
                     messageDiv.className = 'message error';
                     messageDiv.textContent = data.error || 'Erro ao criar conta';
@@ -99,5 +102,3 @@
     </script>
 </body>
 </html>
-```
-
