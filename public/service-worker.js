@@ -1,18 +1,36 @@
-// Vagão Service Worker — estratégia network-first.
-// Sempre tenta buscar a versão mais nova online; o cache é só fallback offline.
-// Combinado com o auto-reload do pwa.js, o usuário recebe cada atualização
-// publicada no Render automaticamente, sem reinstalar o app.
-const CACHE = "vagao-cache-v1";
+// Vagão Service Worker.
+// Objetivo: o app NÃO é offline, mas não pode quebrar sem internet — ele abre e
+// mostra a última versão carregada. O cache é FIXO (só o "esqueleto" do app),
+// sobrescreve em vez de acumular, e os dados de API nunca são cacheados.
+const VERSION = "v2";
+const CACHE = `vagao-shell-${VERSION}`;
 
-self.addEventListener("install", () => {
-  // Ativa a nova versão imediatamente, sem esperar abas antigas fecharem.
+// Lista fixa de arquivos do app (o cache nunca cresce além disto).
+const SHELL = [
+  "/",
+  "/index.html",
+  "/registro.html",
+  "/dashboard.html",
+  "/historico.html",
+  "/admin.html",
+  "/style.css",
+  "/app.js",
+  "/pwa.js",
+  "/manifest.json",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
+];
+
+self.addEventListener("install", (event) => {
   self.skipWaiting();
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      // Remove caches de versões anteriores.
+      // Remove qualquer cache de versão anterior — nada de lixo acumulado.
       const keys = await caches.keys();
       await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
       await self.clients.claim();
@@ -25,23 +43,37 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  // Não intercepta outras origens (Google Maps, Supabase, CDN do Tesseract...).
+  // Outras origens (Google Maps, Supabase, CDN do Tesseract) passam direto.
   if (url.origin !== self.location.origin) return;
-  // Nunca cacheia chamadas de API — sempre vão à rede.
+  // API nunca é cacheada: dados de carona sempre vêm da rede.
   if (url.pathname.startsWith("/api/")) return;
 
+  // Páginas (navegação): rede primeiro; offline, serve a última página em cache.
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          // Sobrescreve a cópia desta página no cache (não acumula entradas novas).
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(async () => (await caches.match(req)) || (await caches.match("/index.html")))
+    );
+    return;
+  }
+
+  // Assets do esqueleto (css/js/ícones): cache primeiro, com atualização em
+  // segundo plano. Só re-cacheia o que JÁ faz parte do shell — mantém o cache fixo.
   event.respondWith(
-    (async () => {
-      try {
-        const fresh = await fetch(req);
-        const cache = await caches.open(CACHE);
-        cache.put(req, fresh.clone());
-        return fresh;
-      } catch (err) {
-        const cached = await caches.match(req);
-        if (cached) return cached;
-        throw err;
-      }
-    })()
+    caches.match(req).then((cached) => {
+      const network = fetch(req)
+        .then((res) => {
+          if (cached) caches.open(CACHE).then((c) => c.put(req, res.clone())).catch(() => {});
+          return res;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
   );
 });
