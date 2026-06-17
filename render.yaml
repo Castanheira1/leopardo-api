@@ -1,0 +1,38 @@
+# Render Blueprint — Vagão (app de carona interno)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Como usar:
+#   1. No Render: New + > Blueprint > conecte este repositório.
+#   2. O Render lê este arquivo e cria o web service.
+#   3. Preencha as variáveis marcadas com "sync: false" (segredos)
+#      no painel — veja DEPLOY-RENDER.md.
+
+services:
+  - type: web
+    name: vagao
+    runtime: node
+    plan: free
+    region: ohio # ajuste para a região mais próxima do seu Supabase
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/config
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true # o Render gera um segredo forte automaticamente
+      - key: SUPABASE_BUCKET
+        value: veiculos
+      - key: RAIO_MATCH_KM
+        value: "3"
+      # Segredos — preencha no painel do Render (Environment):
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
