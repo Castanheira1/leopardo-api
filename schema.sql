@@ -154,5 +154,5 @@ CREATE INDEX idx_viagem_pontos_viagem ON viagem_pontos (viagem_id, registrado_em
 -- Admin padrão (000000 / admin123)
 INSERT INTO usuarios (nome, funcao, matricula, senha_hash, is_admin)
 SELECT 'Administrador', 'Administrador', '000000',
-'$2b$10$QdX5f7eK8Y6i3f2eW9q1Q.Z8j5bN9mK7vL3xP9rT2yU0oP5lM8nHq', TRUE
+'$2b$10$CU7Cm/xiJrJ10FM9GNmAYu/RrIx67TpjYhJww.gX5kh/JRu5UDpAO', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE matricula = '000000');

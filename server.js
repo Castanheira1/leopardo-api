@@ -38,9 +38,15 @@ pool.connect()
   .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
+// Não derruba o boot quando o Supabase ainda não foi configurado:
+// o app sobe e serve as páginas; apenas o upload de fotos fica indisponível.
+const supabaseConfigurado = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_KEY);
+if (!supabaseConfigurado) {
+  console.warn("AVISO: SUPABASE_URL/SUPABASE_KEY não definidos — upload de fotos desativado.");
+}
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_KEY || "placeholder-key"
 );
 
 // Upload genérico para o Supabase Storage (mesmo mecanismo das fotos de carro)
