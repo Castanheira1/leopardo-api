@@ -1,244 +1,93 @@
+# 🚃 VAGÃO - Carona entre colaboradores
 
-# 🚗 LEOPARDO - Sistema de Agendamento de Veículos
+App interno de **carona** (estilo "mini Uber") para o ambiente de trabalho. O mesmo
+usuário alterna entre **motorista** e **passageiro**, com verificação de segurança por
+**foto ao vivo** e **registro de toda viagem com a rota**.
 
-Sistema completo de agendamento de veículos corporativos com autenticação, painel administrativo e dashboard de estatísticas.
+> Pivot do antigo *Leopardo* (sistema de reserva de veículos). A base de usuários,
+> a autenticação e o armazenamento de fotos (Supabase Storage) foram reaproveitados.
 
-## 📋 Funcionalidades
+## ✨ Funcionalidades
 
-### Usuários
-- ✅ Cadastro e login com autenticação JWT
-- ✅ Recuperação de senha via email
-- ✅ Visualizar veículos disponíveis por período
-- ✅ Criar agendamentos com justificativa
-- ✅ Cancelar agendamentos
-- ✅ Visualizar histórico de agendamentos
+- **Modo motorista/passageiro** no mesmo app (alternância rápida).
+- **Pedir carona:** mostra sua localização (GPS), escolhe o destino no mapa, tira uma
+  **selfie ao vivo** e publica o pedido.
+- **Oferecer carona:** ao ativar o modo motorista, captura **selfie + foto do carro**
+  (com a **placa** lida automaticamente por OCR e **editável**) e uma **TAG** manual.
+  A habilitação vale o dia todo e é renovada ao **trocar de carro**.
+- **Match por proximidade:** caronas e pedidos são cruzados por **origem e destino
+  próximos** (Haversine) e horário compatível ("agora" ou agendado).
+- **Aceite + contato:** ao aceitar a proposta, o **WhatsApp/telefone** do outro é liberado.
+- **Viagem com rastreamento ao vivo:** o GPS grava a rota durante o trajeto.
+- **Histórico de segurança:** toda viagem guarda a rota e as fotos (selfies + carro)
+  com **data e local** — registro para proteção em caso de abuso.
 
-### Administradores
-- ✅ Dashboard com estatísticas completas
-- ✅ Cadastrar e gerenciar veículos
-- ✅ Ativar/desativar veículos
-- ✅ Visualizar todos os agendamentos
-- ✅ Relatórios de uso e usuários mais ativos
+## 🔒 Segurança das fotos
+
+As fotos são **capturadas ao vivo pela câmera** (`getUserMedia`), **sem opção de
+anexar arquivo**. Cada foto recebe carimbo de **horário e localização**. As imagens
+vão para o **Supabase Storage** e as tabelas guardam a URL + metadados.
+
+> Câmera e GPS exigem **HTTPS** (ou `localhost` em desenvolvimento).
 
 ## 🛠️ Tecnologias
 
-**Backend:**
-- Node.js + Express
-- PostgreSQL
-- JWT + bcrypt
-- Helmet + Rate Limiting
-- Winston (logs)
-- Nodemailer (emails)
-
-**Frontend:**
-- HTML5 + CSS3 + JavaScript Vanilla
-- Design responsivo
-- Interface moderna e intuitiva
+- **Backend:** Node.js + Express, PostgreSQL (Supabase), JWT + bcrypt, Helmet, Multer.
+- **Frontend:** HTML/CSS/JS puro, **Google Maps** (mapa + Places Autocomplete),
+  **Tesseract.js** (OCR de placa, via CDN).
+- **Storage:** Supabase Storage (mesmo mecanismo das fotos de carro).
 
 ## 📦 Instalação
 
-### Método 1: Docker (Recomendado)
-
 ```bash
-# Clone o repositório
-git clone <url-do-repositorio>
-cd leopardo
-
-# Configure as variáveis de ambiente
-cp .env.example .env
-# Edite o .env com suas configurações
-
-# Inicie os containers
-docker-compose up -d
-
-# Acesse: http://localhost:3000
-```
-
-### Método 2: Manual
-
-```bash
-# Clone o repositório
-git clone <url-do-repositorio>
-cd leopardo
-
-# Instale as dependências
 npm install
-
-# Configure o banco de dados PostgreSQL
-createdb leopardo
-psql -U postgres -d leopardo -f schema.sql
-
-# Configure as variáveis de ambiente
-cp .env.example .env
-# Edite o .env com suas configurações
-
-# Inicie o servidor
-npm start
-
-# Para desenvolvimento (com hot reload)
-npm run dev
+cp .env.example .env   # edite com suas credenciais
+# Crie as tabelas:
+psql "$DATABASE_URL" -f schema.sql
+npm start              # http://localhost:3000
 ```
 
-## ⚙️ Configuração
+### Variáveis de ambiente
 
-### Variáveis de Ambiente (.env)
+Veja `.env.example`. Destaques:
+- `DATABASE_URL`, `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_BUCKET`
+- `GOOGLE_MAPS_API_KEY` — chave do Google Maps (Maps JavaScript API + Places).
+- `RAIO_MATCH_KM` — raio de proximidade do match (padrão 3 km).
 
-```env
-# Banco de Dados
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/leopardo
+## 👤 Usuário padrão
 
-# Segurança
-JWT_SECRET=seu-segredo-super-secreto-aqui-minimo-32-caracteres
+Após o `schema.sql`: admin **000000 / admin123** (altere em produção).
 
-# Servidor
-PORT=3000
-NODE_ENV=development
+## 📊 Principais endpoints
 
-# Email (SMTP)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=seu-email@gmail.com
-SMTP_PASS=sua-senha-de-app
-EMAIL_FROM=noreply@leopardo.com
+| Área | Endpoint |
+|------|----------|
+| Auth | `POST /api/register`, `POST /api/login`, `GET/PATCH /api/perfil` |
+| Config | `GET /api/config` (Maps key) |
+| Fotos | `POST /api/fotos` (multipart, captura ao vivo) |
+| Motorista | `GET /api/habilitacao/hoje`, `POST /api/habilitacao` |
+| Caronas | `POST/GET /api/caronas`, `DELETE /api/caronas/:id`, `GET /api/caronas/match` |
+| Pedidos | `POST/GET /api/pedidos`, `DELETE /api/pedidos/:id`, `GET /api/pedidos/match` |
+| Propostas | `POST /api/propostas`, `GET /api/propostas`, `.../aceitar`, `.../recusar` |
+| Viagens | `POST /api/viagens`, `POST /api/viagens/:id/pontos`, `.../finalizar`, `GET /api/viagens`, `GET /api/viagens/:id` |
+| Admin | `GET /api/admin/overview`, `POST /api/admin/reset-senha` |
 
-# Frontend
-FRONTEND_URL=http://localhost:3000
-```
-
-### Configuração de Email (Gmail)
-
-1. Acesse sua conta Google
-2. Ative a verificação em duas etapas
-3. Gere uma senha de app em: https://myaccount.google.com/apppasswords
-4. Use a senha gerada no `.env` em `SMTP_PASS`
-
-## 👤 Usuários Padrão
-
-Após executar o `schema.sql`, os seguintes usuários estarão disponíveis:
-
-**Administrador:**
-- Matrícula: `000000`
-- Senha: `admin123`
-
-**Usuário Teste:**
-- Matrícula: `123456`
-- Senha: `senha123`
-
-⚠️ **IMPORTANTE:** Altere essas senhas em produção!
-
-## 📁 Estrutura de Arquivos
+## 📁 Estrutura
 
 ```
-leopardo/
-├── server.js              # Backend principal
-├── package.json           # Dependências
-├── schema.sql             # Esquema do banco de dados
-├── .env.example           # Exemplo de variáveis de ambiente
-├── Dockerfile             # Container Docker
-├── docker-compose.yml     # Orquestração Docker
-├── README.md              # Este arquivo
-└── public/                # Frontend
-    ├── index.html         # Login
-    ├── registro.html      # Cadastro
-    ├── dashboard.html     # Dashboard do usuário
-    ├── admin.html         # Painel administrativo
-    ├── recuperar-senha.html
-    ├── redefinir-senha.html
-    ├── app.js             # Funções JavaScript globais
-    └── style.css          # Estilos
+├── server.js          # Backend (Express + Postgres + Supabase Storage)
+├── schema.sql         # Esquema do banco
+├── .env.example
+└── public/
+    ├── index.html     # Login
+    ├── registro.html  # Cadastro (com telefone)
+    ├── dashboard.html # App de carona (mapa, modos, câmera, propostas, viagem)
+    ├── historico.html # Histórico com rota + fotos de segurança
+    ├── admin.html     # Painel admin
+    ├── app.js         # Auth, Maps, câmera/OCR, utilidades
+    └── style.css
 ```
-
-## 🔒 Segurança
-
-O sistema implementa várias camadas de segurança:
-
-- ✅ Senhas hasheadas com bcrypt
-- ✅ Autenticação JWT com expiração
-- ✅ Rate limiting para prevenir ataques
-- ✅ Helmet.js para headers de segurança
-- ✅ CORS configurado
-- ✅ Validação de dados com express-validator
-- ✅ Prepared statements (proteção contra SQL injection)
-- ✅ Logs estruturados com Winston
-
-## 📊 API Endpoints
-
-### Autenticação
-- `POST /api/register` - Cadastrar usuário
-- `POST /api/login` - Login
-- `POST /api/recuperar-senha` - Recuperar senha
-- `POST /api/redefinir-senha` - Redefinir senha
-
-### Agendamentos (requer autenticação)
-- `GET /api/agendamentos/disponiveis` - Listar veículos disponíveis
-- `POST /api/agendamentos` - Criar agendamento
-- `GET /api/meus-agendamentos` - Meus agendamentos
-- `DELETE /api/agendamentos/:id` - Cancelar agendamento
-
-### Admin (requer autenticação + permissão admin)
-- `POST /api/veiculos` - Cadastrar veículo
-- `GET /api/veiculos` - Listar veículos
-- `PATCH /api/veiculos/:id/toggle` - Ativar/desativar veículo
-- `GET /api/admin/agendamentos` - Listar todos agendamentos
-- `GET /api/admin/stats` - Dashboard de estatísticas
-
-## 🧪 Testes
-
-```bash
-# Executar testes
-npm test
-
-# Executar com cobertura
-npm test -- --coverage
-```
-
-## 🚀 Deploy em Produção
-
-### Heroku
-
-```bash
-heroku create leopardo-app
-heroku addons:create heroku-postgresql:hobby-dev
-heroku config:set JWT_SECRET=seu-segredo-aqui
-heroku config:set NODE_ENV=production
-# Configure outras variáveis...
-git push heroku main
-```
-
-### VPS (Ubuntu)
-
-```bash
-# Instale Docker e Docker Compose
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-
-# Clone e configure
-git clone <url-do-repositorio>
-cd leopardo
-cp .env.example .env
-nano .env  # Configure as variáveis
-
-# Inicie
-docker-compose up -d
-
-# Configure nginx como proxy reverso
-# Configure SSL com Let's Encrypt
-```
-
-## 📝 Licença
-
-MIT
-
-## 👨‍💻 Autor
-
-Sistema Leopardo - Desenvolvido para gestão de veículos corporativos
-
-## 🆘 Suporte
-
-Para problemas ou dúvidas, abra uma issue no repositório.
 
 ---
 
-**Desenvolvido com ❤️ para facilitar a gestão de veículos corporativos**
-
-
+Desenvolvido para facilitar caronas entre colaboradores. 🚃

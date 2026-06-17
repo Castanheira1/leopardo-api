@@ -428,6 +428,114 @@ body {
     color: #854d0e;
 }
 
+/* ============ VAGÃO CARONA ============ */
+
+/* Mapa */
+.map-box {
+    width: 100%;
+    height: 320px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin: 12px 0;
+    background: #eef2f6;
+}
+.map-search {
+    width: 100%;
+    padding: 11px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.map-search:focus {
+    outline: none;
+    border-color: var(--vale-cyan);
+    box-shadow: 0 0 0 3px rgba(0, 169, 206, 0.25);
+}
+
+/* Status modo motorista */
+.hab-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.hab-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Itens de carona / pedido / proposta */
+.ride-item {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    flex-wrap: wrap;
+}
+.ride-thumb {
+    width: 84px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+.ride-info { flex: 1; min-width: 200px; }
+.ride-info small { color: #475569; }
+.ride-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Texto auxiliar */
+.cam-hint { color: #64748b; font-size: 0.85rem; margin: 6px 0; }
+
+/* Câmera (overlay) */
+.cam-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.86);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 16px;
+}
+.cam-box {
+    background: #fff;
+    border-radius: 16px;
+    padding: 18px;
+    width: 100%;
+    max-width: 460px;
+    text-align: center;
+}
+.cam-box h3 { color: var(--vale-blue); margin-bottom: 10px; }
+.cam-video {
+    width: 100%;
+    border-radius: 12px;
+    background: #000;
+    max-height: 60vh;
+}
+.cam-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.cam-status { margin-top: 8px; font-size: 0.85rem; color: var(--vale-cyan-dark); min-height: 18px; }
+
+/* Histórico - fotos de segurança */
+.fotos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+.foto-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    text-align: center;
+}
+.foto-card img { width: 100%; height: 120px; object-fit: cover; display: block; }
+.foto-card small { display: block; padding: 6px; color: #475569; }
+
 /* RESPONSIVO */
 @media (max-width: 768px) {
     .nav-container {
