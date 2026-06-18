@@ -15,12 +15,24 @@
     <script src="/pwa.js" defer></script>
     <title>Vagão - Carona</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .rota-info {
+            margin: 8px 0 4px;
+            padding: 10px 14px;
+            background: #0F3D3E;
+            color: #EAD298;
+            font-weight: 600;
+            font-size: 14px;
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-left">
-                <span class="nav-logo-icon">🚃</span>
+                <svg class="nav-logo-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="#EAD298"/><circle cx="16.5" cy="16" r="1.2" fill="#EAD298"/></svg>
                 <div class="nav-title-group">
                     <h1>VAGÃO</h1>
                     <p>Carona entre colaboradores</p>
@@ -55,10 +67,10 @@
 
         <div class="dashboard">
             <div class="tabs">
-                <button class="tab-btn active" onclick="showTab('tabPedir', this)">🙋 Pedir carona</button>
-                <button class="tab-btn" onclick="showTab('tabOferecer', this)">🚗 Oferecer carona</button>
-                <button class="tab-btn" onclick="showTab('tabPropostas', this)">🤝 Propostas <span id="badgeProp" class="badge badge-em-uso" style="display:none;"></span></button>
-                <button class="tab-btn" onclick="showTab('tabViagem', this)" id="tabBtnViagem" style="display:none;">🧭 Viagem</button>
+                <button class="tab-btn active" onclick="showTab('tabPedir', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>Pedir carona</button>
+                <button class="tab-btn" onclick="showTab('tabOferecer', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>Oferecer carona</button>
+                <button class="tab-btn" onclick="showTab('tabPropostas', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M18.5 19a5.5 5.5 0 0 0-3-5"/></svg>Propostas <span id="badgeProp" class="badge badge-em-uso" style="display:none;"></span></button>
+                <button class="tab-btn" onclick="showTab('tabViagem', this)" id="tabBtnViagem" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>Viagem</button>
             </div>
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
@@ -66,7 +78,7 @@
                 <div class="card">
                     <h3>Pedir carona</h3>
                     <p class="cam-hint">Sua localização é a origem. Toque no mapa ou busque o destino.</p>
-                    <input id="destPedInput" class="map-search" placeholder="🔎 Buscar destino...">
+                    <input id="destPedInput" class="map-search" placeholder="Buscar destino...">
                     <div id="mapPed" class="map-box"></div>
                     <div class="form-row">
                         <div class="form-group">
@@ -78,7 +90,7 @@
                             <input type="text" id="obsPed" placeholder="Ex: levo mochila, saída do portão 2">
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="pedirCarona()">📸 Tirar selfie e pedir carona</button>
+                    <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Tirar selfie e pedir carona</button>
                 </div>
                 <div class="card">
                     <h3>Caronas que combinam</h3>
@@ -93,7 +105,7 @@
                 <div class="card">
                     <h3>Oferecer carona</h3>
                     <p class="cam-hint">Requer modo motorista ativo (selfie + foto do carro).</p>
-                    <input id="destOfeInput" class="map-search" placeholder="🔎 Buscar destino...">
+                    <input id="destOfeInput" class="map-search" placeholder="Buscar destino...">
                     <div id="mapOfe" class="map-box"></div>
                     <div class="form-row">
                         <div class="form-group">
@@ -133,6 +145,7 @@
                 <div class="card">
                     <h3>Viagem em andamento</h3>
                     <div id="viagemInfo"></div>
+                    <div id="viagemEta" class="rota-info" style="display:none;"></div>
                     <div id="mapViagem" class="map-box"></div>
                     <div id="viagemControles"></div>
                 </div>
@@ -189,9 +202,10 @@
         habHoje = await r.json();
         const el = document.getElementById('habStatus');
         if (habHoje) {
-            el.innerHTML = `✅ ativo hoje — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
+            el.innerHTML = `${ICN.check} ativo hoje — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
+            iniciarBroadcastLocalizacao();
         } else {
-            el.textContent = '❌ inativo — ative para oferecer carona';
+            el.innerHTML = `${ICN.x} inativo — ative para oferecer carona`;
         }
     }
 
@@ -233,13 +247,41 @@
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
+        // Rota real (Google Directions) com distância e tempo estimado.
+        const dirService = new g.maps.DirectionsService();
+        const dirRenderer = new g.maps.DirectionsRenderer({
+            map, suppressMarkers: true, preserveViewport: true,
+            polylineOptions: { strokeColor: '#0F3D3E', strokeWeight: 5, strokeOpacity: 0.85 },
+        });
+        const rotaInfo = document.createElement('div');
+        rotaInfo.className = 'rota-info';
+        rotaInfo.style.display = 'none';
+        document.getElementById(mapId).insertAdjacentElement('afterend', rotaInfo);
+
+        async function tracarRota() {
+            if (!destino) return;
+            try {
+                const resp = await dirService.route({
+                    origin: mkOrigem.getPosition(),
+                    destination: { lat: destino.lat, lng: destino.lng },
+                    travelMode: g.maps.TravelMode.DRIVING,
+                });
+                dirRenderer.setDirections(resp);
+                const leg = resp.routes[0].legs[0];
+                rotaInfo.innerHTML = `${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
+                rotaInfo.style.display = 'block';
+            } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
+        }
+
         function setDestino(pos, texto) {
             destino = { lat: pos.lat, lng: pos.lng, texto: texto || '' };
             mkDestino.setPosition(pos);
             map.panTo(pos);
+            tracarRota();
         }
 
         map.addListener('click', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+        mkOrigem.addListener('dragend', tracarRota);
 
         const ac = new g.maps.places.Autocomplete(document.getElementById(inputId), { fields: ['geometry', 'name', 'formatted_address'] });
         ac.bindTo('bounds', map);
@@ -249,11 +291,12 @@
         });
 
         return {
+            map,
             getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
             getDestino: () => destino,
         };
     }
-    async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); }
+    async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); iniciarFrotaAoVivo(selPed.map); }
     async function initMapOferecer() { selOfe = await criarSeletor('mapOfe', 'destOfeInput'); }
 
     function horarioISO(id) {
@@ -305,7 +348,7 @@
             ${c.foto_carro_url ? `<img src="${c.foto_carro_url}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${c.motorista_nome}</strong> ${c.placa ? '• ' + c.placa : ''} ${c.tag ? '(TAG ' + c.tag + ')' : ''}<br>
-                <small>📍 ${c.destino_texto || 'destino no mapa'} • 🕒 ${fmtHorario(c.horario)} • vagas: ${c.vagas}${dist}</small>
+                <small>${ICN.pin} ${c.destino_texto || 'destino no mapa'} • ${ICN.clock} ${fmtHorario(c.horario)} • vagas: ${c.vagas}${dist}</small>
                 ${c.observacao ? `<br><small>"${c.observacao}"</small>` : ''}
             </div>
             ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Pedir vaga</button>` : ''}
@@ -364,7 +407,7 @@
             ${p.selfie_url ? `<img src="${p.selfie_url}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${p.passageiro_nome}</strong><br>
-                <small>📍 ${p.destino_texto || 'destino no mapa'} • 🕒 ${fmtHorario(p.horario)}${dist}</small>
+                <small>${ICN.pin} ${p.destino_texto || 'destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)}${dist}</small>
                 ${p.observacao ? `<br><small>"${p.observacao}"</small>` : ''}
             </div>
             <button class="btn btn-primary btn-sm" onclick="oferecerAoPedido(${p.id})">Oferecer carona</button>
@@ -405,7 +448,7 @@
         } else if (p.status === 'aceito') {
             const wpp = linkWhatsApp(tel);
             acoes = `<span class="badge badge-ativo">aceito</span>
-                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">📱 ${tel}</a>` : ''}`;
+                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">${ICN.phone} ${tel}</a>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Abrir viagem</button>`;
             } else if (souMotorista) {
@@ -471,8 +514,13 @@
         if (v.status === 'em_andamento' && ehMotorista) {
             ctrl.innerHTML = `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Finalizar viagem</button>`;
             iniciarTracking(viagemId, map, polyline);
+        } else if (v.status === 'em_andamento') {
+            // Passageiro: acompanha o carro do motorista ao vivo, com rota e ETA.
+            ctrl.innerHTML = '<span class="cam-hint">Acompanhando o motorista ao vivo…</span>';
+            const destino = v.destino_lat ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
+            acompanharMotoristaAoVivo(viagemId, map, destino);
         } else {
-            ctrl.innerHTML = v.status === 'concluida' ? '<span class="badge badge-ativo">Viagem concluída</span>' : '<span class="cam-hint">Acompanhe pelo histórico ao concluir.</span>';
+            ctrl.innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
         }
     }
 
@@ -481,11 +529,17 @@
         trackState = { viagemId, buffer: [], polyline, map };
         localStorage.setItem('viagemAtiva', viagemId);
 
+        let ultimoEnvioLoc = 0;
         trackState.watchId = navigator.geolocation.watchPosition((pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             trackState.buffer.push(pt);
             polyline.getPath().push(new g.maps.LatLng(pt.lat, pt.lng));
             map.panTo(pt);
+            // Transmite a posição ao vivo (no máx. a cada 4s) para o passageiro ver o carro.
+            if (Date.now() - ultimoEnvioLoc > 4000) {
+                ultimoEnvioLoc = Date.now();
+                fetchWithAuth('/api/localizacao', { method: 'POST', body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }) }).catch(() => {});
+            }
         }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
 
         trackState.timer = setInterval(enviarPontos, 15000);
@@ -509,10 +563,119 @@
         document.getElementById('viagemControles').innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
     }
 
+    /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
+    // Carro visto de cima (estilo Uber), com orientação clara (para-brisa dourado à frente).
+    const CAR_ICON_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 64 64">' +
+        '<rect x="8" y="14" width="6" height="12" rx="3" fill="#15211f"/>' +
+        '<rect x="50" y="14" width="6" height="12" rx="3" fill="#15211f"/>' +
+        '<rect x="8" y="38" width="6" height="12" rx="3" fill="#15211f"/>' +
+        '<rect x="50" y="38" width="6" height="12" rx="3" fill="#15211f"/>' +
+        '<rect x="14" y="6" width="36" height="52" rx="14" fill="#0F3D3E" stroke="#ffffff" stroke-width="2"/>' +
+        '<path d="M18 20 Q32 14 46 20 L44 28 Q32 24 20 28 Z" fill="#EAD298"/>' +
+        '<rect x="20" y="30" width="24" height="13" rx="4" fill="#13514f"/>' +
+        '<path d="M20 45 Q32 41 44 45 L45 50 Q32 54 19 50 Z" fill="#9ec6c2"/></svg>'
+    );
+
+    // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
+    const ICN = {
+        pin: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+        clock: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+        route: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V9a4 4 0 0 1 4-4h4M18 7v8a4 4 0 0 1-4 4h-4"/></svg>',
+        car: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>',
+        phone: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M6 3h3l2 5-2 1.5a11 11 0 0 0 5.5 5.5L18 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg>',
+        check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3" style="vertical-align:-3px"><path d="M5 13l4 4L19 7"/></svg>',
+        x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="3" style="vertical-align:-3px"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    };
+
+    // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
+    let fleet = { markers: {}, timer: null };
+    function iniciarFrotaAoVivo(map) {
+        if (fleet.timer) clearInterval(fleet.timer);
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/motoristas-online');
+                if (!r.ok) return;
+                const lista = await r.json();
+                const vistos = {};
+                lista.forEach((m) => {
+                    vistos[m.id] = true;
+                    const pos = { lat: +m.lat, lng: +m.lng };
+                    if (fleet.markers[m.id]) {
+                        fleet.markers[m.id].setPosition(pos);
+                    } else {
+                        fleet.markers[m.id] = new g.maps.Marker({
+                            position: pos, map, icon: CAR_ICON_URL,
+                            title: m.nome + (m.placa ? ' • ' + m.placa : ''),
+                        });
+                    }
+                });
+                Object.keys(fleet.markers).forEach((id) => {
+                    if (!vistos[id]) { fleet.markers[id].setMap(null); delete fleet.markers[id]; }
+                });
+            } catch (_) {}
+        }
+        tick();
+        fleet.timer = setInterval(tick, 5000);
+    }
+
+    // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
+    let broadcastTimer = null;
+    function iniciarBroadcastLocalizacao() {
+        if (broadcastTimer) return;
+        async function envia() {
+            try {
+                const pos = await obterLocalizacao();
+                await fetchWithAuth('/api/localizacao', {
+                    method: 'POST',
+                    body: JSON.stringify({ lat: pos.lat, lng: pos.lng, disponivel: true }),
+                });
+            } catch (_) {}
+        }
+        envia();
+        broadcastTimer = setInterval(envia, 8000);
+    }
+
+    // Passageiro acompanha o carro do motorista ao vivo, com rota e ETA.
+    let acompTimer = null;
+    function acompanharMotoristaAoVivo(viagemId, map, destino) {
+        if (acompTimer) clearInterval(acompTimer);
+        let carro = null, ultimaRota = 0;
+        const ds = new g.maps.DirectionsService();
+        const rend = new g.maps.DirectionsRenderer({
+            map, suppressMarkers: true, preserveViewport: true,
+            polylineOptions: { strokeColor: '#0F3D3E', strokeWeight: 5 },
+        });
+        const eta = document.getElementById('viagemEta');
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/viagens/' + viagemId + '/localizacao');
+                if (!r.ok) return;
+                const loc = await r.json();
+                if (!loc) return;
+                const pos = { lat: +loc.lat, lng: +loc.lng };
+                if (carro) carro.setPosition(pos);
+                else carro = new g.maps.Marker({ position: pos, map, icon: CAR_ICON_URL, title: 'Motorista' });
+                map.panTo(pos);
+                // Recalcula rota/ETA no máx. a cada 12s (economiza cota do Directions).
+                if (destino && Date.now() - ultimaRota > 12000) {
+                    ultimaRota = Date.now();
+                    const resp = await ds.route({ origin: pos, destination: destino, travelMode: g.maps.TravelMode.DRIVING });
+                    rend.setDirections(resp);
+                    const leg = resp.routes[0].legs[0];
+                    if (eta) { eta.style.display = 'block'; eta.innerHTML = `${ICN.car} Motorista a caminho • chega em ~${leg.duration.text} (${leg.distance.text})`; }
+                }
+            } catch (_) {}
+        }
+        tick();
+        acompTimer = setInterval(tick, 4000);
+    }
+
     /* -------- init -------- */
     (async function init() {
         checarTelefone();
         await carregarHabilitacao();
+        if (habHoje) iniciarBroadcastLocalizacao();
         await loadPropostas();
         await initMapPedir();
     })();

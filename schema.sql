@@ -153,6 +153,20 @@ CREATE TABLE viagem_pontos (
 );
 CREATE INDEX idx_viagem_pontos_viagem ON viagem_pontos (viagem_id, registrado_em);
 
+-- ------------------------------------------------------------
+-- Localização ao vivo (modo "Uber"): posição atual de cada usuário.
+-- Motoristas habilitados aparecem no mapa ao vivo; o passageiro acompanha
+-- o carro chegando. Uma linha por usuário (sempre sobrescrita).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS localizacoes_online (
+    usuario_id INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+    lat NUMERIC(10,6) NOT NULL,
+    lng NUMERIC(10,6) NOT NULL,
+    disponivel BOOLEAN DEFAULT TRUE,
+    atualizado_em TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_loc_online_atualizado ON localizacoes_online (atualizado_em);
+
 -- Admin padrão (000000 / admin123)
 INSERT INTO usuarios (nome, funcao, matricula, senha_hash, is_admin)
 SELECT 'Administrador', 'Administrador', '000000',
