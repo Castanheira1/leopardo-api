@@ -187,6 +187,44 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// Recuperação de senha SEM email: o usuário comprova identidade com a matrícula
+// + o telefone que cadastrou, e define uma nova senha na hora. Opção gratuita,
+// sem SMS/email. Para quem não cadastrou telefone, sobra o reset pelo admin.
+app.post("/api/recuperar-senha", async (req, res) => {
+  const { matricula, telefone, nova_senha } = req.body;
+  if (!matricula || !telefone || !nova_senha) {
+    return res.status(400).json({ error: "Preencha matrícula, telefone e a nova senha" });
+  }
+  if (String(nova_senha).length < 4) {
+    return res.status(400).json({ error: "A nova senha deve ter pelo menos 4 caracteres" });
+  }
+
+  // Compara apenas os dígitos, ignorando formatação ((11) 9 9999-9999 etc.).
+  const soDigitos = (v) => String(v || "").replace(/\D/g, "");
+
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, telefone FROM usuarios WHERE matricula = $1",
+      [String(matricula).trim()]
+    );
+    const user = rows[0];
+    // Mensagem genérica para não revelar se a matrícula existe.
+    if (!user || !user.telefone) {
+      return res.status(400).json({ error: "Dados não conferem. Procure o administrador." });
+    }
+    if (soDigitos(user.telefone) !== soDigitos(telefone)) {
+      return res.status(400).json({ error: "Dados não conferem. Procure o administrador." });
+    }
+
+    const senha_hash = await bcrypt.hash(String(nova_senha), 10);
+    await pool.query("UPDATE usuarios SET senha_hash = $1 WHERE id = $2", [senha_hash, user.id]);
+    res.json({ success: true, message: "Senha alterada! Já pode entrar com a nova senha." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
 app.get("/api/perfil", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
