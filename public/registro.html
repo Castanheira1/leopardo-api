@@ -48,6 +48,12 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required placeholder="seu.email@empresa.com">
+                    <small>Usado para recuperar o acesso à conta</small>
+                </div>
+
+                <div class="form-group">
                     <label for="senha">Senha</label>
                     <input type="password" id="senha" required placeholder="Mínimo 6 caracteres" minlength="6">
                 </div>
@@ -75,6 +81,7 @@
             const funcao = document.getElementById('funcao').value;
             const matricula = document.getElementById('matricula').value;
             const telefone = document.getElementById('telefone').value;
+            const email = document.getElementById('email').value;
             const senha = document.getElementById('senha').value;
             const confirmarSenha = document.getElementById('confirmarSenha').value;
             const messageDiv = document.getElementById('message');
@@ -90,7 +97,7 @@
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nome, funcao, matricula, telefone, senha })
+                    body: JSON.stringify({ nome, funcao, matricula, telefone, email, senha })
                 });
                 const data = await response.json();
 
