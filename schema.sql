@@ -31,6 +31,11 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Garante as colunas telefone/email caso a tabela já exista
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(20);
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(150);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS centro_custo VARCHAR(100);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 
 -- ------------------------------------------------------------
 -- Habilitação de motorista (selfie + foto do carro, válida no dia)
@@ -152,6 +157,68 @@ CREATE TABLE viagem_pontos (
     registrado_em TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX idx_viagem_pontos_viagem ON viagem_pontos (viagem_id, registrado_em);
+
+-- ------------------------------------------------------------
+-- Projetos (S11D, Salobo, Carajás, Parauapebas, etc.)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS projetos (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    codigo VARCHAR(30) UNIQUE NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+INSERT INTO projetos (nome, codigo) VALUES
+    ('S11D Eliezer Batista', 'S11D'),
+    ('Salobo', 'SALOBO'),
+    ('Carajás', 'CARAJAS'),
+    ('Parauapebas', 'PARAUAPEBAS')
+ON CONFLICT (codigo) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- Empresas (Vale, MCA, Serveng, etc.)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS empresas (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(150) NOT NULL,
+    cnpj VARCHAR(20),
+    contato_email VARCHAR(255),
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+INSERT INTO empresas (nome) VALUES ('Vale S.A.')
+ON CONFLICT DO NOTHING;
+
+-- ------------------------------------------------------------
+-- Contratos (quem paga por quem em cada projeto)
+-- pagador_empresa_id = empresa responsável pelo pagamento
+-- valor_por_usuario = mensalidade fixa por usuário ativo
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS contratos (
+    id SERIAL PRIMARY KEY,
+    projeto_id INTEGER NOT NULL REFERENCES projetos(id),
+    empresa_beneficiaria_id INTEGER NOT NULL REFERENCES empresas(id),
+    pagador_empresa_id INTEGER NOT NULL REFERENCES empresas(id),
+    valor_por_usuario NUMERIC(10,2) DEFAULT 5.00,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------
+-- Chamados de solicitação de acesso admin (validação futura)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_chamados (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    matricula VARCHAR(50) NOT NULL,
+    empresa_nome VARCHAR(150),
+    projeto_id INTEGER REFERENCES projetos(id),
+    telefone VARCHAR(20),
+    email VARCHAR(255),
+    justificativa TEXT,
+    status VARCHAR(20) DEFAULT 'pendente' CHECK (status IN ('pendente', 'aprovado', 'recusado')),
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
 -- ------------------------------------------------------------
 -- Localização ao vivo (modo "Uber"): posição atual de cada usuário.
