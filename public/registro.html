@@ -21,7 +21,7 @@
         <div class="login-box card" style="max-width:460px;margin:40px auto;">
             <div class="logo" style="text-align:center;margin-bottom:18px;">
                 <h1><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-4px;margin-right:6px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>VAGÃO CARONA</h1>
-                <p>Criar nova conta</p>
+                <p>Crie sua conta</p>
             </div>
 
             <form id="registerForm">
@@ -42,15 +42,15 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="telefone">Telefone / WhatsApp</label>
+                    <label for="telefone">WhatsApp</label>
                     <input type="tel" id="telefone" required placeholder="Ex: (94) 99999-9999">
-                    <small>Usado para combinar a carona após o aceite</small>
+                    <small>Para contato após confirmação da carona</small>
                 </div>
 
                 <div class="form-group">
                     <label for="email">Email</label>
                     <input type="email" id="email" required placeholder="seu.email@empresa.com">
-                    <small>Usado para recuperar o acesso à conta</small>
+                    <small>Para recuperação de acesso</small>
                 </div>
 
                 <div class="form-group">
@@ -63,10 +63,10 @@
                     <input type="password" id="confirmarSenha" required placeholder="Digite a senha novamente">
                 </div>
 
-                <button type="submit" class="btn btn-primary" style="width:100%;">Criar Conta</button>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Criar conta</button>
 
                 <div class="links" style="text-align:center;margin-top:14px;">
-                    <a href="index.html">Já tenho conta</a>
+                    <a href="index.html">Entrar</a>
                 </div>
             </form>
 
@@ -89,7 +89,7 @@
 
             if (senha !== confirmarSenha) {
                 messageDiv.className = 'message error';
-                messageDiv.textContent = 'As senhas não coincidem';
+                messageDiv.textContent = 'As senhas não conferem';
                 return;
             }
 
@@ -103,7 +103,7 @@
 
                 if (response.ok) {
                     messageDiv.className = 'message success';
-                    messageDiv.textContent = 'Conta criada com sucesso! Redirecionando...';
+                    messageDiv.textContent = 'Conta criada! Entrando...';
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
                     setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);

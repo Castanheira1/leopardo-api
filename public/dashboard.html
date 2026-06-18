@@ -202,7 +202,7 @@
         habHoje = await r.json();
         const el = document.getElementById('habStatus');
         if (habHoje) {
-            el.innerHTML = `${ICN.check} Ativo — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
+            el.innerHTML = `${ICN.check} Ativo`;
             iniciarBroadcastLocalizacao();
         } else {
             el.innerHTML = `${ICN.x} Inativo — ative para oferecer caronas`;
@@ -343,15 +343,15 @@
             : '<p class="cam-hint">Nenhuma carona disponível.</p>';
     }
     function cardCarona(c, comBotao) {
-        const dist = c.dist_origem != null ? ` • origem a ${Number(c.dist_origem).toFixed(1)} km` : '';
+        const dist = c.dist_origem != null ? ` • ${Number(c.dist_origem).toFixed(1)} km` : '';
         return `<div class="ride-item">
             ${c.foto_carro_url ? `<img src="${c.foto_carro_url}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${c.motorista_nome}</strong> ${c.placa ? '• ' + c.placa : ''} ${c.tag ? '(TAG ' + c.tag + ')' : ''}<br>
-                <small>${ICN.pin} ${c.destino_texto || 'destino no mapa'} • ${ICN.clock} ${fmtHorario(c.horario)} • vagas: ${c.vagas}${dist}</small>
+                <small>${ICN.pin} ${c.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(c.horario)} • ${c.vagas} vaga(s)${dist}</small>
                 ${c.observacao ? `<br><small>"${c.observacao}"</small>` : ''}
             </div>
-            ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Pedir vaga</button>` : ''}
+            ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Solicitar</button>` : ''}
         </div>`;
     }
     async function pedirVaga(caronaId) {
@@ -402,15 +402,15 @@
             ? pedidos.map(p => cardPedido(p)).join('') : '<p class="cam-hint">Nenhum passageiro disponível no momento.</p>';
     }
     function cardPedido(p) {
-        const dist = p.dist_destino != null ? ` • destino a ${Number(p.dist_destino).toFixed(1)} km` : '';
+        const dist = p.dist_destino != null ? ` • ${Number(p.dist_destino).toFixed(1)} km` : '';
         return `<div class="ride-item">
             ${p.selfie_url ? `<img src="${p.selfie_url}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${p.passageiro_nome}</strong><br>
-                <small>${ICN.pin} ${p.destino_texto || 'destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)}${dist}</small>
+                <small>${ICN.pin} ${p.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)}${dist}</small>
                 ${p.observacao ? `<br><small>"${p.observacao}"</small>` : ''}
             </div>
-            <button class="btn btn-primary btn-sm" onclick="oferecerAoPedido(${p.id})">Oferecer carona</button>
+            <button class="btn btn-primary btn-sm" onclick="oferecerAoPedido(${p.id})">Oferecer</button>
         </div>`;
     }
     async function oferecerAoPedido(pedidoId) {
@@ -418,7 +418,7 @@
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: pedidoId }) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Carona oferecida! Aguarde o aceite do passageiro.');
+        msg('Oferta enviada. Aguardando confirmação do passageiro.');
     }
 
     /* -------- propostas -------- */
@@ -435,7 +435,7 @@
         div.innerHTML = props.map(p => cardProposta(p)).join('');
     }
     function cardProposta(p) {
-        const tipo = p.carona_id ? 'Vaga em carona' : 'Oferta para pedido';
+        const tipo = p.carona_id ? 'Passageiro' : 'Motorista';
         const outro = p.sou_destinatario ? p.de_nome : p.para_nome;
         const tel = p.sou_destinatario ? p.de_telefone : p.para_telefone;
         const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
@@ -447,12 +447,12 @@
                      <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
         } else if (p.status === 'aceito') {
             const wpp = linkWhatsApp(tel);
-            acoes = `<span class="badge badge-ativo">aceito</span>
+            acoes = `<span class="badge badge-ativo">Confirmado</span>
                      ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">${ICN.phone} ${tel}</a>` : ''}`;
             if (p.viagem_id) {
-                acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Abrir viagem</button>`;
+                acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
-                acoes += ` <button class="btn btn-primary btn-sm" onclick="iniciarViagem(${p.id})">Iniciar viagem</button>`;
+                acoes += ` <button class="btn btn-primary btn-sm" onclick="iniciarViagem(${p.id})">Iniciar</button>`;
             }
         } else if (p.status === 'recusado') {
             acoes = `<span class="badge badge-inativo">recusado</span>`;
@@ -472,12 +472,12 @@
         const r = await fetchWithAuth('/api/propostas/' + id + '/aceitar', { method: 'POST' });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Proposta aceita! Contato liberado.');
+        msg('Aceito! Contato liberado.');
         loadPropostas();
     }
     async function recusarProposta(id) {
         const r = await fetchWithAuth('/api/propostas/' + id + '/recusar', { method: 'POST' });
-        if (r.ok) { msg('Proposta recusada'); loadPropostas(); }
+        if (r.ok) { msg('Solicitação recusada.'); loadPropostas(); }
     }
 
     /* -------- viagem + rastreamento ao vivo -------- */
@@ -485,7 +485,7 @@
         const r = await fetchWithAuth('/api/viagens', { method: 'POST', body: JSON.stringify({ proposta_id: propostaId }) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Viagem iniciada! Rastreando rota...');
+        msg('Viagem iniciada.');
         abrirViagem(d.id, true);
     }
 
@@ -502,7 +502,7 @@
         document.getElementById('viagemInfo').innerHTML = `
             <p><strong>Motorista:</strong> ${v.motorista_nome} ${v.placa ? '• ' + v.placa : ''} ${v.tag ? '(TAG ' + v.tag + ')' : ''}</p>
             <p><strong>Passageiro:</strong> ${v.passageiro_nome}</p>
-            <p><strong>Status:</strong> ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}</p>`;
+            <p><strong>Status:</strong> ${{em_andamento:'Em andamento',concluida:'Concluída',cancelada:'Cancelada'}[v.status]||v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}</p>`;
 
         g = await carregarMaps();
         const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
@@ -512,15 +512,15 @@
 
         const ctrl = document.getElementById('viagemControles');
         if (v.status === 'em_andamento' && ehMotorista) {
-            ctrl.innerHTML = `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Finalizar viagem</button>`;
+            ctrl.innerHTML = `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Encerrar viagem</button>`;
             iniciarTracking(viagemId, map, polyline);
         } else if (v.status === 'em_andamento') {
             // Passageiro: acompanha o carro do motorista ao vivo, com rota e ETA.
-            ctrl.innerHTML = '<span class="cam-hint">Acompanhando o motorista ao vivo…</span>';
+            ctrl.innerHTML = '<span class="cam-hint">Acompanhando em tempo real...</span>';
             const destino = v.destino_lat ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
             acompanharMotoristaAoVivo(viagemId, map, destino);
         } else {
-            ctrl.innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
+            ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span>';
         }
     }
 
@@ -559,8 +559,8 @@
         const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', { method: 'POST' });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg(`Viagem concluída! ${d.distancia_km || 0} km registrados.`);
-        document.getElementById('viagemControles').innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
+        msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos.`);
+        document.getElementById('viagemControles').innerHTML = '<span class="badge badge-ativo">Concluída</span>';
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
