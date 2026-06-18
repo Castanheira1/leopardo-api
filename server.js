@@ -954,5 +954,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Leopardo Carona rodando em http://localhost:${PORT}`);
+  console.log(`Vagão rodando em http://localhost:${PORT}`);
 });

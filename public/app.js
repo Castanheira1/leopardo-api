@@ -1,5 +1,5 @@
 /* ============================================================
-   Leopardo Carona - utilidades globais (auth, mapa, câmera, OCR)
+   Vagão - utilidades globais (auth, mapa, câmera, OCR)
    ============================================================ */
 
 function checkAuth(adminOnly = false) {
