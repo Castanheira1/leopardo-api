@@ -57,45 +57,45 @@
         <div class="card hab-card">
             <div class="hab-info">
                 <strong>Modo motorista:</strong>
-                <span id="habStatus">verificando...</span>
+                <span id="habStatus">carregando...</span>
             </div>
             <div class="hab-actions">
-                <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar / atualizar</button>
-                <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar de carro</button>
+                <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar modo motorista</button>
+                <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
             </div>
         </div>
 
         <div class="dashboard">
             <div class="tabs">
-                <button class="tab-btn active" onclick="showTab('tabPedir', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>Pedir carona</button>
-                <button class="tab-btn" onclick="showTab('tabOferecer', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>Oferecer carona</button>
-                <button class="tab-btn" onclick="showTab('tabPropostas', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M18.5 19a5.5 5.5 0 0 0-3-5"/></svg>Propostas <span id="badgeProp" class="badge badge-em-uso" style="display:none;"></span></button>
-                <button class="tab-btn" onclick="showTab('tabViagem', this)" id="tabBtnViagem" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>Viagem</button>
+                <button class="tab-btn active" onclick="showTab('tabPedir', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>Solicitar</button>
+                <button class="tab-btn" onclick="showTab('tabOferecer', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>Oferecer</button>
+                <button class="tab-btn" onclick="showTab('tabPropostas', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M18.5 19a5.5 5.5 0 0 0-3-5"/></svg>Solicitações <span id="badgeProp" class="badge badge-em-uso" style="display:none;"></span></button>
+                <button class="tab-btn" onclick="showTab('tabViagem', this)" id="tabBtnViagem" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>Em andamento</button>
             </div>
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
             <div id="tabPedir" class="tab-content active">
                 <div class="card">
-                    <h3>Pedir carona</h3>
-                    <p class="cam-hint">Sua localização é a origem. Toque no mapa ou busque o destino.</p>
-                    <input id="destPedInput" class="map-search" placeholder="Buscar destino...">
+                    <h3>Para onde você vai?</h3>
+                    <p class="cam-hint">Toque no mapa ou busque um endereço de destino.</p>
+                    <input id="destPedInput" class="map-search" placeholder="Buscar endereço ou destino">
                     <div id="mapPed" class="map-box"></div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Horário (vazio = agora)</label>
+                            <label>Quando? (vazio = agora)</label>
                             <input type="datetime-local" id="horaPed">
                         </div>
                         <div class="form-group">
                             <label>Observação</label>
-                            <input type="text" id="obsPed" placeholder="Ex: levo mochila, saída do portão 2">
+                            <input type="text" id="obsPed" placeholder="Ex: saída portão 2, vou de mochila">
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Tirar selfie e pedir carona</button>
+                    <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
                 </div>
                 <div class="card">
-                    <h3>Caronas que combinam</h3>
-                    <div id="listaCaronasMatch"><p class="cam-hint">Crie um pedido para ver caronas próximas, ou veja todas abaixo.</p></div>
-                    <button class="btn btn-secondary btn-sm" onclick="listarTodasCaronas()">Ver todas as caronas ativas</button>
+                    <h3>Motoristas disponíveis</h3>
+                    <div id="listaCaronasMatch"><p class="cam-hint">Solicite uma carona para ver motoristas próximos.</p></div>
+                    <button class="btn btn-secondary btn-sm" onclick="listarTodasCaronas()">Ver todos</button>
                     <div id="listaCaronasTodas"></div>
                 </div>
             </div>
@@ -103,30 +103,30 @@
             <!-- ============ OFERECER CARONA (motorista) ============ -->
             <div id="tabOferecer" class="tab-content">
                 <div class="card">
-                    <h3>Oferecer carona</h3>
-                    <p class="cam-hint">Requer modo motorista ativo (selfie + foto do carro).</p>
-                    <input id="destOfeInput" class="map-search" placeholder="Buscar destino...">
+                    <h3>Compartilhar carona</h3>
+                    <p class="cam-hint">Ative o modo motorista para publicar caronas.</p>
+                    <input id="destOfeInput" class="map-search" placeholder="Buscar endereço ou destino">
                     <div id="mapOfe" class="map-box"></div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Horário (vazio = agora)</label>
+                            <label>Quando? (vazio = agora)</label>
                             <input type="datetime-local" id="horaOfe">
                         </div>
                         <div class="form-group">
-                            <label>Vagas</label>
+                            <label>Vagas disponíveis</label>
                             <input type="number" id="vagasOfe" min="1" max="6" value="1">
                         </div>
                         <div class="form-group">
                             <label>Observação</label>
-                            <input type="text" id="obsOfe" placeholder="Ex: passo pela portaria">
+                            <input type="text" id="obsOfe" placeholder="Ex: passo pela portaria principal">
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="oferecerCarona()">Publicar carona</button>
+                    <button class="btn btn-primary" onclick="oferecerCarona()">Publicar</button>
                 </div>
                 <div class="card">
-                    <h3>Pedidos que combinam</h3>
-                    <div id="listaPedidosMatch"><p class="cam-hint">Publique uma carona para ver pedidos próximos, ou veja todos abaixo.</p></div>
-                    <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos os pedidos abertos</button>
+                    <h3>Passageiros próximos</h3>
+                    <div id="listaPedidosMatch"><p class="cam-hint">Publique sua carona para ver passageiros por perto.</p></div>
+                    <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos</button>
                     <div id="listaPedidosTodos"></div>
                 </div>
             </div>
@@ -134,7 +134,7 @@
             <!-- ============ PROPOSTAS ============ -->
             <div id="tabPropostas" class="tab-content">
                 <div class="card">
-                    <h3>Propostas</h3>
+                    <h3>Solicitações</h3>
                     <button class="btn btn-secondary btn-sm" onclick="loadPropostas()">Atualizar</button>
                     <div id="listaPropostas"></div>
                 </div>
@@ -188,11 +188,11 @@
         document.getElementById('avisoTelefone').style.display = user.telefone ? 'none' : 'block';
     }
     async function abrirPerfil() {
-        const tel = prompt('Telefone / WhatsApp (com DDD):', user.telefone || '');
+        const tel = prompt('WhatsApp com DDD:', user.telefone || '');
         if (tel === null) return;
         const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel }) });
         const d = await r.json();
-        if (r.ok) { user = { ...user, telefone: d.telefone }; localStorage.setItem('user', JSON.stringify(user)); checarTelefone(); msg('Telefone atualizado'); }
+        if (r.ok) { user = { ...user, telefone: d.telefone }; localStorage.setItem('user', JSON.stringify(user)); checarTelefone(); msg('Contato atualizado'); }
         else msg(d.error || 'Erro', 'error');
     }
 
@@ -202,23 +202,23 @@
         habHoje = await r.json();
         const el = document.getElementById('habStatus');
         if (habHoje) {
-            el.innerHTML = `${ICN.check} ativo hoje — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
+            el.innerHTML = `${ICN.check} Ativo — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
             iniciarBroadcastLocalizacao();
         } else {
-            el.innerHTML = `${ICN.x} inativo — ative para oferecer carona`;
+            el.innerHTML = `${ICN.x} Inativo — ative para oferecer caronas`;
         }
     }
 
     async function ativarMotorista(trocar) {
-        if (habHoje && !trocar) { msg('Modo motorista já está ativo hoje'); return; }
+        if (habHoje && !trocar) { msg('Modo motorista já está ativo'); return; }
         try {
-            msg('Abrindo câmera para a selfie...');
-            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie do motorista (ao vivo)' });
-            const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do carro com a placa dianteira' });
+            msg('Iniciando câmera...');
+            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
+            const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do veículo — placa dianteira' });
 
-            const placa = prompt('Confirme/edite a placa lida:', carro.placa || '');
+            const placa = prompt('Placa do veículo:', carro.placa || '');
             if (!placa) { msg('Placa é obrigatória', 'error'); return; }
-            const tag = prompt('TAG do veículo (identificador interno, preenchimento manual):', '');
+            const tag = prompt('TAG do veículo (opcional):', '');
 
             const body = {
                 placa, tag,
@@ -230,7 +230,7 @@
             if (!r.ok) return msg(d.error || 'Erro', 'error');
             habHoje = d;
             await carregarHabilitacao();
-            msg('Modo motorista ativado!');
+            msg('Modo motorista ativado.');
         } catch (e) {
             if (e.message !== 'cancelado') msg(e.message, 'error');
         }
@@ -306,9 +306,9 @@
 
     /* -------- pedir carona -------- */
     async function pedirCarona() {
-        if (!user.telefone) return msg('Cadastre seu telefone no Perfil primeiro', 'error');
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
-        if (!dest) return msg('Escolha o destino no mapa', 'error');
+        if (!dest) return msg('Defina um destino no mapa', 'error');
         const origem = selPed.getOrigem();
         try {
             const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie (segurança da viagem)' });
@@ -340,7 +340,7 @@
         const caronas = await r.json();
         document.getElementById('listaCaronasTodas').innerHTML = caronas.length
             ? caronas.map(c => cardCarona(c, true)).join('')
-            : '<p class="cam-hint">Nenhuma carona ativa.</p>';
+            : '<p class="cam-hint">Nenhuma carona disponível.</p>';
     }
     function cardCarona(c, comBotao) {
         const dist = c.dist_origem != null ? ` • origem a ${Number(c.dist_origem).toFixed(1)} km` : '';
@@ -355,7 +355,7 @@
         </div>`;
     }
     async function pedirVaga(caronaId) {
-        if (!user.telefone) return msg('Cadastre seu telefone no Perfil primeiro', 'error');
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         try {
             const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie para pedir a vaga' });
             const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({
@@ -363,16 +363,16 @@
             }) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            msg('Vaga solicitada! Aguarde o aceite do motorista.');
+            msg('Solicitação enviada. Aguardando confirmação do motorista.');
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
 
     /* -------- oferecer carona -------- */
     async function oferecerCarona() {
-        if (!user.telefone) return msg('Cadastre seu telefone no Perfil primeiro', 'error');
-        if (!habHoje) { msg('Ative o modo motorista primeiro', 'error'); return ativarMotorista(false); }
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
+        if (!habHoje) { msg('Ative o modo motorista para continuar', 'error'); return ativarMotorista(false); }
         const dest = selOfe && selOfe.getDestino();
-        if (!dest) return msg('Escolha o destino no mapa', 'error');
+        if (!dest) return msg('Defina um destino no mapa', 'error');
         const origem = selOfe.getOrigem();
         const body = {
             origem_lat: origem.lat, origem_lng: origem.lng,
@@ -383,7 +383,7 @@
         const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Carona publicada! Veja os pedidos que combinam.');
+        msg('Carona publicada.');
         matchPedidos(d.id);
     }
     async function matchPedidos(caronaId) {
@@ -391,7 +391,7 @@
         const pedidos = await r.json();
         const div = document.getElementById('listaPedidosMatch');
         div.innerHTML = pedidos.length ? pedidos.map(p => cardPedido(p)).join('')
-            : '<p class="cam-hint">Nenhum pedido compatível agora.</p>';
+            : '<p class="cam-hint">Nenhum passageiro compatível no momento.</p>';
     }
     async function listarTodosPedidos() {
         const o = selOfe ? selOfe.getOrigem() : null;
@@ -399,7 +399,7 @@
         const r = await fetchWithAuth('/api/pedidos' + q);
         const pedidos = await r.json();
         document.getElementById('listaPedidosTodos').innerHTML = pedidos.length
-            ? pedidos.map(p => cardPedido(p)).join('') : '<p class="cam-hint">Nenhum pedido aberto.</p>';
+            ? pedidos.map(p => cardPedido(p)).join('') : '<p class="cam-hint">Nenhum passageiro disponível no momento.</p>';
     }
     function cardPedido(p) {
         const dist = p.dist_destino != null ? ` • destino a ${Number(p.dist_destino).toFixed(1)} km` : '';
@@ -414,7 +414,7 @@
         </div>`;
     }
     async function oferecerAoPedido(pedidoId) {
-        if (!habHoje) { msg('Ative o modo motorista primeiro', 'error'); return ativarMotorista(false); }
+        if (!habHoje) { msg('Ative o modo motorista para continuar', 'error'); return ativarMotorista(false); }
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: pedidoId }) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
@@ -431,7 +431,7 @@
         badge.textContent = pendentesRecebidas;
 
         const div = document.getElementById('listaPropostas');
-        if (!props.length) { div.innerHTML = '<p class="cam-hint">Nenhuma proposta ainda.</p>'; return; }
+        if (!props.length) { div.innerHTML = '<p class="cam-hint">Sem solicitações no momento.</p>'; return; }
         div.innerHTML = props.map(p => cardProposta(p)).join('');
     }
     function cardProposta(p) {
