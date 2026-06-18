@@ -15,6 +15,18 @@
     <script src="/pwa.js" defer></script>
     <title>Vagão - Carona</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .rota-info {
+            margin: 8px 0 4px;
+            padding: 10px 14px;
+            background: #0F3D3E;
+            color: #EAD298;
+            font-weight: 600;
+            font-size: 14px;
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -133,6 +145,7 @@
                 <div class="card">
                     <h3>Viagem em andamento</h3>
                     <div id="viagemInfo"></div>
+                    <div id="viagemEta" class="rota-info" style="display:none;"></div>
                     <div id="mapViagem" class="map-box"></div>
                     <div id="viagemControles"></div>
                 </div>
@@ -190,6 +203,7 @@
         const el = document.getElementById('habStatus');
         if (habHoje) {
             el.innerHTML = `✅ ativo hoje — <strong>${habHoje.placa}</strong> ${habHoje.tag ? '(TAG ' + habHoje.tag + ')' : ''} • foto de ${fmtData(habHoje.foto_carro_em)}`;
+            iniciarBroadcastLocalizacao();
         } else {
             el.textContent = '❌ inativo — ative para oferecer carona';
         }
@@ -233,13 +247,41 @@
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
+        // Rota real (Google Directions) com distância e tempo estimado.
+        const dirService = new g.maps.DirectionsService();
+        const dirRenderer = new g.maps.DirectionsRenderer({
+            map, suppressMarkers: true, preserveViewport: true,
+            polylineOptions: { strokeColor: '#0F3D3E', strokeWeight: 5, strokeOpacity: 0.85 },
+        });
+        const rotaInfo = document.createElement('div');
+        rotaInfo.className = 'rota-info';
+        rotaInfo.style.display = 'none';
+        document.getElementById(mapId).insertAdjacentElement('afterend', rotaInfo);
+
+        async function tracarRota() {
+            if (!destino) return;
+            try {
+                const resp = await dirService.route({
+                    origin: mkOrigem.getPosition(),
+                    destination: { lat: destino.lat, lng: destino.lng },
+                    travelMode: g.maps.TravelMode.DRIVING,
+                });
+                dirRenderer.setDirections(resp);
+                const leg = resp.routes[0].legs[0];
+                rotaInfo.innerHTML = `🛣️ ${leg.distance.text} &nbsp;•&nbsp; ⏱️ ${leg.duration.text}`;
+                rotaInfo.style.display = 'block';
+            } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
+        }
+
         function setDestino(pos, texto) {
             destino = { lat: pos.lat, lng: pos.lng, texto: texto || '' };
             mkDestino.setPosition(pos);
             map.panTo(pos);
+            tracarRota();
         }
 
         map.addListener('click', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+        mkOrigem.addListener('dragend', tracarRota);
 
         const ac = new g.maps.places.Autocomplete(document.getElementById(inputId), { fields: ['geometry', 'name', 'formatted_address'] });
         ac.bindTo('bounds', map);
@@ -249,11 +291,12 @@
         });
 
         return {
+            map,
             getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
             getDestino: () => destino,
         };
     }
-    async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); }
+    async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); iniciarFrotaAoVivo(selPed.map); }
     async function initMapOferecer() { selOfe = await criarSeletor('mapOfe', 'destOfeInput'); }
 
     function horarioISO(id) {
@@ -471,8 +514,13 @@
         if (v.status === 'em_andamento' && ehMotorista) {
             ctrl.innerHTML = `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Finalizar viagem</button>`;
             iniciarTracking(viagemId, map, polyline);
+        } else if (v.status === 'em_andamento') {
+            // Passageiro: acompanha o carro do motorista ao vivo, com rota e ETA.
+            ctrl.innerHTML = '<span class="cam-hint">Acompanhando o motorista ao vivo…</span>';
+            const destino = v.destino_lat ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
+            acompanharMotoristaAoVivo(viagemId, map, destino);
         } else {
-            ctrl.innerHTML = v.status === 'concluida' ? '<span class="badge badge-ativo">Viagem concluída</span>' : '<span class="cam-hint">Acompanhe pelo histórico ao concluir.</span>';
+            ctrl.innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
         }
     }
 
@@ -481,11 +529,17 @@
         trackState = { viagemId, buffer: [], polyline, map };
         localStorage.setItem('viagemAtiva', viagemId);
 
+        let ultimoEnvioLoc = 0;
         trackState.watchId = navigator.geolocation.watchPosition((pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             trackState.buffer.push(pt);
             polyline.getPath().push(new g.maps.LatLng(pt.lat, pt.lng));
             map.panTo(pt);
+            // Transmite a posição ao vivo (no máx. a cada 4s) para o passageiro ver o carro.
+            if (Date.now() - ultimoEnvioLoc > 4000) {
+                ultimoEnvioLoc = Date.now();
+                fetchWithAuth('/api/localizacao', { method: 'POST', body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }) }).catch(() => {});
+            }
         }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
 
         trackState.timer = setInterval(enviarPontos, 15000);
@@ -509,10 +563,101 @@
         document.getElementById('viagemControles').innerHTML = '<span class="badge badge-ativo">Viagem concluída</span>';
     }
 
+    /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
+    const CAR_ICON_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24">' +
+        '<circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#0F3D3E" stroke-width="1.5"/>' +
+        '<path fill="#0F3D3E" d="M6.8 13.2 7.7 9.6c.1-.5.6-.9 1.1-.9h6.4c.5 0 1 .4 1.1.9l.9 3.6v3.4c0 .3-.3.6-.6.6h-.6c-.3 0-.6-.3-.6-.6v-.5H8.6v.5c0 .3-.3.6-.6.6h-.6c-.3 0-.6-.3-.6-.6zM8.6 14.6a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8m6.8 0a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8M8.3 12.4h7.4l-.6-2.3c-.05-.2-.2-.3-.4-.3H9.3c-.2 0-.35.1-.4.3z"/></svg>'
+    );
+
+    // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
+    let fleet = { markers: {}, timer: null };
+    function iniciarFrotaAoVivo(map) {
+        if (fleet.timer) clearInterval(fleet.timer);
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/motoristas-online');
+                if (!r.ok) return;
+                const lista = await r.json();
+                const vistos = {};
+                lista.forEach((m) => {
+                    vistos[m.id] = true;
+                    const pos = { lat: +m.lat, lng: +m.lng };
+                    if (fleet.markers[m.id]) {
+                        fleet.markers[m.id].setPosition(pos);
+                    } else {
+                        fleet.markers[m.id] = new g.maps.Marker({
+                            position: pos, map, icon: CAR_ICON_URL,
+                            title: m.nome + (m.placa ? ' • ' + m.placa : ''),
+                        });
+                    }
+                });
+                Object.keys(fleet.markers).forEach((id) => {
+                    if (!vistos[id]) { fleet.markers[id].setMap(null); delete fleet.markers[id]; }
+                });
+            } catch (_) {}
+        }
+        tick();
+        fleet.timer = setInterval(tick, 5000);
+    }
+
+    // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
+    let broadcastTimer = null;
+    function iniciarBroadcastLocalizacao() {
+        if (broadcastTimer) return;
+        async function envia() {
+            try {
+                const pos = await obterLocalizacao();
+                await fetchWithAuth('/api/localizacao', {
+                    method: 'POST',
+                    body: JSON.stringify({ lat: pos.lat, lng: pos.lng, disponivel: true }),
+                });
+            } catch (_) {}
+        }
+        envia();
+        broadcastTimer = setInterval(envia, 8000);
+    }
+
+    // Passageiro acompanha o carro do motorista ao vivo, com rota e ETA.
+    let acompTimer = null;
+    function acompanharMotoristaAoVivo(viagemId, map, destino) {
+        if (acompTimer) clearInterval(acompTimer);
+        let carro = null, ultimaRota = 0;
+        const ds = new g.maps.DirectionsService();
+        const rend = new g.maps.DirectionsRenderer({
+            map, suppressMarkers: true, preserveViewport: true,
+            polylineOptions: { strokeColor: '#0F3D3E', strokeWeight: 5 },
+        });
+        const eta = document.getElementById('viagemEta');
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/viagens/' + viagemId + '/localizacao');
+                if (!r.ok) return;
+                const loc = await r.json();
+                if (!loc) return;
+                const pos = { lat: +loc.lat, lng: +loc.lng };
+                if (carro) carro.setPosition(pos);
+                else carro = new g.maps.Marker({ position: pos, map, icon: CAR_ICON_URL, title: 'Motorista' });
+                map.panTo(pos);
+                // Recalcula rota/ETA no máx. a cada 12s (economiza cota do Directions).
+                if (destino && Date.now() - ultimaRota > 12000) {
+                    ultimaRota = Date.now();
+                    const resp = await ds.route({ origin: pos, destination: destino, travelMode: g.maps.TravelMode.DRIVING });
+                    rend.setDirections(resp);
+                    const leg = resp.routes[0].legs[0];
+                    if (eta) { eta.style.display = 'block'; eta.innerHTML = `🚗 Motorista a caminho • chega em ~${leg.duration.text} (${leg.distance.text})`; }
+                }
+            } catch (_) {}
+        }
+        tick();
+        acompTimer = setInterval(tick, 4000);
+    }
+
     /* -------- init -------- */
     (async function init() {
         checarTelefone();
         await carregarHabilitacao();
+        if (habHoje) iniciarBroadcastLocalizacao();
         await loadPropostas();
         await initMapPedir();
     })();

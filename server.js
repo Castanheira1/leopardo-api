@@ -727,6 +727,85 @@ app.post("/api/viagens/:id/pontos", verificarAuth, async (req, res) => {
   }
 });
 
+/* ===================== LOCALIZAÇÃO AO VIVO (modo Uber) ===================== */
+// Cada usuário publica sua posição atual (a cada poucos segundos pelo app).
+app.post("/api/localizacao", verificarAuth, async (req, res) => {
+  const nlat = Number(req.body.lat);
+  const nlng = Number(req.body.lng);
+  if (!Number.isFinite(nlat) || !Number.isFinite(nlng) ||
+      nlat < -90 || nlat > 90 || nlng < -180 || nlng > 180) {
+    return res.status(400).json({ error: "Coordenadas inválidas" });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, atualizado_em)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (usuario_id)
+       DO UPDATE SET lat = $2, lng = $3, disponivel = $4, atualizado_em = NOW()`,
+      [req.user.id, nlat, nlng, req.body.disponivel !== false]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao atualizar localização" });
+  }
+});
+
+// Para o app deixar de transmitir (ficar offline no mapa).
+app.delete("/api/localizacao", verificarAuth, async (req, res) => {
+  try {
+    await pool.query("UPDATE localizacoes_online SET disponivel = FALSE WHERE usuario_id = $1", [req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro" });
+  }
+});
+
+// Motoristas legítimos (habilitação ativa hoje) online nos últimos 60s.
+app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (u.id)
+              u.id, u.nome, l.lat, l.lng, h.placa, h.tag
+       FROM localizacoes_online l
+       JOIN usuarios u ON u.id = l.usuario_id
+       JOIN habilitacoes_motorista h
+         ON h.motorista_id = u.id AND h.data = CURRENT_DATE AND h.status = 'ativa'
+       WHERE l.disponivel = TRUE
+         AND l.atualizado_em > NOW() - INTERVAL '60 seconds'
+         AND u.id <> $1
+       ORDER BY u.id, h.created_at DESC
+       LIMIT 100`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar motoristas" });
+  }
+});
+
+// Posição ao vivo do motorista de uma viagem (passageiro acompanha o carro).
+app.get("/api/viagens/:id/localizacao", verificarAuth, async (req, res) => {
+  try {
+    const v = (await pool.query(
+      "SELECT motorista_id, passageiro_id FROM viagens WHERE id = $1", [req.params.id]
+    )).rows[0];
+    if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
+    if (!req.user.is_admin && ![v.motorista_id, v.passageiro_id].includes(req.user.id)) {
+      return res.status(403).json({ error: "Sem permissão" });
+    }
+    const loc = (await pool.query(
+      "SELECT lat, lng, atualizado_em FROM localizacoes_online WHERE usuario_id = $1",
+      [v.motorista_id]
+    )).rows[0];
+    res.json(loc || null);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao obter localização" });
+  }
+});
+
 app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
   try {
     const v = (await pool.query("SELECT * FROM viagens WHERE id = $1", [req.params.id])).rows[0];
