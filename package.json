@@ -1,7 +1,7 @@
 {
-  "name": "leopardo-carona",
+  "name": "vagao",
   "version": "2.0.0",
-  "description": "Leopardo Carona - app interno de caronas entre funcionários",
+  "description": "Vagão - app interno de caronas entre funcionários",
   "main": "server.js",
   "engines": {
     "node": ">=20"
