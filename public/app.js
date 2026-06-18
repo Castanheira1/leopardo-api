@@ -87,7 +87,7 @@ function capturarFoto(opts = {}) {
                 <p class="cam-hint">${ocrPlaca ? 'Enquadre a placa dianteira do veículo' : 'Posicione o rosto e capture'} • foto ao vivo (não é possível anexar)</p>
                 <div class="cam-actions">
                     <button type="button" class="btn btn-secondary cam-cancel">Cancelar</button>
-                    <button type="button" class="btn btn-primary cam-shot">📸 Capturar</button>
+                    <button type="button" class="btn btn-primary cam-shot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Capturar</button>
                 </div>
                 <div class="cam-status"></div>
             </div>`;
