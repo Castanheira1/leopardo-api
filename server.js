@@ -125,9 +125,19 @@ app.get("/api/config", (req, res) => {
   res.json({ mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });
 });
 
+// Lista projetos ativos (público — usado no registro)
+app.get("/api/projetos", async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT id, nome, codigo FROM projetos WHERE ativo = TRUE ORDER BY nome");
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ============================ AUTH ============================ */
 app.post("/api/register", async (req, res) => {
-  const { nome, funcao, matricula, telefone, email, senha } = req.body;
+  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, centro_custo } = req.body;
   if (!nome || !matricula || !senha || !telefone || !email) {
     return res.status(400).json({ error: "Nome, matrícula, telefone, email e senha são obrigatórios" });
   }
@@ -143,12 +153,14 @@ app.post("/api/register", async (req, res) => {
 
     const senha_hash = await bcrypt.hash(senha, 10);
     const is_admin = matricula === "000000";
+    const pid = projeto_id ? parseInt(projeto_id, 10) || null : null;
 
     const { rows } = await pool.query(
-      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, nome, matricula, telefone, email, is_admin`,
-      [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin]
+      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, nome, matricula, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo`,
+      [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin,
+       empresa_nome || null, pid, centro_custo || null]
     );
 
     const token = jwt.sign({ id: rows[0].id, matricula, is_admin }, JWT_SECRET, { expiresIn: "8h" });
@@ -941,6 +953,65 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
     res.json({ success: true, message: `Senha de ${matricula} resetada para: 123456` });
   } catch (err) {
     res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+// Rateio: usuários ativos nos últimos 40 dias, agrupado por projeto/empresa/CC
+app.get("/api/rateio", verificarAuth, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ error: "Acesso negado" });
+  try {
+    const projeto_id = req.query.projeto_id || null;
+    const params = [];
+    let filtro = "";
+    if (projeto_id) { params.push(projeto_id); filtro = `AND u.projeto_id = $${params.length}`; }
+
+    const { rows } = await pool.query(`
+      SELECT
+          u.id,
+          u.nome,
+          u.matricula,
+          u.empresa_nome,
+          u.centro_custo,
+          p.nome AS projeto,
+          p.codigo AS projeto_codigo,
+          COUNT(DISTINCT v.id) AS viagens,
+          5.00 AS custo_mensal
+      FROM usuarios u
+      LEFT JOIN projetos p ON p.id = u.projeto_id
+      LEFT JOIN (
+          SELECT motorista_id AS usuario_id, iniciada_em FROM viagens WHERE iniciada_em >= NOW() - INTERVAL '40 days'
+          UNION ALL
+          SELECT passageiro_id AS usuario_id, iniciada_em FROM viagens WHERE iniciada_em >= NOW() - INTERVAL '40 days'
+      ) v ON v.usuario_id = u.id
+      WHERE u.is_admin = FALSE
+        AND v.usuario_id IS NOT NULL
+        ${filtro}
+      GROUP BY u.id, u.nome, u.matricula, u.empresa_nome, u.centro_custo, p.nome, p.codigo
+      ORDER BY p.nome, u.empresa_nome, u.nome
+    `, params);
+
+    const total_usuarios = rows.length;
+    const total_custo = total_usuarios * 5;
+
+    res.json({ usuarios: rows, total_usuarios, total_custo, periodo_dias: 40 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Solicitar acesso admin (validação manual futura)
+app.post("/api/admin/chamados", async (req, res) => {
+  const { nome, matricula, empresa_nome, projeto_id, telefone, email, justificativa } = req.body;
+  if (!nome || !matricula || !telefone) return res.status(400).json({ error: "Nome, matrícula e telefone são obrigatórios" });
+  try {
+    await pool.query(
+      `INSERT INTO admin_chamados (nome, matricula, empresa_nome, projeto_id, telefone, email, justificativa)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [nome, matricula, empresa_nome || null, projeto_id || null, telefone, email || null, justificativa || null]
+    );
+    res.json({ message: "Solicitação recebida. Nossa equipe entrará em contato em breve." });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
