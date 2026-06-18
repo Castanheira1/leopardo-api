@@ -127,9 +127,12 @@ app.get("/api/config", (req, res) => {
 
 /* ============================ AUTH ============================ */
 app.post("/api/register", async (req, res) => {
-  const { nome, funcao, matricula, telefone, senha } = req.body;
-  if (!nome || !matricula || !senha) {
-    return res.status(400).json({ error: "Nome, matrícula e senha são obrigatórios" });
+  const { nome, funcao, matricula, telefone, email, senha } = req.body;
+  if (!nome || !matricula || !senha || !telefone || !email) {
+    return res.status(400).json({ error: "Nome, matrícula, telefone, email e senha são obrigatórios" });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+    return res.status(400).json({ error: "Email inválido" });
   }
 
   try {
@@ -142,10 +145,10 @@ app.post("/api/register", async (req, res) => {
     const is_admin = matricula === "000000";
 
     const { rows } = await pool.query(
-      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, is_admin)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, nome, matricula, telefone, is_admin`,
-      [nome, matricula, senha_hash, funcao || null, telefone || null, is_admin]
+      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, nome, matricula, telefone, email, is_admin`,
+      [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin]
     );
 
     const token = jwt.sign({ id: rows[0].id, matricula, is_admin }, JWT_SECRET, { expiresIn: "8h" });

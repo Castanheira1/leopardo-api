@@ -22,13 +22,15 @@ CREATE TABLE IF NOT EXISTS usuarios (
     funcao VARCHAR(100),
     matricula VARCHAR(50) UNIQUE NOT NULL,
     telefone VARCHAR(20),
+    email VARCHAR(255),
     senha_hash VARCHAR(255) NOT NULL,
     is_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Garante a coluna telefone caso a tabela já exista
+-- Garante as colunas telefone/email caso a tabela já exista
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(20);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 
 -- ------------------------------------------------------------
 -- Habilitação de motorista (selfie + foto do carro, válida no dia)
