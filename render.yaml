@@ -19,6 +19,8 @@ services:
     healthCheckPath: /api/config
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: "22" # @supabase/supabase-js exige WebSocket nativo (Node >= 22)
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET

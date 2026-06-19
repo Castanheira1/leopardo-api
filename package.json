@@ -4,7 +4,7 @@
   "description": "Vagão - app interno de caronas entre funcionários",
   "main": "server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node server.js",

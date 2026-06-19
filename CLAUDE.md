@@ -29,7 +29,8 @@ user-facing strings in Portuguese to match the existing style.
 
 ## Tech stack
 
-- **Backend:** Node.js (**>= 20**) + Express 4, single file `server.js` (~1000 lines).
+- **Backend:** Node.js (**>= 22** — required, see below) + Express 4, single file
+  `server.js` (~1000 lines).
 - **DB:** PostgreSQL (Supabase). Accessed directly via `pg` `Pool` using `DATABASE_URL`
   — **not** via the Supabase JS client / PostgREST. RLS is therefore not relied upon.
 - **Auth:** JWT (`jsonwebtoken`, 8h expiry) + `bcrypt` password hashes.
@@ -46,9 +47,10 @@ user-facing strings in Portuguese to match the existing style.
 ```
 server.js            # ENTIRE backend: Express app, all routes, DB pool, Supabase upload
 schema.sql           # Full DB schema (idempotent; safe to re-run). Apply manually.
-package.json         # scripts: start / dev (nodemon). engines: node >=20
+package.json         # scripts: start / dev (nodemon). engines: node >=22
+.node-version        # pins Node 22 for Render (read by Render's build)
 .env.example         # All env vars (copy to .env for local dev)
-Dockerfile           # node:20-alpine (NOTE: Render uses render.yaml, not this Dockerfile)
+Dockerfile           # node:22-alpine (NOTE: Render uses render.yaml, not this Dockerfile)
 render.yaml          # Render Blueprint — the real deploy config (node runtime)
 DEPLOY-RENDER.md     # Step-by-step Render deploy guide (authoritative for deploy)
 MELHORIAS_FUTURAS.md # Planned features (admin approval flow, rateio, AI per project)
@@ -83,6 +85,15 @@ npm run dev              # nodemon, http://localhost:3000
 - The server **boots even without a DB or Supabase configured** — it logs a warning and
   serves pages; DB-backed routes return 500 and photo upload is disabled. Only a missing
   **`JWT_SECRET` aborts startup** (`process.exit(1)`).
+
+> **Node 22+ is mandatory (hard crash otherwise).** `createClient` from
+> `@supabase/supabase-js` (currently 2.108.x) initializes a `RealtimeClient` whose
+> `WebSocketFactory` **throws on boot** (`Node.js NN detected without native WebSocket
+> support`) on any Node **< 22**, because native `WebSocket` only exists from Node 22.
+> The app doesn't even use Realtime (only Storage), but `createClient` initializes it
+> regardless. This is pinned via `.node-version` (`22`), `engines` (`>=22`), and
+> `NODE_VERSION=22` in `render.yaml`. If a deploy dies with "Exited with status 1" right
+> after `createClient` in the stack trace, the host is on an older Node — bump it.
 
 ### Environment variables (see `.env.example`)
 
