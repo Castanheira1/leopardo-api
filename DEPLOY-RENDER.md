@@ -66,8 +66,14 @@ Supabase → **Project Settings → Database → Reset database password**.
    | `SUPABASE_KEY` | chave `service_role` |
    | `GOOGLE_MAPS_API_KEY` | chave do Google Maps |
 
-   Já vêm prontas do blueprint: `NODE_ENV=production`, `JWT_SECRET` (gerado
-   automático), `SUPABASE_BUCKET=veiculos`, `RAIO_MATCH_KM=3`.
+   Já vêm prontas do blueprint: `NODE_VERSION=22`, `NODE_ENV=production`,
+   `JWT_SECRET` (gerado automático), `SUPABASE_BUCKET=veiculos`, `RAIO_MATCH_KM=3`.
+
+   > 🔴 **Node 22 é obrigatório.** O `@supabase/supabase-js` quebra no boot em Node < 22
+   > (`Node.js NN detected without native WebSocket support`, erro no `createClient`).
+   > O repositório já fixa isso via `.node-version` (`22`) e `engines`. **Se você criou o
+   > serviço manualmente** (sem o blueprint) e ele subir em Node 18/20, adicione a
+   > variável **`NODE_VERSION=22`** no painel (Environment) e faça um novo deploy.
 5. **Create** → aguarde o build (`npm install` compila o `bcrypt`, leva ~1-2 min).
 
 ---
