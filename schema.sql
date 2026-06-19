@@ -28,14 +28,13 @@ CREATE TABLE IF NOT EXISTS usuarios (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Garante as colunas telefone/email caso a tabela já exista
+-- Garante as colunas telefone/email caso a tabela já exista.
+-- (As colunas com FK para projetos/empresas são adicionadas mais abaixo,
+--  depois que essas tabelas existem — caso contrário um setup limpo falha.)
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(20);
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(150);
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS centro_custo VARCHAR(100);
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 
 -- ------------------------------------------------------------
 -- Habilitação de motorista (selfie + foto do carro, válida no dia)
@@ -188,6 +187,14 @@ CREATE TABLE IF NOT EXISTS empresas (
 );
 INSERT INTO empresas (nome) VALUES ('Vale S.A.')
 ON CONFLICT DO NOTHING;
+
+-- ------------------------------------------------------------
+-- FKs de usuarios -> projetos/empresas
+-- (adicionadas aqui, após as tabelas referenciadas existirem)
+-- ------------------------------------------------------------
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 
 -- ------------------------------------------------------------
 -- Contratos (quem paga por quem em cada projeto)
