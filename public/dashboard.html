@@ -53,18 +53,6 @@
             Cadastre seu telefone/WhatsApp no <a href="#" onclick="abrirPerfil();return false;">Perfil</a> para combinar caronas.
         </div>
 
-        <!-- Status do modo motorista -->
-        <div class="card hab-card">
-            <div class="hab-info">
-                <strong>Modo motorista:</strong>
-                <span id="habStatus">carregando...</span>
-            </div>
-            <div class="hab-actions">
-                <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar modo motorista</button>
-                <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
-            </div>
-        </div>
-
         <div class="dashboard">
             <div class="tabs">
                 <button class="tab-btn active" onclick="showTab('tabPedir', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>Solicitar</button>
@@ -104,6 +92,16 @@
             <div id="tabOferecer" class="tab-content">
                 <div class="card">
                     <h3>Compartilhar carona</h3>
+                    <div class="hab-card">
+                        <div class="hab-info">
+                            <strong>Modo motorista:</strong>
+                            <span id="habStatusOfe">carregando...</span>
+                        </div>
+                        <div class="hab-actions">
+                            <button onclick="ativarMotorista(false)" class="btn btn-primary btn-sm">Ativar modo motorista</button>
+                            <button onclick="abrirPerfil()" class="btn btn-secondary btn-sm">Trocar veículo no perfil</button>
+                        </div>
+                    </div>
                     <p class="cam-hint">Ative o modo motorista para publicar caronas.</p>
                     <input id="destOfeInput" class="map-search" placeholder="Buscar endereço ou destino">
                     <div id="mapOfe" class="map-box"></div>
@@ -154,6 +152,35 @@
         <div id="message" class="message" style="display:none;"></div>
     </div>
 
+    <!-- Modal de Perfil (contato + modo motorista) -->
+    <div id="modalPerfil" class="cam-overlay" style="display:none;">
+        <div class="cam-box perfil-box">
+            <h3>Perfil</h3>
+
+            <div class="perfil-secao">
+                <label for="perfilTelefone">WhatsApp (com DDD)</label>
+                <input id="perfilTelefone" class="map-search" placeholder="(00) 90000-0000">
+                <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar contato</button>
+            </div>
+
+            <div class="perfil-secao">
+                <div class="hab-info">
+                    <strong>Modo motorista:</strong>
+                    <span id="habStatus">carregando...</span>
+                </div>
+                <p class="cam-hint">Tire a selfie e a foto do veículo para oferecer caronas hoje. Renove ao trocar de carro.</p>
+                <div class="hab-actions">
+                    <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar modo motorista</button>
+                    <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
+                </div>
+            </div>
+
+            <div class="cam-actions">
+                <button type="button" class="btn btn-secondary" onclick="fecharPerfil()">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
     <script>
     checkAuth();
@@ -187,9 +214,15 @@
     function checarTelefone() {
         document.getElementById('avisoTelefone').style.display = user.telefone ? 'none' : 'block';
     }
-    async function abrirPerfil() {
-        const tel = prompt('WhatsApp com DDD:', user.telefone || '');
-        if (tel === null) return;
+    function abrirPerfil() {
+        document.getElementById('perfilTelefone').value = user.telefone || '';
+        document.getElementById('modalPerfil').style.display = 'flex';
+    }
+    function fecharPerfil() {
+        document.getElementById('modalPerfil').style.display = 'none';
+    }
+    async function salvarPerfil() {
+        const tel = document.getElementById('perfilTelefone').value.trim();
         const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel }) });
         const d = await r.json();
         if (r.ok) { user = { ...user, telefone: d.telefone }; localStorage.setItem('user', JSON.stringify(user)); checarTelefone(); msg('Contato atualizado'); }
@@ -200,13 +233,14 @@
     async function carregarHabilitacao() {
         const r = await fetchWithAuth('/api/habilitacao/hoje');
         habHoje = await r.json();
-        const el = document.getElementById('habStatus');
-        if (habHoje) {
-            el.innerHTML = `${ICN.check} Ativo`;
-            iniciarBroadcastLocalizacao();
-        } else {
-            el.innerHTML = `${ICN.x} Inativo — ative para oferecer caronas`;
-        }
+        const texto = habHoje
+            ? `${ICN.check} Ativo`
+            : `${ICN.x} Inativo — ative para oferecer caronas`;
+        ['habStatus', 'habStatusOfe'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = texto;
+        });
+        if (habHoje) iniciarBroadcastLocalizacao();
     }
 
     async function ativarMotorista(trocar) {
