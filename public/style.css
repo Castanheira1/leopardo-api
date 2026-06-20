@@ -72,6 +72,39 @@ body {
     font-size: 0.9rem;
 }
 
+/* Logo VAP */
+.nav-logo {
+    height: 46px;
+    width: auto;
+    display: block;
+}
+.nav-tag {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+    opacity: 0.85;
+}
+.login-logo {
+    display: block;
+    width: 210px;
+    max-width: 80%;
+    height: auto;
+    margin: 0 auto 24px;
+}
+/* Badge escuro para o logo branco sobre cartões claros (ex.: registro) */
+.logo-badge {
+    display: inline-block;
+    background: var(--vale-blue);
+    border-radius: 16px;
+    padding: 16px 22px;
+}
+.logo-badge img {
+    display: block;
+    width: 150px;
+    height: auto;
+}
+
 /* CONTAINER PRINCIPAL */
 .container {
     max-width: 1200px;

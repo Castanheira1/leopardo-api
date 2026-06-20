@@ -1,13 +1,13 @@
 {
-  "name": "Vagão - Caronas",
-  "short_name": "Vagão",
-  "description": "App interno de caronas entre funcionários",
+  "name": "VAP - Caronas",
+  "short_name": "VAP",
+  "description": "VAP — Conectando pessoas. App interno de caronas entre colaboradores.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "lang": "pt-BR",
-  "background_color": "#0F3D3E",
+  "background_color": "#000000",
   "theme_color": "#0F3D3E",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
