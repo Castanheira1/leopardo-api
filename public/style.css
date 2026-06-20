@@ -520,6 +520,15 @@ body {
 .cam-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
 .cam-status { margin-top: 8px; font-size: 0.85rem; color: var(--vale-cyan-dark); min-height: 18px; }
 
+/* Modal de perfil (reusa cam-overlay/cam-box, mas alinhado à esquerda) */
+.perfil-box { text-align: left; }
+.perfil-secao { padding: 14px 0; border-top: 1px solid #e2e8f0; }
+.perfil-secao:first-of-type { border-top: none; padding-top: 4px; }
+.perfil-secao label { display: block; font-size: 0.85rem; color: #475569; font-weight: 600; margin-bottom: 6px; }
+.perfil-secao .map-search { margin-bottom: 10px; }
+.perfil-box .hab-info { margin-bottom: 4px; }
+.perfil-box .hab-actions { margin-top: 10px; }
+
 /* Histórico - fotos de segurança */
 .fotos-grid {
     display: grid;
