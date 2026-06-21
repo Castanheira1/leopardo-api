@@ -514,25 +514,27 @@ body {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* ===== Tema escuro do dashboard (cor da tela de login #0F3D3E) ===== */
-body.theme-dark { background: #0F3D3E; }
-.theme-dark .navbar { background: #0c3233; }
-.theme-dark .dashboard { background: transparent; box-shadow: none; }
-.theme-dark .tabs { background: #0c3233; border-bottom-color: rgba(234, 210, 152, 0.18); }
-.theme-dark .tab-btn { color: #a9c2c1; }
-.theme-dark .tab-btn:hover { color: #EAD298; background: rgba(255, 255, 255, 0.05); }
-.theme-dark .tab-btn.active { color: #EAD298; background: #114445; border-bottom-color: #EAD298; }
-.theme-dark .card { background: #114445; border-color: rgba(234, 210, 152, 0.14); color: #e6efef; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
-.theme-dark .card h3 { color: #EAD298; }
-.theme-dark .cam-hint, .theme-dark .ride-info small { color: #9db5b4; }
-.theme-dark label { color: #cfe0df; }
-.theme-dark input, .theme-dark select, .theme-dark textarea { background: #0d3a3b; color: #fff; border-color: rgba(234, 210, 152, 0.25); }
-.theme-dark input::placeholder { color: rgba(255, 255, 255, 0.55); }
+/* ===== Tema escuro estilo Uber: tela PRETA e PLANA (sem painel sobre painel) ===== */
+body.theme-dark { background: #0b0b0d; }
+.theme-dark .navbar { background: #0b0b0d; box-shadow: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.theme-dark .dashboard { background: transparent; box-shadow: none; border-radius: 0; }
+.theme-dark .tabs { background: transparent; border-bottom-color: rgba(255, 255, 255, 0.1); }
+.theme-dark .tab-btn { color: #9aa0a6; }
+.theme-dark .tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.04); }
+.theme-dark .tab-btn.active { color: #fff; background: transparent; border-bottom-color: var(--vale-cyan); }
+/* cards "achatados": sem fundo, borda ou sombra — o conteúdo fica direto na tela preta */
+.theme-dark .card { background: transparent; border: none; box-shadow: none; color: #e8eaed; padding: 14px 0; margin-bottom: 10px; }
+.theme-dark .card h3 { color: #fff; }
+.theme-dark .cam-hint, .theme-dark .ride-info small { color: #9aa0a6; }
+.theme-dark label { color: #cfd2d6; }
+.theme-dark input, .theme-dark select, .theme-dark textarea { background: #1a1b1e; color: #fff; border-color: #2c2d31; }
+.theme-dark input::placeholder { color: rgba(255, 255, 255, 0.5); }
 /* buscador flutuante e inputs do modal de perfil continuam claros */
-.theme-dark .map-search-float, .theme-dark .cam-box input { background: #fff; color: #0F3D3E; border-color: #e2e8f0; }
+.theme-dark .map-search-float, .theme-dark .cam-box input { background: #fff; color: #111; border-color: #e2e8f0; }
 .theme-dark .map-search-float::placeholder { color: #64748b; }
-.theme-dark .ride-item { background: #114445; border-color: rgba(234, 210, 152, 0.14); color: #e6efef; }
-.theme-dark .hab-card { color: #e6efef; }
+/* itens de lista têm uma leve superfície (são itens, não "tela sobre tela") */
+.theme-dark .ride-item { background: #161719; border-color: #25262a; color: #e8eaed; box-shadow: none; }
+.theme-dark .hab-card { color: #e8eaed; }
 
 /* Status modo motorista */
 .hab-card {

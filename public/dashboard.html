@@ -274,7 +274,7 @@
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, styles: MAP_DARK });
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false });
 
         const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, label: 'A', title: 'Origem (arraste se quiser)' });
         let destino = null;
@@ -284,7 +284,7 @@
         const dirService = new g.maps.DirectionsService();
         const dirRenderer = new g.maps.DirectionsRenderer({
             map, suppressMarkers: true, preserveViewport: true,
-            polylineOptions: { strokeColor: '#EAD298', strokeWeight: 6, strokeOpacity: 0.95 },
+            polylineOptions: { strokeColor: '#0F3D3E', strokeWeight: 5, strokeOpacity: 0.85 },
         });
         const rotaInfo = document.createElement('div');
         rotaInfo.className = 'rota-info';
@@ -539,7 +539,7 @@
 
         g = await carregarMaps();
         const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, styles: MAP_DARK });
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false });
         const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
         const polyline = new g.maps.Polyline({ path, strokeColor: '#00a9ce', strokeWeight: 5, map });
 
@@ -609,24 +609,6 @@
         '<rect x="20" y="30" width="24" height="13" rx="4" fill="#13514f"/>' +
         '<path d="M20 45 Q32 41 44 45 L45 50 Q32 54 19 50 Z" fill="#9ec6c2"/></svg>'
     );
-
-    // Tema escuro do mapa (estilo Uber / "tela preta") aplicado em todos os mapas.
-    const MAP_DARK = [
-        { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-        { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-        { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
-        { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
-        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-        { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
-        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-        { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#373737' }] },
-        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
-        { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#e0c98a' }] },
-        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0b1a1a' }] },
-    ];
 
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {
