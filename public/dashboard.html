@@ -62,8 +62,10 @@
                 <div class="card">
                     <h3>Para onde você vai?</h3>
                     <p class="cam-hint">Toque no mapa ou busque um endereço de destino.</p>
-                    <input id="destPedInput" class="map-search" placeholder="Buscar endereço ou destino">
-                    <div id="mapPed" class="map-box"></div>
+                    <div class="map-wrap">
+                        <input id="destPedInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
+                        <div id="mapPed" class="map-box map-box-full"></div>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Quando? (vazio = agora)</label>
@@ -99,8 +101,10 @@
                         </div>
                     </div>
                     <p class="cam-hint">Ative o modo motorista para publicar caronas.</p>
-                    <input id="destOfeInput" class="map-search" placeholder="Buscar endereço ou destino">
-                    <div id="mapOfe" class="map-box"></div>
+                    <div class="map-wrap">
+                        <input id="destOfeInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
+                        <div id="mapOfe" class="map-box map-box-full"></div>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Quando? (vazio = agora)</label>
@@ -271,7 +275,7 @@
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 13, streetViewControl: false, mapTypeControl: false });
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, styles: MAP_DARK });
 
         const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, label: 'A', title: 'Origem (arraste se quiser)' });
         let destino = null;
@@ -281,7 +285,7 @@
         const dirService = new g.maps.DirectionsService();
         const dirRenderer = new g.maps.DirectionsRenderer({
             map, suppressMarkers: true, preserveViewport: true,
-            polylineOptions: { strokeColor: '#0F3D3E', strokeWeight: 5, strokeOpacity: 0.85 },
+            polylineOptions: { strokeColor: '#EAD298', strokeWeight: 6, strokeOpacity: 0.95 },
         });
         const rotaInfo = document.createElement('div');
         rotaInfo.className = 'rota-info';
@@ -327,7 +331,7 @@
         };
     }
     async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); iniciarFrotaAoVivo(selPed.map); }
-    async function initMapOferecer() { selOfe = await criarSeletor('mapOfe', 'destOfeInput'); }
+    async function initMapOferecer() { selOfe = await criarSeletor('mapOfe', 'destOfeInput'); acompanharProprioCarro(selOfe.map); }
 
     function horarioISO(id) {
         const v = document.getElementById(id).value;
@@ -536,7 +540,7 @@
 
         g = await carregarMaps();
         const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14 });
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, styles: MAP_DARK });
         const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
         const polyline = new g.maps.Polyline({ path, strokeColor: '#00a9ce', strokeWeight: 5, map });
 
@@ -607,6 +611,24 @@
         '<path d="M20 45 Q32 41 44 45 L45 50 Q32 54 19 50 Z" fill="#9ec6c2"/></svg>'
     );
 
+    // Tema escuro do mapa (estilo Uber / "tela preta") aplicado em todos os mapas.
+    const MAP_DARK = [
+        { elementType: 'geometry', stylers: [{ color: '#212121' }] },
+        { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+        { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
+        { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
+        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+        { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#373737' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
+        { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#e0c98a' }] },
+        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0b1a1a' }] },
+    ];
+
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {
         pin: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
@@ -647,6 +669,22 @@
         }
         tick();
         fleet.timer = setInterval(tick, 5000);
+    }
+
+    // Mostra o próprio carro do motorista no mapa de "Oferecer" (atualiza a cada 5s).
+    let selfCar = { marker: null, timer: null };
+    function acompanharProprioCarro(map) {
+        if (selfCar.timer) clearInterval(selfCar.timer);
+        async function upd() {
+            try {
+                const p = await obterLocalizacao();
+                const pos = { lat: p.lat, lng: p.lng };
+                if (selfCar.marker) selfCar.marker.setPosition(pos);
+                else selfCar.marker = new g.maps.Marker({ position: pos, map, icon: CAR_ICON_URL, title: 'Você', zIndex: 999 });
+            } catch (_) { /* sem GPS: ignora */ }
+        }
+        upd();
+        selfCar.timer = setInterval(upd, 5000);
     }
 
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
