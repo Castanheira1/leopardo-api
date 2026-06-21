@@ -557,6 +557,21 @@ body.theme-dark { background: #0b0b0d; }
 .prop-motorista { margin-top: 8px; }
 .prop-carro { width: 100%; max-width: 220px; height: 110px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px; }
 
+/* ===== Tela de escolha do papel (passageiro x motorista) ===== */
+.papel-overlay { position: fixed; inset: 0; background: #0b0b0d; z-index: 9998; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.papel-box { width: 100%; max-width: 420px; text-align: center; }
+.papel-box h2 { color: #fff; margin-bottom: 22px; font-size: 1.35rem; }
+.papel-opt { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 26px 18px; margin-bottom: 16px; background: #161719; border: 1px solid #2a2b2f; border-radius: 16px; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+.papel-opt:hover, .papel-opt:active { border-color: #EAD298; background: #1d1f22; }
+.papel-opt svg { margin-bottom: 6px; }
+.papel-tit { font-size: 1.15rem; font-weight: 700; color: #fff; }
+.papel-sub { font-size: 0.85rem; color: #9aa0a6; }
+
+/* Barra de modo (título + trocar papel) */
+.modo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 2px; flex-wrap: wrap; }
+.modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; }
+.modo-acoes { display: flex; gap: 8px; }
+
 /* Status modo motorista */
 .hab-card {
     display: flex;

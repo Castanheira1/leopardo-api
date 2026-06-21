@@ -50,11 +50,12 @@
         </div>
 
         <div class="dashboard">
-            <div class="tabs">
-                <button class="tab-btn active" onclick="showTab('tabPedir', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>Solicitar</button>
-                <button class="tab-btn" onclick="showTab('tabOferecer', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>Oferecer</button>
-                <button class="tab-btn" onclick="showTab('tabPropostas', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:5px"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M18.5 19a5.5 5.5 0 0 0-3-5"/></svg>Solicitações <span id="badgeProp" class="badge badge-em-uso" style="display:none;"></span></button>
-                <button class="tab-btn" onclick="showTab('tabViagem', this)" id="tabBtnViagem" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>Em andamento</button>
+            <div class="modo-bar">
+                <span id="modoTitulo" class="modo-titulo">Carona</span>
+                <div class="modo-acoes">
+                    <button class="btn btn-secondary btn-sm" id="btnViagemAndamento" style="display:none;" onclick="showTab('tabViagem')">Em andamento</button>
+                    <button class="btn btn-secondary btn-sm" onclick="abrirEscolhaPapel()">Trocar papel</button>
+                </div>
             </div>
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
@@ -83,6 +84,10 @@
                     <div id="listaCaronasMatch"><p class="cam-hint">Solicite uma carona para ver motoristas próximos.</p></div>
                     <button class="btn btn-secondary btn-sm" onclick="listarTodasCaronas()">Ver todos</button>
                     <div id="listaCaronasTodas"></div>
+                </div>
+                <div class="card">
+                    <h3>Minhas solicitações</h3>
+                    <div id="listaPropPassageiro"><p class="cam-hint">Você ainda não pediu nenhuma carona.</p></div>
                 </div>
             </div>
 
@@ -126,14 +131,9 @@
                     <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos</button>
                     <div id="listaPedidosTodos"></div>
                 </div>
-            </div>
-
-            <!-- ============ PROPOSTAS ============ -->
-            <div id="tabPropostas" class="tab-content">
                 <div class="card">
-                    <h3>Solicitações</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="loadPropostas()">Atualizar</button>
-                    <div id="listaPropostas"></div>
+                    <h3>Solicitações &amp; corridas</h3>
+                    <div id="listaPropMotorista"><p class="cam-hint">Quando alguém pedir sua carona, aparece aqui para aceitar.</p></div>
                 </div>
             </div>
 
@@ -212,6 +212,23 @@
         </div>
     </div>
 
+    <!-- Tela inicial: escolher o papel (trava no modo escolhido) -->
+    <div id="telaPapel" class="papel-overlay" style="display:none;">
+        <div class="papel-box">
+            <h2>O que você quer fazer?</h2>
+            <button type="button" class="papel-opt" onclick="escolherPapel('passageiro')">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
+                <span class="papel-tit">Pedir carona</span>
+                <span class="papel-sub">Sou passageiro</span>
+            </button>
+            <button type="button" class="papel-opt" onclick="escolherPapel('motorista')">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="#EAD298"/><circle cx="16.5" cy="16" r="1.2" fill="#EAD298"/></svg>
+                <span class="papel-tit">Oferecer carona</span>
+                <span class="papel-sub">Sou motorista</span>
+            </button>
+        </div>
+    </div>
+
     <script src="app.js"></script>
     <script>
     checkAuth();
@@ -238,7 +255,19 @@
         if (btn) btn.classList.add('active');
         if (id === 'tabPedir' && !selPed) initMapPedir();
         if (id === 'tabOferecer' && !selOfe) initMapOferecer();
-        if (id === 'tabPropostas') loadPropostas();
+    }
+
+    /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
+    let modoAtual = null;
+    function abrirEscolhaPapel() {
+        document.getElementById('telaPapel').style.display = 'flex';
+    }
+    function escolherPapel(papel) {
+        modoAtual = papel;
+        document.getElementById('telaPapel').style.display = 'none';
+        document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
+        showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+        loadPropostas();
     }
 
     /* -------- perfil / telefone -------- */
@@ -521,17 +550,17 @@
     }
 
     /* -------- propostas -------- */
+    const ehMotorista = (p) => (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
     async function loadPropostas() {
         const r = await fetchWithAuth('/api/propostas');
         const props = await r.json();
-        const pendentesRecebidas = props.filter(p => p.sou_destinatario && p.status === 'pendente').length;
-        const badge = document.getElementById('badgeProp');
-        badge.style.display = pendentesRecebidas ? 'inline-block' : 'none';
-        badge.textContent = pendentesRecebidas;
-
-        const div = document.getElementById('listaPropostas');
-        if (!props.length) { div.innerHTML = '<p class="cam-hint">Sem solicitações no momento.</p>'; return; }
-        div.innerHTML = props.map(p => cardProposta(p)).join('');
+        renderProp('listaPropMotorista', props.filter(ehMotorista), 'Quando alguém pedir sua carona, aparece aqui para aceitar.');
+        renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)), 'Você ainda não pediu nenhuma carona.');
+    }
+    function renderProp(id, arr, vazio) {
+        const div = document.getElementById(id);
+        if (!div) return;
+        div.innerHTML = arr.length ? arr.map(cardProposta).join('') : `<p class="cam-hint">${vazio}</p>`;
     }
     function cardProposta(p) {
         const tipo = p.carona_id ? 'Passageiro' : 'Motorista';
@@ -639,10 +668,9 @@
             if (!r || !r.ok) return;
             const props = await r.json();
             const pend = props.filter(p => p.sou_destinatario && p.status === 'pendente');
-            const badge = document.getElementById('badgeProp');
-            if (badge) { badge.style.display = pend.length ? 'inline-block' : 'none'; badge.textContent = pend.length; }
-            // não atropela câmera / perfil / um card já aberto
+            // não atropela: escolha de papel, câmera, perfil ou um card já aberto
             if (solicitacaoAtual) return;
+            if (document.getElementById('telaPapel').style.display === 'flex') return;
             if (document.getElementById('modalPerfil').style.display === 'flex') return;
             if (document.querySelector('.cam-video')) return;
             const nova = pend.find(p => !propostasTratadas.has(p.id));
@@ -660,7 +688,7 @@
     }
 
     async function abrirViagem(viagemId) {
-        document.getElementById('tabBtnViagem').style.display = 'inline-block';
+        document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
@@ -863,7 +891,7 @@
         await carregarHabilitacao();
         if (habHoje) iniciarBroadcastLocalizacao();
         await loadPropostas();
-        await initMapPedir();
+        abrirEscolhaPapel();          // começa pela escolha do papel
         pollPropostas();
         setInterval(pollPropostas, 9000);
     })();
