@@ -530,7 +530,7 @@ body.theme-dark { background: #0b0b0d; }
 .theme-dark input, .theme-dark select, .theme-dark textarea { background: #1a1b1e; color: #fff; border-color: #2c2d31; }
 .theme-dark input::placeholder { color: rgba(255, 255, 255, 0.5); }
 /* buscador flutuante e inputs do modal de perfil continuam claros */
-.theme-dark .map-search-float, .theme-dark .cam-box input { background: #fff; color: #111; border-color: #e2e8f0; }
+.theme-dark .map-search-float { background: #fff; color: #111; border-color: #e2e8f0; }
 .theme-dark .map-search-float::placeholder { color: #64748b; }
 /* itens de lista têm uma leve superfície (são itens, não "tela sobre tela") */
 .theme-dark .ride-item { background: #161719; border-color: #25262a; color: #e8eaed; box-shadow: none; }
@@ -578,22 +578,27 @@ body.theme-dark { background: #0b0b0d; }
 .cam-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(2, 6, 23, 0.86);
+    background: rgba(0, 0, 0, 0.6);
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: center;
     z-index: 9999;
-    padding: 16px;
 }
+/* Bottom sheet escuro estilo Uber (Perfil + câmera) */
 .cam-box {
-    background: #fff;
-    border-radius: 16px;
-    padding: 18px;
+    background: #161719;
+    color: #e8eaed;
+    border-radius: 18px 18px 0 0;
+    padding: 20px 18px calc(18px + env(safe-area-inset-bottom));
     width: 100%;
-    max-width: 460px;
+    max-width: 560px;
+    max-height: 92vh;
+    overflow-y: auto;
     text-align: center;
+    animation: sheetUp 0.22s ease-out;
 }
-.cam-box h3 { color: var(--vale-blue); margin-bottom: 10px; }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.cam-box h3 { color: #fff; margin-bottom: 10px; }
 .cam-video {
     width: 100%;
     border-radius: 12px;
@@ -605,9 +610,9 @@ body.theme-dark { background: #0b0b0d; }
 
 /* Modal de perfil (reusa cam-overlay/cam-box, mas alinhado à esquerda) */
 .perfil-box { text-align: left; }
-.perfil-secao { padding: 14px 0; border-top: 1px solid #e2e8f0; }
+.perfil-secao { padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .perfil-secao:first-of-type { border-top: none; padding-top: 4px; }
-.perfil-secao label { display: block; font-size: 0.85rem; color: #475569; font-weight: 600; margin-bottom: 6px; }
+.perfil-secao label { display: block; font-size: 0.85rem; color: #cfd2d6; font-weight: 600; margin-bottom: 6px; }
 .perfil-secao .map-search { margin-bottom: 10px; }
 .perfil-box .hab-info { margin-bottom: 4px; }
 .perfil-box .hab-actions { margin-top: 10px; }
