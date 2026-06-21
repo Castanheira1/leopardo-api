@@ -607,13 +607,25 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
               CASE WHEN pr.status = 'aceito' THEN pu.telefone ELSE NULL END AS para_telefone,
               c.origem_texto AS c_origem, c.destino_texto AS c_destino, c.horario AS c_horario,
               p.origem_texto AS p_origem, p.destino_texto AS p_destino, p.horario AS p_horario,
-              v.id AS viagem_id
+              v.id AS viagem_id,
+              COALESCE(hm.selfie_url, hped.selfie_url) AS motorista_selfie,
+              COALESCE(hm.foto_carro_url, hped.foto_carro_url) AS motorista_carro,
+              COALESCE(hm.placa, hped.placa) AS motorista_placa,
+              COALESCE(hm.tag, hped.tag) AS motorista_tag
        FROM propostas pr
        JOIN usuarios du ON pr.de_usuario_id = du.id
        JOIN usuarios pu ON pr.para_usuario_id = pu.id
        LEFT JOIN caronas c ON pr.carona_id = c.id
        LEFT JOIN pedidos p ON pr.pedido_id = p.id
        LEFT JOIN viagens v ON v.proposta_id = pr.id
+       LEFT JOIN habilitacoes_motorista hm ON hm.id = c.habilitacao_id
+       LEFT JOIN LATERAL (
+         SELECT selfie_url, foto_carro_url, placa, tag
+         FROM habilitacoes_motorista
+         WHERE motorista_id = pr.de_usuario_id AND status = 'ativa'
+           AND created_at > NOW() - INTERVAL '24 hours'
+         ORDER BY created_at DESC LIMIT 1
+       ) hped ON pr.pedido_id IS NOT NULL
        WHERE pr.de_usuario_id = $1 OR pr.para_usuario_id = $1
        ORDER BY pr.created_at DESC`,
       [req.user.id]
@@ -652,6 +664,32 @@ app.post("/api/propostas/:id/recusar", verificarAuth, async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: "Erro ao recusar proposta" });
+  }
+});
+
+// Cancela uma proposta JÁ aceita (qualquer um dos dois lados), antes da viagem
+// começar. Reabre a oferta/pedido para novos matches.
+app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
+  try {
+    const pr = (await pool.query(
+      `UPDATE propostas SET status = 'recusado'
+       WHERE id = $1 AND (de_usuario_id = $2 OR para_usuario_id = $2) AND status = 'aceito'
+         AND NOT EXISTS (
+           SELECT 1 FROM viagens v WHERE v.proposta_id = propostas.id AND v.status = 'em_andamento'
+         )
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    )).rows[0];
+    if (!pr) return res.status(400).json({ error: "Não é possível cancelar (viagem já iniciada ou proposta inválida)" });
+
+    // Reabre a carona/pedido para que possam ser oferecidos de novo
+    if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);
+    if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'", [pr.pedido_id]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao cancelar" });
   }
 });
 
