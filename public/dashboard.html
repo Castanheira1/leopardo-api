@@ -176,6 +176,25 @@
         </div>
     </div>
 
+    <!-- Confirmar veículo (após selfie + foto do carro) — sem prompt() -->
+    <div id="modalVeiculo" class="cam-overlay" style="display:none;">
+        <div class="cam-box perfil-box">
+            <h3>Confirmar veículo</h3>
+            <img id="veicFoto" class="veic-foto" alt="" style="display:none;">
+            <div class="perfil-secao" style="border-top:none;">
+                <label for="veicPlaca">Placa</label>
+                <input id="veicPlaca" class="map-search" placeholder="ABC1D23" autocapitalize="characters" autocomplete="off">
+                <label for="veicTag" style="margin-top:12px;">TAG / referência (opcional)</label>
+                <input id="veicTag" class="map-search" placeholder="Ex: Onix prata">
+                <div id="veicMsg" class="cam-status"></div>
+            </div>
+            <div class="sol-actions">
+                <button type="button" class="btn btn-secondary" onclick="cancelarVeiculo()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmarVeiculo()">Ativar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Solicitação recebida (estilo Uber): aparece sozinha quando chega um pedido -->
     <div id="modalSolicitacao" class="cam-overlay" style="display:none;" onclick="if(event.target===this) dismissSolicitacao()">
         <div class="cam-box sol-box">
@@ -267,31 +286,53 @@
         if (habHoje) iniciarBroadcastLocalizacao();
     }
 
+    let veiculoPend = null;
     async function ativarMotorista(trocar) {
         if (habHoje && !trocar) { msg('Modo motorista já está ativo'); return; }
         try {
             msg('Iniciando câmera...');
             const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
             const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do veículo — placa dianteira' });
-
-            const placa = prompt('Placa do veículo:', carro.placa || '');
-            if (!placa) { msg('Placa é obrigatória', 'error'); return; }
-            const tag = prompt('TAG do veículo (opcional):', '');
-
-            const body = {
-                placa, tag,
-                foto_carro_url: carro.url, foto_carro_lat: carro.lat, foto_carro_lng: carro.lng, foto_carro_em: carro.em,
-                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
-            };
-            const r = await fetchWithAuth('/api/habilitacao', { method: 'POST', body: JSON.stringify(body) });
-            const d = await r.json();
-            if (!r.ok) return msg(d.error || 'Erro', 'error');
-            habHoje = d;
-            await carregarHabilitacao();
-            msg('Modo motorista ativado.');
+            veiculoPend = { selfie, carro };
+            document.getElementById('veicPlaca').value = (carro.placa || '').toUpperCase();
+            document.getElementById('veicTag').value = '';
+            document.getElementById('veicMsg').textContent = '';
+            const prev = document.getElementById('veicFoto');
+            if (carro.url) { prev.src = carro.url; prev.style.display = 'block'; } else { prev.style.display = 'none'; }
+            document.getElementById('modalPerfil').style.display = 'none';
+            document.getElementById('modalVeiculo').style.display = 'flex';
         } catch (e) {
             if (e.message !== 'cancelado') msg(e.message, 'error');
         }
+    }
+    function cancelarVeiculo() {
+        veiculoPend = null;
+        document.getElementById('modalVeiculo').style.display = 'none';
+    }
+    async function confirmarVeiculo() {
+        if (!veiculoPend) return;
+        const placa = document.getElementById('veicPlaca').value.trim().toUpperCase();
+        const tag = document.getElementById('veicTag').value.trim();
+        const out = document.getElementById('veicMsg');
+        const set = (t, c) => { out.textContent = t; out.style.color = c || ''; };
+        if (placa.replace(/[^A-Z0-9]/g, '').length < 7) return set('Confira a placa (7 caracteres).', '#ef9a9a');
+        set('Ativando...', '');
+        const { selfie, carro } = veiculoPend;
+        const body = {
+            placa, tag,
+            foto_carro_url: carro.url, foto_carro_lat: carro.lat, foto_carro_lng: carro.lng, foto_carro_em: carro.em,
+            selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+        };
+        try {
+            const r = await fetchWithAuth('/api/habilitacao', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return set(d.error || 'Erro ao ativar', '#ef9a9a');
+            habHoje = d;
+            await carregarHabilitacao();
+            veiculoPend = null;
+            document.getElementById('modalVeiculo').style.display = 'none';
+            msg('Modo motorista ativado!');
+        } catch (_) { set('Erro de conexão. Tente novamente.', '#ef9a9a'); }
     }
 
     /* -------- seletor de rota (mapa) -------- */
@@ -498,33 +539,54 @@
         const tel = p.sou_destinatario ? p.de_telefone : p.para_telefone;
         const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
         const souMotorista = (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
+        const aceito = p.status === 'aceito';
 
         let acoes = '';
         if (p.status === 'pendente' && p.sou_destinatario) {
             acoes = `<button class="btn btn-success btn-sm" onclick="aceitarProposta(${p.id})">Aceitar</button>
                      <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
-        } else if (p.status === 'aceito') {
+        } else if (aceito) {
             const wpp = linkWhatsApp(tel);
             acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">${ICN.phone} ${tel}</a>` : ''}`;
+                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">${ICN.phone} WhatsApp</a>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="iniciarViagem(${p.id})">Iniciar</button>`;
             }
+            if (!p.viagem_id) {
+                acoes += ` <button class="btn btn-danger btn-sm" onclick="cancelarProposta(${p.id})">Cancelar</button>`;
+            }
         } else if (p.status === 'recusado') {
-            acoes = `<span class="badge badge-inativo">recusado</span>`;
+            acoes = `<span class="badge badge-inativo">cancelado</span>`;
         }
 
+        // Quando aceito, o passageiro vê selfie + carro + placa do motorista
+        const verMotorista = aceito && !souMotorista && (p.motorista_selfie || p.motorista_carro);
+        const thumb = (verMotorista && p.motorista_selfie) ? p.motorista_selfie : p.selfie_url;
+        const blocoCarro = verMotorista ? `
+                <div class="prop-motorista">
+                    ${p.motorista_carro ? `<img src="${p.motorista_carro}" class="prop-carro" alt="carro do motorista">` : ''}
+                    <small>${ICN.car} ${p.motorista_placa || 'veículo'}${p.motorista_tag ? ' • ' + p.motorista_tag : ''}</small>
+                </div>` : '';
+
         return `<div class="ride-item">
-            ${p.selfie_url ? `<img src="${p.selfie_url}" class="ride-thumb">` : ''}
+            ${thumb ? `<img src="${thumb}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${outro}</strong> <small>(${tipo})</small><br>
                 <small>${rota}</small>
                 ${p.mensagem ? `<br><small>"${p.mensagem}"</small>` : ''}
+                ${blocoCarro}
             </div>
             <div class="ride-actions">${acoes}</div>
         </div>`;
+    }
+    async function cancelarProposta(id) {
+        const r = await fetchWithAuth('/api/propostas/' + id + '/cancelar', { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
+        msg('Carona cancelada.');
+        loadPropostas();
     }
     async function aceitarProposta(id) {
         const r = await fetchWithAuth('/api/propostas/' + id + '/aceitar', { method: 'POST' });
