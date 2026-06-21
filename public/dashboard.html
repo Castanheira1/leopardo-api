@@ -176,6 +176,23 @@
         </div>
     </div>
 
+    <!-- Solicitação recebida (estilo Uber): aparece sozinha quando chega um pedido -->
+    <div id="modalSolicitacao" class="cam-overlay" style="display:none;" onclick="if(event.target===this) dismissSolicitacao()">
+        <div class="cam-box sol-box">
+            <div class="sol-badge">Nova solicitação</div>
+            <img id="solSelfie" class="sol-selfie" alt="" style="display:none;">
+            <h3 id="solNome">—</h3>
+            <p id="solTipo" class="cam-hint"></p>
+            <div id="solRota" class="sol-rota"></div>
+            <p id="solMsg" class="sol-msg"></p>
+            <div class="sol-actions">
+                <button class="btn btn-danger" onclick="responderSolicitacao(false)">Recusar</button>
+                <button class="btn btn-primary" onclick="responderSolicitacao(true)">Aceitar</button>
+            </div>
+            <button type="button" class="sol-depois" onclick="dismissSolicitacao()">Ver depois</button>
+        </div>
+    </div>
+
     <script src="app.js"></script>
     <script>
     checkAuth();
@@ -521,6 +538,56 @@
         if (r.ok) { msg('Solicitação recusada.'); loadPropostas(); }
     }
 
+    /* -------- solicitação recebida (estilo Uber): aparece sozinha -------- */
+    let solicitacaoAtual = null;
+    const propostasTratadas = new Set();
+    function mostrarSolicitacao(p) {
+        solicitacaoAtual = p;
+        const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
+        const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
+        document.getElementById('solNome').textContent = p.de_nome || 'Solicitação';
+        document.getElementById('solTipo').textContent = tipo;
+        document.getElementById('solRota').innerHTML = `${ICN.pin} ${rota}`;
+        document.getElementById('solMsg').textContent = p.mensagem ? `"${p.mensagem}"` : '';
+        const selfie = document.getElementById('solSelfie');
+        if (p.selfie_url) { selfie.src = p.selfie_url; selfie.style.display = 'block'; }
+        else { selfie.style.display = 'none'; }
+        document.getElementById('modalSolicitacao').style.display = 'flex';
+    }
+    function dismissSolicitacao() {
+        if (solicitacaoAtual) propostasTratadas.add(solicitacaoAtual.id);
+        solicitacaoAtual = null;
+        document.getElementById('modalSolicitacao').style.display = 'none';
+    }
+    async function responderSolicitacao(aceito) {
+        const p = solicitacaoAtual;
+        if (!p) return;
+        propostasTratadas.add(p.id);
+        solicitacaoAtual = null;
+        document.getElementById('modalSolicitacao').style.display = 'none';
+        const r = await fetchWithAuth('/api/propostas/' + p.id + '/' + (aceito ? 'aceitar' : 'recusar'), { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg(aceito ? 'Aceito! Contato liberado.' : 'Solicitação recusada.');
+        loadPropostas();
+    }
+    async function pollPropostas() {
+        try {
+            const r = await fetchWithAuth('/api/propostas');
+            if (!r || !r.ok) return;
+            const props = await r.json();
+            const pend = props.filter(p => p.sou_destinatario && p.status === 'pendente');
+            const badge = document.getElementById('badgeProp');
+            if (badge) { badge.style.display = pend.length ? 'inline-block' : 'none'; badge.textContent = pend.length; }
+            // não atropela câmera / perfil / um card já aberto
+            if (solicitacaoAtual) return;
+            if (document.getElementById('modalPerfil').style.display === 'flex') return;
+            if (document.querySelector('.cam-video')) return;
+            const nova = pend.find(p => !propostasTratadas.has(p.id));
+            if (nova) mostrarSolicitacao(nova);
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+
     /* -------- viagem + rastreamento ao vivo -------- */
     async function iniciarViagem(propostaId) {
         const r = await fetchWithAuth('/api/viagens', { method: 'POST', body: JSON.stringify({ proposta_id: propostaId }) });
@@ -735,6 +802,8 @@
         if (habHoje) iniciarBroadcastLocalizacao();
         await loadPropostas();
         await initMapPedir();
+        pollPropostas();
+        setInterval(pollPropostas, 9000);
     })();
     </script>
 </body>
