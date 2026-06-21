@@ -535,6 +535,11 @@ body.theme-dark { background: #0b0b0d; }
 /* itens de lista têm uma leve superfície (são itens, não "tela sobre tela") */
 .theme-dark .ride-item { background: #161719; border-color: #25262a; color: #e8eaed; box-shadow: none; }
 .theme-dark .hab-card { color: #e8eaed; }
+/* botões na cor da marca (dourado), em vez do azul/cyan */
+.theme-dark .btn-primary { background: #EAD298; color: #0F3D3E; box-shadow: none; }
+.theme-dark .btn-primary:hover { background: #e0c98a; }
+.theme-dark .btn-secondary { background: #2a2b2f; color: #e8eaed; }
+.theme-dark .btn-secondary:hover { background: #34353a; }
 
 /* Status modo motorista */
 .hab-card {

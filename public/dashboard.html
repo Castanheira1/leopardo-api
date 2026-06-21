@@ -160,16 +160,12 @@
                 <label for="perfilTelefone">WhatsApp (com DDD)</label>
                 <input id="perfilTelefone" class="map-search" placeholder="(00) 90000-0000">
                 <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar contato</button>
+                <div id="perfilMsg" class="cam-status"></div>
             </div>
 
             <div class="perfil-secao">
-                <div class="hab-info">
-                    <strong>Modo motorista:</strong>
-                    <span id="habStatus">carregando...</span>
-                </div>
-                <p class="cam-hint">Tire a selfie e a foto do veículo para oferecer caronas hoje. Renove ao trocar de carro.</p>
                 <div class="hab-actions">
-                    <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar modo motorista</button>
+                    <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar para oferecer carona</button>
                     <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
                 </div>
             </div>
@@ -222,10 +218,22 @@
     }
     async function salvarPerfil() {
         const tel = document.getElementById('perfilTelefone').value.trim();
-        const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel }) });
-        const d = await r.json();
-        if (r.ok) { user = { ...user, telefone: d.telefone }; localStorage.setItem('user', JSON.stringify(user)); checarTelefone(); msg('Contato atualizado'); }
-        else msg(d.error || 'Erro', 'error');
+        const out = document.getElementById('perfilMsg');
+        const setMsg = (t, cor) => { if (out) { out.textContent = t; out.style.color = cor || ''; } };
+        if (tel.replace(/\D/g, '').length < 10) return setMsg('Informe um telefone válido com DDD.', '#ef9a9a');
+        setMsg('Salvando...', '');
+        try {
+            const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel }) });
+            const d = await r.json();
+            if (r.ok) {
+                user = { ...user, telefone: d.telefone };
+                localStorage.setItem('user', JSON.stringify(user));
+                checarTelefone();
+                setMsg('✓ Contato salvo!', '#86efac');
+            } else setMsg(d.error || 'Erro ao salvar', '#ef9a9a');
+        } catch (_) {
+            setMsg('Erro de conexão. Tente novamente.', '#ef9a9a');
+        }
     }
 
     /* -------- habilitação motorista -------- */
@@ -233,8 +241,8 @@
         const r = await fetchWithAuth('/api/habilitacao/hoje');
         habHoje = await r.json();
         const texto = habHoje
-            ? `${ICN.check} Ativo`
-            : `${ICN.x} Inativo — ative para oferecer caronas`;
+            ? '<span style="color:#22c55e">●</span> Ativo'
+            : '<span style="color:#9aa0a6">●</span> Inativo';
         ['habStatus', 'habStatusOfe'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = texto;
