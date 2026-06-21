@@ -28,7 +28,7 @@
         }
     </style>
 </head>
-<body>
+<body class="theme-dark">
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-left">
@@ -96,8 +96,7 @@
                             <span id="habStatusOfe">carregando...</span>
                         </div>
                         <div class="hab-actions">
-                            <button onclick="ativarMotorista(false)" class="btn btn-primary btn-sm">Ativar modo motorista</button>
-                            <button onclick="abrirPerfil()" class="btn btn-secondary btn-sm">Trocar veículo no perfil</button>
+                            <button onclick="abrirPerfil()" class="btn btn-primary btn-sm">Ativar no Perfil</button>
                         </div>
                     </div>
                     <p class="cam-hint">Ative o modo motorista para publicar caronas.</p>
@@ -404,7 +403,7 @@
     /* -------- oferecer carona -------- */
     async function oferecerCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
-        if (!habHoje) { msg('Ative o modo motorista para continuar', 'error'); return ativarMotorista(false); }
+        if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
         const dest = selOfe && selOfe.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
         const origem = selOfe.getOrigem();
@@ -448,7 +447,7 @@
         </div>`;
     }
     async function oferecerAoPedido(pedidoId) {
-        if (!habHoje) { msg('Ative o modo motorista para continuar', 'error'); return ativarMotorista(false); }
+        if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: pedidoId }) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');

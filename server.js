@@ -287,7 +287,8 @@ app.get("/api/habilitacao/hoje", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT * FROM habilitacoes_motorista
-       WHERE motorista_id = $1 AND data = CURRENT_DATE AND status = 'ativa'
+       WHERE motorista_id = $1 AND status = 'ativa'
+         AND created_at > NOW() - INTERVAL '24 hours'
        ORDER BY created_at DESC LIMIT 1`,
       [req.user.id]
     );
@@ -310,10 +311,10 @@ app.post("/api/habilitacao", verificarAuth, async (req, res) => {
   if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória" });
 
   try {
-    // Encerra habilitações anteriores do dia (troca de carro)
+    // Encerra habilitações ativas anteriores (troca de carro / nova ativação)
     await pool.query(
       `UPDATE habilitacoes_motorista SET status = 'encerrada'
-       WHERE motorista_id = $1 AND data = CURRENT_DATE AND status = 'ativa'`,
+       WHERE motorista_id = $1 AND status = 'ativa'`,
       [req.user.id]
     );
 
@@ -340,7 +341,8 @@ app.post("/api/habilitacao", verificarAuth, async (req, res) => {
 const habilitacaoAtiva = async (userId) => {
   const { rows } = await pool.query(
     `SELECT * FROM habilitacoes_motorista
-     WHERE motorista_id = $1 AND data = CURRENT_DATE AND status = 'ativa'
+     WHERE motorista_id = $1 AND status = 'ativa'
+       AND created_at > NOW() - INTERVAL '24 hours'
      ORDER BY created_at DESC LIMIT 1`,
     [userId]
   );
@@ -782,7 +784,8 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
        FROM localizacoes_online l
        JOIN usuarios u ON u.id = l.usuario_id
        JOIN habilitacoes_motorista h
-         ON h.motorista_id = u.id AND h.data = CURRENT_DATE AND h.status = 'ativa'
+         ON h.motorista_id = u.id AND h.status = 'ativa'
+            AND h.created_at > NOW() - INTERVAL '24 hours'
        WHERE l.disponivel = TRUE
          AND l.atualizado_em > NOW() - INTERVAL '60 seconds'
          AND u.id <> $1

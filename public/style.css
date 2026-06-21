@@ -514,6 +514,26 @@ body {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
+/* ===== Tema escuro do dashboard (cor da tela de login #0F3D3E) ===== */
+body.theme-dark { background: #0F3D3E; }
+.theme-dark .navbar { background: #0c3233; }
+.theme-dark .dashboard { background: transparent; box-shadow: none; }
+.theme-dark .tabs { background: #0c3233; border-bottom-color: rgba(234, 210, 152, 0.18); }
+.theme-dark .tab-btn { color: #a9c2c1; }
+.theme-dark .tab-btn:hover { color: #EAD298; background: rgba(255, 255, 255, 0.05); }
+.theme-dark .tab-btn.active { color: #EAD298; background: #114445; border-bottom-color: #EAD298; }
+.theme-dark .card { background: #114445; border-color: rgba(234, 210, 152, 0.14); color: #e6efef; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
+.theme-dark .card h3 { color: #EAD298; }
+.theme-dark .cam-hint, .theme-dark .ride-info small { color: #9db5b4; }
+.theme-dark label { color: #cfe0df; }
+.theme-dark input, .theme-dark select, .theme-dark textarea { background: #0d3a3b; color: #fff; border-color: rgba(234, 210, 152, 0.25); }
+.theme-dark input::placeholder { color: rgba(255, 255, 255, 0.55); }
+/* buscador flutuante e inputs do modal de perfil continuam claros */
+.theme-dark .map-search-float, .theme-dark .cam-box input { background: #fff; color: #0F3D3E; border-color: #e2e8f0; }
+.theme-dark .map-search-float::placeholder { color: #64748b; }
+.theme-dark .ride-item { background: #114445; border-color: rgba(234, 210, 152, 0.14); color: #e6efef; }
+.theme-dark .hab-card { color: #e6efef; }
+
 /* Status modo motorista */
 .hab-card {
     display: flex;
