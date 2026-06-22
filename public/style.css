@@ -78,6 +78,7 @@ body {
     width: auto;
     display: block;
 }
+.nav-user { color: #EAD298; font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
 .nav-tag {
     font-size: 0.8rem;
     font-weight: 700;
@@ -534,12 +535,11 @@ body.theme-dark { background: #0b0b0d; }
 .theme-dark .map-search-float::placeholder { color: #64748b; }
 /* itens de lista têm uma leve superfície (são itens, não "tela sobre tela") */
 .theme-dark .ride-item { background: #161719; border-color: #25262a; color: #e8eaed; box-shadow: none; }
-.theme-dark .hab-card { color: #e8eaed; }
-/* botões na cor da marca (dourado), em vez do azul/cyan */
-.theme-dark .btn-primary { background: #EAD298; color: #0F3D3E; box-shadow: none; }
-.theme-dark .btn-primary:hover { background: #e0c98a; }
-.theme-dark .btn-secondary { background: #2a2b2f; color: #e8eaed; }
-.theme-dark .btn-secondary:hover { background: #34353a; }
+/* todos os botões na cor da marca (dourado) */
+.theme-dark .btn-primary,
+.theme-dark .btn-secondary { background: #EAD298; color: #0F3D3E; box-shadow: none; }
+.theme-dark .btn-primary:hover,
+.theme-dark .btn-secondary:hover { background: #e0c98a; }
 
 /* ===== Solicitação recebida estilo Uber (bottom sheet) ===== */
 .sol-box { text-align: center; }
@@ -572,15 +572,7 @@ body.theme-dark { background: #0b0b0d; }
 .modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; }
 .modo-acoes { display: flex; gap: 8px; }
 
-/* Status modo motorista */
-.hab-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-}
+/* Ações de motorista no modal de perfil */
 .hab-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* Itens de carona / pedido / proposta */
