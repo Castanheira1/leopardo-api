@@ -33,9 +33,10 @@
         <div class="nav-container">
             <div class="nav-left">
                 <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
+                <span id="userName" class="nav-user"></span>
             </div>
             <div class="nav-links">
-                <span id="userName"></span>
+                <button id="navAtivar" onclick="abrirPerfil()" class="btn btn-secondary btn-sm" style="display:none;">Ativar no Perfil</button>
                 <a href="historico.html" class="btn btn-secondary btn-sm">Histórico</a>
                 <button onclick="abrirPerfil()" class="btn btn-secondary btn-sm">Perfil</button>
                 <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
@@ -95,25 +96,12 @@
             <div id="tabOferecer" class="tab-content">
                 <div class="card">
                     <h3>Compartilhar carona</h3>
-                    <div class="hab-card">
-                        <div class="hab-info">
-                            <strong>Modo motorista:</strong>
-                            <span id="habStatusOfe">carregando...</span>
-                        </div>
-                        <div class="hab-actions">
-                            <button onclick="abrirPerfil()" class="btn btn-primary btn-sm">Ativar no Perfil</button>
-                        </div>
-                    </div>
-                    <p class="cam-hint">Ative o modo motorista para publicar caronas.</p>
+                    <p class="cam-hint">Defina o destino no mapa e publique. Ative o modo motorista no topo.</p>
                     <div class="map-wrap">
                         <input id="destOfeInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
                         <div id="mapOfe" class="map-box map-box-full"></div>
                     </div>
                     <div class="form-row">
-                        <div class="form-group">
-                            <label>Quando? (vazio = agora)</label>
-                            <input type="datetime-local" id="horaOfe">
-                        </div>
                         <div class="form-group">
                             <label>Vagas disponíveis</label>
                             <input type="number" id="vagasOfe" min="1" max="6" value="1">
@@ -231,9 +219,8 @@
 
     <script src="app.js"></script>
     <script>
-    checkAuth();
+    checkAuth();                 // app.js já preenche #userName
     let user = JSON.parse(localStorage.getItem('user'));
-    document.getElementById('userName').textContent = `Olá, ${user.nome.split(' ')[0]}!`;
 
     let habHoje = null;
     let g = null;             // google namespace
@@ -258,14 +245,13 @@
     }
 
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
-    let modoAtual = null;
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
     }
     function escolherPapel(papel) {
-        modoAtual = papel;
         document.getElementById('telaPapel').style.display = 'none';
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
+        document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'inline-block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
         loadPropostas();
     }
@@ -305,13 +291,10 @@
     async function carregarHabilitacao() {
         const r = await fetchWithAuth('/api/habilitacao/hoje');
         habHoje = await r.json();
-        const texto = habHoje
-            ? '<span style="color:#22c55e">●</span> Ativo'
-            : '<span style="color:#9aa0a6">●</span> Inativo';
-        ['habStatus', 'habStatusOfe'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = texto;
-        });
+        const nav = document.getElementById('navAtivar');
+        if (nav) nav.innerHTML = habHoje
+            ? '<span style="color:#22c55e">●</span> Motorista ativo'
+            : 'Ativar no Perfil';
         if (habHoje) iniciarBroadcastLocalizacao();
     }
 
@@ -505,7 +488,7 @@
         const body = {
             origem_lat: origem.lat, origem_lng: origem.lng,
             destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-            horario: horarioISO('horaOfe'), vagas: +document.getElementById('vagasOfe').value || 1,
+            horario: null, vagas: +document.getElementById('vagasOfe').value || 1,
             observacao: document.getElementById('obsOfe').value,
         };
         const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
@@ -554,13 +537,15 @@
     async function loadPropostas() {
         const r = await fetchWithAuth('/api/propostas');
         const props = await r.json();
-        renderProp('listaPropMotorista', props.filter(ehMotorista), 'Quando alguém pedir sua carona, aparece aqui para aceitar.');
-        renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)), 'Você ainda não pediu nenhuma carona.');
+        renderProp('listaPropMotorista', props.filter(ehMotorista));
+        renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)));
     }
-    function renderProp(id, arr, vazio) {
+    function renderProp(id, arr) {
         const div = document.getElementById(id);
         if (!div) return;
-        div.innerHTML = arr.length ? arr.map(cardProposta).join('') : `<p class="cam-hint">${vazio}</p>`;
+        const card = div.closest('.card');           // esconde a seção inteira quando vazia
+        if (card) card.style.display = arr.length ? '' : 'none';
+        div.innerHTML = arr.map(cardProposta).join('');
     }
     function cardProposta(p) {
         const tipo = p.carona_id ? 'Passageiro' : 'Motorista';
@@ -782,8 +767,6 @@
         route: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V9a4 4 0 0 1 4-4h4M18 7v8a4 4 0 0 1-4 4h-4"/></svg>',
         car: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>',
         phone: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M6 3h3l2 5-2 1.5a11 11 0 0 0 5.5 5.5L18 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg>',
-        check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3" style="vertical-align:-3px"><path d="M5 13l4 4L19 7"/></svg>',
-        x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="3" style="vertical-align:-3px"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     };
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
