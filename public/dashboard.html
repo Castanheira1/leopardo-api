@@ -66,43 +66,45 @@
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
             <div id="tabPedir" class="tab-content active">
-                <div class="map-wrap">
+                <div class="map-stage">
                     <input id="destPedInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
-                    <div id="mapPed" class="map-box map-box-full"></div>
-                </div>
-                <div class="card map-actions">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Quando? (vazio = agora)</label>
-                            <input type="datetime-local" id="horaPed">
+                    <div id="mapPed" class="map-stage-map"></div>
+                    <div id="acaoSheetPed" class="acao-sheet">
+                        <div class="acao-grip" id="gripPed"><span></span></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Quando? (vazio = agora)</label>
+                                <input type="datetime-local" id="horaPed">
+                            </div>
+                            <div class="form-group">
+                                <label>Observação</label>
+                                <input type="text" id="obsPed" placeholder="Ex: saída portão 2, vou de mochila">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Observação</label>
-                            <input type="text" id="obsPed" placeholder="Ex: saída portão 2, vou de mochila">
-                        </div>
+                        <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
                     </div>
-                    <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
                 </div>
             </div>
 
             <!-- ============ OFERECER CARONA (motorista) ============ -->
             <div id="tabOferecer" class="tab-content">
-                <div class="map-wrap">
+                <div class="map-stage">
                     <input id="destOfeInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
-                    <div id="mapOfe" class="map-box map-box-full"></div>
-                </div>
-                <div class="card map-actions">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Vagas disponíveis</label>
-                            <input type="number" id="vagasOfe" min="1" max="6" value="1">
+                    <div id="mapOfe" class="map-stage-map"></div>
+                    <div id="acaoSheetOfe" class="acao-sheet">
+                        <div class="acao-grip" id="gripOfe"><span></span></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Vagas disponíveis</label>
+                                <input type="number" id="vagasOfe" min="1" max="6" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Observação</label>
+                                <input type="text" id="obsOfe" placeholder="Ex: passo pela portaria principal">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Observação</label>
-                            <input type="text" id="obsOfe" placeholder="Ex: passo pela portaria principal">
-                        </div>
+                        <button class="btn btn-primary" onclick="oferecerCarona()">Publicar carona</button>
                     </div>
-                    <button class="btn btn-primary" onclick="oferecerCarona()">Publicar</button>
                 </div>
             </div>
 
@@ -413,7 +415,7 @@
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
 
         const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, label: 'A', title: 'Origem (arraste se quiser)' });
         let destino = null;
@@ -468,8 +470,16 @@
             getDestino: () => destino,
         };
     }
-    async function initMapPedir() { selPed = await criarSeletor('mapPed', 'destPedInput'); iniciarFrotaAoVivo(selPed.map); }
-    async function initMapOferecer() { selOfe = await criarSeletor('mapOfe', 'destOfeInput'); acompanharProprioCarro(selOfe.map); }
+    async function initMapPedir() {
+        selPed = await criarSeletor('mapPed', 'destPedInput');
+        iniciarFrotaAoVivo(selPed.map);
+        tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+    }
+    async function initMapOferecer() {
+        selOfe = await criarSeletor('mapOfe', 'destOfeInput');
+        acompanharProprioCarro(selOfe.map);
+        tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+    }
 
     function horarioISO(id) {
         const v = document.getElementById(id).value;
@@ -495,6 +505,7 @@
             if (!r.ok) return msg(d.error || 'Erro', 'error');
             msg('Pedido criado! Veja as caronas que combinam.');
             await matchCaronas(d.id);
+            document.getElementById('acaoSheetPed').classList.add('collapsed');
             abrirPainel('painelPassageiro');
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
@@ -578,6 +589,7 @@
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         msg('Carona publicada! Os passageiros já podem ver seu carro no mapa e pedir.');
+        document.getElementById('acaoSheetOfe').classList.add('collapsed');
     }
 
     /* -------- propostas -------- */
@@ -747,7 +759,7 @@
 
         g = await carregarMaps();
         const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
         const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
         const polyline = new g.maps.Polyline({ path, strokeColor: '#0F3D3E', strokeWeight: 5, map });
 
@@ -766,27 +778,23 @@
         initSheetDrag();
     }
 
-    // Bottom sheet arrastável (arrasta o "puxador" pra baixo = some / pra cima = mostra).
-    let sheetDragReady = false;
-    function initSheetDrag() {
-        const sheet = document.getElementById('viagemSheet');
-        const grip = document.getElementById('sheetGrip');
-        if (!sheet || !grip) return;
-        sheet.classList.remove('collapsed');
-        if (sheetDragReady) return;
-        sheetDragReady = true;
+    // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
+    // peek = quanto fica visível (a "abinha") quando colapsado.
+    function tornarArrastavel(sheet, grip, peekVis = 44) {
+        if (!sheet || !grip || sheet._dragReady) return;
+        sheet._dragReady = true;
         const curT = () => (new DOMMatrix(getComputedStyle(sheet).transform).m42 || 0);
-        let startY = 0, startT = 0, dragging = false, moved = 0, peek = 0;
+        let startY = 0, startT = 0, dragging = false, moved = 0, limite = 0;
         const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
-        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); peek = sheet.offsetHeight - 64; sheet.style.transition = 'none'; startT = curT(); };
-        const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; sheet.style.transform = `translateY(${Math.max(0, Math.min(peek, startT + moved))}px)`; };
+        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); limite = sheet.offsetHeight - peekVis; sheet.style.transition = 'none'; startT = curT(); };
+        const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; sheet.style.transform = `translateY(${Math.max(0, Math.min(limite, startT + moved))}px)`; };
         const up = () => {
             if (!dragging) return;
             dragging = false;
             const t = curT();
             sheet.style.transition = '';
             sheet.style.transform = '';
-            const colapsar = Math.abs(moved) < 6 ? !sheet.classList.contains('collapsed') : t > (sheet.offsetHeight - 64) / 2;
+            const colapsar = Math.abs(moved) < 6 ? !sheet.classList.contains('collapsed') : t > (sheet.offsetHeight - peekVis) / 2;
             sheet.classList.toggle('collapsed', colapsar);
         };
         grip.addEventListener('mousedown', down);
@@ -795,6 +803,11 @@
         window.addEventListener('touchmove', move, { passive: true });
         window.addEventListener('mouseup', up);
         window.addEventListener('touchend', up);
+    }
+    function initSheetDrag() {
+        const sheet = document.getElementById('viagemSheet');
+        if (sheet) sheet.classList.remove('collapsed');
+        tornarArrastavel(sheet, document.getElementById('sheetGrip'), 64);
     }
 
     function iniciarTracking(viagemId, map, polyline) {
