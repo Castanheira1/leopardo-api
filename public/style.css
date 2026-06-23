@@ -537,9 +537,11 @@ body {
     transition: transform 0.22s ease;
     touch-action: none;
 }
-.acao-sheet.collapsed { transform: translateY(calc(100% - 42px)); }
-.acao-grip { display: flex; justify-content: center; padding: 9px 0 12px; cursor: grab; }
-.acao-grip span { width: 46px; height: 5px; border-radius: 3px; background: #6b6e75; display: block; }
+/* colapsado: fica só a "abinha" preta (botão) sempre visível sobre o mapa */
+.acao-sheet.collapsed { transform: translateY(calc(100% - 60px)); }
+.acao-grip { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 12px; cursor: grab; }
+.acao-handle { width: 46px; height: 5px; border-radius: 3px; background: #6b6e75; display: block; }
+.acao-titulo { color: #fff; font-weight: 700; font-size: 0.98rem; letter-spacing: 0.3px; }
 
 /* Painéis (listas) abertos pelo menu */
 .painel-box { text-align: left; }
