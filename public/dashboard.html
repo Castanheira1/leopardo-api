@@ -125,14 +125,26 @@
                 </div>
             </div>
 
-            <!-- ============ VIAGEM EM ANDAMENTO ============ -->
+            <!-- ============ VIAGEM EM ANDAMENTO (estilo Uber) ============ -->
             <div id="tabViagem" class="tab-content">
-                <div class="card">
-                    <h3>Viagem em andamento</h3>
-                    <div id="viagemInfo"></div>
-                    <div id="viagemEta" class="rota-info" style="display:none;"></div>
-                    <div id="mapViagem" class="map-box"></div>
-                    <div id="viagemControles"></div>
+                <div class="viagem-wrap">
+                    <div id="mapViagem" class="viagem-map"></div>
+                    <div id="viagemSheet" class="viagem-sheet">
+                        <div class="sheet-grip" id="sheetGrip"><span></span></div>
+                        <div class="sheet-top">
+                            <strong id="viagemTitulo">Motorista a caminho</strong>
+                            <span id="viagemEta" class="viagem-eta" style="display:none;"></span>
+                        </div>
+                        <div class="sheet-driver">
+                            <img id="viagemSelfie" class="sheet-selfie" alt="" style="display:none;">
+                            <div class="sheet-driver-info">
+                                <strong id="viagemNome">—</strong>
+                                <small id="viagemCarro"></small>
+                            </div>
+                            <span id="viagemPlaca" class="sheet-placa"></span>
+                        </div>
+                        <div id="viagemControles" class="sheet-acoes"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -675,36 +687,77 @@
     async function abrirViagem(viagemId) {
         document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
 
         const r = await fetchWithAuth('/api/viagens/' + viagemId);
         const v = await r.json();
         const ehMotorista = v.motorista_id === user.id;
 
-        document.getElementById('viagemInfo').innerHTML = `
-            <p><strong>Motorista:</strong> ${v.motorista_nome} ${v.placa ? '• ' + v.placa : ''} ${v.tag ? '(TAG ' + v.tag + ')' : ''}</p>
-            <p><strong>Passageiro:</strong> ${v.passageiro_nome}</p>
-            <p><strong>Status:</strong> ${{em_andamento:'Em andamento',concluida:'Concluída',cancelada:'Cancelada'}[v.status]||v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}</p>`;
+        // Mostra o "outro": passageiro vê o motorista; motorista vê o passageiro.
+        const nome = ehMotorista ? v.passageiro_nome : v.motorista_nome;
+        const tel = ehMotorista ? v.passageiro_telefone : v.motorista_telefone;
+        const selfie = ehMotorista ? v.passageiro_selfie : v.motorista_selfie;
+        const sel = document.getElementById('viagemSelfie');
+        if (selfie) { sel.src = selfie; sel.style.display = 'block'; } else { sel.style.display = 'none'; }
+        document.getElementById('viagemNome').textContent = nome || '—';
+        document.getElementById('viagemCarro').textContent = ehMotorista ? 'Passageiro' : (v.tag || 'Veículo');
+        const plEl = document.getElementById('viagemPlaca');
+        plEl.textContent = (!ehMotorista && v.placa) ? v.placa : '';
+        plEl.style.display = (!ehMotorista && v.placa) ? 'inline-block' : 'none';
+        document.getElementById('viagemTitulo').textContent =
+            v.status === 'concluida' ? 'Viagem concluída' : (ehMotorista ? 'Em viagem' : 'Motorista a caminho');
+        const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
 
         g = await carregarMaps();
         const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
         const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false });
         const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
-        const polyline = new g.maps.Polyline({ path, strokeColor: '#00a9ce', strokeWeight: 5, map });
+        const polyline = new g.maps.Polyline({ path, strokeColor: '#0F3D3E', strokeWeight: 5, map });
 
+        const wpp = tel ? `<a class="btn btn-success" href="${linkWhatsApp(tel)}" target="_blank">${ICN.phone} Conversar no WhatsApp</a>` : '';
         const ctrl = document.getElementById('viagemControles');
         if (v.status === 'em_andamento' && ehMotorista) {
-            ctrl.innerHTML = `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Encerrar viagem</button>`;
+            ctrl.innerHTML = wpp + `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Encerrar viagem</button>`;
             iniciarTracking(viagemId, map, polyline);
         } else if (v.status === 'em_andamento') {
-            // Passageiro: acompanha o carro do motorista ao vivo, com rota e ETA.
-            ctrl.innerHTML = '<span class="cam-hint">Acompanhando em tempo real...</span>';
+            ctrl.innerHTML = wpp;
             const destino = v.destino_lat ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
             acompanharMotoristaAoVivo(viagemId, map, destino);
         } else {
             ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span>';
         }
+        initSheetDrag();
+    }
+
+    // Bottom sheet arrastável (arrasta o "puxador" pra baixo = some / pra cima = mostra).
+    let sheetDragReady = false;
+    function initSheetDrag() {
+        const sheet = document.getElementById('viagemSheet');
+        const grip = document.getElementById('sheetGrip');
+        if (!sheet || !grip) return;
+        sheet.classList.remove('collapsed');
+        if (sheetDragReady) return;
+        sheetDragReady = true;
+        const curT = () => (new DOMMatrix(getComputedStyle(sheet).transform).m42 || 0);
+        let startY = 0, startT = 0, dragging = false, moved = 0, peek = 0;
+        const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
+        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); peek = sheet.offsetHeight - 64; sheet.style.transition = 'none'; startT = curT(); };
+        const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; sheet.style.transform = `translateY(${Math.max(0, Math.min(peek, startT + moved))}px)`; };
+        const up = () => {
+            if (!dragging) return;
+            dragging = false;
+            const t = curT();
+            sheet.style.transition = '';
+            sheet.style.transform = '';
+            const colapsar = Math.abs(moved) < 6 ? !sheet.classList.contains('collapsed') : t > (sheet.offsetHeight - 64) / 2;
+            sheet.classList.toggle('collapsed', colapsar);
+        };
+        grip.addEventListener('mousedown', down);
+        grip.addEventListener('touchstart', down, { passive: true });
+        window.addEventListener('mousemove', move);
+        window.addEventListener('touchmove', move, { passive: true });
+        window.addEventListener('mouseup', up);
+        window.addEventListener('touchend', up);
     }
 
     function iniciarTracking(viagemId, map, polyline) {
@@ -860,7 +913,7 @@
                     const resp = await ds.route({ origin: pos, destination: destino, travelMode: g.maps.TravelMode.DRIVING });
                     rend.setDirections(resp);
                     const leg = resp.routes[0].legs[0];
-                    if (eta) { eta.style.display = 'block'; eta.innerHTML = `${ICN.car} Motorista a caminho • chega em ~${leg.duration.text} (${leg.distance.text})`; }
+                    if (eta) { eta.style.display = 'inline'; eta.textContent = `chega em ~${leg.duration.text} • ${leg.distance.text}`; }
                 }
             } catch (_) {}
         }
