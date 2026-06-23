@@ -35,8 +35,29 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
+
+// Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
+// tê-las porque uma ordem antiga do schema.sql falhava os ALTER com FK (os
+// ALTER de projeto_id/empresa_id referenciavam tabelas ainda não criadas).
+// Tudo é "ADD COLUMN IF NOT EXISTS" — no-op se a coluna já existe.
+async function garantirColunasUsuarios() {
+  const colunas = [
+    "email VARCHAR(255)",
+    "empresa_nome VARCHAR(150)",
+    "centro_custo VARCHAR(100)",
+    "projeto_id INTEGER",
+    "admin_projeto_id INTEGER",
+  ];
+  for (const c of colunas) {
+    try {
+      await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ${c}`);
+    } catch (e) {
+      console.warn("garantirColunasUsuarios:", e.message);
+    }
+  }
+}
 
 // Não derruba o boot quando o Supabase ainda não foi configurado:
 // o app sobe e serve as páginas; apenas o upload de fotos fica indisponível.
