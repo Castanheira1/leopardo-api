@@ -79,6 +79,14 @@ body {
     display: block;
 }
 .nav-user { color: #EAD298; font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+
+/* Menu (hambúrguer) — junta Ativar / Histórico / Perfil / Trocar papel / Sair */
+.nav-menu-wrap { position: relative; }
+.nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.nav-menu { position: absolute; right: 0; top: calc(100% + 8px); background: #161719; border: 1px solid #2a2b2f; border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); min-width: 210px; overflow: hidden; z-index: 60; }
+.nav-menu-item { display: block; width: 100%; text-align: left; padding: 14px 18px; background: none; border: none; color: #e8eaed; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+.nav-menu-item:hover { background: rgba(255, 255, 255, 0.06); color: #EAD298; }
+.nav-menu-item + .nav-menu-item { border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .nav-tag {
     font-size: 0.8rem;
     font-weight: 700;

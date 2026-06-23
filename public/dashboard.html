@@ -36,10 +36,18 @@
                 <span id="userName" class="nav-user"></span>
             </div>
             <div class="nav-links">
-                <button id="navAtivar" onclick="abrirPerfil()" class="btn btn-secondary btn-sm" style="display:none;">Ativar no Perfil</button>
-                <a href="historico.html" class="btn btn-secondary btn-sm">Histórico</a>
-                <button onclick="abrirPerfil()" class="btn btn-secondary btn-sm">Perfil</button>
-                <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
+                <div class="nav-menu-wrap">
+                    <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Menu">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+                    </button>
+                    <div id="navMenu" class="nav-menu" style="display:none;">
+                        <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
+                        <a href="historico.html" class="nav-menu-item">Histórico</a>
+                        <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
+                        <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
+                        <button onclick="logout()" class="nav-menu-item">Sair</button>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
@@ -55,7 +63,6 @@
                 <span id="modoTitulo" class="modo-titulo">Carona</span>
                 <div class="modo-acoes">
                     <button class="btn btn-secondary btn-sm" id="btnViagemAndamento" style="display:none;" onclick="showTab('tabViagem')">Em andamento</button>
-                    <button class="btn btn-secondary btn-sm" onclick="abrirEscolhaPapel()">Trocar papel</button>
                 </div>
             </div>
 
@@ -256,6 +263,18 @@
         if (id === 'tabOferecer' && !selOfe) initMapOferecer();
     }
 
+    /* -------- menu (hambúrguer) -------- */
+    function toggleMenu(e) {
+        if (e) e.stopPropagation();
+        const m = document.getElementById('navMenu');
+        m.style.display = m.style.display === 'block' ? 'none' : 'block';
+    }
+    function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; }
+    document.addEventListener('click', (e) => {
+        if (document.getElementById('navMenu').style.display === 'block'
+            && !e.target.closest('#btnMenu')) fecharMenu();
+    });
+
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
@@ -263,7 +282,7 @@
     function escolherPapel(papel) {
         document.getElementById('telaPapel').style.display = 'none';
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
-        document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'inline-block' : 'none';
+        document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
         loadPropostas();
     }
