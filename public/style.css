@@ -567,6 +567,26 @@ body.theme-dark { background: #0b0b0d; }
 .papel-tit { font-size: 1.15rem; font-weight: 700; color: #fff; }
 .papel-sub { font-size: 0.85rem; color: #9aa0a6; }
 
+/* ===== Viagem em andamento estilo Uber (mapa cheio + sheet arrastável) ===== */
+#tabViagem.tab-content { padding: 10px 8px; }
+.viagem-wrap { position: relative; height: 74vh; min-height: 460px; border-radius: 14px; overflow: hidden; background: #161719; }
+.viagem-map { position: absolute; inset: 0; }
+.viagem-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease; touch-action: none; }
+.viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
+.sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; }
+.sheet-grip span { width: 44px; height: 5px; border-radius: 3px; background: #44464b; display: block; }
+.sheet-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.sheet-top strong { color: #fff; font-size: 1.05rem; }
+.viagem-eta { color: #EAD298; font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
+.sheet-driver { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.sheet-selfie { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 2px solid #EAD298; }
+.sheet-driver-info { flex: 1; min-width: 0; }
+.sheet-driver-info strong { color: #fff; display: block; }
+.sheet-driver-info small { color: #9aa0a6; }
+.sheet-placa { background: #fff; color: #111; font-weight: 800; letter-spacing: 1px; padding: 6px 10px; border-radius: 8px; font-size: 0.95rem; }
+.sheet-acoes { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.sheet-acoes .btn { flex: 1; padding: 13px; }
+
 /* Barra de modo (título + trocar papel) */
 .modo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 2px; flex-wrap: wrap; }
 .modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; }
