@@ -316,6 +316,7 @@
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
         document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+        if (papel === 'motorista') carregarHabilitacao();   // status fresco (evita revalidar à toa)
         loadPropostas();
     }
 
@@ -363,7 +364,10 @@
 
     let veiculoPend = null;
     async function ativarMotorista(trocar) {
-        if (habHoje && !trocar) { msg('Modo motorista já está ativo'); return; }
+        if (!trocar) {
+            if (!habHoje) await carregarHabilitacao();      // reconfere no servidor (vale 24h)
+            if (habHoje) { msg('Modo motorista já está ativo (válido por 24h).'); return; }
+        }
         try {
             msg('Iniciando câmera...');
             const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
@@ -588,8 +592,49 @@
         const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Carona publicada! Os passageiros já podem ver seu carro no mapa e pedir.');
+        msg('Carona publicada! Você está em rota — os passageiros já podem pedir.');
         document.getElementById('acaoSheetOfe').classList.add('collapsed');
+        abrirTrajeto(d);
+    }
+    // Modo trajeto do motorista (estilo Uber): rota publicada + posição ao vivo.
+    async function abrirTrajeto(c) {
+        document.getElementById('btnViagemAndamento').style.display = 'inline-block';
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tabViagem').classList.add('active');
+
+        document.getElementById('viagemSelfie').style.display = 'none';
+        document.getElementById('viagemTitulo').textContent = 'Você está em rota';
+        document.getElementById('viagemNome').textContent = 'Sua carona publicada';
+        document.getElementById('viagemCarro').textContent = c.destino_texto ? ('Indo para ' + c.destino_texto) : 'A caminho do destino';
+        const pl = document.getElementById('viagemPlaca');
+        pl.textContent = (habHoje && habHoje.placa) ? habHoje.placa : '';
+        pl.style.display = (habHoje && habHoje.placa) ? 'inline-block' : 'none';
+        const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
+
+        g = await carregarMaps();
+        const origem = { lat: +c.origem_lat, lng: +c.origem_lng };
+        const destino = c.destino_lat ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        if (destino) {
+            const ds = new g.maps.DirectionsService();
+            const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, polylineOptions: { strokeColor: '#EAD298', strokeWeight: 6 } });
+            try {
+                const resp = await ds.route({ origin: origem, destination: destino, travelMode: g.maps.TravelMode.DRIVING });
+                rend.setDirections(resp);
+                const leg = resp.routes[0].legs[0];
+                eta.style.display = 'inline'; eta.textContent = `${leg.distance.text} • ${leg.duration.text}`;
+            } catch (_) { /* sem rota: segue só com a posição ao vivo */ }
+        }
+        acompanharProprioCarro(map);   // transmite a posição ao vivo (passageiros veem o carro)
+        document.getElementById('viagemControles').innerHTML =
+            `<button class="btn btn-danger" onclick="encerrarCarona(${c.id})">Encerrar carona</button>`;
+        initSheetDrag();
+    }
+    async function encerrarCarona(caronaId) {
+        await fetchWithAuth('/api/caronas/' + caronaId, { method: 'DELETE' });
+        document.getElementById('btnViagemAndamento').style.display = 'none';
+        msg('Carona encerrada.');
+        escolherPapel('motorista');
     }
 
     /* -------- propostas -------- */
@@ -911,6 +956,7 @@
     let selfCar = { marker: null, timer: null };
     function acompanharProprioCarro(map) {
         if (selfCar.timer) clearInterval(selfCar.timer);
+        if (selfCar.marker) { selfCar.marker.setMap(null); selfCar.marker = null; }  // recria no mapa atual
         async function upd() {
             try {
                 const p = await obterLocalizacao();
