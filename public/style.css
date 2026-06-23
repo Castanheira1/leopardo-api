@@ -30,19 +30,20 @@ body {
 .navbar {
     background: var(--vale-blue);
     color: #fff;
-    padding: 0.9rem 0;
+    padding: 0.7rem 0;
+    padding-top: calc(0.7rem + env(safe-area-inset-top)); /* notch do iPhone */
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
 }
 
 .nav-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 16px;
+    padding: 0 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
 }
 
 .nav-left {
@@ -68,17 +69,30 @@ body {
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 16px;
+    justify-content: flex-end;
+    gap: 12px;
     font-size: 0.9rem;
+    flex-wrap: wrap;
 }
 
 /* Logo VAP */
 .nav-logo {
-    height: 46px;
+    height: 56px;
     width: auto;
     display: block;
+    flex-shrink: 0;
 }
-.nav-user { color: #EAD298; font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+/* nome do usuário centralizado entre o logo e o menu */
+.nav-user {
+    flex: 1;
+    text-align: center;
+    color: #EAD298;
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 /* Menu (hambúrguer) — junta Ativar / Histórico / Perfil / Trocar papel / Sair */
 .nav-menu-wrap { position: relative; }
@@ -692,8 +706,7 @@ body.theme-dark { background: #0b0b0d; }
 /* RESPONSIVO */
 @media (max-width: 768px) {
     .nav-container {
-        flex-direction: column;
-        align-items: flex-start;
+        gap: 8px;
     }
 
     .tab-content {
@@ -727,6 +740,9 @@ body.theme-dark { background: #0b0b0d; }
     .nav-title-group h1 {
         font-size: 1.25rem;
     }
+    .nav-logo { height: 50px; }
+    .nav-user { font-size: 0.88rem; }
+    .nav-menu { min-width: 190px; }
 
     .card {
         padding: 18px 14px;
