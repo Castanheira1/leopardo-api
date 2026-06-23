@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
@@ -31,22 +31,18 @@
 <body class="theme-dark">
     <nav class="navbar">
         <div class="nav-container">
-            <div class="nav-left">
-                <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
-                <span id="userName" class="nav-user"></span>
-            </div>
-            <div class="nav-links">
-                <div class="nav-menu-wrap">
-                    <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Menu">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-                    </button>
-                    <div id="navMenu" class="nav-menu" style="display:none;">
-                        <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
-                        <a href="historico.html" class="nav-menu-item">Histórico</a>
-                        <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
-                        <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
-                        <button onclick="logout()" class="nav-menu-item">Sair</button>
-                    </div>
+            <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
+            <span id="userName" class="nav-user"></span>
+            <div class="nav-menu-wrap">
+                <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Menu">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+                </button>
+                <div id="navMenu" class="nav-menu" style="display:none;">
+                    <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
+                    <a href="historico.html" class="nav-menu-item">Histórico</a>
+                    <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
+                    <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
+                    <button onclick="logout()" class="nav-menu-item">Sair</button>
                 </div>
             </div>
         </div>
