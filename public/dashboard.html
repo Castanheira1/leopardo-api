@@ -39,6 +39,8 @@
                 </button>
                 <div id="navMenu" class="nav-menu" style="display:none;">
                     <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
+                    <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
+                    <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Pedidos &amp; corridas</button>
                     <a href="historico.html" class="nav-menu-item">Histórico</a>
                     <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
                     <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
@@ -64,13 +66,11 @@
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
             <div id="tabPedir" class="tab-content active">
-                <div class="card">
-                    <h3>Para onde você vai?</h3>
-                    <p class="cam-hint">Toque no mapa ou busque um endereço de destino.</p>
-                    <div class="map-wrap">
-                        <input id="destPedInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
-                        <div id="mapPed" class="map-box map-box-full"></div>
-                    </div>
+                <div class="map-wrap">
+                    <input id="destPedInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
+                    <div id="mapPed" class="map-box map-box-full"></div>
+                </div>
+                <div class="card map-actions">
                     <div class="form-row">
                         <div class="form-group">
                             <label>Quando? (vazio = agora)</label>
@@ -83,27 +83,15 @@
                     </div>
                     <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
                 </div>
-                <div class="card">
-                    <h3>Motoristas disponíveis</h3>
-                    <div id="listaCaronasMatch"><p class="cam-hint">Solicite uma carona para ver motoristas próximos.</p></div>
-                    <button class="btn btn-secondary btn-sm" onclick="listarTodasCaronas()">Ver todos</button>
-                    <div id="listaCaronasTodas"></div>
-                </div>
-                <div class="card">
-                    <h3>Minhas solicitações</h3>
-                    <div id="listaPropPassageiro"><p class="cam-hint">Você ainda não pediu nenhuma carona.</p></div>
-                </div>
             </div>
 
             <!-- ============ OFERECER CARONA (motorista) ============ -->
             <div id="tabOferecer" class="tab-content">
-                <div class="card">
-                    <h3>Compartilhar carona</h3>
-                    <p class="cam-hint">Defina o destino no mapa e publique. Ative o modo motorista no topo.</p>
-                    <div class="map-wrap">
-                        <input id="destOfeInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
-                        <div id="mapOfe" class="map-box map-box-full"></div>
-                    </div>
+                <div class="map-wrap">
+                    <input id="destOfeInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
+                    <div id="mapOfe" class="map-box map-box-full"></div>
+                </div>
+                <div class="card map-actions">
                     <div class="form-row">
                         <div class="form-group">
                             <label>Vagas disponíveis</label>
@@ -115,16 +103,6 @@
                         </div>
                     </div>
                     <button class="btn btn-primary" onclick="oferecerCarona()">Publicar</button>
-                </div>
-                <div class="card">
-                    <h3>Passageiros próximos</h3>
-                    <div id="listaPedidosMatch"><p class="cam-hint">Publique sua carona para ver passageiros por perto.</p></div>
-                    <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos</button>
-                    <div id="listaPedidosTodos"></div>
-                </div>
-                <div class="card">
-                    <h3>Solicitações &amp; corridas</h3>
-                    <div id="listaPropMotorista"><p class="cam-hint">Quando alguém pedir sua carona, aparece aqui para aceitar.</p></div>
                 </div>
             </div>
 
@@ -215,6 +193,40 @@
         </div>
     </div>
 
+    <!-- Painéis (abrem pelo menu): listas de caronas/pedidos e solicitações -->
+    <div id="painelPassageiro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelPassageiro')">
+        <div class="cam-box perfil-box painel-box">
+            <h3>Caronas &amp; solicitações</h3>
+            <div class="painel-sec">
+                <strong class="painel-tit">Motoristas disponíveis</strong>
+                <div id="listaCaronasMatch"></div>
+                <button class="btn btn-secondary btn-sm" onclick="listarTodasCaronas()">Ver todas as caronas</button>
+                <div id="listaCaronasTodas"></div>
+            </div>
+            <div class="painel-sec">
+                <strong class="painel-tit">Minhas solicitações</strong>
+                <div id="listaPropPassageiro"></div>
+            </div>
+            <div class="sol-actions"><button type="button" class="btn btn-secondary" onclick="fecharPainel('painelPassageiro')">Fechar</button></div>
+        </div>
+    </div>
+    <div id="painelMotorista" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelMotorista')">
+        <div class="cam-box perfil-box painel-box">
+            <h3>Pedidos &amp; corridas</h3>
+            <div class="painel-sec">
+                <strong class="painel-tit">Passageiros próximos</strong>
+                <div id="listaPedidosMatch"></div>
+                <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos os pedidos</button>
+                <div id="listaPedidosTodos"></div>
+            </div>
+            <div class="painel-sec">
+                <strong class="painel-tit">Solicitações &amp; corridas</strong>
+                <div id="listaPropMotorista"></div>
+            </div>
+            <div class="sol-actions"><button type="button" class="btn btn-secondary" onclick="fecharPainel('painelMotorista')">Fechar</button></div>
+        </div>
+    </div>
+
     <!-- Tela inicial: escolher o papel (trava no modo escolhido) -->
     <div id="telaPapel" class="papel-overlay" style="display:none;">
         <div class="papel-box">
@@ -271,6 +283,17 @@
             && !e.target.closest('#btnMenu')) fecharMenu();
     });
 
+    /* -------- painéis (listas/solicitações) abertos pelo menu -------- */
+    function abrirPainel(id) {
+        loadPropostas();
+        document.getElementById(id).style.display = 'flex';
+    }
+    function fecharPainel(id) { document.getElementById(id).style.display = 'none'; }
+    function painelAberto() {
+        return document.getElementById('painelPassageiro').style.display === 'flex'
+            || document.getElementById('painelMotorista').style.display === 'flex';
+    }
+
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
@@ -279,6 +302,8 @@
         document.getElementById('telaPapel').style.display = 'none';
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
+        document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
+        document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
         loadPropostas();
     }
@@ -460,7 +485,8 @@
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
             msg('Pedido criado! Veja as caronas que combinam.');
-            matchCaronas(d.id);
+            await matchCaronas(d.id);
+            abrirPainel('painelPassageiro');
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
 
@@ -522,7 +548,8 @@
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         msg('Carona publicada.');
-        matchPedidos(d.id);
+        await matchPedidos(d.id);
+        abrirPainel('painelMotorista');
     }
     async function matchPedidos(caronaId) {
         const r = await fetchWithAuth('/api/pedidos/match?carona_id=' + caronaId);
@@ -570,9 +597,7 @@
     function renderProp(id, arr) {
         const div = document.getElementById(id);
         if (!div) return;
-        const card = div.closest('.card');           // esconde a seção inteira quando vazia
-        if (card) card.style.display = arr.length ? '' : 'none';
-        div.innerHTML = arr.map(cardProposta).join('');
+        div.innerHTML = arr.length ? arr.map(cardProposta).join('') : '<p class="cam-hint">Nada por aqui ainda.</p>';
     }
     function cardProposta(p) {
         const tipo = p.carona_id ? 'Passageiro' : 'Motorista';
@@ -685,6 +710,7 @@
             if (document.getElementById('telaPapel').style.display === 'flex') return;
             if (document.getElementById('modalPerfil').style.display === 'flex') return;
             if (document.querySelector('.cam-video')) return;
+            if (painelAberto()) return;
             const nova = pend.find(p => !propostasTratadas.has(p.id));
             if (nova) mostrarSolicitacao(nova);
         } catch (_) { /* rede instável: tenta no próximo ciclo */ }

@@ -537,6 +537,18 @@ body {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
+/* Mapa full-bleed (edge-to-edge) nas abas pedir/oferecer */
+#tabPedir.tab-content, #tabOferecer.tab-content { padding: 0 0 22px; }
+#tabPedir .map-wrap, #tabOferecer .map-wrap { margin: 0 -16px; border-radius: 0; }
+#tabPedir .map-box-full, #tabOferecer .map-box-full { height: 72vh; min-height: 420px; border-radius: 0; }
+.map-actions { margin-top: 14px; }
+
+/* Painéis (listas) abertos pelo menu */
+.painel-box { text-align: left; }
+.painel-sec { padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.painel-sec:first-of-type { border-top: none; padding-top: 2px; }
+.painel-tit { display: block; color: #EAD298; font-weight: 700; margin-bottom: 8px; }
+
 /* ===== Tema escuro estilo Uber: tela PRETA e PLANA (sem painel sobre painel) ===== */
 body.theme-dark { background: #0b0b0d; }
 .theme-dark .navbar { background: #0b0b0d; box-shadow: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
