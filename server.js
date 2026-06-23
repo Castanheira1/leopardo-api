@@ -609,7 +609,9 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
               p.origem_texto AS p_origem, p.destino_texto AS p_destino, p.horario AS p_horario,
               v.id AS viagem_id,
               COALESCE(hm.selfie_url, hped.selfie_url) AS motorista_selfie,
+              COALESCE(hm.selfie_em, hped.selfie_em) AS motorista_selfie_em,
               COALESCE(hm.foto_carro_url, hped.foto_carro_url) AS motorista_carro,
+              COALESCE(hm.foto_carro_em, hped.foto_carro_em) AS motorista_carro_em,
               COALESCE(hm.placa, hped.placa) AS motorista_placa,
               COALESCE(hm.tag, hped.tag) AS motorista_tag
        FROM propostas pr
@@ -620,7 +622,7 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
        LEFT JOIN viagens v ON v.proposta_id = pr.id
        LEFT JOIN habilitacoes_motorista hm ON hm.id = c.habilitacao_id
        LEFT JOIN LATERAL (
-         SELECT selfie_url, foto_carro_url, placa, tag
+         SELECT selfie_url, selfie_em, foto_carro_url, foto_carro_em, placa, tag
          FROM habilitacoes_motorista
          WHERE motorista_id = pr.de_usuario_id AND status = 'ativa'
            AND created_at > NOW() - INTERVAL '24 hours'
@@ -816,18 +818,23 @@ app.delete("/api/localizacao", verificarAuth, async (req, res) => {
 // Motoristas legítimos (habilitação ativa hoje) online nos últimos 60s.
 app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   try {
+    // Só motoristas com uma carona publicada (rota): o passageiro clica no
+    // carro no mapa e pede vaga naquela carona.
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
-              u.id, u.nome, l.lat, l.lng, h.placa, h.tag
+              u.id, u.nome, l.lat, l.lng,
+              h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
+              ca.id AS carona_id, ca.origem_texto, ca.destino_texto
        FROM localizacoes_online l
        JOIN usuarios u ON u.id = l.usuario_id
        JOIN habilitacoes_motorista h
          ON h.motorista_id = u.id AND h.status = 'ativa'
             AND h.created_at > NOW() - INTERVAL '24 hours'
+       JOIN caronas ca ON ca.motorista_id = u.id AND ca.status = 'ativa'
        WHERE l.disponivel = TRUE
          AND l.atualizado_em > NOW() - INTERVAL '60 seconds'
          AND u.id <> $1
-       ORDER BY u.id, h.created_at DESC
+       ORDER BY u.id, ca.created_at DESC, h.created_at DESC
        LIMIT 100`,
       [req.user.id]
     );
