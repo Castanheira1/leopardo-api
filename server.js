@@ -836,7 +836,7 @@ app.delete("/api/localizacao", verificarAuth, async (req, res) => {
   }
 });
 
-// Motoristas legítimos (habilitação ativa hoje) online nos últimos 60s.
+// Motoristas com carona publicada e online nos últimos 3 min (vistos pelo passageiro).
 app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   try {
     // Só motoristas com uma carona publicada (rota): o passageiro clica no
@@ -853,7 +853,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
             AND h.created_at > NOW() - INTERVAL '24 hours'
        JOIN caronas ca ON ca.motorista_id = u.id AND ca.status = 'ativa'
        WHERE l.disponivel = TRUE
-         AND l.atualizado_em > NOW() - INTERVAL '60 seconds'
+         AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
          AND u.id <> $1
        ORDER BY u.id, ca.created_at DESC, h.created_at DESC
        LIMIT 100`,
