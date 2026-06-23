@@ -590,6 +590,8 @@ body.theme-dark { background: #0b0b0d; }
 .veic-foto { width: 100%; max-height: 170px; object-fit: cover; border-radius: 12px; margin-bottom: 6px; }
 .prop-motorista { margin-top: 8px; }
 .prop-carro { width: 100%; max-width: 220px; height: 110px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px; }
+.foto-meta { color: #9aa0a6; font-size: 0.78rem; }
+.carro-foto { width: 100%; max-height: 160px; object-fit: cover; border-radius: 12px; margin: 0 auto 10px; display: block; }
 
 /* ===== Tela de escolha do papel (passageiro x motorista) ===== */
 .papel-overlay { position: fixed; inset: 0; background: #0b0b0d; z-index: 9998; display: flex; align-items: center; justify-content: center; padding: 24px; }

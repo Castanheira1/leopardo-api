@@ -40,7 +40,7 @@
                 <div id="navMenu" class="nav-menu" style="display:none;">
                     <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
                     <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
-                    <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Pedidos &amp; corridas</button>
+                    <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; corridas</button>
                     <a href="historico.html" class="nav-menu-item">Histórico</a>
                     <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
                     <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
@@ -193,6 +193,21 @@
         </div>
     </div>
 
+    <!-- Carona de um carro clicado no mapa (passageiro pede direto) -->
+    <div id="modalCarro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharCarro()">
+        <div class="cam-box sol-box">
+            <div class="sol-badge">Carona disponível</div>
+            <img id="carroFoto" class="carro-foto" alt="" style="display:none;">
+            <h3 id="carroNome">Motorista</h3>
+            <div id="carroRota" class="sol-rota"></div>
+            <span id="carroPlaca" class="sheet-placa"></span>
+            <div class="sol-actions">
+                <button type="button" class="btn btn-secondary" onclick="fecharCarro()">Fechar</button>
+                <button type="button" class="btn btn-primary" onclick="pedirCaronaDoCarro()">Pedir esta carona</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Painéis (abrem pelo menu): listas de caronas/pedidos e solicitações -->
     <div id="painelPassageiro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelPassageiro')">
         <div class="cam-box perfil-box painel-box">
@@ -212,15 +227,9 @@
     </div>
     <div id="painelMotorista" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelMotorista')">
         <div class="cam-box perfil-box painel-box">
-            <h3>Pedidos &amp; corridas</h3>
+            <h3>Solicitações &amp; corridas</h3>
+            <p class="cam-hint">Você publica a rota; os passageiros pedem. Aceite ou recuse aqui.</p>
             <div class="painel-sec">
-                <strong class="painel-tit">Passageiros próximos</strong>
-                <div id="listaPedidosMatch"></div>
-                <button class="btn btn-secondary btn-sm" onclick="listarTodosPedidos()">Ver todos os pedidos</button>
-                <div id="listaPedidosTodos"></div>
-            </div>
-            <div class="painel-sec">
-                <strong class="painel-tit">Solicitações &amp; corridas</strong>
                 <div id="listaPropMotorista"></div>
             </div>
             <div class="sol-actions"><button type="button" class="btn btn-secondary" onclick="fecharPainel('painelMotorista')">Fechar</button></div>
@@ -404,7 +413,7 @@
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false });
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
 
         const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, label: 'A', title: 'Origem (arraste se quiser)' });
         let destino = null;
@@ -531,6 +540,27 @@
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
 
+    /* -------- passageiro clica no carro no mapa e pede a carona -------- */
+    let carroSel = null;
+    function mostrarCaronaDoCarro(m) {
+        carroSel = m;
+        document.getElementById('carroNome').textContent = m.nome || 'Motorista';
+        document.getElementById('carroRota').innerHTML = `${ICN.pin} ${m.origem_texto || 'origem'} → ${m.destino_texto || 'destino'}`;
+        const placa = document.getElementById('carroPlaca');
+        placa.textContent = m.placa || '';
+        placa.style.display = m.placa ? 'inline-block' : 'none';
+        const foto = document.getElementById('carroFoto');
+        if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
+        document.getElementById('modalCarro').style.display = 'flex';
+    }
+    function fecharCarro() { document.getElementById('modalCarro').style.display = 'none'; }
+    async function pedirCaronaDoCarro() {
+        const m = carroSel;
+        fecharCarro();
+        if (!m || !m.carona_id) return msg('Essa carona não está mais disponível.', 'error');
+        await pedirVaga(m.carona_id);
+    }
+
     /* -------- oferecer carona -------- */
     async function oferecerCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
@@ -547,43 +577,7 @@
         const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Carona publicada.');
-        await matchPedidos(d.id);
-        abrirPainel('painelMotorista');
-    }
-    async function matchPedidos(caronaId) {
-        const r = await fetchWithAuth('/api/pedidos/match?carona_id=' + caronaId);
-        const pedidos = await r.json();
-        const div = document.getElementById('listaPedidosMatch');
-        div.innerHTML = pedidos.length ? pedidos.map(p => cardPedido(p)).join('')
-            : '<p class="cam-hint">Nenhum passageiro compatível no momento.</p>';
-    }
-    async function listarTodosPedidos() {
-        const o = selOfe ? selOfe.getOrigem() : null;
-        const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
-        const r = await fetchWithAuth('/api/pedidos' + q);
-        const pedidos = await r.json();
-        document.getElementById('listaPedidosTodos').innerHTML = pedidos.length
-            ? pedidos.map(p => cardPedido(p)).join('') : '<p class="cam-hint">Nenhum passageiro disponível no momento.</p>';
-    }
-    function cardPedido(p) {
-        const dist = p.dist_destino != null ? ` • ${Number(p.dist_destino).toFixed(1)} km` : '';
-        return `<div class="ride-item">
-            ${p.selfie_url ? `<img src="${p.selfie_url}" class="ride-thumb">` : ''}
-            <div class="ride-info">
-                <strong>${p.passageiro_nome}</strong><br>
-                <small>${ICN.pin} ${p.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)}${dist}</small>
-                ${p.observacao ? `<br><small>"${p.observacao}"</small>` : ''}
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="oferecerAoPedido(${p.id})">Oferecer</button>
-        </div>`;
-    }
-    async function oferecerAoPedido(pedidoId) {
-        if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
-        const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: pedidoId }) });
-        const d = await r.json();
-        if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Oferta enviada. Aguardando confirmação do passageiro.');
+        msg('Carona publicada! Os passageiros já podem ver seu carro no mapa e pedir.');
     }
 
     /* -------- propostas -------- */
@@ -634,6 +628,8 @@
                 <div class="prop-motorista">
                     ${p.motorista_carro ? `<img src="${p.motorista_carro}" class="prop-carro" alt="carro do motorista">` : ''}
                     <small>${ICN.car} ${p.motorista_placa || 'veículo'}${p.motorista_tag ? ' • ' + p.motorista_tag : ''}</small>
+                    ${p.motorista_carro_em ? `<br><small class="foto-meta">Foto do carro: ${fmtData(p.motorista_carro_em)}</small>` : ''}
+                    ${p.motorista_selfie_em ? `<br><small class="foto-meta">Selfie do motorista: ${fmtData(p.motorista_selfie_em)}</small>` : ''}
                 </div>` : '';
 
         return `<div class="ride-item">
@@ -751,7 +747,7 @@
 
         g = await carregarMaps();
         const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false });
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 14, streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
         const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
         const polyline = new g.maps.Polyline({ path, strokeColor: '#0F3D3E', strokeWeight: 5, map });
 
@@ -878,11 +874,15 @@
                     const pos = { lat: +m.lat, lng: +m.lng };
                     if (fleet.markers[m.id]) {
                         fleet.markers[m.id].setPosition(pos);
+                        fleet.markers[m.id]._m = m;
                     } else {
-                        fleet.markers[m.id] = new g.maps.Marker({
+                        const mk = new g.maps.Marker({
                             position: pos, map, icon: CAR_ICON_URL,
                             title: m.nome + (m.placa ? ' • ' + m.placa : ''),
                         });
+                        mk._m = m;
+                        mk.addListener('click', () => mostrarCaronaDoCarro(mk._m));
+                        fleet.markers[m.id] = mk;
                     }
                 });
                 Object.keys(fleet.markers).forEach((id) => {
