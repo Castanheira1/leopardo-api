@@ -486,15 +486,7 @@ body {
 
 /* ============ VAGÃO CARONA ============ */
 
-/* Mapa */
-.map-box {
-    width: 100%;
-    height: 320px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    margin: 12px 0;
-    background: #eef2f6;
-}
+/* Buscador de endereço (flutua sobre o mapa) */
 .map-search {
     width: 100%;
     padding: 11px 12px;
@@ -507,22 +499,6 @@ body {
     outline: none;
     border-color: var(--vale-cyan);
     box-shadow: 0 0 0 3px rgba(0, 169, 206, 0.25);
-}
-
-/* Mapa estilo Uber: tela cheia vertical com o buscador flutuando por cima */
-.map-wrap {
-    position: relative;
-    margin: 12px 0;
-    border-radius: 14px;
-    overflow: hidden;
-}
-.map-box-full {
-    height: 64vh;
-    min-height: 380px;
-    margin: 0;
-    border: none;
-    border-radius: 14px;
-    background: #212121;
 }
 .map-search-float {
     position: absolute;
@@ -537,11 +513,33 @@ body {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* Mapa full-bleed (edge-to-edge) nas abas pedir/oferecer */
-#tabPedir.tab-content, #tabOferecer.tab-content { padding: 0 0 22px; }
-#tabPedir .map-wrap, #tabOferecer .map-wrap { margin: 0 -16px; border-radius: 0; }
-#tabPedir .map-box-full, #tabOferecer .map-box-full { height: 72vh; min-height: 420px; border-radius: 0; }
-.map-actions { margin-top: 14px; }
+/* Mapa em satélite ocupando a tela + sheet de ação por cima (pedir/oferecer) */
+#tabPedir.tab-content, #tabOferecer.tab-content { padding: 0; }
+.map-stage {
+    position: relative;
+    margin: 0 -16px;
+    height: calc(100vh - 150px);
+    min-height: 440px;
+    overflow: hidden;
+    background: #1b1b1b;
+}
+.map-stage-map { position: absolute; inset: 0; }
+.acao-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    background: #161719;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+    transition: transform 0.22s ease;
+    touch-action: none;
+}
+.acao-sheet.collapsed { transform: translateY(calc(100% - 42px)); }
+.acao-grip { display: flex; justify-content: center; padding: 9px 0 12px; cursor: grab; }
+.acao-grip span { width: 46px; height: 5px; border-radius: 3px; background: #6b6e75; display: block; }
 
 /* Painéis (listas) abertos pelo menu */
 .painel-box { text-align: left; }
