@@ -71,17 +71,17 @@
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
                         <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
-                        <div class="form-row">
+                        <div class="form-row form-row-2col">
                             <div class="form-group">
                                 <label>Quando? (vazio = agora)</label>
                                 <input type="datetime-local" id="horaPed">
                             </div>
                             <div class="form-group">
-                                <label>Observação</label>
-                                <input type="text" id="obsPed" placeholder="Ex: saída portão 2, vou de mochila">
+                                <label>Quantas pessoas?</label>
+                                <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
-                        <button class="btn btn-primary" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
+                        <button class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
                     </div>
                 </div>
             </div>
@@ -515,7 +515,7 @@
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-                horario: horarioISO('horaPed'), observacao: document.getElementById('obsPed').value,
+                horario: horarioISO('horaPed'), pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
             };
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
@@ -683,8 +683,7 @@
         return `<div class="ride-item">
             <div class="ride-info">
                 <strong>Solicitação ativa</strong><br>
-                <small>${ICN.pin} ${p.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)}</small>
-                ${p.observacao ? `<br><small>"${p.observacao}"</small>` : ''}
+                <small>${ICN.pin} ${p.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)} • ${p.pessoas || 1} pessoa(s)</small>
                 <br>${status}
             </div>
             <div class="ride-actions"><button class="btn btn-danger btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button></div>
