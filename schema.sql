@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     email VARCHAR(255),
     senha_hash VARCHAR(255) NOT NULL,
     is_admin BOOLEAN DEFAULT FALSE,
+    sexo VARCHAR(10),
     created_at TIMESTAMP DEFAULT NOW()
 );
 

@@ -142,6 +142,12 @@
             <div class="perfil-secao">
                 <label for="perfilTelefone">WhatsApp (com DDD)</label>
                 <input id="perfilTelefone" class="map-search" placeholder="(00) 90000-0000">
+                <label for="perfilSexo" style="margin-top:10px;display:block;">Sexo (bonequinho no mapa)</label>
+                <select id="perfilSexo" class="map-search">
+                    <option value="">Não informar</option>
+                    <option value="M">Homem (azul)</option>
+                    <option value="F">Mulher (rosa)</option>
+                </select>
                 <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar contato</button>
                 <div id="perfilMsg" class="cam-status"></div>
             </div>
@@ -331,6 +337,7 @@
     }
     function abrirPerfil() {
         document.getElementById('perfilTelefone').value = user.telefone || '';
+        document.getElementById('perfilSexo').value = user.sexo || '';
         document.getElementById('modalPerfil').style.display = 'flex';
     }
     function fecharPerfil() {
@@ -338,18 +345,19 @@
     }
     async function salvarPerfil() {
         const tel = document.getElementById('perfilTelefone').value.trim();
+        const sexo = document.getElementById('perfilSexo').value || null;
         const out = document.getElementById('perfilMsg');
         const setMsg = (t, cor) => { if (out) { out.textContent = t; out.style.color = cor || ''; } };
         if (tel.replace(/\D/g, '').length < 10) return setMsg('Informe um telefone válido com DDD.', '#ef9a9a');
         setMsg('Salvando...', '');
         try {
-            const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel }) });
+            const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel, sexo }) });
             const d = await r.json();
             if (r.ok) {
-                user = { ...user, telefone: d.telefone };
+                user = { ...user, telefone: d.telefone, sexo: d.sexo };
                 localStorage.setItem('user', JSON.stringify(user));
                 checarTelefone();
-                setMsg('✓ Contato salvo!', '#86efac');
+                setMsg('✓ Perfil salvo!', '#86efac');
             } else setMsg(d.error || 'Erro ao salvar', '#ef9a9a');
         } catch (_) {
             setMsg('Erro de conexão. Tente novamente.', '#ef9a9a');
@@ -426,7 +434,8 @@
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
         const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
 
-        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, label: 'A', title: 'Origem (arraste se quiser)' });
+        // Origem = você (bonequinho por sexo). Arrastável para ajustar o embarque.
+        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: pessoaIcon(user.sexo), title: 'Você (arraste para ajustar o embarque)' });
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
@@ -884,19 +893,26 @@
         const ds = new g.maps.DirectionsService();
         const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, preserveViewport: true, polylineOptions: { strokeColor: '#000000', strokeWeight: 6 } });
 
-        viagemView = { id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status, embarque, destino, tel, map, ds, rend, carro: null, ultimaRota: 0 };
+        viagemView = {
+            id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
+            embarque, destino, tel, map, ds, rend,
+            motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
+            posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
+            carMarker: null, pessoaMarker: null, ultimaRota: 0,
+        };
         atualizarCabecalhoViagem();
 
-        if (v.status !== 'em_andamento') { /* concluída: só mostra os pinos/rota final */ }
-        else if (ehMotorista) motoristaLoop();
-        else passageiroLoop();
+        if (v.status !== 'em_andamento') { /* concluída: só mostra os pinos */ }
+        else iniciarViagemLoop();
         initSheetDrag();
     }
 
-    // Alvo atual da rota: na fase "encontro" é o embarque; na fase "destino" é o destino.
+    // Alvo atual da rota: na fase "encontro" o carro vai até o passageiro (posição
+    // ao vivo, ou o ponto de embarque); na fase "destino" vai até o destino.
     function alvoViagem() {
         const vv = viagemView; if (!vv) return null;
-        return vv.fase === 'destino' ? (vv.destino || vv.embarque) : (vv.embarque || vv.destino);
+        if (vv.fase === 'destino') return vv.destino || vv.embarque;
+        return vv.posPassageiro || vv.embarque || vv.destino;
     }
 
     // Título + botões conforme papel e fase.
@@ -924,17 +940,30 @@
         }
     }
 
-    // Atualiza o carro no mapa e recalcula a rota (carro -> alvo da fase atual).
-    async function renderRotaViagem(pos) {
+    // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
+    // rota do carro até o alvo da fase. Cada lado vê o outro.
+    async function renderViagem() {
         const vv = viagemView; if (!vv) return;
-        if (vv.carro) vv.carro.setPosition(pos);
-        else vv.carro = new g.maps.Marker({ position: pos, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
-        vv.map.panTo(pos);
+        // Carro do motorista
+        if (vv.posMotorista) {
+            if (vv.carMarker) vv.carMarker.setPosition(vv.posMotorista);
+            else vv.carMarker = new g.maps.Marker({ position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
+        }
+        // Bonequinho do passageiro (cor por sexo)
+        if (vv.posPassageiro) {
+            if (vv.pessoaMarker) vv.pessoaMarker.setPosition(vv.posPassageiro);
+            else vv.pessoaMarker = new g.maps.Marker({ position: vv.posPassageiro, map: vv.map, icon: pessoaIcon(vv.passageiroSexo), title: 'Passageiro', zIndex: 998 });
+        }
+        // Centraliza na própria posição (cada um se vê no centro).
+        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
+        if (minhaPos) vv.map.panTo(minhaPos);
+
+        // Rota: do carro (motorista) até o alvo da fase.
         const alvo = alvoViagem();
-        if (alvo && Date.now() - vv.ultimaRota > 10000) {
+        if (vv.posMotorista && alvo && Date.now() - vv.ultimaRota > 10000) {
             vv.ultimaRota = Date.now();
             try {
-                const resp = await vv.ds.route({ origin: pos, destination: alvo, travelMode: g.maps.TravelMode.DRIVING });
+                const resp = await vv.ds.route({ origin: vv.posMotorista, destination: alvo, travelMode: g.maps.TravelMode.DRIVING });
                 vv.rend.setDirections(resp);
                 const leg = resp.routes[0].legs[0];
                 const eta = document.getElementById('viagemEta');
@@ -942,7 +971,7 @@
                     ? (vv.ehMotorista ? 'chega ao passageiro em' : 'motorista chega em')
                     : 'destino em';
                 if (eta) { eta.style.display = 'inline'; eta.textContent = `${prefixo} ~${leg.duration.text} • ${leg.distance.text}`; }
-            } catch (_) { /* sem rota: segue só com o carro */ }
+            } catch (_) { /* sem rota: segue só com os marcadores */ }
         }
     }
 
@@ -978,48 +1007,48 @@
         tornarArrastavel(sheet, document.getElementById('sheetGrip'), 64);
     }
 
-    // MOTORISTA: lê o GPS, transmite a posição (passageiro vê o carro), grava o
-    // trajeto e desenha a rota até o alvo da fase atual.
-    function motoristaLoop() {
+    // Loop único dos dois lados: cada um transmite a SUA posição (GPS) e busca a
+    // posição do OUTRO no servidor. Assim motorista e passageiro se veem no mapa.
+    function iniciarViagemLoop() {
         const vv = viagemView;
         if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        if (acompTimer) clearInterval(acompTimer);
         trackState = { viagemId: vv.id, buffer: [] };
         localStorage.setItem('viagemAtiva', vv.id);
 
+        // 1) GPS próprio → marca a própria posição, transmite, e (motorista) grava o trajeto.
         let ultimoEnvioLoc = 0;
         trackState.watchId = navigator.geolocation.watchPosition((pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            trackState.buffer.push(pt);
-            renderRotaViagem(pt);
-            // Transmite a posição ao vivo (no máx. a cada 4s) para o passageiro ver o carro.
+            if (vv.ehMotorista) { vv.posMotorista = pt; trackState.buffer.push(pt); }
+            else vv.posPassageiro = pt;
+            renderViagem();
             if (Date.now() - ultimoEnvioLoc > 4000) {
                 ultimoEnvioLoc = Date.now();
                 fetchWithAuth('/api/localizacao', { method: 'POST', body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }) }).catch(() => {});
             }
         }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
 
-        trackState.timer = setInterval(enviarPontos, 15000);
-    }
-    // PASSAGEIRO: acompanha a posição do motorista e reage à mudança de fase/status.
-    function passageiroLoop() {
-        const vv = viagemView;
-        if (acompTimer) clearInterval(acompTimer);
+        // 2) Posição do outro + fase/status (a cada 4s).
         async function tick() {
             try {
                 const r = await fetchWithAuth('/api/viagens/' + vv.id + '/localizacao');
                 if (!r || !r.ok) return;
-                const loc = await r.json();
-                if (!loc) return;
-                if (loc.status && loc.status !== vv.status) {
-                    vv.status = loc.status; atualizarCabecalhoViagem();
+                const d = await r.json();
+                if (d.status && d.status !== vv.status) {
+                    vv.status = d.status; atualizarCabecalhoViagem();
                     if (vv.status !== 'em_andamento') { clearInterval(acompTimer); return; }
                 }
-                if (loc.fase && loc.fase !== vv.fase) { vv.fase = loc.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem(); }
-                if (loc.lat != null) renderRotaViagem({ lat: +loc.lat, lng: +loc.lng });
+                if (d.fase && d.fase !== vv.fase) { vv.fase = d.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem(); }
+                // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
+                if (!vv.ehMotorista && d.motorista) vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
+                if (vv.ehMotorista && d.passageiro) vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
+                renderViagem();
             } catch (_) { /* rede instável: tenta no próximo ciclo */ }
         }
         tick();
         acompTimer = setInterval(tick, 4000);
+        if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
     }
     // Motorista chegou ao passageiro: muda para a fase de destino.
     async function cheguei(viagemId) {
@@ -1065,6 +1094,17 @@
         '<path d="M24 45 Q32 42 40 45 L41 51 Q32 55 23 51 Z" fill="#c9a96a"/>' +
         '<circle cx="32" cy="9" r="1.4" fill="#EAD298"/></svg>'
     );
+
+    // Bonequinho do usuário no mapa, colorido por sexo: rosa = mulher, azul = homem,
+    // cinza = não informado. Pino com cabeça + ombros.
+    function pessoaIcon(sexo) {
+        const cor = sexo === 'F' ? '#ec4899' : sexo === 'M' ? '#2563eb' : '#9ca3af';
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="38" height="46" viewBox="0 0 38 46">' +
+            '<path d="M19 45 C19 45 4 27 4 16 a15 15 0 1 1 30 0 C34 27 19 45 19 45 Z" fill="' + cor + '" stroke="#fff" stroke-width="2"/>' +
+            '<circle cx="19" cy="12" r="4.6" fill="#fff"/>' +
+            '<path d="M11 24 a8 7 0 0 1 16 0 Z" fill="#fff"/></svg>';
+        return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new g.maps.Size(38, 46), anchor: new g.maps.Point(19, 45) };
+    }
 
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {

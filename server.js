@@ -50,6 +50,7 @@ async function garantirColunasUsuarios() {
     "centro_custo VARCHAR(100)",
     "projeto_id INTEGER",
     "admin_projeto_id INTEGER",
+    "sexo VARCHAR(10)",
   ];
   for (const c of colunas) {
     try {
@@ -255,7 +256,8 @@ app.get("/api/projetos", async (req, res) => {
 
 /* ============================ AUTH ============================ */
 app.post("/api/register", async (req, res) => {
-  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, centro_custo } = req.body;
+  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, centro_custo, sexo } = req.body;
+  const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   if (!nome || !matricula || !senha || !telefone || !email) {
     return res.status(400).json({ error: "Nome, matrícula, telefone, email e senha são obrigatórios" });
   }
@@ -274,11 +276,11 @@ app.post("/api/register", async (req, res) => {
     const pid = projeto_id ? parseInt(projeto_id, 10) || null : null;
 
     const { rows } = await pool.query(
-      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id, nome, matricula, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo`,
+      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, nome, matricula, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo`,
       [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin,
-       empresa_nome || null, pid, centro_custo || null]
+       empresa_nome || null, pid, centro_custo || null, sexoNorm]
     );
 
     const token = jwt.sign({ id: rows[0].id, matricula, is_admin }, JWT_SECRET, { expiresIn: "8h" });
@@ -311,7 +313,7 @@ app.post("/api/login", async (req, res) => {
       token,
       user: {
         id: user.id, nome: user.nome, matricula: user.matricula,
-        telefone: user.telefone, is_admin: user.is_admin,
+        telefone: user.telefone, is_admin: user.is_admin, sexo: user.sexo,
       },
     });
   } catch (err) {
@@ -361,7 +363,7 @@ app.post("/api/recuperar-senha", async (req, res) => {
 app.get("/api/perfil", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, nome, funcao, matricula, telefone, is_admin FROM usuarios WHERE id = $1",
+      "SELECT id, nome, funcao, matricula, telefone, is_admin, sexo FROM usuarios WHERE id = $1",
       [req.user.id]
     );
     res.json(rows[0]);
@@ -371,16 +373,18 @@ app.get("/api/perfil", verificarAuth, async (req, res) => {
 });
 
 app.patch("/api/perfil", verificarAuth, async (req, res) => {
-  const { telefone, nome, funcao } = req.body;
+  const { telefone, nome, funcao, sexo } = req.body;
+  const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   try {
     const { rows } = await pool.query(
       `UPDATE usuarios SET
          telefone = COALESCE($1, telefone),
          nome = COALESCE($2, nome),
-         funcao = COALESCE($3, funcao)
-       WHERE id = $4
-       RETURNING id, nome, funcao, matricula, telefone, is_admin`,
-      [telefone || null, nome || null, funcao || null, req.user.id]
+         funcao = COALESCE($3, funcao),
+         sexo = COALESCE($4, sexo)
+       WHERE id = $5
+       RETURNING id, nome, funcao, matricula, telefone, is_admin, sexo`,
+      [telefone || null, nome || null, funcao || null, sexoNorm, req.user.id]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -1000,7 +1004,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     // carro no mapa e pede vaga naquela carona.
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
-              u.id, u.nome, l.lat, l.lng,
+              u.id, u.nome, u.sexo, l.lat, l.lng,
               h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
               ca.id AS carona_id, ca.origem_texto, ca.destino_texto
        FROM localizacoes_online l
@@ -1027,18 +1031,32 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
 app.get("/api/viagens/:id/localizacao", verificarAuth, async (req, res) => {
   try {
     const v = (await pool.query(
-      "SELECT motorista_id, passageiro_id, fase, status FROM viagens WHERE id = $1", [req.params.id]
+      `SELECT v.motorista_id, v.passageiro_id, v.fase, v.status,
+              m.sexo AS motorista_sexo, pa.sexo AS passageiro_sexo
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       JOIN usuarios pa ON v.passageiro_id = pa.id
+       WHERE v.id = $1`, [req.params.id]
     )).rows[0];
     if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
     if (!req.user.is_admin && ![v.motorista_id, v.passageiro_id].includes(req.user.id)) {
       return res.status(403).json({ error: "Sem permissão" });
     }
-    const loc = (await pool.query(
-      "SELECT lat, lng, atualizado_em FROM localizacoes_online WHERE usuario_id = $1",
-      [v.motorista_id]
-    )).rows[0];
+    // Posição ao vivo dos dois lados (cada um transmite a sua) para que um veja o outro.
+    const locs = (await pool.query(
+      "SELECT usuario_id, lat, lng FROM localizacoes_online WHERE usuario_id = ANY($1)",
+      [[v.motorista_id, v.passageiro_id]]
+    )).rows;
+    const posDe = (id) => { const l = locs.find((x) => x.usuario_id === id); return l ? { lat: l.lat, lng: l.lng } : null; };
     // Sempre devolve fase/status (o passageiro reage à mudança), mesmo sem posição ainda.
-    res.json({ ...(loc || {}), fase: v.fase, status: v.status });
+    // `lat/lng` no topo = posição do motorista (compatível com versões antigas do app).
+    const motorista = posDe(v.motorista_id);
+    res.json({
+      ...(motorista || {}),
+      motorista, passageiro: posDe(v.passageiro_id),
+      motorista_sexo: v.motorista_sexo, passageiro_sexo: v.passageiro_sexo,
+      fase: v.fase, status: v.status,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao obter localização" });
@@ -1120,8 +1138,8 @@ app.get("/api/viagens", verificarAuth, async (req, res) => {
 app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
   try {
     const v = (await pool.query(
-      `SELECT v.*, m.nome AS motorista_nome, m.telefone AS motorista_telefone,
-              pa.nome AS passageiro_nome, pa.telefone AS passageiro_telefone,
+      `SELECT v.*, m.nome AS motorista_nome, m.telefone AS motorista_telefone, m.sexo AS motorista_sexo,
+              pa.nome AS passageiro_nome, pa.telefone AS passageiro_telefone, pa.sexo AS passageiro_sexo,
               h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url AS motorista_selfie,
               pr.selfie_url AS passageiro_selfie, pd.selfie_url AS pedido_selfie
        FROM viagens v

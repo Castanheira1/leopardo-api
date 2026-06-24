@@ -44,6 +44,15 @@
                     <input type="text" id="funcao" placeholder="Ex: Analista, Operador">
                 </div>
                 <div class="form-group">
+                    <label for="sexo">Sexo</label>
+                    <select id="sexo" required>
+                        <option value="">Selecione</option>
+                        <option value="M">Homem</option>
+                        <option value="F">Mulher</option>
+                    </select>
+                    <small>Define o seu bonequinho no mapa (azul = homem, rosa = mulher)</small>
+                </div>
+                <div class="form-group">
                     <label for="matricula">Matrícula</label>
                     <input type="text" id="matricula" required placeholder="6-10 dígitos" pattern="[0-9]{6,10}">
                     <small>Apenas números, 6 a 10 dígitos</small>
@@ -176,6 +185,7 @@
                     body: JSON.stringify({
                         nome: document.getElementById('nome').value,
                         funcao: document.getElementById('funcao').value,
+                        sexo: document.getElementById('sexo').value,
                         matricula: document.getElementById('matricula').value,
                         empresa_nome: document.getElementById('empresa_nome').value,
                         projeto_id: document.getElementById('projeto_id').value || null,
