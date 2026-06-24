@@ -8,6 +8,7 @@ const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { createClient } = require("@supabase/supabase-js");
+const webpush = require("web-push");
 
 require("dotenv").config();
 
@@ -35,7 +36,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -56,6 +57,60 @@ async function garantirColunasUsuarios() {
     } catch (e) {
       console.warn("garantirColunasUsuarios:", e.message);
     }
+  }
+}
+
+// Notificações push (Web Push / VAPID). Opcional: sem as chaves, o app sobe
+// normalmente e só não envia notificações (mesma filosofia do Supabase).
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
+const pushConfigurado = Boolean(VAPID_PUBLIC && VAPID_PRIVATE);
+if (pushConfigurado) {
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:contato@vap.app", VAPID_PUBLIC, VAPID_PRIVATE);
+} else {
+  console.warn("AVISO: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY não definidos — notificações push desativadas.");
+}
+
+// Envia uma notificação para todos os aparelhos inscritos de um usuário.
+// Remove inscrições mortas (app desinstalado → 404/410). Nunca lança.
+async function enviarPush(usuarioId, payload) {
+  if (!pushConfigurado || !usuarioId) return;
+  try {
+    const { rows } = await pool.query(
+      "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE usuario_id = $1",
+      [usuarioId]
+    );
+    const data = JSON.stringify(payload);
+    await Promise.all(rows.map(async (s) => {
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, data);
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          await pool.query("DELETE FROM push_subscriptions WHERE endpoint = $1", [s.endpoint]).catch(() => {});
+        }
+      }
+    }));
+  } catch (err) {
+    console.error("enviarPush:", err.message);
+  }
+}
+
+// Auto-heal: cria a tabela de inscrições de notificação se não existir (o
+// schema.sql é aplicado à mão; isto garante que o push funcione sem esse passo).
+async function garantirTabelaPush() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions(usuario_id)");
+  } catch (e) {
+    console.warn("garantirTabelaPush:", e.message);
   }
 }
 
@@ -143,7 +198,39 @@ setInterval(async () => {
 
 /* ============================ CONFIG ============================ */
 app.get("/api/config", (req, res) => {
-  res.json({ mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });
+  res.json({ mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "", pushPublicKey: VAPID_PUBLIC });
+});
+
+/* ============================ PUSH ============================ */
+// Registra o aparelho do usuário para receber notificações.
+app.post("/api/push/subscribe", verificarAuth, async (req, res) => {
+  const { endpoint, keys } = req.body || {};
+  if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: "Inscrição inválida" });
+  try {
+    await pool.query(
+      `INSERT INTO push_subscriptions (usuario_id, endpoint, p256dh, auth)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (endpoint)
+       DO UPDATE SET usuario_id = EXCLUDED.usuario_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
+      [req.user.id, endpoint, keys.p256dh, keys.auth]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("push subscribe:", err.message);
+    res.status(500).json({ error: "Erro ao registrar notificações" });
+  }
+});
+
+// Remove a inscrição (logout / usuário desligou as notificações).
+app.post("/api/push/unsubscribe", verificarAuth, async (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: "endpoint obrigatório" });
+  try {
+    await pool.query("DELETE FROM push_subscriptions WHERE endpoint = $1 AND usuario_id = $2", [endpoint, req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao remover notificações" });
+  }
 });
 
 // Lista projetos ativos (público — usado no registro)
@@ -407,8 +494,23 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
 
 // Lista caronas ativas; se ?lat&lng informados, calcula distância da origem
 app.get("/api/caronas", verificarAuth, async (req, res) => {
-  const { lat, lng } = req.query;
+  const { lat, lng, meus } = req.query;
   try {
+    // "meus": caronas ativas que o próprio motorista publicou (para retomar o
+    // trajeto ao reabrir o app).
+    if (meus) {
+      const { rows } = await pool.query(
+        `SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url
+         FROM caronas c
+         JOIN usuarios u ON c.motorista_id = u.id
+         LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+         WHERE c.status = 'ativa' AND c.motorista_id = $1
+         ORDER BY c.created_at DESC`,
+        [req.user.id]
+      );
+      return res.json(rows);
+    }
+
     const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
     const params = lat && lng ? [lat, lng] : [];
     const orderBy = lat && lng ? "dist_origem ASC" : "c.created_at DESC";
@@ -479,8 +581,23 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
 });
 
 app.get("/api/pedidos", verificarAuth, async (req, res) => {
-  const { lat, lng } = req.query;
+  const { lat, lng, meus } = req.query;
   try {
+    // "meus": pedidos abertos do próprio passageiro (ficam esperando até casar ou
+    // serem cancelados). Inclui quantas ofertas de motorista já chegaram.
+    if (meus) {
+      const { rows } = await pool.query(
+        `SELECT p.*,
+                (SELECT COUNT(*) FROM propostas pr
+                  WHERE pr.pedido_id = p.id AND pr.status = 'pendente') AS ofertas
+         FROM pedidos p
+         WHERE p.status = 'aberto' AND p.passageiro_id = $1
+         ORDER BY p.created_at DESC`,
+        [req.user.id]
+      );
+      return res.json(rows);
+    }
+
     const dist = lat && lng ? `, ${haversine("p.destino_lat", "p.destino_lng", "$1", "$2")} AS dist_destino` : "";
     const params = lat && lng ? [lat, lng] : [];
     const orderBy = lat && lng ? "dist_destino ASC" : "p.created_at DESC";
@@ -613,6 +730,14 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       ]
     );
     res.json(rows[0]);
+
+    // Notifica quem recebeu a solicitação (mesmo com o app fechado).
+    const deNome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [req.user.id])).rows[0]?.nome || "Um colega";
+    enviarPush(para_usuario_id, {
+      title: "Nova solicitação de carona",
+      body: carona_id ? `${deNome} pediu uma vaga na sua carona.` : `${deNome} ofereceu uma carona para você.`,
+      url: "/dashboard.html",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao enviar proposta" });
@@ -707,6 +832,13 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
     // Cria a viagem na hora do aceite: já liga os dois, habilita rastreamento e contato.
     const viagem = await criarViagemDaProposta(req.params.id);
     res.json({ ...rows[0], viagem_id: viagem ? viagem.id : null });
+
+    // Notifica quem fez a solicitação de que foi aceita (app pode estar fechado).
+    enviarPush(rows[0].de_usuario_id, {
+      title: "Carona confirmada!",
+      body: "Sua solicitação foi aceita. Toque para acompanhar ao vivo.",
+      url: "/dashboard.html",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao aceitar proposta" });

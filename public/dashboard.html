@@ -222,6 +222,7 @@
             </div>
             <div class="painel-sec">
                 <strong class="painel-tit">Minhas solicitações</strong>
+                <div id="listaMeusPedidos"></div>
                 <div id="listaPropPassageiro"></div>
             </div>
             <div class="sol-actions"><button type="button" class="btn btn-secondary" onclick="fecharPainel('painelPassageiro')">Fechar</button></div>
@@ -297,6 +298,7 @@
     /* -------- painéis (listas/solicitações) abertos pelo menu -------- */
     function abrirPainel(id) {
         loadPropostas();
+        if (id === 'painelPassageiro') loadMeusPedidos();
         document.getElementById(id).style.display = 'flex';
     }
     function fecharPainel(id) { document.getElementById(id).style.display = 'none'; }
@@ -310,6 +312,8 @@
         document.getElementById('telaPapel').style.display = 'flex';
     }
     function escolherPapel(papel) {
+        localStorage.setItem('papel', papel);   // volta no mesmo modo ao reabrir o app
+        registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
@@ -640,10 +644,48 @@
     /* -------- propostas -------- */
     const ehMotorista = (p) => (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
     async function loadPropostas() {
-        const r = await fetchWithAuth('/api/propostas');
-        const props = await r.json();
-        renderProp('listaPropMotorista', props.filter(ehMotorista));
-        renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)));
+        // Tolera rede instável/offline: se falhar, mantém o que já está na tela.
+        try {
+            const r = await fetchWithAuth('/api/propostas');
+            if (!r || !r.ok) return;
+            const props = await r.json();
+            renderProp('listaPropMotorista', props.filter(ehMotorista));
+            renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)));
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    // Meus pedidos abertos: ficam visíveis "aguardando motorista" até casar ou o
+    // passageiro cancelar — não somem quando não há ninguém na rota.
+    async function loadMeusPedidos() {
+        const div = document.getElementById('listaMeusPedidos');
+        if (!div) return;
+        try {
+            const r = await fetchWithAuth('/api/pedidos?meus=1');
+            if (!r || !r.ok) return;
+            const peds = await r.json();
+            div.innerHTML = peds.map(cardMeuPedido).join('');
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    function cardMeuPedido(p) {
+        const ofertas = Number(p.ofertas) || 0;
+        const status = ofertas > 0
+            ? `<span class="badge badge-ativo">${ofertas} oferta(s) — veja abaixo</span>`
+            : '<small>Aguardando um motorista na sua rota…</small>';
+        return `<div class="ride-item">
+            <div class="ride-info">
+                <strong>Solicitação ativa</strong><br>
+                <small>${ICN.pin} ${p.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)}</small>
+                ${p.observacao ? `<br><small>"${p.observacao}"</small>` : ''}
+                <br>${status}
+            </div>
+            <div class="ride-actions"><button class="btn btn-danger btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button></div>
+        </div>`;
+    }
+    async function cancelarPedido(id) {
+        const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
+        msg('Solicitação cancelada.');
+        loadMeusPedidos();
     }
     function renderProp(id, arr) {
         const div = document.getElementById(id);
@@ -767,7 +809,13 @@
             if (document.getElementById('telaPapel').style.display === 'flex') return;
             if (document.getElementById('modalPerfil').style.display === 'flex') return;
             if (document.querySelector('.cam-video')) return;
-            if (painelAberto()) return;
+            // Painel aberto: não abre modal por cima, mas mantém as listas atualizadas.
+            if (painelAberto()) {
+                renderProp('listaPropMotorista', props.filter(ehMotorista));
+                renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)));
+                if (document.getElementById('painelPassageiro').style.display === 'flex') loadMeusPedidos();
+                return;
+            }
 
             // Carona aceita com viagem criada → abre o rastreamento sozinho para quem
             // ainda não viu (o passageiro que pediu, ou o motorista, como reforço).
@@ -1042,13 +1090,45 @@
         acompTimer = setInterval(tick, 4000);
     }
 
+    /* -------- restaurar sessão (fechar/reabrir o app não perde o estado) -------- */
+    // O servidor é a fonte da verdade: ao reabrir, retoma a viagem em andamento ou a
+    // carona publicada. Tudo dentro de try/catch para o app não quebrar offline.
+    async function restaurarSessao() {
+        try {
+            const r = await fetchWithAuth('/api/viagens');
+            if (r && r.ok) {
+                const ativa = (await r.json()).find(v => v.status === 'em_andamento');
+                if (ativa) {
+                    escolherPapel(ativa.motorista_id === user.id ? 'motorista' : 'passageiro');
+                    viagensAbertas.add(ativa.id);
+                    await abrirViagem(ativa.id);
+                    return true;
+                }
+            }
+        } catch (_) { /* offline: cai para a escolha de papel */ }
+        try {
+            const r = await fetchWithAuth('/api/caronas?meus=1');
+            if (r && r.ok) {
+                const minha = (await r.json())[0];
+                if (minha) { escolherPapel('motorista'); await abrirTrajeto(minha); return true; }
+            }
+        } catch (_) { /* offline: cai para a escolha de papel */ }
+        return false;
+    }
+
     /* -------- init -------- */
     (async function init() {
         checarTelefone();
-        await carregarHabilitacao();
+        await carregarHabilitacao().catch(() => {});
         if (habHoje) iniciarBroadcastLocalizacao();
         await loadPropostas();
-        abrirEscolhaPapel();          // começa pela escolha do papel
+        // Retoma onde parou; senão, volta ao último papel; senão, pede para escolher.
+        const retomou = await restaurarSessao();
+        if (!retomou) {
+            const papel = localStorage.getItem('papel');
+            if (papel) escolherPapel(papel); else abrirEscolhaPapel();
+        }
+        registrarPush(true);   // sincroniza a inscrição se a permissão já foi dada (sem popup)
         pollPropostas();
         setInterval(pollPropostas, 9000);
     })();

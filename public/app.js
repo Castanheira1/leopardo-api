@@ -29,6 +29,47 @@ async function fetchWithAuth(url, options = {}) {
     return resp;
 }
 
+/* -------------------- Notificações push (Web Push) -------------------- */
+function _b64ToUint8(base64) {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(b64);
+    return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+// Inscreve o aparelho para receber notificações. Idempotente e à prova de erro:
+// se o navegador não suporta, a permissão é negada ou não há chave, apenas sai.
+let _pushPronto = false;
+async function registrarPush(silencioso = false) {
+    try {
+        if (_pushPronto) return;
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+        if (!localStorage.getItem('token')) return;
+        if (Notification.permission === 'denied') return;
+        // Modo silencioso (no carregamento): só sincroniza se a permissão já existe,
+        // sem disparar o popup. O popup só aparece num gesto do usuário.
+        if (Notification.permission === 'default' && silencioso) return;
+
+        const cfg = await (await fetch('/api/config')).json();
+        if (!cfg.pushPublicKey) return;   // servidor sem VAPID: push desligado
+
+        if (Notification.permission === 'default') {
+            const p = await Notification.requestPermission();
+            if (p !== 'granted') return;
+        }
+
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+            sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: _b64ToUint8(cfg.pushPublicKey),
+            });
+        }
+        const r = await fetchWithAuth('/api/push/subscribe', { method: 'POST', body: JSON.stringify(sub) });
+        if (r && r.ok) _pushPronto = true;
+    } catch (_) { /* nunca quebra o app por causa de notificação */ }
+}
+
 /* -------------------- Carregamento de scripts externos -------------------- */
 const _scriptsCarregados = {};
 function carregarScript(src) {

@@ -29,6 +29,8 @@ services:
         value: veiculos
       - key: RAIO_MATCH_KM
         value: "3"
+      - key: VAPID_SUBJECT
+        value: mailto:contato@vap.app
       # Segredos — preencha no painel do Render (Environment):
       - key: DATABASE_URL
         sync: false
@@ -37,4 +39,10 @@ services:
       - key: SUPABASE_KEY
         sync: false
       - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      # Notificações push — gere o par com:
+      #   node -e "console.log(require('web-push').generateVAPIDKeys())"
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
         sync: false
