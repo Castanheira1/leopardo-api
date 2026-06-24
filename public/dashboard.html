@@ -1052,8 +1052,16 @@
                 if (!r || !r.ok) return;
                 const d = await r.json();
                 if (d.status && d.status !== vv.status) {
-                    vv.status = d.status; atualizarCabecalhoViagem();
-                    if (vv.status !== 'em_andamento') { limparRotaViagem(); clearInterval(acompTimer); return; }
+                    vv.status = d.status;
+                    if (vv.status !== 'em_andamento') {
+                        clearInterval(acompTimer);
+                        // Passageiro não fica preso na tela de "concluída": volta ao mapa.
+                        // A corrida fica registrada no histórico.
+                        if (!vv.ehMotorista) { msg('Viagem concluída. Veja no histórico.'); sairDaViagem(); }
+                        else { atualizarCabecalhoViagem(); limparRotaViagem(); }
+                        return;
+                    }
+                    atualizarCabecalhoViagem();
                 }
                 if (d.fase && d.fase !== vv.fase) { vv.fase = d.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem(); }
                 // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
