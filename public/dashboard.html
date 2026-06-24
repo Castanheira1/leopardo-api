@@ -286,7 +286,9 @@
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         if (btn) btn.classList.add('active');
-        if (id === 'tabPedir' && !selPed) initMapPedir();
+        // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
+        // (ela pode ter sido parada ao entrar numa viagem).
+        if (id === 'tabPedir') { if (!selPed) initMapPedir(); else iniciarFrotaAoVivo(selPed.map); }
         if (id === 'tabOferecer' && !selOfe) initMapOferecer();
     }
 
@@ -435,7 +437,9 @@
         const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
 
         // Origem = você (bonequinho por sexo). Arrastável para ajustar o embarque.
-        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: pessoaIcon(user.sexo), title: 'Você (arraste para ajustar o embarque)' });
+        // Origem = você (bonequinho por sexo). Nunca deixa o ícone derrubar o mapa/frota.
+        let iconeUser; try { iconeUser = pessoaIcon(user.sexo); } catch (_) { iconeUser = undefined; }
+        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: iconeUser, title: 'Você (arraste para ajustar o embarque)' });
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
