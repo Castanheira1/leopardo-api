@@ -264,7 +264,8 @@
     let habHoje = null;
     let g = null;             // google namespace
     let selPed = null, selOfe = null;
-    let trackState = null;    // { viagemId, watchId, buffer, timer, polyline, map }
+    let trackState = null;    // { viagemId, watchId, buffer, timer }
+    let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
 
     /* -------- util -------- */
     function msg(texto, tipo = 'success') {
@@ -848,6 +849,9 @@
         document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
+        // Encerra loops de outras telas para não deixar marcadores/timers órfãos no mapa.
+        if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+        if (selfCar.timer) { clearInterval(selfCar.timer); selfCar.timer = null; }
 
         const r = await fetchWithAuth('/api/viagens/' + viagemId);
         const v = await r.json();
@@ -864,29 +868,82 @@
         const plEl = document.getElementById('viagemPlaca');
         plEl.textContent = (!ehMotorista && v.placa) ? v.placa : '';
         plEl.style.display = (!ehMotorista && v.placa) ? 'inline-block' : 'none';
-        document.getElementById('viagemTitulo').textContent =
-            v.status === 'concluida' ? 'Viagem concluída' : (ehMotorista ? 'Em viagem' : 'Motorista a caminho');
         const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
 
         g = await carregarMaps();
-        const centro = v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 };
+        const embarque = v.origem_lat != null ? { lat: +v.origem_lat, lng: +v.origem_lng } : null;
+        const destino = v.destino_lat != null ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
+        const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
         const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
-        const path = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
-        const polyline = new g.maps.Polyline({ path, strokeColor: '#000000', strokeWeight: 6, map });
 
-        const wpp = tel ? `<a class="btn btn-success" href="${linkWhatsApp(tel)}" target="_blank">${ICN.phone} Conversar no WhatsApp</a>` : '';
-        const ctrl = document.getElementById('viagemControles');
-        if (v.status === 'em_andamento' && ehMotorista) {
-            ctrl.innerHTML = wpp + `<button class="btn btn-danger" onclick="finalizarViagem(${viagemId})">Encerrar viagem</button>`;
-            iniciarTracking(viagemId, map, polyline);
-        } else if (v.status === 'em_andamento') {
-            ctrl.innerHTML = wpp;
-            const destino = v.destino_lat ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
-            acompanharMotoristaAoVivo(viagemId, map, destino);
-        } else {
-            ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span>';
-        }
+        // Pinos fixos: embarque (verde) e destino (dourado).
+        const pin = (cor) => ({ path: g.maps.SymbolPath.CIRCLE, scale: 7, fillColor: cor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 });
+        if (embarque) new g.maps.Marker({ position: embarque, map, icon: pin('#22c55e'), title: 'Embarque' });
+        if (destino) new g.maps.Marker({ position: destino, map, icon: pin('#EAD298'), title: 'Destino' });
+
+        const ds = new g.maps.DirectionsService();
+        const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, preserveViewport: true, polylineOptions: { strokeColor: '#000000', strokeWeight: 6 } });
+
+        viagemView = { id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status, embarque, destino, tel, map, ds, rend, carro: null, ultimaRota: 0 };
+        atualizarCabecalhoViagem();
+
+        if (v.status !== 'em_andamento') { /* concluída: só mostra os pinos/rota final */ }
+        else if (ehMotorista) motoristaLoop();
+        else passageiroLoop();
         initSheetDrag();
+    }
+
+    // Alvo atual da rota: na fase "encontro" é o embarque; na fase "destino" é o destino.
+    function alvoViagem() {
+        const vv = viagemView; if (!vv) return null;
+        return vv.fase === 'destino' ? (vv.destino || vv.embarque) : (vv.embarque || vv.destino);
+    }
+
+    // Título + botões conforme papel e fase.
+    function atualizarCabecalhoViagem() {
+        const vv = viagemView; if (!vv) return;
+        const titulo = document.getElementById('viagemTitulo');
+        const ctrl = document.getElementById('viagemControles');
+        const wpp = vv.tel ? `<a class="btn btn-success" href="${linkWhatsApp(vv.tel)}" target="_blank">${ICN.phone} WhatsApp</a>` : '';
+        if (vv.status !== 'em_andamento') {
+            titulo.textContent = 'Viagem concluída';
+            ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span>';
+            return;
+        }
+        if (vv.ehMotorista) {
+            if (vv.fase === 'encontro') {
+                titulo.textContent = 'A caminho do passageiro';
+                ctrl.innerHTML = wpp + `<button class="btn btn-primary" onclick="cheguei(${vv.id})">Cheguei — iniciar viagem</button>`;
+            } else {
+                titulo.textContent = 'Em viagem ao destino';
+                ctrl.innerHTML = wpp + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>`;
+            }
+        } else {
+            titulo.textContent = vv.fase === 'encontro' ? 'Motorista a caminho de você' : 'Em viagem ao destino';
+            ctrl.innerHTML = wpp;
+        }
+    }
+
+    // Atualiza o carro no mapa e recalcula a rota (carro -> alvo da fase atual).
+    async function renderRotaViagem(pos) {
+        const vv = viagemView; if (!vv) return;
+        if (vv.carro) vv.carro.setPosition(pos);
+        else vv.carro = new g.maps.Marker({ position: pos, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
+        vv.map.panTo(pos);
+        const alvo = alvoViagem();
+        if (alvo && Date.now() - vv.ultimaRota > 10000) {
+            vv.ultimaRota = Date.now();
+            try {
+                const resp = await vv.ds.route({ origin: pos, destination: alvo, travelMode: g.maps.TravelMode.DRIVING });
+                vv.rend.setDirections(resp);
+                const leg = resp.routes[0].legs[0];
+                const eta = document.getElementById('viagemEta');
+                const prefixo = vv.fase === 'encontro'
+                    ? (vv.ehMotorista ? 'chega ao passageiro em' : 'motorista chega em')
+                    : 'destino em';
+                if (eta) { eta.style.display = 'inline'; eta.textContent = `${prefixo} ~${leg.duration.text} • ${leg.distance.text}`; }
+            } catch (_) { /* sem rota: segue só com o carro */ }
+        }
     }
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
@@ -921,17 +978,19 @@
         tornarArrastavel(sheet, document.getElementById('sheetGrip'), 64);
     }
 
-    function iniciarTracking(viagemId, map, polyline) {
+    // MOTORISTA: lê o GPS, transmite a posição (passageiro vê o carro), grava o
+    // trajeto e desenha a rota até o alvo da fase atual.
+    function motoristaLoop() {
+        const vv = viagemView;
         if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
-        trackState = { viagemId, buffer: [], polyline, map };
-        localStorage.setItem('viagemAtiva', viagemId);
+        trackState = { viagemId: vv.id, buffer: [] };
+        localStorage.setItem('viagemAtiva', vv.id);
 
         let ultimoEnvioLoc = 0;
         trackState.watchId = navigator.geolocation.watchPosition((pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             trackState.buffer.push(pt);
-            polyline.getPath().push(new g.maps.LatLng(pt.lat, pt.lng));
-            map.panTo(pt);
+            renderRotaViagem(pt);
             // Transmite a posição ao vivo (no máx. a cada 4s) para o passageiro ver o carro.
             if (Date.now() - ultimoEnvioLoc > 4000) {
                 ultimoEnvioLoc = Date.now();
@@ -940,6 +999,35 @@
         }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
 
         trackState.timer = setInterval(enviarPontos, 15000);
+    }
+    // PASSAGEIRO: acompanha a posição do motorista e reage à mudança de fase/status.
+    function passageiroLoop() {
+        const vv = viagemView;
+        if (acompTimer) clearInterval(acompTimer);
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/viagens/' + vv.id + '/localizacao');
+                if (!r || !r.ok) return;
+                const loc = await r.json();
+                if (!loc) return;
+                if (loc.status && loc.status !== vv.status) {
+                    vv.status = loc.status; atualizarCabecalhoViagem();
+                    if (vv.status !== 'em_andamento') { clearInterval(acompTimer); return; }
+                }
+                if (loc.fase && loc.fase !== vv.fase) { vv.fase = loc.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem(); }
+                if (loc.lat != null) renderRotaViagem({ lat: +loc.lat, lng: +loc.lng });
+            } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+        }
+        tick();
+        acompTimer = setInterval(tick, 4000);
+    }
+    // Motorista chegou ao passageiro: muda para a fase de destino.
+    async function cheguei(viagemId) {
+        const r = await fetchWithAuth('/api/viagens/' + viagemId + '/iniciar', { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (viagemView) { viagemView.fase = 'destino'; viagemView.ultimaRota = 0; atualizarCabecalhoViagem(); }
+        msg('Passageiro embarcado — seguindo para o destino.');
     }
     async function enviarPontos() {
         if (!trackState || !trackState.buffer.length) return;
@@ -952,12 +1040,13 @@
             if (trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
             clearInterval(trackState.timer);
         }
+        if (acompTimer) clearInterval(acompTimer);
         localStorage.removeItem('viagemAtiva');
         const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', { method: 'POST' });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); }
         msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos.`);
-        document.getElementById('viagemControles').innerHTML = '<span class="badge badge-ativo">Concluída</span>';
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
@@ -1056,39 +1145,7 @@
     }
 
     // Passageiro acompanha o carro do motorista ao vivo, com rota e ETA.
-    let acompTimer = null;
-    function acompanharMotoristaAoVivo(viagemId, map, destino) {
-        if (acompTimer) clearInterval(acompTimer);
-        let carro = null, ultimaRota = 0;
-        const ds = new g.maps.DirectionsService();
-        const rend = new g.maps.DirectionsRenderer({
-            map, suppressMarkers: true, preserveViewport: true,
-            polylineOptions: { strokeColor: '#000000', strokeWeight: 6 },
-        });
-        const eta = document.getElementById('viagemEta');
-        async function tick() {
-            try {
-                const r = await fetchWithAuth('/api/viagens/' + viagemId + '/localizacao');
-                if (!r.ok) return;
-                const loc = await r.json();
-                if (!loc) return;
-                const pos = { lat: +loc.lat, lng: +loc.lng };
-                if (carro) carro.setPosition(pos);
-                else carro = new g.maps.Marker({ position: pos, map, icon: CAR_ICON_URL, title: 'Motorista' });
-                map.panTo(pos);
-                // Recalcula rota/ETA no máx. a cada 12s (economiza cota do Directions).
-                if (destino && Date.now() - ultimaRota > 12000) {
-                    ultimaRota = Date.now();
-                    const resp = await ds.route({ origin: pos, destination: destino, travelMode: g.maps.TravelMode.DRIVING });
-                    rend.setDirections(resp);
-                    const leg = resp.routes[0].legs[0];
-                    if (eta) { eta.style.display = 'inline'; eta.textContent = `chega em ~${leg.duration.text} • ${leg.distance.text}`; }
-                }
-            } catch (_) {}
-        }
-        tick();
-        acompTimer = setInterval(tick, 4000);
-    }
+    let acompTimer = null;   // timer do acompanhamento do passageiro (passageiroLoop)
 
     /* -------- restaurar sessão (fechar/reabrir o app não perde o estado) -------- */
     // O servidor é a fonte da verdade: ao reabrir, retoma a viagem em andamento ou a

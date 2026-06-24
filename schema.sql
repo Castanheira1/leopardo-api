@@ -139,6 +139,8 @@ CREATE TABLE viagens (
     destino_lat NUMERIC(10,6),
     destino_lng NUMERIC(10,6),
     status VARCHAR(20) DEFAULT 'em_andamento' CHECK (status IN ('em_andamento', 'concluida', 'cancelada')),
+    -- fase da viagem: 'encontro' = motorista indo buscar; 'destino' = a caminho do destino
+    fase VARCHAR(20) DEFAULT 'encontro' CHECK (fase IN ('encontro', 'destino')),
     iniciada_em TIMESTAMP DEFAULT NOW(),
     finalizada_em TIMESTAMP,
     distancia_km NUMERIC(10,2),

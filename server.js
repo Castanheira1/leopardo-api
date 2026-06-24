@@ -36,7 +36,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -92,6 +92,16 @@ async function enviarPush(usuarioId, payload) {
     }));
   } catch (err) {
     console.error("enviarPush:", err.message);
+  }
+}
+
+// Auto-heal: a viagem tem 2 fases — 'encontro' (motorista indo buscar) e
+// 'destino' (a caminho do destino). Bancos antigos não têm a coluna.
+async function garantirColunasViagens() {
+  try {
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS fase TEXT DEFAULT 'encontro'");
+  } catch (e) {
+    console.warn("garantirColunasViagens:", e.message);
   }
 }
 
@@ -793,13 +803,20 @@ async function criarViagemDaProposta(propostaId) {
   const existente = (await pool.query("SELECT * FROM viagens WHERE proposta_id = $1", [propostaId])).rows[0];
   if (existente) return existente;
 
-  let motorista_id, passageiro_id, fonte;
+  // Ponto de encontro (embarque) e destino. O encontro é SEMPRE onde o passageiro
+  // está; o destino é para onde ele quer ir.
+  let motorista_id, passageiro_id, embarque, destino;
   if (pr.carona_id) {
     motorista_id = pr.para_usuario_id; passageiro_id = pr.de_usuario_id;
-    fonte = (await pool.query("SELECT * FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
+    const car = (await pool.query("SELECT * FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
+    // passageiro pediu vaga: o embarque é a posição dele (selfie do pedido de vaga)
+    embarque = { texto: "Embarque do passageiro", lat: pr.selfie_lat || car?.origem_lat, lng: pr.selfie_lng || car?.origem_lng };
+    destino = { texto: car?.destino_texto, lat: car?.destino_lat, lng: car?.destino_lng };
   } else {
     motorista_id = pr.de_usuario_id; passageiro_id = pr.para_usuario_id;
-    fonte = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
+    const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
+    embarque = { texto: ped?.origem_texto, lat: ped?.origem_lat, lng: ped?.origem_lng };
+    destino = { texto: ped?.destino_texto, lat: ped?.destino_lat, lng: ped?.destino_lng };
   }
   const hab = await habilitacaoAtiva(motorista_id);
 
@@ -811,8 +828,8 @@ async function criarViagemDaProposta(propostaId) {
      RETURNING *`,
     [
       pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
-      fonte?.origem_texto || null, fonte?.origem_lat || null, fonte?.origem_lng || null,
-      fonte?.destino_texto || null, fonte?.destino_lat || null, fonte?.destino_lng || null,
+      embarque.texto || null, embarque.lat || null, embarque.lng || null,
+      destino.texto || null, destino.lat || null, destino.lng || null,
     ]
   );
   if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'concluida' WHERE id = $1", [pr.carona_id]);
@@ -1010,7 +1027,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
 app.get("/api/viagens/:id/localizacao", verificarAuth, async (req, res) => {
   try {
     const v = (await pool.query(
-      "SELECT motorista_id, passageiro_id FROM viagens WHERE id = $1", [req.params.id]
+      "SELECT motorista_id, passageiro_id, fase, status FROM viagens WHERE id = $1", [req.params.id]
     )).rows[0];
     if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
     if (!req.user.is_admin && ![v.motorista_id, v.passageiro_id].includes(req.user.id)) {
@@ -1020,10 +1037,28 @@ app.get("/api/viagens/:id/localizacao", verificarAuth, async (req, res) => {
       "SELECT lat, lng, atualizado_em FROM localizacoes_online WHERE usuario_id = $1",
       [v.motorista_id]
     )).rows[0];
-    res.json(loc || null);
+    // Sempre devolve fase/status (o passageiro reage à mudança), mesmo sem posição ainda.
+    res.json({ ...(loc || {}), fase: v.fase, status: v.status });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao obter localização" });
+  }
+});
+
+// Motorista chegou ao passageiro e embarcou: muda a fase para 'destino'.
+app.post("/api/viagens/:id/iniciar", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE viagens SET fase = 'destino'
+       WHERE id = $1 AND motorista_id = $2 AND status = 'em_andamento'
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "Viagem não encontrada" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao iniciar a viagem" });
   }
 });
 
