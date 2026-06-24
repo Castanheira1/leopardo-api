@@ -943,7 +943,7 @@
     // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
     // rota do carro até o alvo da fase. Cada lado vê o outro.
     async function renderViagem() {
-        const vv = viagemView; if (!vv) return;
+        const vv = viagemView; if (!vv || vv.status !== 'em_andamento') return;
         // Carro do motorista
         if (vv.posMotorista) {
             if (vv.carMarker) vv.carMarker.setPosition(vv.posMotorista);
@@ -973,6 +973,16 @@
                 if (eta) { eta.style.display = 'inline'; eta.textContent = `${prefixo} ~${leg.duration.text} • ${leg.distance.text}`; }
             } catch (_) { /* sem rota: segue só com os marcadores */ }
         }
+    }
+
+    // Viagem concluída: tira a rota, o carro e o bonequinho do mapa (não fica
+    // sobrando o caminho antigo). Mantém só os pinos de embarque/destino.
+    function limparRotaViagem() {
+        const vv = viagemView; if (!vv) return;
+        if (vv.rend) { vv.rend.setMap(null); vv.rend = null; }
+        if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
+        if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
+        const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
     }
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
@@ -1037,7 +1047,7 @@
                 const d = await r.json();
                 if (d.status && d.status !== vv.status) {
                     vv.status = d.status; atualizarCabecalhoViagem();
-                    if (vv.status !== 'em_andamento') { clearInterval(acompTimer); return; }
+                    if (vv.status !== 'em_andamento') { limparRotaViagem(); clearInterval(acompTimer); return; }
                 }
                 if (d.fase && d.fase !== vv.fase) { vv.fase = d.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem(); }
                 // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
@@ -1074,7 +1084,7 @@
         const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', { method: 'POST' });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); }
+        if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); limparRotaViagem(); }
         msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos.`);
     }
 
