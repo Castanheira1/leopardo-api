@@ -855,7 +855,8 @@
     }
 
     async function abrirViagem(viagemId) {
-        document.getElementById('btnViagemAndamento').style.display = 'inline-block';
+        // O botão "Em andamento" só faz sentido durante a viagem (atalho de volta a
+        // ela). atualizarCabecalhoViagem mostra/esconde conforme o status.
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
         // Encerra loops de outras telas para não deixar marcadores/timers órfãos no mapa.
@@ -921,11 +922,16 @@
         const titulo = document.getElementById('viagemTitulo');
         const ctrl = document.getElementById('viagemControles');
         const wpp = vv.tel ? `<a class="btn btn-success" href="${linkWhatsApp(vv.tel)}" target="_blank">${ICN.phone} WhatsApp</a>` : '';
+        const btnAnd = document.getElementById('btnViagemAndamento');
         if (vv.status !== 'em_andamento') {
+            // Concluída: esconde o atalho "Em andamento" e oferece a saída.
             titulo.textContent = 'Viagem concluída';
-            ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span>';
+            ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span> '
+                + '<button class="btn btn-primary" onclick="sairDaViagem()">Voltar ao início</button>';
+            if (btnAnd) btnAnd.style.display = 'none';
             return;
         }
+        if (btnAnd) btnAnd.style.display = 'inline-block';
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
                 titulo.textContent = 'A caminho do passageiro';
@@ -1086,6 +1092,17 @@
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); limparRotaViagem(); }
         msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos.`);
+    }
+    // Sai da tela de viagem (concluída) e volta ao mapa do papel atual.
+    function sairDaViagem() {
+        if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        if (trackState && trackState.timer) clearInterval(trackState.timer);
+        if (acompTimer) clearInterval(acompTimer);
+        trackState = null;
+        viagemView = null;
+        localStorage.removeItem('viagemAtiva');
+        document.getElementById('btnViagemAndamento').style.display = 'none';
+        escolherPapel(localStorage.getItem('papel') || 'passageiro');
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
