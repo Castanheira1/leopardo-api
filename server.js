@@ -407,8 +407,23 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
 
 // Lista caronas ativas; se ?lat&lng informados, calcula distância da origem
 app.get("/api/caronas", verificarAuth, async (req, res) => {
-  const { lat, lng } = req.query;
+  const { lat, lng, meus } = req.query;
   try {
+    // "meus": caronas ativas que o próprio motorista publicou (para retomar o
+    // trajeto ao reabrir o app).
+    if (meus) {
+      const { rows } = await pool.query(
+        `SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url
+         FROM caronas c
+         JOIN usuarios u ON c.motorista_id = u.id
+         LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+         WHERE c.status = 'ativa' AND c.motorista_id = $1
+         ORDER BY c.created_at DESC`,
+        [req.user.id]
+      );
+      return res.json(rows);
+    }
+
     const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
     const params = lat && lng ? [lat, lng] : [];
     const orderBy = lat && lng ? "dist_origem ASC" : "c.created_at DESC";
@@ -479,8 +494,23 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
 });
 
 app.get("/api/pedidos", verificarAuth, async (req, res) => {
-  const { lat, lng } = req.query;
+  const { lat, lng, meus } = req.query;
   try {
+    // "meus": pedidos abertos do próprio passageiro (ficam esperando até casar ou
+    // serem cancelados). Inclui quantas ofertas de motorista já chegaram.
+    if (meus) {
+      const { rows } = await pool.query(
+        `SELECT p.*,
+                (SELECT COUNT(*) FROM propostas pr
+                  WHERE pr.pedido_id = p.id AND pr.status = 'pendente') AS ofertas
+         FROM pedidos p
+         WHERE p.status = 'aberto' AND p.passageiro_id = $1
+         ORDER BY p.created_at DESC`,
+        [req.user.id]
+      );
+      return res.json(rows);
+    }
+
     const dist = lat && lng ? `, ${haversine("p.destino_lat", "p.destino_lng", "$1", "$2")} AS dist_destino` : "";
     const params = lat && lng ? [lat, lng] : [];
     const orderBy = lat && lng ? "dist_destino ASC" : "p.created_at DESC";
