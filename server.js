@@ -660,6 +660,41 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
   }
 });
 
+// Cria a viagem a partir de uma proposta aceita (idempotente). Liga motorista
+// e passageiro, copia a rota e marca a carona/pedido como atendido.
+async function criarViagemDaProposta(propostaId) {
+  const pr = (await pool.query("SELECT * FROM propostas WHERE id = $1 AND status = 'aceito'", [propostaId])).rows[0];
+  if (!pr) return null;
+  const existente = (await pool.query("SELECT * FROM viagens WHERE proposta_id = $1", [propostaId])).rows[0];
+  if (existente) return existente;
+
+  let motorista_id, passageiro_id, fonte;
+  if (pr.carona_id) {
+    motorista_id = pr.para_usuario_id; passageiro_id = pr.de_usuario_id;
+    fonte = (await pool.query("SELECT * FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
+  } else {
+    motorista_id = pr.de_usuario_id; passageiro_id = pr.para_usuario_id;
+    fonte = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
+  }
+  const hab = await habilitacaoAtiva(motorista_id);
+
+  const { rows } = await pool.query(
+    `INSERT INTO viagens
+       (proposta_id, carona_id, pedido_id, motorista_id, passageiro_id, habilitacao_id,
+        origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     RETURNING *`,
+    [
+      pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
+      fonte?.origem_texto || null, fonte?.origem_lat || null, fonte?.origem_lng || null,
+      fonte?.destino_texto || null, fonte?.destino_lat || null, fonte?.destino_lng || null,
+    ]
+  );
+  if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'concluida' WHERE id = $1", [pr.carona_id]);
+  if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
+  return rows[0];
+}
+
 app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -669,8 +704,11 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
       [req.params.id, req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: "Proposta não encontrada" });
-    res.json(rows[0]);
+    // Cria a viagem na hora do aceite: já liga os dois, habilita rastreamento e contato.
+    const viagem = await criarViagemDaProposta(req.params.id);
+    res.json({ ...rows[0], viagem_id: viagem ? viagem.id : null });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Erro ao aceitar proposta" });
   }
 });
@@ -726,45 +764,15 @@ app.post("/api/viagens", verificarAuth, async (req, res) => {
     const pr = (await pool.query("SELECT * FROM propostas WHERE id = $1 AND status = 'aceito'", [proposta_id])).rows[0];
     if (!pr) return res.status(404).json({ error: "Proposta não aceita ou inexistente" });
 
-    const existente = (await pool.query("SELECT id FROM viagens WHERE proposta_id = $1", [proposta_id])).rows[0];
-    if (existente) return res.json({ id: existente.id, jaExistia: true });
-
-    // Define motorista / passageiro e a fonte (carona ou pedido)
-    let motorista_id, passageiro_id, fonte;
-    if (pr.carona_id) {
-      // passageiro (de) pediu vaga ao motorista (para)
-      motorista_id = pr.para_usuario_id; passageiro_id = pr.de_usuario_id;
-      fonte = (await pool.query("SELECT * FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
-    } else {
-      // motorista (de) ofereceu ao passageiro (para)
-      motorista_id = pr.de_usuario_id; passageiro_id = pr.para_usuario_id;
-      fonte = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
-    }
-
+    // Só o motorista (lado que oferece o carro) pode iniciar manualmente.
+    const motorista_id = pr.carona_id ? pr.para_usuario_id : pr.de_usuario_id;
     if (req.user.id !== motorista_id) {
       return res.status(403).json({ error: "Apenas o motorista inicia a viagem" });
     }
 
-    const hab = await habilitacaoAtiva(motorista_id);
-
-    const { rows } = await pool.query(
-      `INSERT INTO viagens
-         (proposta_id, carona_id, pedido_id, motorista_id, passageiro_id, habilitacao_id,
-          origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       RETURNING *`,
-      [
-        pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
-        fonte?.origem_texto || null, fonte?.origem_lat || null, fonte?.origem_lng || null,
-        fonte?.destino_texto || null, fonte?.destino_lat || null, fonte?.destino_lng || null,
-      ]
-    );
-
-    // Marca a oferta/pedido como em atendimento
-    if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'concluida' WHERE id = $1", [pr.carona_id]);
-    if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
-
-    res.json(rows[0]);
+    const viagem = await criarViagemDaProposta(proposta_id);
+    if (!viagem) return res.status(404).json({ error: "Proposta não aceita ou inexistente" });
+    res.json(viagem);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao iniciar viagem" });
