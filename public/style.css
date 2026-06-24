@@ -547,11 +547,43 @@ body {
     transition: transform 0.22s ease;
     touch-action: none;
 }
-/* colapsado: fica só a "abinha" preta (botão) sempre visível sobre o mapa */
-.acao-sheet.collapsed { transform: translateY(calc(100% - 60px)); }
-.acao-grip { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 12px; cursor: grab; }
-.acao-handle { width: 46px; height: 5px; border-radius: 3px; background: #6b6e75; display: block; }
-.acao-titulo { color: #fff; font-weight: 700; font-size: 0.98rem; letter-spacing: 0.3px; }
+/* colapsado: a "meia bola" dourada fica sempre visível e convidativa sobre o mapa */
+.acao-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
+.acao-grip {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 30px 0 12px;     /* espaço para a meia bola que projeta acima da barra */
+    cursor: grab;
+}
+/* Alça em meia bola (semicírculo) que se projeta acima da barra — fácil de ver e pegar */
+.acao-handle {
+    position: absolute;
+    top: -19px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 66px;
+    height: 33px;
+    border-radius: 66px 66px 0 0;
+    background: linear-gradient(180deg, #EAD298 0%, #c9a96a 100%);
+    box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.45);
+    display: block;
+}
+/* tracinho de "puxe" dentro da meia bola */
+.acao-handle::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 4px;
+    border-radius: 3px;
+    background: rgba(15, 61, 62, 0.7);
+}
+.acao-titulo { color: #fff; font-weight: 700; font-size: 1rem; letter-spacing: 0.3px; }
 
 /* Painéis (listas) abertos pelo menu */
 .painel-box { text-align: left; }
