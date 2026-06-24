@@ -36,7 +36,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); garantirColunasPedidos(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -93,6 +93,15 @@ async function enviarPush(usuarioId, payload) {
     }));
   } catch (err) {
     console.error("enviarPush:", err.message);
+  }
+}
+
+// Auto-heal: o pedido guarda quantas pessoas vão na carona.
+async function garantirColunasPedidos() {
+  try {
+    await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1");
+  } catch (e) {
+    console.warn("garantirColunasPedidos:", e.message);
   }
 }
 
@@ -564,9 +573,10 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
   const {
     origem_texto, origem_lat, origem_lng,
     destino_texto, destino_lat, destino_lng,
-    horario, observacao,
+    horario, observacao, pessoas,
     selfie_url, selfie_lat, selfie_lng, selfie_em,
   } = req.body;
+  const nPessoas = Math.min(Math.max(parseInt(pessoas, 10) || 1, 1), 6);
 
   if (origem_lat == null || origem_lng == null || destino_lat == null || destino_lng == null) {
     return res.status(400).json({ error: "Origem e destino são obrigatórios" });
@@ -577,13 +587,13 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO pedidos
          (passageiro_id, origem_texto, origem_lat, origem_lng,
-          destino_texto, destino_lat, destino_lng, horario, observacao,
+          destino_texto, destino_lat, destino_lng, horario, observacao, pessoas,
           selfie_url, selfie_lat, selfie_lng, selfie_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         req.user.id, origem_texto || null, origem_lat, origem_lng,
-        destino_texto || null, destino_lat, destino_lng, horario || null, observacao || null,
+        destino_texto || null, destino_lat, destino_lng, horario || null, observacao || null, nPessoas,
         selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
       ]
     );

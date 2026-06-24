@@ -344,6 +344,16 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 18px;
 }
+/* Variante compacta: 2 colunas mesmo em telas estreitas (form curto, botão à vista) */
+.form-row-2col {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+/* Botão que ocupa a largura toda (alvo de toque grande, sempre visível) */
+.btn-block {
+    display: block;
+    width: 100%;
+}
 
 .form-group {
     margin-bottom: 18px;

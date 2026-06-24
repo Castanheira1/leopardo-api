@@ -93,6 +93,7 @@ CREATE TABLE pedidos (
     destino_lat NUMERIC(10,6) NOT NULL,
     destino_lng NUMERIC(10,6) NOT NULL,
     horario TIMESTAMP,                 -- NULL = agora
+    pessoas INTEGER DEFAULT 1,         -- quantas pessoas vão na carona
     selfie_url TEXT,
     selfie_lat NUMERIC(10,6),
     selfie_lng NUMERIC(10,6),
