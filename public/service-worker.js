@@ -2,7 +2,7 @@
 // Objetivo: o app NÃO é offline, mas não pode quebrar sem internet — ele abre e
 // mostra a última versão carregada. O cache é FIXO (só o "esqueleto" do app),
 // sobrescreve em vez de acumular, e os dados de API nunca são cacheados.
-const VERSION = "v22";
+const VERSION = "v23";
 const CACHE = `vagao-shell-${VERSION}`;
 
 // Lista fixa de arquivos do app (o cache nunca cresce além disto).
@@ -36,6 +36,36 @@ self.addEventListener("activate", (event) => {
       await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
       await self.clients.claim();
     })()
+  );
+});
+
+// Notificações push: o servidor manda um JSON {title, body, url} e o SW mostra
+// a notificação mesmo com o app fechado.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) {}
+  const title = data.title || "VAP";
+  const options = {
+    body: data.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    vibrate: [80, 40, 80],
+    data: { url: data.url || "/dashboard.html" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Toque na notificação: foca uma aba já aberta ou abre o app.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const alvo = (event.notification.data && event.notification.data.url) || "/dashboard.html";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientes) => {
+      for (const c of clientes) {
+        if (c.url.includes(alvo) && "focus" in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(alvo);
+    })
   );
 });
 

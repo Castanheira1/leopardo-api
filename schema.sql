@@ -241,6 +241,21 @@ CREATE TABLE IF NOT EXISTS localizacoes_online (
 );
 CREATE INDEX IF NOT EXISTS idx_loc_online_atualizado ON localizacoes_online (atualizado_em);
 
+-- ------------------------------------------------------------
+-- Inscrições de notificação push (Web Push / VAPID). Uma linha por
+-- aparelho/navegador; o mesmo usuário pode ter várias. O servidor também
+-- cria esta tabela no boot (garantirTabelaPush) caso o schema não seja aplicado.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id SERIAL PRIMARY KEY,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions (usuario_id);
+
 -- Admin padrão (000000 / admin123)
 INSERT INTO usuarios (nome, funcao, matricula, senha_hash, is_admin)
 SELECT 'Administrador', 'Administrador', '000000',

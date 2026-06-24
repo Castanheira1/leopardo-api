@@ -313,6 +313,7 @@
     }
     function escolherPapel(papel) {
         localStorage.setItem('papel', papel);   // volta no mesmo modo ao reabrir o app
+        registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
@@ -1127,6 +1128,7 @@
             const papel = localStorage.getItem('papel');
             if (papel) escolherPapel(papel); else abrirEscolhaPapel();
         }
+        registrarPush(true);   // sincroniza a inscrição se a permissão já foi dada (sem popup)
         pollPropostas();
         setInterval(pollPropostas, 9000);
     })();
