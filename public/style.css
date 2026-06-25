@@ -654,16 +654,33 @@ body.theme-dark { background: #0b0b0d; }
 .viagem-map { position: absolute; inset: 0; }
 /* Tela "Chamando…" — pulso radar enquanto espera o outro aceitar */
 .chamando-box { text-align: center; }
-.chamando-radar { width: 120px; height: 120px; margin: 6px auto 16px; display: flex; align-items: center; justify-content: center; }
+.chamando-radar { position: relative; width: 150px; height: 150px; margin: 10px auto 22px; display: flex; align-items: center; justify-content: center; }
+/* anéis concêntricos que expandem (radar estilo Uber) */
+.chamando-ring {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 40px; height: 40px;
+    margin: -20px 0 0 -20px;
+    border-radius: 50%;
+    border: 2px solid rgba(234, 210, 152, 0.7);
+    animation: radarExpand 2.2s ease-out infinite;
+}
+.chamando-ring:nth-child(2) { animation-delay: 1.1s; }
 .chamando-dot {
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     background: #EAD298;
-    box-shadow: 0 0 0 0 rgba(234, 210, 152, 0.55);
-    animation: pingPulse 1.5s ease-out infinite;
+    box-shadow: 0 0 18px rgba(234, 210, 152, 0.6);
+    z-index: 1;
+    animation: pingPulse 1.6s ease-out infinite;
 }
-.chamando-sub { color: #cfd2d6; margin: 2px 0 18px; }
+.chamando-box h3 { font-size: 1.3rem; }
+.chamando-sub { color: #cfd2d6; margin: 2px 0 20px; }
+@keyframes radarExpand {
+    0%   { width: 40px; height: 40px; margin: -20px 0 0 -20px; opacity: 0.9; }
+    100% { width: 150px; height: 150px; margin: -75px 0 0 -75px; opacity: 0; }
+}
 @keyframes pingPulse {
     0%   { box-shadow: 0 0 0 0 rgba(234, 210, 152, 0.55); transform: scale(0.7); opacity: 1; }
     70%  { box-shadow: 0 0 0 32px rgba(234, 210, 152, 0); transform: scale(1); opacity: 0.9; }
