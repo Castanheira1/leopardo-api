@@ -312,8 +312,8 @@
         if (btn) btn.classList.add('active');
         // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
         // (ela pode ter sido parada ao entrar numa viagem).
-        if (id === 'tabPedir') { if (!selPed) initMapPedir(); else iniciarFrotaAoVivo(selPed.map); }
-        if (id === 'tabOferecer') { if (!selOfe) initMapOferecer(); else iniciarPedidosAoVivo(selOfe.map); }
+        if (id === 'tabPedir') { if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); selPed.dica(); } }
+        if (id === 'tabOferecer') { if (!selOfe) initMapOferecer(); else { iniciarPedidosAoVivo(selOfe.map); selOfe.recentrar(); selOfe.dica(); } }
     }
 
     /* -------- menu (hambúrguer) -------- */
@@ -458,7 +458,7 @@
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
 
         // Origem = você (bonequinho por sexo). Arrastável para ajustar o embarque.
         // Origem = você (bonequinho por sexo). Nunca deixa o ícone derrubar o mapa/frota.
@@ -500,32 +500,59 @@
             tracarRota();
         }
 
-        map.addListener('click', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+        // Duplo toque marca o local (evita criar rota a cada toque). Toque simples só avisa.
+        let ultimaDica = 0;
+        function dicaToque(forcar) {
+            const agora = Date.now();
+            if (!forcar && agora - ultimaDica < 4000) return;
+            ultimaDica = agora;
+            msg('Toque DUAS vezes no mapa para marcar o local.');
+        }
+        map.addListener('click', () => dicaToque());
+        map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
         mkOrigem.addListener('dragend', tracarRota);
 
-        const ac = new g.maps.places.Autocomplete(document.getElementById(inputId), { fields: ['geometry', 'name', 'formatted_address'] });
+        const inputEl = document.getElementById(inputId);
+        const ac = new g.maps.places.Autocomplete(inputEl, { fields: ['geometry', 'name', 'formatted_address'] });
         ac.bindTo('bounds', map);
         ac.addListener('place_changed', () => {
             const p = ac.getPlace();
-            if (p.geometry) setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.formatted_address || p.name);
+            if (p.geometry) {
+                setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.formatted_address || p.name);
+                inputEl.value = '';   // limpa a busca para o próximo endereço
+            }
         });
+
+        // Atualiza a origem para a localização ATUAL (evita ficar travado num lugar antigo).
+        async function recentrar() {
+            try {
+                const p = await obterLocalizacao();
+                mkOrigem.setPosition(p);
+                map.panTo(p);
+                if (destino) tracarRota();
+            } catch (_) { /* sem GPS agora: mantém a posição atual */ }
+        }
 
         return {
             map,
             getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
             getDestino: () => destino,
+            recentrar,
+            dica: () => dicaToque(true),
         };
     }
     async function initMapPedir() {
         selPed = await criarSeletor('mapPed', 'destPedInput');
         iniciarFrotaAoVivo(selPed.map);
         tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+        selPed.dica();   // instrução ao abrir
     }
     async function initMapOferecer() {
         selOfe = await criarSeletor('mapOfe', 'destOfeInput');
         acompanharProprioCarro(selOfe.map);
         iniciarPedidosAoVivo(selOfe.map);   // passageiros chamando carona no mapa
         tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+        selOfe.dica();   // instrução ao abrir
     }
 
     function horarioISO(id) {
