@@ -216,6 +216,20 @@
         </div>
     </div>
 
+    <!-- Passageiro chamando carona (visto pelo motorista no mapa) -->
+    <div id="modalPedido" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPedido()">
+        <div class="cam-box sol-box">
+            <div class="sol-badge">🙋 Pedindo carona</div>
+            <img id="pedidoSelfie" class="carro-foto" alt="" style="display:none;">
+            <h3 id="pedidoNome">Passageiro</h3>
+            <div id="pedidoRota" class="sol-rota"></div>
+            <div class="sol-actions">
+                <button type="button" class="btn btn-secondary" onclick="fecharPedido()">Fechar</button>
+                <button type="button" class="btn btn-primary" onclick="oferecerAoPedido()">Oferecer carona</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Painéis (abrem pelo menu): listas de caronas/pedidos e solicitações -->
     <div id="painelPassageiro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelPassageiro')">
         <div class="cam-box perfil-box painel-box">
@@ -289,7 +303,7 @@
         // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
         // (ela pode ter sido parada ao entrar numa viagem).
         if (id === 'tabPedir') { if (!selPed) initMapPedir(); else iniciarFrotaAoVivo(selPed.map); }
-        if (id === 'tabOferecer' && !selOfe) initMapOferecer();
+        if (id === 'tabOferecer') { if (!selOfe) initMapOferecer(); else iniciarPedidosAoVivo(selOfe.map); }
     }
 
     /* -------- menu (hambúrguer) -------- */
@@ -500,6 +514,7 @@
     async function initMapOferecer() {
         selOfe = await criarSeletor('mapOfe', 'destOfeInput');
         acompanharProprioCarro(selOfe.map);
+        iniciarPedidosAoVivo(selOfe.map);   // passageiros chamando carona no mapa
         tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
     }
 
@@ -867,6 +882,7 @@
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+        if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         if (selfCar.timer) { clearInterval(selfCar.timer); selfCar.timer = null; }
 
         const ehMotorista = v.motorista_id === user.id;
@@ -1187,6 +1203,65 @@
         }
         tick();
         fleet.timer = setInterval(tick, 5000);
+    }
+
+    // Passageiros pedindo carona aparecem no mapa do MOTORISTA como bonequinhos
+    // "acenando" (marcador pulando). O motorista toca e oferece a carona.
+    let pedidoFleet = { markers: {}, timer: null };
+    function iniciarPedidosAoVivo(map) {
+        if (pedidoFleet.timer) clearInterval(pedidoFleet.timer);
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/pedidos');
+                if (!r || !r.ok) return;
+                const lista = (await r.json()).filter(p => p.passageiro_id !== user.id && p.origem_lat != null);
+                const vistos = {};
+                lista.forEach((p) => {
+                    vistos[p.id] = true;
+                    const pos = { lat: +p.origem_lat, lng: +p.origem_lng };
+                    if (pedidoFleet.markers[p.id]) {
+                        pedidoFleet.markers[p.id].setPosition(pos);
+                        pedidoFleet.markers[p.id]._p = p;
+                    } else {
+                        let icone; try { icone = pessoaIcon(p.passageiro_sexo); } catch (_) { icone = undefined; }
+                        const mk = new g.maps.Marker({
+                            position: pos, map, icon: icone, zIndex: 900,
+                            title: (p.passageiro_nome || 'Passageiro') + ' — pedindo carona',
+                            animation: g.maps.Animation.BOUNCE,   // "acenando/chamando"
+                        });
+                        mk._p = p;
+                        mk.addListener('click', () => mostrarPedido(mk._p));
+                        pedidoFleet.markers[p.id] = mk;
+                    }
+                });
+                Object.keys(pedidoFleet.markers).forEach((id) => {
+                    if (!vistos[id]) { pedidoFleet.markers[id].setMap(null); delete pedidoFleet.markers[id]; }
+                });
+            } catch (_) {}
+        }
+        tick();
+        pedidoFleet.timer = setInterval(tick, 6000);
+    }
+    // Motorista toca num passageiro que está chamando e oferece a carona.
+    let pedidoSel = null;
+    function mostrarPedido(p) {
+        pedidoSel = p;
+        document.getElementById('pedidoNome').textContent = p.passageiro_nome || 'Passageiro';
+        document.getElementById('pedidoRota').innerHTML = `${ICN.pin} ${p.destino_texto || 'destino no mapa'} • ${p.pessoas || 1} pessoa(s)`;
+        const sf = document.getElementById('pedidoSelfie');
+        if (p.selfie_url) { sf.src = p.selfie_url; sf.style.display = 'block'; } else { sf.style.display = 'none'; }
+        document.getElementById('modalPedido').style.display = 'flex';
+    }
+    function fecharPedido() { document.getElementById('modalPedido').style.display = 'none'; }
+    async function oferecerAoPedido() {
+        const p = pedidoSel;
+        fecharPedido();
+        if (!p) return;
+        if (!habHoje) { msg('Ative o modo motorista no Perfil para oferecer.', 'error'); abrirPerfil(); return; }
+        const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: p.id }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg('Oferta enviada! Aguarde o passageiro confirmar.');
     }
 
     // Mostra o próprio carro do motorista no mapa de "Oferecer" (atualiza a cada 5s).

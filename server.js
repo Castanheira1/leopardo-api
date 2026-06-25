@@ -598,6 +598,21 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
       ]
     );
     res.json(rows[0]);
+
+    // Notifica os motoristas ativos (habilitados hoje) que há um novo pedido.
+    try {
+      const nome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [req.user.id])).rows[0]?.nome || "Um colega";
+      const motoristas = (await pool.query(
+        `SELECT DISTINCT motorista_id FROM habilitacoes_motorista
+         WHERE status = 'ativa' AND created_at > NOW() - INTERVAL '24 hours' AND motorista_id <> $1`,
+        [req.user.id]
+      )).rows;
+      motoristas.forEach((m) => enviarPush(m.motorista_id, {
+        title: "🙋 Alguém pediu carona",
+        body: `${nome} está pedindo carona. Abra o app para oferecer.`,
+        url: "/dashboard.html",
+      }));
+    } catch (e) { console.warn("push pedido:", e.message); }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar pedido" });
@@ -627,7 +642,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
     const orderBy = lat && lng ? "dist_destino ASC" : "p.created_at DESC";
 
     const { rows } = await pool.query(
-      `SELECT p.*, u.nome AS passageiro_nome ${dist}
+      `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo ${dist}
        FROM pedidos p
        JOIN usuarios u ON p.passageiro_id = u.id
        WHERE p.status = 'aberto'
