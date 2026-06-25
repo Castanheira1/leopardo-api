@@ -230,6 +230,16 @@
         </div>
     </div>
 
+    <!-- "Chamando…" — enquanto espera o outro lado aceitar -->
+    <div id="modalChamando" class="cam-overlay" style="display:none;">
+        <div class="cam-box chamando-box">
+            <div class="chamando-radar"><span class="chamando-dot"></span></div>
+            <h3>Chamando…</h3>
+            <p class="chamando-sub">Aguardando <strong id="chamandoNome">o motorista</strong> aceitar</p>
+            <button type="button" class="btn btn-danger" onclick="cancelarChamando()">Cancelar</button>
+        </div>
+    </div>
+
     <!-- Painéis (abrem pelo menu): listas de caronas/pedidos e solicitações -->
     <div id="painelPassageiro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelPassageiro')">
         <div class="cam-box perfil-box painel-box">
@@ -302,8 +312,8 @@
         if (btn) btn.classList.add('active');
         // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
         // (ela pode ter sido parada ao entrar numa viagem).
-        if (id === 'tabPedir') { if (!selPed) initMapPedir(); else iniciarFrotaAoVivo(selPed.map); }
-        if (id === 'tabOferecer') { if (!selOfe) initMapOferecer(); else iniciarPedidosAoVivo(selOfe.map); }
+        if (id === 'tabPedir') { if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); selPed.dica(); } }
+        if (id === 'tabOferecer') { if (!selOfe) initMapOferecer(); else { iniciarPedidosAoVivo(selOfe.map); selOfe.recentrar(); selOfe.dica(); } }
     }
 
     /* -------- menu (hambúrguer) -------- */
@@ -448,7 +458,7 @@
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
 
         // Origem = você (bonequinho por sexo). Arrastável para ajustar o embarque.
         // Origem = você (bonequinho por sexo). Nunca deixa o ícone derrubar o mapa/frota.
@@ -490,32 +500,59 @@
             tracarRota();
         }
 
-        map.addListener('click', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+        // Duplo toque marca o local (evita criar rota a cada toque). Toque simples só avisa.
+        let ultimaDica = 0;
+        function dicaToque(forcar) {
+            const agora = Date.now();
+            if (!forcar && agora - ultimaDica < 4000) return;
+            ultimaDica = agora;
+            msg('Toque DUAS vezes no mapa para marcar o local.');
+        }
+        map.addListener('click', () => dicaToque());
+        map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
         mkOrigem.addListener('dragend', tracarRota);
 
-        const ac = new g.maps.places.Autocomplete(document.getElementById(inputId), { fields: ['geometry', 'name', 'formatted_address'] });
+        const inputEl = document.getElementById(inputId);
+        const ac = new g.maps.places.Autocomplete(inputEl, { fields: ['geometry', 'name', 'formatted_address'] });
         ac.bindTo('bounds', map);
         ac.addListener('place_changed', () => {
             const p = ac.getPlace();
-            if (p.geometry) setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.formatted_address || p.name);
+            if (p.geometry) {
+                setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.formatted_address || p.name);
+                inputEl.value = '';   // limpa a busca para o próximo endereço
+            }
         });
+
+        // Atualiza a origem para a localização ATUAL (evita ficar travado num lugar antigo).
+        async function recentrar() {
+            try {
+                const p = await obterLocalizacao();
+                mkOrigem.setPosition(p);
+                map.panTo(p);
+                if (destino) tracarRota();
+            } catch (_) { /* sem GPS agora: mantém a posição atual */ }
+        }
 
         return {
             map,
             getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
             getDestino: () => destino,
+            recentrar,
+            dica: () => dicaToque(true),
         };
     }
     async function initMapPedir() {
         selPed = await criarSeletor('mapPed', 'destPedInput');
         iniciarFrotaAoVivo(selPed.map);
         tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+        selPed.dica();   // instrução ao abrir
     }
     async function initMapOferecer() {
         selOfe = await criarSeletor('mapOfe', 'destOfeInput');
         acompanharProprioCarro(selOfe.map);
         iniciarPedidosAoVivo(selOfe.map);   // passageiros chamando carona no mapa
         tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+        selOfe.dica();   // instrução ao abrir
     }
 
     function horarioISO(id) {
@@ -584,8 +621,27 @@
             }) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            msg('Solicitação enviada. Aguardando confirmação do motorista.');
+            mostrarChamando(carroSel && carroSel.nome, d.id);
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
+    }
+
+    /* -------- tela "Chamando…" (espera o outro aceitar) -------- */
+    let chamandoId = null;
+    function mostrarChamando(nome, propostaId) {
+        chamandoId = propostaId || null;
+        document.getElementById('chamandoNome').textContent = nome || 'o motorista';
+        document.getElementById('modalChamando').style.display = 'flex';
+    }
+    function fecharChamando() {
+        chamandoId = null;
+        document.getElementById('modalChamando').style.display = 'none';
+    }
+    async function cancelarChamando() {
+        const id = chamandoId;
+        fecharChamando();
+        if (id) { propostasTratadas.add(id); await fetchWithAuth('/api/propostas/' + id + '/cancelar', { method: 'POST' }).catch(() => {}); }
+        msg('Chamada cancelada.');
+        loadPropostas();
     }
 
     /* -------- passageiro clica no carro no mapa e pede a carona -------- */
@@ -832,6 +888,14 @@
             const r = await fetchWithAuth('/api/propostas');
             if (!r || !r.ok) return;
             const props = await r.json();
+
+            // Chamando…: fecha se a proposta foi recusada (some também quando aceita,
+            // pois o bloco "viva" abaixo abre a viagem).
+            if (chamandoId) {
+                const cp = props.find(p => p.id === chamandoId);
+                if (!cp || cp.status === 'recusado') { fecharChamando(); if (cp) msg('Não foi aceito desta vez.', 'error'); }
+            }
+
             // não atropela: escolha de papel, câmera, perfil ou um card já aberto
             if (solicitacaoAtual) return;
             if (document.getElementById('telaPapel').style.display === 'flex') return;
@@ -851,10 +915,14 @@
             if (viva) {
                 viagensAbertas.add(viva.viagem_id);
                 propostasTratadas.add(viva.id);
+                fecharChamando();
                 msg('Carona aceita! Acompanhe ao vivo.');
                 abrirViagem(viva.viagem_id);
                 return;
             }
+
+            // Esperando aceite (chamando): não interrompe com outros modais.
+            if (chamandoId) return;
 
             // Solicitação pendente recebida → aparece estilo Uber.
             const pend = props.filter(p => p.sou_destinatario && p.status === 'pendente');
@@ -1261,7 +1329,7 @@
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: p.id }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Oferta enviada! Aguarde o passageiro confirmar.');
+        mostrarChamando(p.passageiro_nome, d.id);
     }
 
     // Mostra o próprio carro do motorista no mapa de "Oferecer" (atualiza a cada 5s).
