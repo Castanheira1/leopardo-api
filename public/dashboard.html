@@ -703,7 +703,7 @@
         g = await carregarMaps();
         const origem = { lat: +c.origem_lat, lng: +c.origem_lng };
         const destino = c.destino_lat ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: origem, zoom: 16, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
         if (destino) {
             const ds = new g.maps.DirectionsService();
             const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, polylineOptions: { strokeColor: '#000000', strokeWeight: 6 } });
@@ -972,7 +972,7 @@
         const embarque = v.origem_lat != null ? { lat: +v.origem_lat, lng: +v.origem_lng } : null;
         const destino = v.destino_lat != null ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
         const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 16, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
 
         // Pinos fixos: embarque (verde) e destino (dourado).
         const pin = (cor) => ({ path: g.maps.SymbolPath.CIRCLE, scale: 7, fillColor: cor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 });
@@ -1020,18 +1020,26 @@
             return;
         }
         if (btnAnd) btnAnd.style.display = 'inline-block';
+        const navBtn = `<button class="btn btn-primary" onclick="navegar()">${ICN.route} Navegar</button>`;
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
                 titulo.textContent = 'A caminho do passageiro';
-                ctrl.innerHTML = wpp + `<button class="btn btn-primary" onclick="cheguei(${vv.id})">Cheguei — iniciar viagem</button>`;
+                ctrl.innerHTML = navBtn + `<button class="btn btn-secondary" onclick="cheguei(${vv.id})">Embarcou — iniciar</button>` + wpp;
             } else {
                 titulo.textContent = 'Em viagem ao destino';
-                ctrl.innerHTML = wpp + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>`;
+                ctrl.innerHTML = navBtn + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>` + wpp;
             }
         } else {
             titulo.textContent = vv.fase === 'encontro' ? 'Motorista a caminho de você' : 'Em viagem ao destino';
-            ctrl.innerHTML = wpp;
+            ctrl.innerHTML = navBtn + wpp;
         }
+    }
+    // Abre o Google Maps no MODO NAVEGAÇÃO (turn-by-turn de verdade) até o alvo da fase.
+    function navegar() {
+        const vv = viagemView; if (!vv) return;
+        const alvo = (vv.ehMotorista && vv.fase === 'encontro') ? (vv.posPassageiro || vv.embarque) : (vv.destino || vv.embarque);
+        if (!alvo) return msg('Local indisponível para navegar.', 'error');
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${alvo.lat},${alvo.lng}&travelmode=driving&dir_action=navigate`, '_blank');
     }
 
     // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
