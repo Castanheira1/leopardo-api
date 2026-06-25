@@ -202,6 +202,7 @@
                     messageDiv.textContent = 'Conta criada! Entrando...';
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.removeItem('papel');   // nova conta → pergunta o papel
                     setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
                 } else {
                     messageDiv.className = 'message error';
