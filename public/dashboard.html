@@ -112,6 +112,7 @@
             <div id="tabViagem" class="tab-content">
                 <div class="viagem-wrap">
                     <div id="mapViagem" class="viagem-map"></div>
+                    <div id="viagemPing" class="map-ping" style="display:none;"></div>
                     <div id="viagemSheet" class="viagem-sheet">
                         <div class="sheet-grip" id="sheetGrip"><span></span></div>
                         <div class="sheet-top">
@@ -943,15 +944,18 @@
         const ctrl = document.getElementById('viagemControles');
         const wpp = vv.tel ? `<a class="btn btn-success" href="${linkWhatsApp(vv.tel)}" target="_blank">${ICN.phone} WhatsApp</a>` : '';
         const btnAnd = document.getElementById('btnViagemAndamento');
+        const ping = document.getElementById('viagemPing');
         if (vv.status !== 'em_andamento') {
-            // Concluída: esconde o atalho "Em andamento" e oferece a saída.
+            // Concluída: esconde o atalho "Em andamento", o pulso e oferece a saída.
             titulo.textContent = 'Viagem concluída';
             ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span> '
                 + '<button class="btn btn-primary" onclick="sairDaViagem()">Voltar ao início</button>';
             if (btnAnd) btnAnd.style.display = 'none';
+            if (ping) ping.style.display = 'none';
             return;
         }
         if (btnAnd) btnAnd.style.display = 'inline-block';
+        if (ping) ping.style.display = 'block';   // pulso "chamada em andamento"
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
                 titulo.textContent = 'A caminho do passageiro';
@@ -1009,6 +1013,7 @@
         if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
         if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
         const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+        const ping = document.getElementById('viagemPing'); if (ping) ping.style.display = 'none';
     }
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
