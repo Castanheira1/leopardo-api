@@ -454,16 +454,17 @@
     }
 
     /* -------- seletor de rota (mapa) -------- */
-    async function criarSeletor(mapId, inputId) {
+    async function criarSeletor(mapId, inputId, comoCarro) {
         g = await carregarMaps();
         let origem = null;
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
         const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
 
-        // Origem = você (bonequinho por sexo). Arrastável para ajustar o embarque.
-        // Origem = você (bonequinho por sexo). Nunca deixa o ícone derrubar o mapa/frota.
-        let iconeUser; try { iconeUser = pessoaIcon(user.sexo); } catch (_) { iconeUser = undefined; }
-        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: iconeUser, title: 'Você (arraste para ajustar o embarque)' });
+        // Seu marcador: motorista vê o CARRINHO; passageiro vê o bonequinho (por sexo).
+        // Nunca deixa o ícone derrubar o mapa caso falhe.
+        let iconeUser;
+        try { iconeUser = comoCarro ? CAR_ICON_URL : pessoaIcon(user.sexo); } catch (_) { iconeUser = undefined; }
+        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: iconeUser, title: comoCarro ? 'Seu carro (arraste para ajustar a saída)' : 'Você (arraste para ajustar o embarque)' });
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
@@ -548,8 +549,7 @@
         selPed.dica();   // instrução ao abrir
     }
     async function initMapOferecer() {
-        selOfe = await criarSeletor('mapOfe', 'destOfeInput');
-        acompanharProprioCarro(selOfe.map);
+        selOfe = await criarSeletor('mapOfe', 'destOfeInput', true);   // motorista = carrinho
         iniciarPedidosAoVivo(selOfe.map);   // passageiros chamando carona no mapa
         tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
         selOfe.dica();   // instrução ao abrir
