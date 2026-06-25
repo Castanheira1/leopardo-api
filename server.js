@@ -795,7 +795,7 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
               CASE WHEN pr.status = 'aceito' THEN pu.telefone ELSE NULL END AS para_telefone,
               c.origem_texto AS c_origem, c.destino_texto AS c_destino, c.horario AS c_horario,
               p.origem_texto AS p_origem, p.destino_texto AS p_destino, p.horario AS p_horario,
-              v.id AS viagem_id,
+              v.id AS viagem_id, v.status AS viagem_status,
               COALESCE(hm.selfie_url, hped.selfie_url) AS motorista_selfie,
               COALESCE(hm.selfie_em, hped.selfie_em) AS motorista_selfie_em,
               COALESCE(hm.foto_carro_url, hped.foto_carro_url) AS motorista_carro,
