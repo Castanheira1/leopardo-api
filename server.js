@@ -584,6 +584,9 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
   if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória para pedir carona" });
 
   try {
+    // Um pedido aberto por passageiro: cancela os anteriores (evita bonequinhos
+    // duplicados no mapa do motorista).
+    await pool.query("UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto'", [req.user.id]);
     const { rows } = await pool.query(
       `INSERT INTO pedidos
          (passageiro_id, origem_texto, origem_lat, origem_lng,

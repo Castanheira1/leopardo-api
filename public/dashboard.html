@@ -230,13 +230,13 @@
         </div>
     </div>
 
-    <!-- "Chamando…" — enquanto espera o outro lado aceitar -->
+    <!-- "Chamando…" — modo chamada estilo Uber (espera aceite / procura motorista) -->
     <div id="modalChamando" class="cam-overlay" style="display:none;">
         <div class="cam-box chamando-box">
-            <div class="chamando-radar"><span class="chamando-dot"></span></div>
-            <h3>Chamando…</h3>
-            <p class="chamando-sub">Aguardando <strong id="chamandoNome">o motorista</strong> aceitar</p>
-            <button type="button" class="btn btn-danger" onclick="cancelarChamando()">Cancelar</button>
+            <div class="chamando-radar"><span class="chamando-ring"></span><span class="chamando-ring"></span><span class="chamando-dot"></span></div>
+            <h3 id="chamandoTitulo">Chamando…</h3>
+            <p class="chamando-sub" id="chamandoSub">Aguardando o motorista aceitar</p>
+            <button type="button" class="btn btn-danger btn-block" onclick="cancelarChamando()">Cancelar</button>
         </div>
     </div>
 
@@ -577,10 +577,9 @@
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            msg('Pedido criado! Veja as caronas que combinam.');
-            await matchCaronas(d.id);
+            await matchCaronas(d.id);   // popula o painel para consulta
             document.getElementById('acaoSheetPed').classList.add('collapsed');
-            abrirPainel('painelPassageiro');
+            mostrarChamando({ pedidoId: d.id });   // entra no modo chamada
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
 
@@ -621,25 +620,34 @@
             }) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            mostrarChamando(carroSel && carroSel.nome, d.id);
+            mostrarChamando({ nome: carroSel && carroSel.nome, propostaId: d.id });
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
 
-    /* -------- tela "Chamando…" (espera o outro aceitar) -------- */
+    /* -------- modo chamada (estilo Uber) -------- */
+    // chamandoId = proposta enviada esperando aceite; chamandoPedidoId = pedido
+    // postado procurando motorista.
     let chamandoId = null;
-    function mostrarChamando(nome, propostaId) {
+    let chamandoPedidoId = null;
+    function mostrarChamando({ nome, propostaId, pedidoId } = {}) {
         chamandoId = propostaId || null;
-        document.getElementById('chamandoNome').textContent = nome || 'o motorista';
+        chamandoPedidoId = pedidoId || null;
+        document.getElementById('chamandoTitulo').textContent = pedidoId ? 'Procurando motorista…' : 'Chamando…';
+        document.getElementById('chamandoSub').innerHTML = pedidoId
+            ? 'Avisamos os motoristas perto de você'
+            : `Aguardando <strong>${nome || 'o motorista'}</strong> aceitar`;
         document.getElementById('modalChamando').style.display = 'flex';
     }
     function fecharChamando() {
         chamandoId = null;
+        chamandoPedidoId = null;
         document.getElementById('modalChamando').style.display = 'none';
     }
     async function cancelarChamando() {
-        const id = chamandoId;
+        const prop = chamandoId, ped = chamandoPedidoId;
         fecharChamando();
-        if (id) { propostasTratadas.add(id); await fetchWithAuth('/api/propostas/' + id + '/cancelar', { method: 'POST' }).catch(() => {}); }
+        if (prop) { propostasTratadas.add(prop); await fetchWithAuth('/api/propostas/' + prop + '/cancelar', { method: 'POST' }).catch(() => {}); }
+        if (ped) { await fetchWithAuth('/api/pedidos/' + ped, { method: 'DELETE' }).catch(() => {}); }
         msg('Chamada cancelada.');
         loadPropostas();
     }
@@ -895,6 +903,12 @@
                 const cp = props.find(p => p.id === chamandoId);
                 if (!cp || cp.status === 'recusado') { fecharChamando(); if (cp) msg('Não foi aceito desta vez.', 'error'); }
             }
+            // Procurando motorista (pedido): se um motorista ofereceu, fecha a chamada
+            // para a oferta aparecer (modalSolicitacao abre logo abaixo).
+            if (chamandoPedidoId) {
+                const oferta = props.find(p => p.pedido_id === chamandoPedidoId && p.sou_destinatario && p.status === 'pendente');
+                if (oferta) { fecharChamando(); msg('Um motorista ofereceu carona!'); }
+            }
 
             // não atropela: escolha de papel, câmera, perfil ou um card já aberto
             if (solicitacaoAtual) return;
@@ -921,8 +935,8 @@
                 return;
             }
 
-            // Esperando aceite (chamando): não interrompe com outros modais.
-            if (chamandoId) return;
+            // Esperando aceite/procurando (chamando aberto): não interrompe com outros modais.
+            if (chamandoId || chamandoPedidoId) return;
 
             // Solicitação pendente recebida → aparece estilo Uber.
             const pend = props.filter(p => p.sou_destinatario && p.status === 'pendente');
@@ -1337,7 +1351,7 @@
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: p.id }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        mostrarChamando(p.passageiro_nome, d.id);
+        mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id });
     }
 
     // Mostra o próprio carro do motorista no mapa de "Oferecer" (atualiza a cada 5s).
