@@ -243,6 +243,7 @@
                 if (response.ok) {
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.removeItem('papel');   // novo login → pergunta o papel
                     window.location.href = data.user.is_admin ? 'admin.html' : 'dashboard.html';
                 } else {
                     errorDiv.textContent = data.error || 'Erro ao fazer login';
