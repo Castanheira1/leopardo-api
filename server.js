@@ -910,9 +910,12 @@ app.post("/api/propostas/:id/recusar", verificarAuth, async (req, res) => {
 // começar. Reabre a oferta/pedido para novos matches.
 app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
   try {
+    // Permite cancelar uma proposta PENDENTE (chamada em espera) ou ACEITA (antes da
+    // viagem iniciar). Vale para quem enviou ou recebeu.
     const pr = (await pool.query(
       `UPDATE propostas SET status = 'recusado'
-       WHERE id = $1 AND (de_usuario_id = $2 OR para_usuario_id = $2) AND status = 'aceito'
+       WHERE id = $1 AND (de_usuario_id = $2 OR para_usuario_id = $2)
+         AND status IN ('pendente', 'aceito')
          AND NOT EXISTS (
            SELECT 1 FROM viagens v WHERE v.proposta_id = propostas.id AND v.status = 'em_andamento'
          )
