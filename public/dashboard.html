@@ -312,8 +312,15 @@
         if (btn) btn.classList.add('active');
         // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
         // (ela pode ter sido parada ao entrar numa viagem).
-        if (id === 'tabPedir') { if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); selPed.dica(); } }
-        if (id === 'tabOferecer') { if (!selOfe) initMapOferecer(); else { iniciarPedidosAoVivo(selOfe.map); selOfe.recentrar(); selOfe.dica(); } }
+        // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
+        if (id === 'tabPedir') {
+            if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
+            if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); selPed.dica(); }
+        }
+        if (id === 'tabOferecer') {
+            if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+            if (!selOfe) initMapOferecer(); else { iniciarPedidosAoVivo(selOfe.map); selOfe.recentrar(); selOfe.dica(); }
+        }
     }
 
     /* -------- menu (hambúrguer) -------- */
@@ -892,6 +899,7 @@
         if (aceito && d.viagem_id) { viagensAbertas.add(d.viagem_id); abrirViagem(d.viagem_id); }
     }
     async function pollPropostas() {
+        if (document.hidden) return;   // app em segundo plano: não consome rede
         try {
             const r = await fetchWithAuth('/api/propostas');
             if (!r || !r.ok) return;
@@ -923,9 +931,11 @@
                 return;
             }
 
-            // Carona aceita com viagem criada → abre o rastreamento sozinho para quem
-            // ainda não viu (o passageiro que pediu, ou o motorista, como reforço).
-            const viva = props.find(p => p.status === 'aceito' && p.viagem_id && !viagensAbertas.has(p.viagem_id));
+            // Carona aceita com viagem EM ANDAMENTO → abre o rastreamento sozinho. Só
+            // viagens em andamento (não conta proposta antiga cuja viagem já concluiu —
+            // isso causava "aceite falso").
+            const viva = props.find(p => p.status === 'aceito' && p.viagem_id
+                && p.viagem_status === 'em_andamento' && !viagensAbertas.has(p.viagem_id));
             if (viva) {
                 viagensAbertas.add(viva.viagem_id);
                 propostasTratadas.add(viva.id);
@@ -1265,6 +1275,7 @@
     function iniciarFrotaAoVivo(map) {
         if (fleet.timer) clearInterval(fleet.timer);
         async function tick() {
+            if (document.hidden) return;   // segundo plano: não polla
             try {
                 const r = await fetchWithAuth('/api/motoristas-online');
                 if (!r.ok) return;
@@ -1301,6 +1312,7 @@
     function iniciarPedidosAoVivo(map) {
         if (pedidoFleet.timer) clearInterval(pedidoFleet.timer);
         async function tick() {
+            if (document.hidden) return;   // segundo plano: não polla
             try {
                 const r = await fetchWithAuth('/api/pedidos');
                 if (!r || !r.ok) return;
