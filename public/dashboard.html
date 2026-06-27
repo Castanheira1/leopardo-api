@@ -1308,13 +1308,48 @@
 
     // Passageiros pedindo carona aparecem no mapa do MOTORISTA como bonequinhos
     // "acenando" (marcador pulando). O motorista toca e oferece a carona.
+    // Marcador "pulsando" (radar) por sexo, no mapa (overlay HTML). Azul = homem,
+    // rosa = mulher, cinza = não informado. Definido lazy (precisa do g.maps carregado).
+    let _PulseClass = null;
+    function criarPulse(map, pos, sexo, onClick, titulo) {
+        if (!_PulseClass) {
+            _PulseClass = class extends g.maps.OverlayView {
+                constructor(p, s, cb, t) { super(); this.pos = p; this.sexo = s; this.cb = cb; this.titulo = t; this.div = null; }
+                onAdd() {
+                    const cor = this.sexo === 'F' ? '#ec4899' : this.sexo === 'M' ? '#2563eb' : '#9ca3af';
+                    const d = document.createElement('div');
+                    d.className = 'map-pulse';
+                    d.title = this.titulo || '';
+                    d.style.setProperty('--cor', cor);
+                    d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
+                    d.addEventListener('click', (e) => { e.stopPropagation(); this.cb && this.cb(); });
+                    this.div = d;
+                    this.getPanes().overlayMouseTarget.appendChild(d);
+                }
+                draw() {
+                    if (!this.div) return;
+                    const pt = this.getProjection().fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+                    if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
+                }
+                setPosition(p) { this.pos = p; this.draw(); }
+                onRemove() { if (this.div) { this.div.remove(); this.div = null; } }
+            };
+        }
+        const o = new _PulseClass(pos, sexo, onClick, titulo);
+        o.setMap(map);
+        return o;
+    }
+
     let pedidoFleet = { markers: {}, timer: null };
     function iniciarPedidosAoVivo(map) {
         if (pedidoFleet.timer) clearInterval(pedidoFleet.timer);
         async function tick() {
             if (document.hidden) return;   // segundo plano: não polla
             try {
-                const r = await fetchWithAuth('/api/pedidos');
+                // Passa a posição do motorista: o servidor devolve só quem está PERTO.
+                const o = selOfe ? selOfe.getOrigem() : null;
+                const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
+                const r = await fetchWithAuth('/api/pedidos' + q);
                 if (!r || !r.ok) return;
                 const lista = (await r.json()).filter(p => p.passageiro_id !== user.id && p.origem_lat != null);
                 const vistos = {};
@@ -1325,14 +1360,9 @@
                         pedidoFleet.markers[p.id].setPosition(pos);
                         pedidoFleet.markers[p.id]._p = p;
                     } else {
-                        let icone; try { icone = pessoaIcon(p.passageiro_sexo); } catch (_) { icone = undefined; }
-                        const mk = new g.maps.Marker({
-                            position: pos, map, icon: icone, zIndex: 900,
-                            title: (p.passageiro_nome || 'Passageiro') + ' — pedindo carona',
-                            animation: g.maps.Animation.BOUNCE,   // "acenando/chamando"
-                        });
+                        const titulo = (p.passageiro_nome || 'Passageiro') + ' — pedindo carona';
+                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo);
                         mk._p = p;
-                        mk.addListener('click', () => mostrarPedido(mk._p));
                         pedidoFleet.markers[p.id] = mk;
                     }
                 });
@@ -1343,6 +1373,11 @@
         }
         tick();
         pedidoFleet.timer = setInterval(tick, 6000);
+    }
+    // Remove o pulso de um pedido na hora (após o motorista oferecer/aceitar).
+    function removerPulsoPedido(pedidoId) {
+        const mk = pedidoFleet.markers[pedidoId];
+        if (mk) { mk.setMap(null); delete pedidoFleet.markers[pedidoId]; }
     }
     // Motorista toca num passageiro que está chamando e oferece a carona.
     let pedidoSel = null;
@@ -1363,6 +1398,8 @@
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: p.id }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (navigator.vibrate) navigator.vibrate(80);   // vibrasinha curta ao aceitar
+        removerPulsoPedido(p.id);                        // o círculo pulsando some
         mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id });
     }
 
