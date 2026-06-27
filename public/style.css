@@ -519,7 +519,7 @@ body {
     left: 10px;
     right: 10px;
     width: auto;
-    z-index: 5;
+    z-index: 51;   /* acima da navbar fixa (50): a busca nunca fica escondida */
     margin: 0;
     background: #fff;
     border-color: transparent;
@@ -686,6 +686,12 @@ body.theme-dark { background: #0b0b0d; }
     70%  { box-shadow: 0 0 0 32px rgba(234, 210, 152, 0); transform: scale(1); opacity: 0.9; }
     100% { box-shadow: 0 0 0 0 rgba(234, 210, 152, 0); transform: scale(0.7); opacity: 1; }
 }
+/* Pulso "radar" no mapa do motorista: passageiro pedindo carona, cor por sexo (--cor) */
+.map-pulse { position: absolute; transform: translate(-50%, -50%); width: 0; height: 0; cursor: pointer; }
+.map-pulse .mp-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--cor); box-shadow: 0 0 10px var(--cor); }
+.map-pulse .mp-ring { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--cor); animation: mpExpand 1.8s ease-out infinite; }
+.map-pulse .mp-ring:nth-child(2) { animation-delay: 0.9s; }
+@keyframes mpExpand { 0% { transform: scale(0.6); opacity: 0.85; } 100% { transform: scale(3.4); opacity: 0; } }
 .viagem-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease; touch-action: none; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; }

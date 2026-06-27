@@ -602,17 +602,30 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     );
     res.json(rows[0]);
 
-    // Notifica os motoristas ativos (habilitados hoje) que há um novo pedido.
+    // Notifica só os motoristas ativos MAIS PERTO do embarque (não espalha para
+    // todos nem para quem está longe). Ordena por distância e limita aos N mais perto.
     try {
+      const ped = rows[0];
       const nome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [req.user.id])).rows[0]?.nome || "Um colega";
       const motoristas = (await pool.query(
-        `SELECT DISTINCT motorista_id FROM habilitacoes_motorista
-         WHERE status = 'ativa' AND created_at > NOW() - INTERVAL '24 hours' AND motorista_id <> $1`,
-        [req.user.id]
+        `SELECT motorista_id FROM (
+           SELECT DISTINCT ON (h.motorista_id) h.motorista_id,
+                  ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
+           FROM habilitacoes_motorista h
+           JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
+           WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
+             AND l.atualizado_em > NOW() - INTERVAL '10 minutes'
+             AND h.motorista_id <> $3
+           ORDER BY h.motorista_id, h.created_at DESC
+         ) s
+         WHERE s.dist <= 15
+         ORDER BY s.dist ASC
+         LIMIT 8`,
+        [ped.origem_lat, ped.origem_lng, req.user.id]
       )).rows;
       motoristas.forEach((m) => enviarPush(m.motorista_id, {
-        title: "🙋 Alguém pediu carona",
-        body: `${nome} está pedindo carona. Abra o app para oferecer.`,
+        title: "🙋 Carona perto de você",
+        body: `${nome} está pedindo carona aqui perto. Abra o app para oferecer.`,
         url: "/dashboard.html",
       }));
     } catch (e) { console.warn("push pedido:", e.message); }
@@ -640,17 +653,32 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       return res.json(rows);
     }
 
-    const dist = lat && lng ? `, ${haversine("p.destino_lat", "p.destino_lng", "$1", "$2")} AS dist_destino` : "";
-    const params = lat && lng ? [lat, lng] : [];
-    const orderBy = lat && lng ? "dist_destino ASC" : "p.created_at DESC";
+    // Com lat/lng (mapa do motorista): só passageiros PERTO do embarque, ordenados por
+    // distância e limitados — evita poluir a tela com gente longe quando há muita gente.
+    if (lat && lng) {
+      const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
+      const { rows } = await pool.query(
+        `SELECT * FROM (
+           SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
+                  ${distOrigem} AS dist_origem
+           FROM pedidos p
+           JOIN usuarios u ON p.passageiro_id = u.id
+           WHERE p.status = 'aberto'
+         ) s
+         WHERE s.dist_origem <= 15
+         ORDER BY s.dist_origem ASC
+         LIMIT 60`,
+        [lat, lng]
+      );
+      return res.json(rows);
+    }
 
     const { rows } = await pool.query(
-      `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo ${dist}
+      `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo
        FROM pedidos p
        JOIN usuarios u ON p.passageiro_id = u.id
        WHERE p.status = 'aberto'
-       ORDER BY ${orderBy}`,
-      params
+       ORDER BY p.created_at DESC`
     );
     res.json(rows);
   } catch (err) {
