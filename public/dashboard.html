@@ -604,6 +604,21 @@
     }
 
     /* -------- pedir carona -------- */
+    // Geocodificação reversa: posição {lat,lng} -> endereço escrito (para mostrar
+    // ORIGEM e DESTINO por nome, não só a linha da rota). Nunca lança.
+    let _geocoder = null;
+    function geocodeReverso(pos) {
+        return new Promise((resolve) => {
+            try {
+                if (!g || !g.maps || !pos) return resolve(null);
+                _geocoder = _geocoder || new g.maps.Geocoder();
+                _geocoder.geocode({ location: pos }, (res, status) => {
+                    resolve(status === 'OK' && res && res[0] ? res[0].formatted_address : null);
+                });
+            } catch (_) { resolve(null); }
+        });
+    }
+
     async function pedirCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
@@ -611,8 +626,9 @@
         const origem = selPed.getOrigem();
         try {
             const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie (segurança da viagem)' });
+            const origemTexto = await geocodeReverso(origem);   // nome do ponto de embarque
             const body = {
-                origem_lat: origem.lat, origem_lng: origem.lng,
+                origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
                 horario: horarioISO('horaPed'), pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
@@ -711,7 +727,9 @@
     function mostrarCaronaDoCarro(m) {
         carroSel = m;
         document.getElementById('carroNome').textContent = m.nome || 'Motorista';
-        document.getElementById('carroRota').innerHTML = `${ICN.pin} ${m.origem_texto || 'origem'} → ${m.destino_texto || 'destino'}`;
+        document.getElementById('carroRota').innerHTML =
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${m.origem_texto || 'Local do motorista'}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${m.destino_texto || 'Destino no mapa'}</div>`;
         const placa = document.getElementById('carroPlaca');
         placa.textContent = m.placa || '';
         placa.style.display = m.placa ? 'inline-block' : 'none';
@@ -737,8 +755,9 @@
         const dest = selOfe && selOfe.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
         const origem = selOfe.getOrigem();
+        const origemTexto = await geocodeReverso(origem);   // nome do ponto de saída
         const body = {
-            origem_lat: origem.lat, origem_lng: origem.lng,
+            origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
             destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
             horario: null, vagas: +document.getElementById('vagasOfe').value || 1,
         };
@@ -1564,7 +1583,9 @@
         pedidoSel = p;
         document.getElementById('pedidoNome').textContent = p.passageiro_nome || 'Passageiro';
         document.getElementById('pedidoRota').innerHTML =
-            `${ICN.pin} ${p.origem_texto || 'origem'} → ${p.destino_texto || 'destino'} • ${p.pessoas || 1} pessoa(s)`;
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${p.origem_texto || 'Local do passageiro'}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${p.destino_texto || 'Destino no mapa'}</div>`
+            + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${p.pessoas || 1} pessoa(s)</div>`;
         const sf = document.getElementById('pedidoSelfie');
         if (p.selfie_url) { sf.src = p.selfie_url; sf.style.display = 'block'; } else { sf.style.display = 'none'; }
         document.getElementById('modalPedido').style.display = 'flex';
