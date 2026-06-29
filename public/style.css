@@ -546,7 +546,9 @@ body {
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
-    padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+    /* Folga extra embaixo p/ o botão não encostar na barra inferior do iPhone
+       (env() já adapta por modelo/tela; o +30px é a folga "um pouco mais acima"). */
+    padding: 0 16px calc(30px + env(safe-area-inset-bottom));
     transition: transform 0.22s ease;
     touch-action: none;
 }

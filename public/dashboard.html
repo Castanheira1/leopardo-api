@@ -606,9 +606,20 @@
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            await matchCaronas(d.id);   // popula o painel para consulta
+            // Limpa o horário escolhido: evita AGENDAR o próximo pedido sem querer
+            // (um horário futuro deixado no campo esconde o pedido dos motoristas).
+            const eraAgendado = body.horario && new Date(body.horario).getTime() > Date.now() + 60000;
+            document.getElementById('horaPed').value = '';
             document.getElementById('acaoSheetPed').classList.add('collapsed');
-            mostrarChamando({ pedidoId: d.id });   // entra no modo chamada
+            if (eraAgendado) {
+                // Pedido agendado: NÃO está procurando agora. Avisa quando vai aparecer.
+                const q = new Date(body.horario);
+                const quando = q.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                msg('Carona agendada para ' + quando + '. Os motoristas serão avisados nesse horário.');
+            } else {
+                await matchCaronas(d.id);   // popula o painel para consulta
+                mostrarChamando({ pedidoId: d.id });   // entra no modo chamada (procurando agora)
+            }
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
     }
 
@@ -1364,21 +1375,45 @@
                 lista.forEach((m) => {
                     vistos[m.id] = true;
                     const pos = { lat: +m.lat, lng: +m.lng };
-                    if (fleet.markers[m.id]) {
-                        fleet.markers[m.id].setPosition(pos);
-                        fleet.markers[m.id]._m = m;
+                    const dest = m.destino_lat != null ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
+                    let item = fleet.markers[m.id];
+                    if (item) {
+                        item.m = m;
+                        item.car.setPosition(pos);
+                        if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
                     } else {
-                        const mk = new g.maps.Marker({
+                        const car = new g.maps.Marker({
                             position: pos, map, icon: CAR_ICON_URL,
                             title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ''),
                         });
-                        mk._m = m;
-                        mk.addListener('click', () => mostrarCaronaDoCarro(mk._m));
-                        fleet.markers[m.id] = mk;
+                        const abrir = () => mostrarCaronaDoCarro(fleet.markers[m.id].m);
+                        car.addListener('click', abrir);
+                        // Para onde o carro vai (visível sem precisar tocar): linha tracejada
+                        // dourada até um pino no destino da carona.
+                        let linha = null, destinoMk = null;
+                        if (dest) {
+                            linha = new g.maps.Polyline({
+                                map, path: [pos, dest], geodesic: true, clickable: false,
+                                strokeOpacity: 0,
+                                icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: '#EAD298', strokeOpacity: 0.95, scale: 3 }, offset: '0', repeat: '12px' }],
+                            });
+                            destinoMk = new g.maps.Marker({
+                                position: dest, map, title: 'Destino: ' + (m.destino_texto || ''),
+                                icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5.5, fillColor: '#EAD298', fillOpacity: 1, strokeColor: '#0F3D3E', strokeWeight: 1.5 },
+                            });
+                            destinoMk.addListener('click', abrir);
+                        }
+                        fleet.markers[m.id] = { m, car, linha, destinoMk };
                     }
                 });
                 Object.keys(fleet.markers).forEach((id) => {
-                    if (!vistos[id]) { fleet.markers[id].setMap(null); delete fleet.markers[id]; }
+                    if (!vistos[id]) {
+                        const it = fleet.markers[id];
+                        it.car.setMap(null);
+                        if (it.linha) it.linha.setMap(null);
+                        if (it.destinoMk) it.destinoMk.setMap(null);
+                        delete fleet.markers[id];
+                    }
                 });
             } catch (_) {}
         }
