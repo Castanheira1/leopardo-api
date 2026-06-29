@@ -1094,34 +1094,43 @@
             return;
         }
         if (btnAnd) btnAnd.style.display = 'inline-block';
-        const navBtn = `<button class="btn btn-primary" onclick="navegar()">${ICN.route} Navegar</button>`;
+        // "Navegar" agora é DENTRO do app (segue você no mapa + próximo passo). A voz
+        // (turn-by-turn falado) só existe no app do Google Maps, então fica como opção.
+        const navBtn = `<button class="btn btn-primary" onclick="navegarApp()">${ICN.route} Navegar</button>`;
+        const vozBtn = `<button class="btn btn-secondary" onclick="navegarVoz()" title="Abrir o Google Maps com voz">${ICN.phone} Voz</button>`;
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
                 titulo.textContent = 'A caminho do passageiro';
-                ctrl.innerHTML = navBtn + `<button class="btn btn-secondary" onclick="cheguei(${vv.id})">Embarcou — iniciar</button>` + wpp;
+                ctrl.innerHTML = navBtn + vozBtn + `<button class="btn btn-secondary" onclick="cheguei(${vv.id})">Embarcou — iniciar</button>` + wpp;
             } else {
                 titulo.textContent = 'Em viagem ao destino';
-                ctrl.innerHTML = navBtn + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>` + wpp;
+                ctrl.innerHTML = navBtn + vozBtn + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>` + wpp;
             }
         } else {
             titulo.textContent = vv.fase === 'encontro' ? 'Motorista a caminho de você' : 'Em viagem ao destino';
             ctrl.innerHTML = navBtn + wpp;
         }
     }
-    // Abre o Google Maps no MODO NAVEGAÇÃO (turn-by-turn por voz, que só existe no
-    // app nativo). No Android/iOS abre direto o APP do Maps (sem deixar uma aba extra
-    // no navegador); no desktop cai para o site.
-    function navegar() {
+    // Navegação DENTRO do app: o mapa passa a seguir a sua posição e a faixa do
+    // topo mostra o próximo passo (vire à direita em…). Sem sair do VAP.
+    function navegarApp() {
+        const vv = viagemView; if (!vv) return;
+        recentrarViagem();
+        vv.ultimaRota = 0;   // força recalcular a rota/faixa de passo já no próximo ciclo
+        renderViagem();
+        msg('Navegando no app: o mapa segue você e mostra o próximo passo.');
+    }
+    // Opção de VOZ: abre o app do Google Maps em navegação (turn-by-turn falado, que
+    // não existe na web). Ao fechar o Maps, o Android/iOS volta sozinho para o VAP.
+    function navegarVoz() {
         const vv = viagemView; if (!vv) return;
         const alvo = (vv.ehMotorista && vv.fase === 'encontro') ? (vv.posPassageiro || vv.embarque) : (vv.destino || vv.embarque);
         if (!alvo) return msg('Local indisponível para navegar.', 'error');
         const ll = `${alvo.lat},${alvo.lng}`;
         const ua = navigator.userAgent || '';
         if (/android/i.test(ua)) {
-            // Intent do Google Maps: abre o app nativo já navegando (não abre aba).
             window.location.href = `google.navigation:q=${ll}&mode=d`;
         } else if (/iphone|ipad|ipod/i.test(ua)) {
-            // App do Google Maps no iOS, se instalado.
             window.location.href = `comgooglemaps://?daddr=${ll}&directionsmode=driving`;
         } else {
             window.open(`https://www.google.com/maps/dir/?api=1&destination=${ll}&travelmode=driving&dir_action=navigate`, '_blank');
