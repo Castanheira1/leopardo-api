@@ -1065,7 +1065,8 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
       `SELECT DISTINCT ON (u.id)
               u.id, u.nome, u.sexo, l.lat, l.lng,
               h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
-              ca.id AS carona_id, ca.origem_texto, ca.destino_texto
+              ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
+              ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng
        FROM localizacoes_online l
        JOIN usuarios u ON u.id = l.usuario_id
        JOIN habilitacoes_motorista h
