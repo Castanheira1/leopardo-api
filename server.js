@@ -695,6 +695,13 @@ app.delete("/api/pedidos/:id", verificarAuth, async (req, res) => {
       [req.params.id, req.user.id]
     );
     if (rowCount === 0) return res.status(404).json({ error: "Pedido não encontrado" });
+    // Libera quem ofereceu: as propostas pendentes deste pedido caem para recusado,
+    // assim o motorista não fica preso na tela "Aguardando aceitar".
+    await pool.query(
+      `UPDATE propostas SET status = 'recusado'
+       WHERE pedido_id = $1 AND status = 'pendente'`,
+      [req.params.id]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Erro ao cancelar pedido" });

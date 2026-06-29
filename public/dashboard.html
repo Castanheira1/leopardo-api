@@ -1570,6 +1570,15 @@
                 if (minha) { escolherPapel('motorista'); await abrirTrajeto(minha); return true; }
             }
         } catch (_) { /* offline: cai para a escolha de papel */ }
+        // Passageiro com pedido ainda aberto: retoma a tela "Procurando motorista…"
+        // (fechar/reabrir o app NÃO pode perder a chamada). O poll detecta a oferta.
+        try {
+            const r = await fetchWithAuth('/api/pedidos?meus=1');
+            if (r && r.ok) {
+                const aberto = (await r.json())[0];
+                if (aberto) { escolherPapel('passageiro'); mostrarChamando({ pedidoId: aberto.id }); return true; }
+            }
+        } catch (_) { /* offline: cai para a escolha de papel */ }
         return false;
     }
 
