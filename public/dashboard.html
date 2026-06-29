@@ -98,12 +98,8 @@
                                 <label>Vagas disponíveis</label>
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1">
                             </div>
-                            <div class="form-group">
-                                <label>Observação</label>
-                                <input type="text" id="obsOfe" placeholder="Ex: passo pela portaria principal">
-                            </div>
                         </div>
-                        <button class="btn btn-primary" onclick="oferecerCarona()">Publicar carona</button>
+                        <button class="btn btn-primary btn-block" onclick="oferecerCarona()">Publicar carona</button>
                     </div>
                 </div>
             </div>
@@ -330,12 +326,19 @@
     }
 
     /* -------- menu (hambúrguer) -------- */
+    // A busca flutua com z-index acima do navbar (pra não sumir ao rolar); por isso
+    // ela passava por cima do menu. Enquanto o menu está aberto, escondemos a busca.
+    function _buscaVisivel(menuAberto) {
+        document.querySelectorAll('.map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
+    }
     function toggleMenu(e) {
         if (e) e.stopPropagation();
         const m = document.getElementById('navMenu');
-        m.style.display = m.style.display === 'block' ? 'none' : 'block';
+        const aberto = m.style.display !== 'block';
+        m.style.display = aberto ? 'block' : 'none';
+        _buscaVisivel(aberto);
     }
-    function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; }
+    function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; _buscaVisivel(false); }
     document.addEventListener('click', (e) => {
         if (document.getElementById('navMenu').style.display === 'block'
             && !e.target.closest('#btnMenu')) fecharMenu();
@@ -473,11 +476,23 @@
         try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
         const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
 
-        // Seu marcador: motorista vê o CARRINHO; passageiro vê o bonequinho (por sexo).
-        // Nunca deixa o ícone derrubar o mapa caso falhe.
+        // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
+        // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
+        // passageiro o marcador fica invisível (só serve de "pega" para arrastar) e o
+        // pulso anda junto. Nunca deixa o ícone derrubar o mapa caso falhe.
         let iconeUser;
-        try { iconeUser = comoCarro ? CAR_ICON_URL : pessoaIcon(user.sexo); } catch (_) { iconeUser = undefined; }
+        try {
+            iconeUser = comoCarro ? CAR_ICON_URL
+                : { path: g.maps.SymbolPath.CIRCLE, scale: 18, fillColor: '#000', fillOpacity: 0.001, strokeWeight: 0 };
+        } catch (_) { iconeUser = undefined; }
         const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: iconeUser, title: comoCarro ? 'Seu carro (arraste para ajustar a saída)' : 'Você (arraste para ajustar o embarque)' });
+        let pulseOrigem = null;
+        if (!comoCarro) {
+            try {
+                pulseOrigem = criarPulse(map, origem, user.sexo, null, 'Você');
+                mkOrigem.addListener('drag', () => { const p = mkOrigem.getPosition(); pulseOrigem.setPosition({ lat: p.lat(), lng: p.lng() }); });
+            } catch (_) { /* sem pulso: segue só com o marcador */ }
+        }
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
@@ -542,6 +557,7 @@
             try {
                 const p = await obterLocalizacao();
                 mkOrigem.setPosition(p);
+                if (pulseOrigem) pulseOrigem.setPosition(p);
                 map.panTo(p);
                 if (destino) tracarRota();
             } catch (_) { /* sem GPS agora: mantém a posição atual */ }
@@ -700,7 +716,6 @@
             origem_lat: origem.lat, origem_lng: origem.lng,
             destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
             horario: null, vagas: +document.getElementById('vagasOfe').value || 1,
-            observacao: document.getElementById('obsOfe').value,
         };
         const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
         const d = await r.json();
@@ -1387,7 +1402,10 @@
                     d.title = this.titulo || '';
                     d.style.setProperty('--cor', cor);
                     d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
-                    d.addEventListener('click', (e) => { e.stopPropagation(); this.cb && this.cb(); });
+                    // Sem clique (ex.: o próprio pulso do passageiro) → não captura toques,
+                    // deixando arrastar o marcador que fica embaixo.
+                    if (this.cb) d.addEventListener('click', (e) => { e.stopPropagation(); this.cb(); });
+                    else d.style.pointerEvents = 'none';
                     this.div = d;
                     this.getPanes().overlayMouseTarget.appendChild(d);
                 }
