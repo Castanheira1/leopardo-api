@@ -112,6 +112,10 @@
             <div id="tabViagem" class="tab-content">
                 <div class="viagem-wrap">
                     <div id="mapViagem" class="viagem-map"></div>
+                    <div id="viagemNav" class="viagem-nav" style="display:none;"></div>
+                    <button type="button" id="btnRecentrar" class="viagem-recenter" style="display:none;" title="Recentralizar" onclick="recentrarViagem()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path></svg>
+                    </button>
                     <div id="viagemSheet" class="viagem-sheet">
                         <div class="sheet-grip" id="sheetGrip"><span></span></div>
                         <div class="sheet-top">
@@ -719,6 +723,9 @@
         pl.textContent = (habHoje && habHoje.placa) ? habHoje.placa : '';
         pl.style.display = (habHoje && habHoje.placa) ? 'inline-block' : 'none';
         const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
+        // Esta tela não tem navegação por passo: esconde a faixa/recentralizar da viagem.
+        const nav0 = document.getElementById('viagemNav'); if (nav0) nav0.style.display = 'none';
+        const rec0 = document.getElementById('btnRecentrar'); if (rec0) rec0.style.display = 'none';
 
         g = await carregarMaps();
         const origem = { lat: +c.origem_lat, lng: +c.origem_lng };
@@ -1017,8 +1024,16 @@
             motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
             posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
+            seguir: true,   // o mapa segue a própria posição até o usuário arrastar
         };
         atualizarCabecalhoViagem();
+
+        // Arrastar o mapa pausa o "seguir" (deixa olhar em volta); o botão recentraliza.
+        map.addListener('dragstart', () => { if (viagemView) viagemView.seguir = false; });
+        const btnRec = document.getElementById('btnRecentrar');
+        const navBar = document.getElementById('viagemNav');
+        if (v.status === 'em_andamento') { if (btnRec) btnRec.style.display = 'flex'; }
+        else { if (btnRec) btnRec.style.display = 'none'; if (navBar) navBar.style.display = 'none'; }
 
         if (v.status !== 'em_andamento') { /* concluída: só mostra os pinos */ }
         else iniciarViagemLoop();
@@ -1063,12 +1078,37 @@
             ctrl.innerHTML = navBtn + wpp;
         }
     }
-    // Abre o Google Maps no MODO NAVEGAÇÃO (turn-by-turn de verdade) até o alvo da fase.
+    // Abre o Google Maps no MODO NAVEGAÇÃO (turn-by-turn por voz, que só existe no
+    // app nativo). No Android/iOS abre direto o APP do Maps (sem deixar uma aba extra
+    // no navegador); no desktop cai para o site.
     function navegar() {
         const vv = viagemView; if (!vv) return;
         const alvo = (vv.ehMotorista && vv.fase === 'encontro') ? (vv.posPassageiro || vv.embarque) : (vv.destino || vv.embarque);
         if (!alvo) return msg('Local indisponível para navegar.', 'error');
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${alvo.lat},${alvo.lng}&travelmode=driving&dir_action=navigate`, '_blank');
+        const ll = `${alvo.lat},${alvo.lng}`;
+        const ua = navigator.userAgent || '';
+        if (/android/i.test(ua)) {
+            // Intent do Google Maps: abre o app nativo já navegando (não abre aba).
+            window.location.href = `google.navigation:q=${ll}&mode=d`;
+        } else if (/iphone|ipad|ipod/i.test(ua)) {
+            // App do Google Maps no iOS, se instalado.
+            window.location.href = `comgooglemaps://?daddr=${ll}&directionsmode=driving`;
+        } else {
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${ll}&travelmode=driving&dir_action=navigate`, '_blank');
+        }
+    }
+    // Recentraliza o mapa da viagem na própria posição e reativa o "seguir".
+    function recentrarViagem() {
+        const vv = viagemView; if (!vv || !vv.map) return;
+        vv.seguir = true;
+        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
+        if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(17); }
+    }
+    // Tira as tags HTML que o Google manda nas instruções ("Vire à <b>direita</b>").
+    function _limparInstrucao(html) {
+        const d = document.createElement('div');
+        d.innerHTML = html || '';
+        return (d.textContent || '').trim();
     }
 
     // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
@@ -1085,9 +1125,10 @@
             if (vv.pessoaMarker) vv.pessoaMarker.setPosition(vv.posPassageiro);
             else vv.pessoaMarker = new g.maps.Marker({ position: vv.posPassageiro, map: vv.map, icon: pessoaIcon(vv.passageiroSexo), title: 'Passageiro', zIndex: 998 });
         }
-        // Centraliza na própria posição (cada um se vê no centro).
+        // Segue a própria posição (cada um se vê no centro) — a menos que o usuário
+        // tenha arrastado o mapa para olhar em volta (aí o botão recentralizar volta).
         const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
-        if (minhaPos) vv.map.panTo(minhaPos);
+        if (minhaPos && vv.seguir !== false) vv.map.panTo(minhaPos);
 
         // Rota: do carro (motorista) até o alvo da fase.
         const alvo = alvoViagem();
@@ -1102,6 +1143,19 @@
                     ? (vv.ehMotorista ? 'chega ao passageiro em' : 'motorista chega em')
                     : 'destino em';
                 if (eta) { eta.style.display = 'inline'; eta.textContent = `${prefixo} ~${leg.duration.text} • ${leg.distance.text}`; }
+                // Faixa de navegação (próximo passo): só para quem dirige (o motorista).
+                // O passo[0] é sempre a próxima manobra a partir da posição atual, pois a
+                // rota é recalculada da posição ao vivo a cada 10s.
+                const nav = document.getElementById('viagemNav');
+                if (nav) {
+                    const passo = leg.steps && leg.steps[0];
+                    if (vv.ehMotorista && passo) {
+                        nav.innerHTML = `<span class="nav-dist">${passo.distance ? passo.distance.text : ''}</span>${_limparInstrucao(passo.instructions)}`;
+                        nav.style.display = 'block';
+                    } else {
+                        nav.style.display = 'none';
+                    }
+                }
             } catch (_) { /* sem rota: segue só com os marcadores */ }
         }
     }
@@ -1114,6 +1168,8 @@
         if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
         if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
         const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+        const nav = document.getElementById('viagemNav'); if (nav) nav.style.display = 'none';
+        const btnRec = document.getElementById('btnRecentrar'); if (btnRec) btnRec.style.display = 'none';
     }
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
