@@ -522,11 +522,25 @@
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
+        let geocoder = null;
         function setDestino(pos, texto) {
             destino = { lat: pos.lat, lng: pos.lng, texto: texto || '' };
             mkDestino.setPosition(pos);
             map.panTo(pos);
             tracarRota();
+            // Marcou no mapa (sem nome): descobre o endereço para o outro lado ver
+            // PARA ONDE vai, não só a rota. Só aplica se o destino não mudou nesse meio.
+            if (!texto) {
+                try {
+                    geocoder = geocoder || new g.maps.Geocoder();
+                    geocoder.geocode({ location: pos }, (res, status) => {
+                        if (status === 'OK' && res && res[0] && destino
+                            && destino.lat === pos.lat && destino.lng === pos.lng) {
+                            destino.texto = res[0].formatted_address;
+                        }
+                    });
+                } catch (_) { /* sem geocoder: segue sem o nome */ }
+            }
         }
 
         // Duplo toque marca o local (evita criar rota a cada toque). Toque simples só avisa.
@@ -1427,7 +1441,7 @@
             } catch (_) {}
         }
         tick();
-        fleet.timer = setInterval(tick, 5000);
+        fleet.timer = setInterval(tick, 3000);   // carros mais perto de tempo real
     }
 
     // Passageiros pedindo carona aparecem no mapa do MOTORISTA como bonequinhos
@@ -1499,7 +1513,7 @@
             } catch (_) {}
         }
         tick();
-        pedidoFleet.timer = setInterval(tick, 6000);
+        pedidoFleet.timer = setInterval(tick, 3000);   // mais perto de tempo real
     }
     // Remove o pulso de um pedido na hora (após o motorista oferecer/aceitar).
     function removerPulsoPedido(pedidoId) {
@@ -1603,7 +1617,7 @@
             } catch (_) {}
         }
         envia();
-        broadcastTimer = setInterval(envia, 8000);
+        broadcastTimer = setInterval(envia, 4000);   // posição do motorista mais ao vivo
     }
 
     // Passageiro acompanha o carro do motorista ao vivo, com rota e ETA.
@@ -1658,7 +1672,7 @@
         }
         registrarPush(true);   // sincroniza a inscrição se a permissão já foi dada (sem popup)
         pollPropostas();
-        setInterval(pollPropostas, 9000);
+        setInterval(pollPropostas, 5000);   // detecta aceite/oferta mais rápido
     })();
     </script>
 </body>
