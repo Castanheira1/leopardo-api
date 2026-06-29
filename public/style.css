@@ -701,7 +701,20 @@ body.theme-dark { background: #0b0b0d; }
 .sheet-grip span { width: 44px; height: 5px; border-radius: 3px; background: #44464b; display: block; }
 .sheet-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .sheet-top strong { color: #fff; font-size: 1.05rem; }
-.viagem-eta { color: #EAD298; font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
+.viagem-eta { color: #EAD298; font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
+
+/* Faixa de navegação no topo do mapa: próximo passo (vire à direita em X). */
+.viagem-nav { position: absolute; top: 10px; left: 10px; right: 64px; z-index: 5;
+    background: rgba(15, 61, 62, 0.95); color: #fff; border: 1px solid rgba(234, 210, 152, 0.4);
+    border-radius: 12px; padding: 10px 14px; font-size: 0.95rem; line-height: 1.3;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); }
+.viagem-nav .nav-dist { display: block; color: #EAD298; font-weight: 700; font-size: 1.05rem; }
+/* Botão flutuante de recentralizar o mapa na própria posição. */
+.viagem-recenter { position: absolute; top: 10px; right: 10px; z-index: 5;
+    width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+    background: #fff; color: #0F3D3E; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    display: flex; align-items: center; justify-content: center; }
+.viagem-recenter svg { width: 24px; height: 24px; }
 .sheet-driver { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .sheet-selfie { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 2px solid #EAD298; }
 .sheet-driver-info { flex: 1; min-width: 0; }
