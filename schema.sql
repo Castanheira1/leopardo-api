@@ -99,6 +99,7 @@ CREATE TABLE pedidos (
     selfie_lng NUMERIC(10,6),
     selfie_em TIMESTAMP,
     observacao TEXT,
+    notificado BOOLEAN DEFAULT FALSE,  -- pedido agendado só notifica os motoristas na hora marcada
     status VARCHAR(20) DEFAULT 'aberto' CHECK (status IN ('aberto', 'atendido', 'cancelado')),
     created_at TIMESTAMP DEFAULT NOW()
 );

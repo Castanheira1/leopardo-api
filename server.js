@@ -100,6 +100,9 @@ async function enviarPush(usuarioId, payload) {
 async function garantirColunasPedidos() {
   try {
     await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1");
+    // notificado: pedido agendado (horário futuro) só notifica os motoristas na hora
+    // marcada. Marca quando a notificação de proximidade já foi enviada.
+    await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notificado BOOLEAN DEFAULT FALSE");
   } catch (e) {
     console.warn("garantirColunasPedidos:", e.message);
   }
@@ -203,13 +206,62 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
     + sin(radians(${pLat})) * sin(radians(${latCol}))
   ))))`;
 
-// Marca pedidos "para agora" antigos como cancelados (limpeza leve)
+// Notifica os motoristas ativos MAIS PERTO do embarque de um pedido (não espalha
+// para todos nem para quem está longe) e marca o pedido como notificado. Usado tanto
+// no POST (pedido "para agora") quanto pelo agendador (pedido com horário marcado).
+async function notificarMotoristasProximos(ped) {
+  try {
+    const nome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [ped.passageiro_id])).rows[0]?.nome || "Um colega";
+    const motoristas = (await pool.query(
+      `SELECT motorista_id FROM (
+         SELECT DISTINCT ON (h.motorista_id) h.motorista_id,
+                ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
+         FROM habilitacoes_motorista h
+         JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
+         WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
+           AND l.atualizado_em > NOW() - INTERVAL '10 minutes'
+           AND h.motorista_id <> $3
+         ORDER BY h.motorista_id, h.created_at DESC
+       ) s
+       WHERE s.dist <= 15
+       ORDER BY s.dist ASC
+       LIMIT 8`,
+      [ped.origem_lat, ped.origem_lng, ped.passageiro_id]
+    )).rows;
+    motoristas.forEach((m) => enviarPush(m.motorista_id, {
+      title: "🙋 Carona perto de você",
+      body: `${nome} está pedindo carona aqui perto. Abra o app para oferecer.`,
+      url: "/dashboard.html",
+    }));
+  } catch (e) { console.warn("notificarMotoristasProximos:", e.message); }
+  try { await pool.query("UPDATE pedidos SET notificado = TRUE WHERE id = $1", [ped.id]); } catch (_) {}
+}
+
+// Agendador: pedidos com horário marcado só aparecem/notificam na hora. A cada
+// minuto, dispara a notificação de proximidade dos que acabaram de "vencer".
+setInterval(async () => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, passageiro_id, origem_lat, origem_lng FROM pedidos
+      WHERE status = 'aberto' AND notificado = FALSE
+        AND horario IS NOT NULL AND horario <= NOW()
+    `);
+    for (const ped of rows) await notificarMotoristasProximos(ped);
+  } catch (err) {
+    console.error("Erro ao notificar pedidos agendados:", err.message);
+  }
+}, 60 * 1000);
+
+// Marca pedidos antigos como cancelados (limpeza leve): "para agora" parados há mais
+// de 3h, e agendados cujo horário já passou há mais de 3h.
 setInterval(async () => {
   try {
     await pool.query(`
       UPDATE pedidos SET status = 'cancelado'
-      WHERE status = 'aberto' AND horario IS NULL
-      AND created_at < NOW() - INTERVAL '3 hours'
+      WHERE status = 'aberto' AND (
+        (horario IS NULL AND created_at < NOW() - INTERVAL '3 hours')
+        OR (horario IS NOT NULL AND horario < NOW() - INTERVAL '3 hours')
+      )
     `);
   } catch (err) {
     console.error("Erro ao expirar pedidos:", err.message);
@@ -602,33 +654,12 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     );
     res.json(rows[0]);
 
-    // Notifica só os motoristas ativos MAIS PERTO do embarque (não espalha para
-    // todos nem para quem está longe). Ordena por distância e limita aos N mais perto.
-    try {
-      const ped = rows[0];
-      const nome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [req.user.id])).rows[0]?.nome || "Um colega";
-      const motoristas = (await pool.query(
-        `SELECT motorista_id FROM (
-           SELECT DISTINCT ON (h.motorista_id) h.motorista_id,
-                  ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
-           FROM habilitacoes_motorista h
-           JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
-           WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
-             AND l.atualizado_em > NOW() - INTERVAL '10 minutes'
-             AND h.motorista_id <> $3
-           ORDER BY h.motorista_id, h.created_at DESC
-         ) s
-         WHERE s.dist <= 15
-         ORDER BY s.dist ASC
-         LIMIT 8`,
-        [ped.origem_lat, ped.origem_lng, req.user.id]
-      )).rows;
-      motoristas.forEach((m) => enviarPush(m.motorista_id, {
-        title: "🙋 Carona perto de você",
-        body: `${nome} está pedindo carona aqui perto. Abra o app para oferecer.`,
-        url: "/dashboard.html",
-      }));
-    } catch (e) { console.warn("push pedido:", e.message); }
+    // Pedido "para agora" (sem horário ou horário já vencido): notifica os motoristas
+    // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
+    // dispara a notificação na hora marcada (notificado continua FALSE até lá).
+    const ped = rows[0];
+    const agendadoFuturo = ped.horario && new Date(ped.horario).getTime() > Date.now();
+    if (!agendadoFuturo) await notificarMotoristasProximos(ped);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar pedido" });
@@ -664,6 +695,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
            FROM pedidos p
            JOIN usuarios u ON p.passageiro_id = u.id
            WHERE p.status = 'aberto'
+             AND (p.horario IS NULL OR p.horario <= NOW())
          ) s
          WHERE s.dist_origem <= 15
          ORDER BY s.dist_origem ASC
@@ -678,6 +710,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
        FROM pedidos p
        JOIN usuarios u ON p.passageiro_id = u.id
        WHERE p.status = 'aberto'
+         AND (p.horario IS NULL OR p.horario <= NOW())
        ORDER BY p.created_at DESC`
     );
     res.json(rows);
