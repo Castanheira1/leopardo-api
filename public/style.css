@@ -531,7 +531,10 @@ body {
 .map-stage {
     position: relative;
     margin: 0 -16px;
-    height: calc(100vh - 150px);
+    height: calc(100vh - 150px);    /* fallback p/ navegadores sem dvh */
+    height: calc(100dvh - 150px);   /* desconta a barra dinâmica do navegador (iPhone/Android),
+                                       senão a folha de baixo (botão Publicar/Solicitar) fica
+                                       fora da tela e o botão não pode ser tocado */
     min-height: 440px;
     overflow: hidden;
     background: #1b1b1b;
