@@ -208,6 +208,7 @@
             <img id="carroFoto" class="carro-foto" alt="" style="display:none;">
             <h3 id="carroNome">Motorista</h3>
             <div id="carroRota" class="sol-rota"></div>
+            <div id="carroMapa" class="mini-mapa" style="display:none;"></div>
             <span id="carroPlaca" class="sheet-placa"></span>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharCarro()">Fechar</button>
@@ -220,9 +221,10 @@
     <div id="modalPedido" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPedido()">
         <div class="cam-box sol-box">
             <div class="sol-badge">🙋 Pedindo carona</div>
-            <img id="pedidoSelfie" class="carro-foto" alt="" style="display:none;">
+            <img id="pedidoSelfie" class="sol-selfie" alt="" style="display:none;">
             <h3 id="pedidoNome">Passageiro</h3>
             <div id="pedidoRota" class="sol-rota"></div>
+            <div id="pedidoMapa" class="mini-mapa" style="display:none;"></div>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharPedido()">Fechar</button>
                 <button type="button" class="btn btn-primary" onclick="oferecerAoPedido()">Oferecer carona</button>
@@ -671,6 +673,9 @@
         const foto = document.getElementById('carroFoto');
         if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
         document.getElementById('modalCarro').style.display = 'flex';
+        const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : null;
+        const d = m.destino_lat != null ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
+        desenharRotaMini('carroMapa', o, d);
     }
     function fecharCarro() { document.getElementById('modalCarro').style.display = 'none'; }
     async function pedirCaronaDoCarro() {
@@ -1290,7 +1295,7 @@
                     } else {
                         const mk = new g.maps.Marker({
                             position: pos, map, icon: CAR_ICON_URL,
-                            title: m.nome + (m.placa ? ' • ' + m.placa : ''),
+                            title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ''),
                         });
                         mk._m = m;
                         mk.addListener('click', () => mostrarCaronaDoCarro(mk._m));
@@ -1379,15 +1384,57 @@
         const mk = pedidoFleet.markers[pedidoId];
         if (mk) { mk.setMap(null); delete pedidoFleet.markers[pedidoId]; }
     }
+    // Prévia da rota (origem -> destino) dentro de um modal. Reaproveita o mapa por
+    // container e mostra a linha preta da rota; sem rota disponível, só enquadra os 2 pontos.
+    const _miniMapas = {};
+    function desenharRotaMini(elId, o, d) {
+        const el = document.getElementById(elId);
+        if (!el || !g || !g.maps || !o || !d) { if (el) el.style.display = 'none'; return; }
+        el.style.display = 'block';
+        let mm = _miniMapas[elId];
+        if (!mm) {
+            const map = new g.maps.Map(el, {
+                zoom: 13, center: o, disableDefaultUI: true, gestureHandling: 'none',
+                keyboardShortcuts: false, clickableIcons: false, mapTypeId: 'roadmap',
+            });
+            const rend = new g.maps.DirectionsRenderer({
+                map, suppressMarkers: true, preserveViewport: false,
+                polylineOptions: { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.9 },
+            });
+            mm = _miniMapas[elId] = { map, rend, ds: new g.maps.DirectionsService(), mkO: null, mkD: null };
+        }
+        const { map, rend, ds } = mm;
+        const dot = (cor) => ({ path: g.maps.SymbolPath.CIRCLE, scale: 6, fillColor: cor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 });
+        if (mm.mkO) mm.mkO.setMap(null);
+        if (mm.mkD) mm.mkD.setMap(null);
+        mm.mkO = new g.maps.Marker({ position: o, map, icon: dot('#22c55e'), title: 'Embarque', zIndex: 2 });
+        mm.mkD = new g.maps.Marker({ position: d, map, icon: dot('#EAD298'), title: 'Destino', zIndex: 2 });
+        // O mapa foi criado num container que pode ter ficado escondido: força o recálculo.
+        setTimeout(() => {
+            g.maps.event.trigger(map, 'resize');
+            ds.route({ origin: o, destination: d, travelMode: g.maps.TravelMode.DRIVING })
+              .then((resp) => { rend.setDirections(resp); })
+              .catch(() => {
+                  rend.set('directions', null);
+                  const b = new g.maps.LatLngBounds(); b.extend(o); b.extend(d);
+                  map.fitBounds(b, 40);
+              });
+        }, 60);
+    }
+
     // Motorista toca num passageiro que está chamando e oferece a carona.
     let pedidoSel = null;
     function mostrarPedido(p) {
         pedidoSel = p;
         document.getElementById('pedidoNome').textContent = p.passageiro_nome || 'Passageiro';
-        document.getElementById('pedidoRota').innerHTML = `${ICN.pin} ${p.destino_texto || 'destino no mapa'} • ${p.pessoas || 1} pessoa(s)`;
+        document.getElementById('pedidoRota').innerHTML =
+            `${ICN.pin} ${p.origem_texto || 'origem'} → ${p.destino_texto || 'destino'} • ${p.pessoas || 1} pessoa(s)`;
         const sf = document.getElementById('pedidoSelfie');
         if (p.selfie_url) { sf.src = p.selfie_url; sf.style.display = 'block'; } else { sf.style.display = 'none'; }
         document.getElementById('modalPedido').style.display = 'flex';
+        const o = p.origem_lat != null ? { lat: +p.origem_lat, lng: +p.origem_lng } : null;
+        const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
+        desenharRotaMini('pedidoMapa', o, d);
     }
     function fecharPedido() { document.getElementById('modalPedido').style.display = 'none'; }
     async function oferecerAoPedido() {
