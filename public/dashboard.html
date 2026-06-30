@@ -551,7 +551,24 @@
             ultimaDica = agora;
             msg('Toque DUAS vezes no mapa para marcar o local.');
         }
-        map.addListener('click', () => dicaToque());
+        // Tocar num LUGAR nomeado do mapa (POI: portaria, hospital, britador…) usa o
+        // NOME dele como destino — muito mais fácil que decorar o endereço de rua.
+        let placesSvc = null;
+        map.addListener('click', (e) => {
+            if (e.placeId) {
+                if (e.stop) e.stop();   // não abre o infowindow padrão do Google
+                placesSvc = placesSvc || new g.maps.places.PlacesService(map);
+                placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
+                    if (status === 'OK' && det && det.geometry) {
+                        setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
+                    } else {
+                        setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                    }
+                });
+                return;
+            }
+            dicaToque();
+        });
         map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
         mkOrigem.addListener('dragend', tracarRota);
 
@@ -561,7 +578,9 @@
         ac.addListener('place_changed', () => {
             const p = ac.getPlace();
             if (p.geometry) {
-                setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.formatted_address || p.name);
+                // Prefere o NOME do lugar (ex.: "Portaria S11D", "Hospital 5 de Outubro")
+                // em vez do endereço de rua, que é difícil de achar.
+                setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.name || p.formatted_address);
                 inputEl.value = '';   // limpa a busca para o próximo endereço
             }
         });
