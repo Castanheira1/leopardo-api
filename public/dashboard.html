@@ -1165,11 +1165,12 @@
     // Navegação DENTRO do app: o mapa passa a seguir a sua posição e a faixa do
     // topo mostra o próximo passo (vire à direita em…). Sem sair do VAP.
     function navegarApp() {
-        const vv = viagemView; if (!vv) return;
-        recentrarViagem();
-        vv.ultimaRota = 0;   // força recalcular a rota/faixa de passo já no próximo ciclo
+        const vv = viagemView; if (!vv || !vv.map) return;
+        vv.seguir = true;                 // o mapa volta a acompanhar a sua posição
+        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
+        if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(18); }   // zoom de navegação
+        vv.ultimaRota = 0;                // recalcula a rota/próximo passo já
         renderViagem();
-        msg('Navegando no app: o mapa segue você e mostra o próximo passo.');
     }
     // Recentraliza o mapa da viagem na própria posição e reativa o "seguir".
     function recentrarViagem() {
@@ -1206,7 +1207,7 @@
 
         // Rota: do carro (motorista) até o alvo da fase.
         const alvo = alvoViagem();
-        if (vv.posMotorista && alvo && Date.now() - vv.ultimaRota > 10000) {
+        if (vv.posMotorista && alvo && Date.now() - vv.ultimaRota > 5000) {   // próximo passo mais fresco
             vv.ultimaRota = Date.now();
             try {
                 const resp = await vv.ds.route({ origin: vv.posMotorista, destination: alvo, travelMode: g.maps.TravelMode.DRIVING });
