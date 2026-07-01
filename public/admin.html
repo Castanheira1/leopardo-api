@@ -93,7 +93,7 @@ async function resetSenha() {
     if (!matricula) return;
     const r = await fetchWithAuth('/api/admin/reset-senha', { method: 'POST', body: JSON.stringify({ matricula }) });
     const d = await r.json();
-    alert(d.message || d.error || 'Concluído');
+    mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
 }
 
 carregar();

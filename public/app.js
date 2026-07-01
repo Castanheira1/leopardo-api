@@ -6,10 +6,38 @@ function checkAuth(adminOnly = false) {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || 'null');
     if (!token || !user) { location.href = 'index.html'; return; }
-    if (adminOnly && !user.is_admin) { alert('Acesso negado'); location.href = 'dashboard.html'; return; }
+    if (adminOnly && !user.is_admin) { avisoProximaPagina('Acesso restrito a administradores.'); location.href = 'dashboard.html'; return; }
     const el = document.getElementById('userName');
     if (el) el.textContent = `Olá, ${user.nome.split(' ')[0]}!`;
 }
+
+/* -------------------- Toast global (substitui alert) -------------------- */
+// Reusa o #message da página quando existe; senão cria um flutuante no topo.
+function mostrarToast(texto, tipo = 'success') {
+    let m = document.getElementById('message');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'message';
+        m.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;';
+        document.body.appendChild(m);
+    }
+    m.className = 'message ' + tipo;
+    m.textContent = texto;
+    m.style.display = 'block';
+    clearTimeout(m._t);
+    m._t = setTimeout(() => { m.style.display = 'none'; }, 5000);
+}
+// Aviso que precisa sobreviver a um redirect (ex.: sessão expirada → login):
+// grava agora, e a próxima página mostra ao carregar.
+function avisoProximaPagina(texto) {
+    try { sessionStorage.setItem('flashToast', texto); } catch (_) {}
+}
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        const t = sessionStorage.getItem('flashToast');
+        if (t) { sessionStorage.removeItem('flashToast'); mostrarToast(t, 'error'); }
+    } catch (_) {}
+});
 
 function logout() {
     localStorage.removeItem('token');
@@ -25,7 +53,7 @@ async function fetchWithAuth(url, options = {}) {
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
     const resp = await fetch(url, { ...options, headers, credentials: 'include' });
-    if (resp.status === 401) { alert('Sessão expirada'); logout(); }
+    if (resp.status === 401) { avisoProximaPagina('Sessão expirada. Entre novamente.'); logout(); }
     return resp;
 }
 
