@@ -690,21 +690,18 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       return res.json(rows);
     }
 
-    // Com lat/lng (mapa do motorista): só passageiros PERTO do embarque, ordenados por
-    // distância e limitados — evita poluir a tela com gente longe quando há muita gente.
+    // Com lat/lng (mapa do motorista): TODOS os pedidos abertos, os mais perto
+    // primeiro (o motorista decide até onde vai; o LIMIT segura casos extremos).
     if (lat && lng) {
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
       const { rows } = await pool.query(
-        `SELECT * FROM (
-           SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
-                  ${distOrigem} AS dist_origem
-           FROM pedidos p
-           JOIN usuarios u ON p.passageiro_id = u.id
-           WHERE p.status = 'aberto'
-             AND (p.horario IS NULL OR p.horario <= NOW())
-         ) s
-         WHERE s.dist_origem <= 15
-         ORDER BY s.dist_origem ASC
+        `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
+                ${distOrigem} AS dist_origem
+         FROM pedidos p
+         JOIN usuarios u ON p.passageiro_id = u.id
+         WHERE p.status = 'aberto'
+           AND (p.horario IS NULL OR p.horario <= NOW())
+         ORDER BY dist_origem ASC
          LIMIT 60`,
         [lat, lng]
       );
