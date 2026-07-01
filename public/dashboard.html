@@ -299,6 +299,38 @@
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
 
+    /* -------- buzina (aviso de novo pedido de carona) -------- */
+    // Duas buzinadas curtas + duas vibradas no celular do motorista. O AudioContext
+    // só toca depois de um gesto do usuário (política de autoplay dos navegadores):
+    // destrava no primeiro toque em qualquer lugar da página.
+    let _audioCtx = null;
+    document.addEventListener('pointerdown', () => {
+        try {
+            if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (_audioCtx.state === 'suspended') _audioCtx.resume();
+        } catch (_) {}
+    });
+    function buzinar() {
+        try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (_) {}
+        const ctx = _audioCtx;
+        if (!ctx || ctx.state !== 'running') return;   // sem gesto ainda: só vibra
+        const toque = (t) => {
+            [440, 554].forEach((f) => {   // duas notas juntas = timbre de buzina
+                const o = ctx.createOscillator(), gn = ctx.createGain();
+                o.type = 'sawtooth';
+                o.frequency.value = f;
+                gn.gain.setValueAtTime(0.0001, t);
+                gn.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
+                gn.gain.setValueAtTime(0.15, t + 0.16);
+                gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.23);
+                o.connect(gn).connect(ctx.destination);
+                o.start(t); o.stop(t + 0.26);
+            });
+        };
+        const t0 = ctx.currentTime + 0.01;
+        toque(t0); toque(t0 + 0.34);   // bi-bi
+    }
+
     /* -------- util -------- */
     function msg(texto, tipo = 'success') {
         const m = document.getElementById('message');
@@ -974,6 +1006,7 @@
     const propostasTratadas = new Set();
     const viagensAbertas = new Set(); // viagens já abertas no rastreamento (não reabre sozinha)
     function mostrarSolicitacao(p) {
+        buzinar();   // chegou gente pedindo: toca e vibra
         solicitacaoAtual = p;
         const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
         const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
@@ -1135,7 +1168,7 @@
         else { if (btnRec) btnRec.style.display = 'none'; if (navBar) navBar.style.display = 'none'; }
 
         if (v.status !== 'em_andamento') { /* concluída: só mostra os pinos */ }
-        else iniciarViagemLoop();
+        else { iniciarViagemLoop(); if (viagemView.ehMotorista) navegarApp(); }   // motorista já entra navegando
         initSheetDrag();
     }
 
@@ -1163,31 +1196,41 @@
             return;
         }
         if (btnAnd) btnAnd.style.display = 'inline-block';
-        // Navegação só DENTRO do app: o mapa segue você + faixa com o próximo passo.
-        // Sem opção de voz/Google Maps externo (não sai do VAP).
+        // Navegação DENTRO do app (sem voz): mapa seguindo + faixa com o próximo
+        // passo. Quem quiser voz pode abrir a rota no Google Maps — o registro da
+        // viagem continua rodando aqui no VAP.
         const navBtn = `<button class="btn btn-primary" onclick="navegarApp()">${ICN.route} Navegar</button>`;
+        const mapsBtn = `<button class="btn btn-secondary" onclick="abrirGoogleMaps()">${ICN.pin} Maps</button>`;
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
                 titulo.textContent = 'A caminho do passageiro';
-                ctrl.innerHTML = navBtn + `<button class="btn btn-secondary" onclick="cheguei(${vv.id})">Embarcou — iniciar</button>` + wpp;
+                ctrl.innerHTML = navBtn + `<button class="btn btn-secondary" onclick="cheguei(${vv.id})">Embarcou — iniciar</button>` + mapsBtn + wpp;
             } else {
                 titulo.textContent = 'Em viagem ao destino';
-                ctrl.innerHTML = navBtn + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>` + wpp;
+                ctrl.innerHTML = navBtn + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>` + mapsBtn + wpp;
             }
         } else {
+            // Passageiro não dirige: nada de "Navegar" — só acompanhar e falar.
             titulo.textContent = vv.fase === 'encontro' ? 'Motorista a caminho de você' : 'Em viagem ao destino';
-            ctrl.innerHTML = navBtn + wpp;
+            ctrl.innerHTML = wpp;
         }
     }
-    // Navegação DENTRO do app: o mapa passa a seguir a sua posição e a faixa do
-    // topo mostra o próximo passo (vire à direita em…). Sem sair do VAP.
+    // Modo navegação DENTRO do app: o mapa segue a sua posição em zoom de rua e a
+    // faixa do topo cresce mostrando a manobra (seta + distância + instrução).
     function navegarApp() {
         const vv = viagemView; if (!vv || !vv.map) return;
         vv.seguir = true;                 // o mapa volta a acompanhar a sua posição
+        vv.navegando = true;              // faixa de manobra em modo grande
         const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
         if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(18); }   // zoom de navegação
         vv.ultimaRota = 0;                // recalcula a rota/próximo passo já
         renderViagem();
+    }
+    // Fallback com voz: abre a rota da fase atual no Google Maps (o rastreamento
+    // e o registro da viagem continuam no VAP em segundo plano).
+    function abrirGoogleMaps() {
+        const alvo = alvoViagem(); if (!alvo) return;
+        window.open('https://www.google.com/maps/dir/?api=1&destination=' + alvo.lat + ',' + alvo.lng + '&travelmode=driving&dir_action=navigate', '_blank');
     }
     // Recentraliza o mapa da viagem na própria posição e reativa o "seguir".
     function recentrarViagem() {
@@ -1202,6 +1245,20 @@
         d.innerHTML = html || '';
         return (d.textContent || '').trim();
     }
+    // Seta da manobra na faixa de navegação (cobre as manobras comuns do
+    // Directions; o que não conhecer cai na seta reta).
+    function setaManobra(m) {
+        m = String(m || '');
+        let d = 'M12 20V6M7 10l5-5 5 5';                                    // reta
+        if (m.includes('uturn')) d = 'M16 20v-9a4 4 0 0 0-8 0v4m-3-3 3 3 3-3';
+        else if (m.includes('roundabout')) d = 'M12 20v-4a5 5 0 1 1 4-8m0 0V4m0 4h-4';
+        else if (/slight-left|ramp-left|fork-left|keep-left/.test(m)) d = 'M14 20v-7L8 7m0 5V7h5';
+        else if (/slight-right|ramp-right|fork-right|keep-right/.test(m)) d = 'M10 20v-7l6-6m0 5V7h-5';
+        else if (m.includes('left')) d = 'M17 20v-5a4 4 0 0 0-4-4H6m4-5-5 5 5 5';
+        else if (m.includes('right')) d = 'M7 20v-5a4 4 0 0 1 4-4h7m-4-5 5 5-5 5';
+        else if (m.includes('merge')) d = 'M12 20v-6L8 9m8 5V9m-4-5-3 4m3-4 3 4';
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+    }
 
     // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
     // rota do carro até o alvo da fase. Cada lado vê o outro.
@@ -1212,10 +1269,13 @@
             if (vv.carMarker) vv.carMarker.setPosition(vv.posMotorista);
             else vv.carMarker = new g.maps.Marker({ position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
         }
-        // Bonequinho do passageiro (cor por sexo)
-        if (vv.posPassageiro) {
+        // Passageiro: círculo pulsante (o mesmo do modo chamada), só na fase de
+        // encontro — depois que embarca ele está dentro do carro.
+        if (vv.posPassageiro && vv.fase === 'encontro') {
             if (vv.pessoaMarker) vv.pessoaMarker.setPosition(vv.posPassageiro);
-            else vv.pessoaMarker = new g.maps.Marker({ position: vv.posPassageiro, map: vv.map, icon: pessoaIcon(vv.passageiroSexo), title: 'Passageiro', zIndex: 998 });
+            else vv.pessoaMarker = criarPulse(vv.map, vv.posPassageiro, vv.passageiroSexo, null, 'Passageiro');
+        } else if (vv.pessoaMarker) {
+            vv.pessoaMarker.setMap(null); vv.pessoaMarker = null;
         }
         // Segue a própria posição (cada um se vê no centro) — a menos que o usuário
         // tenha arrastado o mapa para olhar em volta (aí o botão recentralizar volta).
@@ -1242,8 +1302,10 @@
                 if (nav) {
                     const passo = leg.steps && leg.steps[0];
                     if (vv.ehMotorista && passo) {
-                        nav.innerHTML = `<span class="nav-dist">${passo.distance ? passo.distance.text : ''}</span>${_limparInstrucao(passo.instructions)}`;
-                        nav.style.display = 'block';
+                        nav.innerHTML = `<span class="nav-seta">${setaManobra(passo.maneuver)}</span>`
+                            + `<span class="nav-txt"><span class="nav-dist">${passo.distance ? passo.distance.text : ''}</span>${_limparInstrucao(passo.instructions)}</span>`;
+                        nav.classList.toggle('nav-grande', !!vv.navegando);
+                        nav.style.display = 'flex';
                     } else {
                         nav.style.display = 'none';
                     }
@@ -1336,7 +1398,10 @@
                     }
                     atualizarCabecalhoViagem();
                 }
-                if (d.fase && d.fase !== vv.fase) { vv.fase = d.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem(); }
+                if (d.fase && d.fase !== vv.fase) {
+                    vv.fase = d.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem();
+                    if (vv.ehMotorista) navegarApp();   // nova fase = nova rota: já entra navegando
+                }
                 // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
                 if (!vv.ehMotorista && d.motorista) vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
                 if (vv.ehMotorista && d.passageiro) vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
@@ -1352,7 +1417,7 @@
         const r = await fetchWithAuth('/api/viagens/' + viagemId + '/iniciar', { method: 'POST' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        if (viagemView) { viagemView.fase = 'destino'; viagemView.ultimaRota = 0; atualizarCabecalhoViagem(); }
+        if (viagemView) { viagemView.fase = 'destino'; viagemView.ultimaRota = 0; atualizarCabecalhoViagem(); navegarApp(); }
         msg('Passageiro embarcado — seguindo para o destino.');
     }
     async function enviarPontos() {
@@ -1387,32 +1452,30 @@
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
-    // Carro visto de cima (estilo Uber), com orientação clara (para-brisa dourado à frente).
-    // Carro visto de cima, estilo Tesla: carroceria preta com detalhes dourados.
+    // Carro visto de cima: carroceria escura com brilho (gradiente), vidros azulados,
+    // retrovisores, faróis acesos na frente e lanternas atrás — orientação clara.
     const CAR_ICON_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 64 64">' +
-        '<ellipse cx="32" cy="33" rx="16" ry="28" fill="#000" opacity="0.22"/>' +
-        '<rect x="11" y="19" width="5" height="9" rx="2.5" fill="#0a0a0a"/>' +
-        '<rect x="48" y="19" width="5" height="9" rx="2.5" fill="#0a0a0a"/>' +
-        '<rect x="11" y="37" width="5" height="9" rx="2.5" fill="#0a0a0a"/>' +
-        '<rect x="48" y="37" width="5" height="9" rx="2.5" fill="#0a0a0a"/>' +
-        '<path d="M32 4 C22 4 17 12 16 24 C15 36 16 48 19 55 C23 60 41 60 45 55 C48 48 49 36 48 24 C47 12 42 4 32 4 Z" fill="#101012" stroke="#EAD298" stroke-width="1.6"/>' +
-        '<path d="M22 17 Q32 13 42 17 L40 25 Q32 22 24 25 Z" fill="#EAD298"/>' +
-        '<rect x="23" y="28" width="18" height="13" rx="5" fill="#1c1c20"/>' +
-        '<path d="M24 45 Q32 42 40 45 L41 51 Q32 55 23 51 Z" fill="#c9a96a"/>' +
-        '<circle cx="32" cy="9" r="1.4" fill="#EAD298"/></svg>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 64 64">' +
+        '<defs>' +
+        '<linearGradient id="cb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#25272c"/><stop offset="0.5" stop-color="#0e0f12"/><stop offset="1" stop-color="#25272c"/></linearGradient>' +
+        '<linearGradient id="cv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8d8e8"/><stop offset="1" stop-color="#3d6b7d"/></linearGradient>' +
+        '</defs>' +
+        '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.25"/>' +
+        '<rect x="12.5" y="15" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
+        '<rect x="45.5" y="15" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
+        '<rect x="12.5" y="38" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
+        '<rect x="45.5" y="38" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
+        '<path d="M16 21 L11.5 23.5 L11.5 26.5 L16.3 25.5 Z" fill="#101216"/>' +
+        '<path d="M48 21 L52.5 23.5 L52.5 26.5 L47.7 25.5 Z" fill="#101216"/>' +
+        '<path d="M32 3.5 C23.5 3.5 18 9.5 17 20 C16 32 16.2 45.5 18.8 53.5 C20.6 59 43.4 59 45.2 53.5 C47.8 45.5 48 32 47 20 C46 9.5 40.5 3.5 32 3.5 Z" fill="url(#cb)" stroke="#EAD298" stroke-width="1.4"/>' +
+        '<path d="M24.5 6.5 Q32 4.8 39.5 6.5 L38.5 9 Q32 7.6 25.5 9 Z" fill="#ffe9a8"/>' +
+        '<path d="M22 16 Q32 12.5 42 16 L40.3 25.5 Q32 22.5 23.7 25.5 Z" fill="url(#cv)"/>' +
+        '<rect x="23" y="27.5" width="18" height="15" rx="6" fill="#17181c" stroke="#2c2e34" stroke-width="1"/>' +
+        '<rect x="30.4" y="27.5" width="3.2" height="15" fill="#1e2025"/>' +
+        '<path d="M23.8 45.5 Q32 42.5 40.2 45.5 L41 51.5 Q32 55.5 23 51.5 Z" fill="url(#cv)" opacity="0.85"/>' +
+        '<path d="M22.5 54.5 Q26 56.5 32 56.5 T41.5 54.5 L41 56.8 Q32 59 23 56.8 Z" fill="#e0524d"/>' +
+        '</svg>'
     );
-
-    // Bonequinho do usuário no mapa, colorido por sexo: rosa = mulher, azul = homem,
-    // cinza = não informado. Pino com cabeça + ombros.
-    function pessoaIcon(sexo) {
-        const cor = sexo === 'F' ? '#ec4899' : sexo === 'M' ? '#2563eb' : '#9ca3af';
-        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="38" height="46" viewBox="0 0 38 46">' +
-            '<path d="M19 45 C19 45 4 27 4 16 a15 15 0 1 1 30 0 C34 27 19 45 19 45 Z" fill="' + cor + '" stroke="#fff" stroke-width="2"/>' +
-            '<circle cx="19" cy="12" r="4.6" fill="#fff"/>' +
-            '<path d="M11 24 a8 7 0 0 1 16 0 Z" fill="#fff"/></svg>';
-        return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new g.maps.Size(38, 46), anchor: new g.maps.Point(19, 45) };
-    }
 
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {
@@ -1488,10 +1551,10 @@
     // Marcador "pulsando" (radar) por sexo, no mapa (overlay HTML). Azul = homem,
     // rosa = mulher, cinza = não informado. Definido lazy (precisa do g.maps carregado).
     let _PulseClass = null;
-    function criarPulse(map, pos, sexo, onClick, titulo) {
+    function criarPulse(map, pos, sexo, onClick, titulo, rotulo) {
         if (!_PulseClass) {
             _PulseClass = class extends g.maps.OverlayView {
-                constructor(p, s, cb, t) { super(); this.pos = p; this.sexo = s; this.cb = cb; this.titulo = t; this.div = null; }
+                constructor(p, s, cb, t, r) { super(); this.pos = p; this.sexo = s; this.cb = cb; this.titulo = t; this.rotulo = r; this.div = null; }
                 onAdd() {
                     const cor = this.sexo === 'F' ? '#ec4899' : this.sexo === 'M' ? '#2563eb' : '#9ca3af';
                     const d = document.createElement('div');
@@ -1499,6 +1562,14 @@
                     d.title = this.titulo || '';
                     d.style.setProperty('--cor', cor);
                     d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
+                    // Rótulo (ex.: destino do pedido) abaixo do ponto — textContent
+                    // porque o texto vem do usuário.
+                    if (this.rotulo) {
+                        const r = document.createElement('span');
+                        r.className = 'mp-rotulo';
+                        r.textContent = this.rotulo;
+                        d.appendChild(r);
+                    }
                     // Sem clique (ex.: o próprio pulso do passageiro) → não captura toques,
                     // deixando arrastar o marcador que fica embaixo.
                     if (this.cb) d.addEventListener('click', (e) => { e.stopPropagation(); this.cb(); });
@@ -1515,24 +1586,25 @@
                 onRemove() { if (this.div) { this.div.remove(); this.div = null; } }
             };
         }
-        const o = new _PulseClass(pos, sexo, onClick, titulo);
+        const o = new _PulseClass(pos, sexo, onClick, titulo, rotulo);
         o.setMap(map);
         return o;
     }
 
-    let pedidoFleet = { markers: {}, timer: null };
+    let pedidoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false };
     function iniciarPedidosAoVivo(map) {
         if (pedidoFleet.timer) clearInterval(pedidoFleet.timer);
         async function tick() {
             if (document.hidden) return;   // segundo plano: não polla
             try {
-                // Passa a posição do motorista: o servidor devolve só quem está PERTO.
+                // Passa a posição do motorista: o servidor ordena por proximidade.
                 const o = selOfe ? selOfe.getOrigem() : null;
                 const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
                 const r = await fetchWithAuth('/api/pedidos' + q);
                 if (!r || !r.ok) return;
                 const lista = (await r.json()).filter(p => p.passageiro_id !== user.id && p.origem_lat != null);
                 const vistos = {};
+                let novos = 0;
                 lista.forEach((p) => {
                     vistos[p.id] = true;
                     const pos = { lat: +p.origem_lat, lng: +p.origem_lng };
@@ -1541,14 +1613,22 @@
                         pedidoFleet.markers[p.id]._p = p;
                     } else {
                         const titulo = (p.passageiro_nome || 'Passageiro') + ' — pedindo carona';
-                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo);
+                        // Rótulo com o destino: o motorista vê para onde a pessoa quer
+                        // ir sem precisar tocar no pulso.
+                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo,
+                            '→ ' + (p.destino_texto || 'destino no mapa'));
                         mk._p = p;
                         pedidoFleet.markers[p.id] = mk;
+                        if (pedidoFleet.viuPrimeiraLeva) novos++;   // pedido chegando ao vivo
                     }
                 });
                 Object.keys(pedidoFleet.markers).forEach((id) => {
                     if (!vistos[id]) { pedidoFleet.markers[id].setMap(null); delete pedidoFleet.markers[id]; }
                 });
+                // Buzina só para pedido que CHEGOU depois que o mapa abriu
+                // (a primeira leva é o que já estava lá).
+                if (novos) buzinar();
+                pedidoFleet.viuPrimeiraLeva = true;
             } catch (_) {}
         }
         tick();
