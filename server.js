@@ -4,6 +4,7 @@ const multer = require("multer");
 const helmet = require("helmet");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
+const compression = require("compression");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -25,7 +26,9 @@ if (!JWT_SECRET) {
 }
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 600 }));
+app.use(compression());
+// 1200: o polling legítimo de um motorista em viagem chega perto de 600/15min
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1200 }));
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -33,6 +36,9 @@ app.use(express.urlencoded({ extended: true }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  max: 10,                        // não subir: o Session pooler do Supabase tem teto próprio
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000, // falha rápido em vez de enfileirar para sempre
 });
 
 pool.connect()
@@ -246,7 +252,7 @@ setInterval(async () => {
       WHERE status = 'aberto' AND notificado = FALSE
         AND horario IS NOT NULL AND horario <= NOW()
     `);
-    for (const ped of rows) await notificarMotoristasProximos(ped);
+    await Promise.all(rows.map(notificarMotoristasProximos));
   } catch (err) {
     console.error("Erro ao notificar pedidos agendados:", err.message);
   }
@@ -751,18 +757,20 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
     if (!ped) return res.status(404).json({ error: "Pedido não encontrado" });
 
     const { rows } = await pool.query(
-      `SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url,
-              ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem,
-              ${haversine("c.destino_lat", "c.destino_lng", "$3", "$4")} AS dist_destino
-       FROM caronas c
-       JOIN usuarios u ON c.motorista_id = u.id
-       LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
-       WHERE c.status = 'ativa' AND c.motorista_id <> $5
-         AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $6
-         AND ${haversine("c.destino_lat", "c.destino_lng", "$3", "$4")} <= $6
-         AND (c.horario IS NULL OR $7::timestamp IS NULL
-              OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
-       ORDER BY (dist_origem + dist_destino) ASC`,
+      `SELECT * FROM (
+         SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url,
+                ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem,
+                ${haversine("c.destino_lat", "c.destino_lng", "$3", "$4")} AS dist_destino
+         FROM caronas c
+         JOIN usuarios u ON c.motorista_id = u.id
+         LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+         WHERE c.status = 'ativa' AND c.motorista_id <> $5
+           AND (c.horario IS NULL OR $7::timestamp IS NULL
+                OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
+       ) s
+       WHERE s.dist_origem <= $6 AND s.dist_destino <= $6
+       ORDER BY (s.dist_origem + s.dist_destino) ASC
+       LIMIT 20`,
       [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario]
     );
     res.json(rows);
@@ -781,17 +789,19 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
     if (!car) return res.status(404).json({ error: "Carona não encontrada" });
 
     const { rows } = await pool.query(
-      `SELECT p.*, u.nome AS passageiro_nome,
-              ${haversine("p.origem_lat", "p.origem_lng", "$1", "$2")} AS dist_origem,
-              ${haversine("p.destino_lat", "p.destino_lng", "$3", "$4")} AS dist_destino
-       FROM pedidos p
-       JOIN usuarios u ON p.passageiro_id = u.id
-       WHERE p.status = 'aberto' AND p.passageiro_id <> $5
-         AND ${haversine("p.origem_lat", "p.origem_lng", "$1", "$2")} <= $6
-         AND ${haversine("p.destino_lat", "p.destino_lng", "$3", "$4")} <= $6
-         AND (p.horario IS NULL OR $7::timestamp IS NULL
-              OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
-       ORDER BY (dist_origem + dist_destino) ASC`,
+      `SELECT * FROM (
+         SELECT p.*, u.nome AS passageiro_nome,
+                ${haversine("p.origem_lat", "p.origem_lng", "$1", "$2")} AS dist_origem,
+                ${haversine("p.destino_lat", "p.destino_lng", "$3", "$4")} AS dist_destino
+         FROM pedidos p
+         JOIN usuarios u ON p.passageiro_id = u.id
+         WHERE p.status = 'aberto' AND p.passageiro_id <> $5
+           AND (p.horario IS NULL OR $7::timestamp IS NULL
+                OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
+       ) s
+       WHERE s.dist_origem <= $6 AND s.dist_destino <= $6
+       ORDER BY (s.dist_origem + s.dist_destino) ASC
+       LIMIT 20`,
       [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario]
     );
     res.json(rows);
@@ -885,7 +895,8 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
          ORDER BY created_at DESC LIMIT 1
        ) hped ON pr.pedido_id IS NOT NULL
        WHERE pr.de_usuario_id = $1 OR pr.para_usuario_id = $1
-       ORDER BY pr.created_at DESC`,
+       ORDER BY pr.created_at DESC
+       LIMIT 50`,
       [req.user.id]
     );
     res.json(rows.map((r) => ({ ...r, sou_destinatario: r.para_usuario_id === req.user.id })));
@@ -1225,7 +1236,8 @@ app.get("/api/viagens", verificarAuth, async (req, res) => {
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
        WHERE v.motorista_id = $1 OR v.passageiro_id = $1
-       ORDER BY v.created_at DESC`,
+       ORDER BY v.created_at DESC
+       LIMIT 50`,
       [req.user.id]
     );
     res.json(rows);
@@ -1257,8 +1269,17 @@ app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
       return res.status(403).json({ error: "Sem permissão" });
     }
 
+    // Decima o trajeto para no máx. ~500 pontos (mantendo sempre o primeiro e o
+    // último) — viagens longas geram milhares de pontos e o traçado não precisa.
     const pontos = (await pool.query(
-      "SELECT lat, lng, registrado_em FROM viagem_pontos WHERE viagem_id = $1 ORDER BY registrado_em ASC",
+      `SELECT lat, lng, registrado_em FROM (
+         SELECT lat, lng, registrado_em,
+                ROW_NUMBER() OVER (ORDER BY registrado_em ASC) AS rn,
+                COUNT(*) OVER () AS total
+         FROM viagem_pontos WHERE viagem_id = $1
+       ) s
+       WHERE (s.rn - 1) % GREATEST(1, CEIL(s.total / 500.0)::int) = 0 OR s.rn = s.total
+       ORDER BY s.registrado_em ASC`,
       [req.params.id]
     )).rows;
 

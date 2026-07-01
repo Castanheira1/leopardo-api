@@ -153,8 +153,12 @@ function capturarFoto(opts = {}) {
             try {
                 status.textContent = 'Processando...';
                 const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth || 720;
-                canvas.height = video.videoHeight || 960;
+                // Teto de 1280px no lado maior: câmeras modernas geram fotos enormes
+                // que só encarecem o upload — o enquadramento não muda.
+                const vw = video.videoWidth || 720, vh = video.videoHeight || 960;
+                const escala = Math.min(1, 1280 / Math.max(vw, vh));
+                canvas.width = Math.round(vw * escala);
+                canvas.height = Math.round(vh * escala);
                 canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
                 // Localização e horário do instante da captura
@@ -188,13 +192,28 @@ function capturarFoto(opts = {}) {
 }
 
 /* -------------------- OCR de placa (Tesseract.js) -------------------- */
+// O Tesseract pesa vários MB (script + worker + wasm + traineddata). Pré-aquecer
+// o worker no INÍCIO do fluxo (preCarregarOcr, fire-and-forget) faz o download
+// acontecer enquanto o usuário tira as fotos, em vez de travar no "Lendo a placa...".
+const _TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+let _ocrWorkerPromise = null;
+function preCarregarOcr() {
+    if (!_ocrWorkerPromise) {
+        _ocrWorkerPromise = (async () => {
+            await carregarScript(_TESSERACT_SRC);
+            const worker = await Tesseract.createWorker('eng');
+            await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+            return worker;
+        })();
+        _ocrWorkerPromise.catch(() => { _ocrWorkerPromise = null; });   // permite nova tentativa
+    }
+    return _ocrWorkerPromise;
+}
 async function lerPlaca(canvas) {
     try {
-        await carregarScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+        const worker = await preCarregarOcr();
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        const { data } = await Tesseract.recognize(dataUrl, 'eng', {
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-        });
+        const { data } = await worker.recognize(dataUrl);
         const texto = (data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         // Mercosul: ABC1D23 | Antiga: ABC1234
         const m = texto.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);

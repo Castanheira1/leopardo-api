@@ -59,6 +59,8 @@ CREATE TABLE habilitacoes_motorista (
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX idx_habilitacao_motorista_data ON habilitacoes_motorista (motorista_id, data, placa);
+-- Padrão real de acesso das queries: habilitação ativa mais recente do motorista
+CREATE INDEX IF NOT EXISTS idx_habilitacao_ativa ON habilitacoes_motorista (motorista_id, status, created_at DESC);
 
 -- ------------------------------------------------------------
 -- Caronas (ofertas dos motoristas)
@@ -79,6 +81,8 @@ CREATE TABLE caronas (
     status VARCHAR(20) DEFAULT 'ativa' CHECK (status IN ('ativa', 'concluida', 'cancelada')),
     created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_caronas_status ON caronas (status);
+CREATE INDEX IF NOT EXISTS idx_caronas_motorista ON caronas (motorista_id, status);
 
 -- ------------------------------------------------------------
 -- Pedidos (pedidos de passageiro) - exige selfie ao vivo
@@ -103,6 +107,8 @@ CREATE TABLE pedidos (
     status VARCHAR(20) DEFAULT 'aberto' CHECK (status IN ('aberto', 'atendido', 'cancelado')),
     created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_pedidos_status_horario ON pedidos (status, horario);
+CREATE INDEX IF NOT EXISTS idx_pedidos_passageiro ON pedidos (passageiro_id, status);
 
 -- ------------------------------------------------------------
 -- Propostas (o "match" + aceite, cobre os dois lados)
@@ -123,6 +129,11 @@ CREATE TABLE propostas (
     status VARCHAR(20) DEFAULT 'pendente' CHECK (status IN ('pendente', 'aceito', 'recusado')),
     created_at TIMESTAMP DEFAULT NOW()
 );
+-- de/para separados: o WHERE usa OR e o planner combina os dois via BitmapOr
+CREATE INDEX IF NOT EXISTS idx_propostas_de ON propostas (de_usuario_id);
+CREATE INDEX IF NOT EXISTS idx_propostas_para ON propostas (para_usuario_id);
+CREATE INDEX IF NOT EXISTS idx_propostas_carona ON propostas (carona_id);
+CREATE INDEX IF NOT EXISTS idx_propostas_pedido ON propostas (pedido_id);
 
 -- ------------------------------------------------------------
 -- Viagens efetivadas (a partir de uma proposta aceita)
@@ -149,6 +160,11 @@ CREATE TABLE viagens (
     distancia_km NUMERIC(10,2),
     created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_viagens_proposta ON viagens (proposta_id);
+CREATE INDEX IF NOT EXISTS idx_viagens_motorista ON viagens (motorista_id);
+CREATE INDEX IF NOT EXISTS idx_viagens_passageiro ON viagens (passageiro_id);
+CREATE INDEX IF NOT EXISTS idx_viagens_status ON viagens (status);
+CREATE INDEX IF NOT EXISTS idx_viagens_iniciada ON viagens (iniciada_em);
 
 -- ------------------------------------------------------------
 -- Pontos da rota (rastreamento GPS ao vivo da viagem)

@@ -424,6 +424,7 @@
             if (habHoje) { msg('Modo motorista já está ativo (válido por 24h).'); return; }
         }
         try {
+            preCarregarOcr();   // baixa o Tesseract em paralelo enquanto tira as fotos
             msg('Iniciando câmera...');
             const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
             const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do veículo — placa dianteira' });
@@ -1463,7 +1464,7 @@
             } catch (_) {}
         }
         tick();
-        fleet.timer = setInterval(tick, 3000);   // carros mais perto de tempo real
+        fleet.timer = setInterval(tick, 8000);   // equilíbrio tempo real × carga/bateria
     }
 
     // Passageiros pedindo carona aparecem no mapa do MOTORISTA como bonequinhos
@@ -1535,7 +1536,7 @@
             } catch (_) {}
         }
         tick();
-        pedidoFleet.timer = setInterval(tick, 3000);   // mais perto de tempo real
+        pedidoFleet.timer = setInterval(tick, 8000);   // equilíbrio tempo real × carga/bateria
     }
     // Remove o pulso de um pedido na hora (após o motorista oferecer/aceitar).
     function removerPulsoPedido(pedidoId) {
@@ -1632,6 +1633,7 @@
     function iniciarBroadcastLocalizacao() {
         if (broadcastTimer) return;
         async function envia() {
+            if (document.hidden) return;   // segundo plano: não gasta GPS/rede
             try {
                 const pos = await obterLocalizacao();
                 await fetchWithAuth('/api/localizacao', {
@@ -1641,7 +1643,7 @@
             } catch (_) {}
         }
         envia();
-        broadcastTimer = setInterval(envia, 4000);   // posição do motorista mais ao vivo
+        broadcastTimer = setInterval(envia, 8000);   // fora de viagem, 8s basta
     }
 
     // Passageiro acompanha o carro do motorista ao vivo, com rota e ETA.
@@ -1696,7 +1698,9 @@
         }
         registrarPush(true);   // sincroniza a inscrição se a permissão já foi dada (sem popup)
         pollPropostas();
-        setInterval(pollPropostas, 5000);   // detecta aceite/oferta mais rápido
+        setInterval(pollPropostas, 8000);   // detecta aceite/oferta sem martelar o servidor
+        // Voltou do segundo plano: atualiza na hora, sem esperar o próximo tick.
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) pollPropostas(); });
     })();
     </script>
 </body>
