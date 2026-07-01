@@ -40,7 +40,7 @@
                 <div id="navMenu" class="nav-menu" style="display:none;">
                     <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
                     <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
-                    <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; corridas</button>
+                    <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
                     <a href="historico.html" class="nav-menu-item">Histórico</a>
                     <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
                     <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
@@ -81,7 +81,7 @@
                                 <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
-                        <button class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Solicitar carona</button>
+                        <button class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona</button>
                     </div>
                 </div>
             </div>
@@ -92,14 +92,14 @@
                     <input id="destOfeInput" class="map-search map-search-float" placeholder="Buscar endereço ou destino">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div id="acaoSheetOfe" class="acao-sheet">
-                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Publicar carona</span></div>
+                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Vagas disponíveis</label>
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1">
                             </div>
                         </div>
-                        <button class="btn btn-primary btn-block" onclick="oferecerCarona()">Publicar carona</button>
+                        <button class="btn btn-primary btn-block" onclick="oferecerCarona()">Oferecer carona</button>
                     </div>
                 </div>
             </div>
@@ -262,7 +262,7 @@
     </div>
     <div id="painelMotorista" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelMotorista')">
         <div class="cam-box perfil-box painel-box">
-            <h3>Solicitações &amp; corridas</h3>
+            <h3>Solicitações &amp; viagens</h3>
             <p class="cam-hint">Você publica a rota; os passageiros pedem. Aceite ou recuse aqui.</p>
             <div class="painel-sec">
                 <div id="listaPropMotorista"></div>
@@ -639,13 +639,29 @@
         });
     }
 
+    // Selfie de segurança do passageiro: vale por 1h na mesma sessão. Repetir a
+    // câmera a cada toque (pedir carona, pedir vaga) só gerava fricção — a foto
+    // continua ao vivo e carimbada; só não é exigida de novo em sequência.
+    async function obterSelfieSeguranca(titulo) {
+        try {
+            const s = JSON.parse(sessionStorage.getItem('selfieSeguranca') || 'null');
+            if (s && s.url && Date.now() - new Date(s.em).getTime() < 60 * 60 * 1000) {
+                msg('Usando a selfie tirada há pouco.');
+                return s;
+            }
+        } catch (_) {}
+        const s = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo });
+        try { sessionStorage.setItem('selfieSeguranca', JSON.stringify(s)); } catch (_) {}
+        return s;
+    }
+
     async function pedirCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
         const origem = selPed.getOrigem();
         try {
-            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie (segurança da viagem)' });
+            const selfie = await obterSelfieSeguranca('Selfie (segurança da viagem)');
             const origemTexto = await geocodeReverso(origem);   // nome do ponto de embarque
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
@@ -704,7 +720,7 @@
     async function pedirVaga(caronaId) {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         try {
-            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie para pedir a vaga' });
+            const selfie = await obterSelfieSeguranca('Selfie para pedir a vaga');
             const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({
                 carona_id: caronaId, selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
             }) });
@@ -1313,7 +1329,7 @@
                     if (vv.status !== 'em_andamento') {
                         clearInterval(acompTimer);
                         // Passageiro não fica preso na tela de "concluída": volta ao mapa.
-                        // A corrida fica registrada no histórico.
+                        // A viagem fica registrada no histórico.
                         if (!vv.ehMotorista) { msg('Viagem concluída. Veja no histórico.'); sairDaViagem(); }
                         else { atualizarCabecalhoViagem(); limparRotaViagem(); }
                         return;
