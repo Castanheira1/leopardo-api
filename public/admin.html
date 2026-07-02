@@ -47,6 +47,13 @@
     </div>
 
     <div class="card">
+        <h3>Notificações — motoristas do dia</h3>
+        <p class="cam-hint" style="margin:4px 0 10px;">Raio-X do aviso de pedido: quem ativou o modo motorista nas últimas 24h,
+        se o celular dele aceita push e a idade da última localização (usada no aviso de até 1 km com app fechado).</p>
+        <div id="listaPush"></div>
+    </div>
+
+    <div class="card">
         <h3>Viagens recentes</h3>
         <div id="listaViagens"></div>
     </div>
@@ -67,6 +74,8 @@ async function carregar() {
         ${statCard(ADM_ICN.nav, d.viagensEmAndamento, 'Viagens em andamento')}
         ${statCard(ADM_ICN.check, d.viagensConcluidas, 'Viagens concluídas')}`;
 
+    carregarPushStatus();
+
     document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => `
         <div class="agendamento-item ${v.status === 'concluida' ? 'completed' : v.status === 'em_andamento' ? 'in-progress' : ''}">
             <div class="agendamento-header">
@@ -86,6 +95,30 @@ const ADM_ICN = {
 };
 function statCard(icon, num, label) {
     return `<div class="stat-card"><span class="stat-icon">${icon}</span><h3>${num}</h3><p>${label}</p></div>`;
+}
+
+// Raio-X das notificações: por que um motorista (não) recebe o aviso de pedido.
+async function carregarPushStatus() {
+    const div = document.getElementById('listaPush');
+    try {
+        const r = await fetchWithAuth('/api/admin/push-status');
+        const d = await r.json();
+        if (!r.ok) return;
+        const aviso = d.pushConfigurado ? '' :
+            '<div class="agendamento-item"><strong style="color:#b91c1c;">Chaves VAPID ausentes no servidor — nenhum push sai.</strong></div>';
+        div.innerHTML = aviso + ((d.motoristas || []).map(m => {
+            const push = +m.inscricoes_push > 0
+                ? `✅ push OK (${m.inscricoes_push} aparelho${m.inscricoes_push > 1 ? 's' : ''})`
+                : '❌ SEM push — não permitiu notificações';
+            const loc = m.localizacao_em
+                ? `📍 localização de ${m.localizacao_min} min atrás`
+                : '📍 sem localização registrada — fora do aviso';
+            return `<div class="agendamento-item ${+m.inscricoes_push > 0 && m.localizacao_em ? 'completed' : ''}">
+                <div class="agendamento-header"><strong>${m.nome}</strong><span class="badge badge-ativo">${m.matricula}</span></div>
+                <small>${push} • ${loc} • motorista desde ${fmtData(m.habilitado_em)}</small>
+            </div>`;
+        }).join('') || '<p class="cam-hint">Nenhum motorista habilitado nas últimas 24h.</p>');
+    } catch (_) { /* mantém a tela */ }
 }
 
 async function resetSenha() {
