@@ -85,7 +85,7 @@
                                 <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
-                        <button class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona</button>
+                        <button id="btnCtaPedir" class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona</button>
                     </div>
                 </div>
             </div>
@@ -103,7 +103,7 @@
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1">
                             </div>
                         </div>
-                        <button class="btn btn-primary btn-block" onclick="oferecerCarona()">Oferecer carona</button>
+                        <button id="btnCtaOferecer" class="btn btn-primary btn-block" onclick="oferecerCarona()">Oferecer carona</button>
                     </div>
                 </div>
             </div>
@@ -302,6 +302,16 @@
     let selPed = null, selOfe = null;
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
+
+    /* -------- altura real da tela -------- */
+    // Fallback p/ navegadores sem "dvh": 100vh passa da área visível e CORTA a
+    // barra de baixo — e como a tela é travada (sem rolagem), o botão fica
+    // inalcançável. Mede a altura de verdade e expõe em --appvh.
+    function ajustarAltura() {
+        document.documentElement.style.setProperty('--appvh', (window.innerHeight * 0.01) + 'px');
+    }
+    ajustarAltura();
+    window.addEventListener('resize', ajustarAltura);
 
     /* -------- buzina (aviso de novo pedido de carona) -------- */
     // Duas buzinadas curtas + duas vibradas no celular do motorista. O AudioContext
@@ -790,6 +800,17 @@
         return s;
     }
 
+    // Feedback IMEDIATO no botão + trava de duplo toque: em rede lenta o toque
+    // parecia "não pegar" e o usuário tocava de novo (duplicando a ação).
+    function travarBotao(id, texto) {
+        const b = document.getElementById(id);
+        if (!b || b.disabled) return null;
+        const original = b.innerHTML;
+        b.disabled = true;
+        b.textContent = texto;
+        return () => { b.disabled = false; b.innerHTML = original; };
+    }
+
     async function pedirCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
@@ -801,6 +822,8 @@
             return msg('Ative sua localização (GPS) para pedir carona.', 'error');
         }
         const origem = selPed.getOrigem();
+        const soltar = travarBotao('btnCtaPedir', 'Abrindo a câmera…');
+        if (!soltar) return;   // já tem um pedido em andamento
         try {
             const selfie = await obterSelfieSeguranca('Selfie (segurança da viagem)');
             const origemTexto = await geocodeReverso(origem);   // nome do ponto de embarque
@@ -828,6 +851,7 @@
                 mostrarChamando({ pedidoId: d.id });   // entra no modo chamada (procurando agora)
             }
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
+        finally { soltar(); }
     }
 
     async function matchCaronas(pedidoId) {
@@ -937,18 +961,23 @@
             return msg('Ative sua localização (GPS) para oferecer carona.', 'error');
         }
         const origem = selOfe.getOrigem();
-        const origemTexto = await geocodeReverso(origem);   // nome do ponto de saída
-        const body = {
-            origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
-            destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-            horario: null, vagas: +document.getElementById('vagasOfe').value || 1,
-        };
-        const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
-        const d = await r.json();
-        if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Carona publicada! Você está em rota — os passageiros já podem pedir.');
-        document.getElementById('acaoSheetOfe').classList.add('collapsed');
-        abrirTrajeto(d);
+        const soltar = travarBotao('btnCtaOferecer', 'Publicando…');
+        if (!soltar) return;   // já tem uma publicação em andamento
+        try {
+            const origemTexto = await geocodeReverso(origem);   // nome do ponto de saída
+            const body = {
+                origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
+                destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
+                horario: null, vagas: +document.getElementById('vagasOfe').value || 1,
+            };
+            const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            msg('Carona publicada! Você está em rota — os passageiros já podem pedir.');
+            document.getElementById('acaoSheetOfe').classList.add('collapsed');
+            abrirTrajeto(d);
+        } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
+        finally { soltar(); }
     }
     // Modo trajeto do motorista (estilo Uber): rota publicada + posição ao vivo.
     async function abrirTrajeto(c) {

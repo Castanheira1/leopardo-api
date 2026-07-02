@@ -548,9 +548,9 @@ a.btn { display: inline-block; text-align: center; }
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
-    /* Folga extra embaixo p/ o botão não encostar na barra inferior do iPhone
-       (env() já adapta por modelo/tela; o +30px é a folga "um pouco mais acima"). */
-    padding: 0 16px calc(30px + env(safe-area-inset-bottom));
+    /* Folga extra embaixo p/ o botão não encostar na barra inferior/gestos do
+       celular (env() adapta por modelo; o +34px é a folga acima da barra de gestos). */
+    padding: 0 16px calc(34px + env(safe-area-inset-bottom));
     transition: transform 0.22s ease;
     touch-action: none;
 }
@@ -604,6 +604,7 @@ body.theme-dark { background: #0b0b0d; }
    Sem isso a página inteira subia ao arrastar e a busca cobria o menu. */
 body.theme-dark {
     height: 100vh;
+    height: calc(var(--appvh, 1vh) * 100);   /* altura REAL medida por JS (navegador sem dvh) */
     height: 100dvh;
     overflow: hidden;
     overscroll-behavior: none;   /* sem pull-to-refresh acidental arrastando o mapa */
@@ -762,6 +763,12 @@ body.theme-dark {
 .viagem-nav.nav-grande .nav-dist { font-size: 1.35rem; }
 .viagem-nav.nav-grande .nav-seta { width: 54px; height: 54px; }
 .viagem-nav.nav-grande .nav-seta svg { width: 40px; height: 40px; }
+/* Alvo de toque confortável nos botões das barras de baixo (48px = dedo). */
+.acao-sheet .btn,
+.sheet-acoes .btn,
+.sol-actions .btn { min-height: 48px; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+
 /* Alternador Satélite <-> Mapa leve (canto do mapa). */
 .map-tipo-btn {
     margin: 0 0 12px 10px;
