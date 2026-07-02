@@ -144,7 +144,21 @@ function obterLocalizacao(opts = {}) {
         .catch((err) => {
             if (err && err.code === 1) throw err;
             return pedir({ enableHighAccuracy: false, timeout: 8000, maximumAge: 60000, ...opts });
+        })
+        .then((p) => {
+            // Guarda a última posição: o mapa abre NA HORA centrado nela na
+            // próxima vez, sem esperar o GPS responder de novo.
+            try { localStorage.setItem('ultimaPos', JSON.stringify({ ...p, em: Date.now() })); } catch (_) {}
+            return p;
         });
+}
+// Última posição conhecida (para abrir o mapa instantaneamente). Vale por 7 dias.
+function ultimaPosConhecida() {
+    try {
+        const p = JSON.parse(localStorage.getItem('ultimaPos') || 'null');
+        if (p && p.lat && Date.now() - (p.em || 0) < 7 * 24 * 3600 * 1000) return { lat: p.lat, lng: p.lng };
+    } catch (_) {}
+    return null;
 }
 
 /* -------------------- Câmera (captura AO VIVO, sem anexar arquivo) -------------------- */

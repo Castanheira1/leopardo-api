@@ -12,6 +12,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="VAP">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <!-- Conexão pré-aquecida com os servidores do mapa: as imagens começam
+         a chegar mais cedo em internet fraca. -->
+    <link rel="preconnect" href="https://maps.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://maps.gstatic.com" crossorigin>
     <script src="/pwa.js" defer></script>
     <title>VAP - Carona</title>
     <link rel="stylesheet" href="style.css">
@@ -502,21 +506,61 @@
         } catch (_) { set('Erro de conexão. Tente novamente.', '#ef9a9a'); }
     }
 
+    /* -------- mapa: criação central + alternador Satélite/Mapa leve -------- */
+    // Satélite é pesado em internet fraca. O tipo escolhido fica salvo; o modo
+    // "mapa leve" usa o vetor ESCURO (estilo app de corrida) — carrega muito
+    // mais rápido. Os carros/pulsos/rotas continuam ao vivo igual.
+    const ESTILO_MAPA_ESCURO = [
+        { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#8a93a3' }] },
+        { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#d5b97a' }] },
+        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#263c3f' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
+        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
+        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#746855' }] },
+        { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1f2835' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
+        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+    ];
+    function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapa') || 'hybrid'; } catch (_) { return 'hybrid'; } }
+    function aplicarTipoMapa(map, tipo) {
+        map.setMapTypeId(tipo);
+        map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_ESCURO : null });
+    }
+    function novoMapa(elId, opts) {
+        const map = new g.maps.Map(document.getElementById(elId), {
+            zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
+            fullscreenControl: false, gestureHandling: 'greedy', ...opts,
+        });
+        if (tipoMapaSalvo() === 'roadmap') map.setOptions({ styles: ESTILO_MAPA_ESCURO });
+        // Botão flutuante Satélite <-> Mapa leve (a escolha vale para os próximos mapas).
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'map-tipo-btn';
+        const rotulo = () => { b.textContent = tipoMapaSalvo() === 'hybrid' ? 'Mapa leve' : 'Satélite'; };
+        rotulo();
+        b.onclick = () => {
+            const novo = tipoMapaSalvo() === 'hybrid' ? 'roadmap' : 'hybrid';
+            try { localStorage.setItem('tipoMapa', novo); } catch (_) {}
+            aplicarTipoMapa(map, novo);
+            rotulo();
+        };
+        map.controls[g.maps.ControlPosition.LEFT_BOTTOM].push(b);
+        return map;
+    }
+
     /* -------- seletor de rota (mapa) -------- */
     async function criarSeletor(mapId, inputId, comoCarro) {
         g = await carregarMaps();
-        let origem = null;
-        // A origem é SEMPRE a posição real do GPS — não dá para arrastar e "se
-        // colocar" onde quiser. Sem GPS não se pede nem se oferece carona
-        // (gpsOk falso trava a publicação com aviso claro).
-        const estado = { gpsOk: true };
-        try { origem = await obterLocalizacao(); }
-        catch (_) {
-            estado.gpsOk = false;
-            origem = { lat: -6.40, lng: -49.85 };   // ~Canaã/S11D: só para abrir o mapa
-            msg('Ative a localização (GPS) — ela é obrigatória para pedir ou oferecer carona.', 'error');
-        }
-        const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
+        // O mapa abre NA HORA na última posição conhecida (ou no polo S11D) e o
+        // GPS ajusta quando responder — esperar o GPS aqui segurava o download
+        // das imagens e o mapa parecia lento. A origem continua sendo SEMPRE a
+        // posição real do GPS: sem ele, pedir/oferecer segue bloqueado.
+        let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
+        const estado = { gpsOk: false };
+        const map = novoMapa(mapId, { center: origem, zoom: 15, disableDoubleClickZoom: true });
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
@@ -534,6 +578,17 @@
                 pulseOrigem = criarPulse(map, origem, user.sexo, null, 'Você');
             } catch (_) { /* sem pulso: segue só com o marcador */ }
         }
+        // Primeiro fix do GPS: chega e posiciona (o mapa já está carregando desde
+        // o primeiro instante — a espera não trava mais a tela).
+        obterLocalizacao().then((p) => {
+            estado.gpsOk = true;
+            mkOrigem.setPosition(p);
+            if (pulseOrigem) pulseOrigem.setPosition(p);
+            map.panTo(p);
+            if (destino) tracarRota();
+        }).catch(() => {
+            msg('Ative a localização (GPS) — ela é obrigatória para pedir ou oferecer carona.', 'error');
+        });
         // Origem viva: acompanha o GPS de tempos em tempos (sem panejar o mapa,
         // para não brigar com o usuário olhando em volta).
         setInterval(async () => {
@@ -910,7 +965,7 @@
         g = await carregarMaps();
         const origem = { lat: +c.origem_lat, lng: +c.origem_lng };
         const destino = c.destino_lat ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: origem, zoom: 16, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = novoMapa('mapViagem', { center: origem, zoom: 16 });
         if (destino) {
             const ds = new g.maps.DirectionsService();
             const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, polylineOptions: { strokeColor: '#000000', strokeWeight: 6 } });
@@ -1197,7 +1252,7 @@
         const embarque = v.origem_lat != null ? { lat: +v.origem_lat, lng: +v.origem_lng } : null;
         const destino = v.destino_lat != null ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
         const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
-        const map = new g.maps.Map(document.getElementById('mapViagem'), { center: centro, zoom: 16, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy' });
+        const map = novoMapa('mapViagem', { center: centro, zoom: 16 });
 
         // Pinos fixos: embarque (verde) e destino (dourado).
         const pin = (cor) => ({ path: g.maps.SymbolPath.CIRCLE, scale: 7, fillColor: cor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 });
@@ -1846,6 +1901,7 @@
 
     /* -------- init -------- */
     (async function init() {
+        carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
         checarTelefone();
         await carregarHabilitacao().catch(() => {});
         if (habHoje) iniciarBroadcastLocalizacao();
