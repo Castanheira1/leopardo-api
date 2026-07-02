@@ -1598,7 +1598,8 @@
             _PulseClass = class extends g.maps.OverlayView {
                 constructor(p, s, cb, t, r) { super(); this.pos = p; this.sexo = s; this.cb = cb; this.titulo = t; this.rotulo = r; this.div = null; }
                 onAdd() {
-                    const cor = this.sexo === 'F' ? '#ec4899' : this.sexo === 'M' ? '#2563eb' : '#9ca3af';
+                    // Tons mais vivos: destacam no mapa híbrido (satélite escuro).
+                    const cor = this.sexo === 'F' ? '#ff2f92' : this.sexo === 'M' ? '#3d8bff' : '#b0b6bf';
                     const d = document.createElement('div');
                     d.className = 'map-pulse';
                     d.title = this.titulo || '';
