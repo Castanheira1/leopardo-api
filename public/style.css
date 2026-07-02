@@ -762,6 +762,20 @@ body.theme-dark {
 .viagem-nav.nav-grande .nav-dist { font-size: 1.35rem; }
 .viagem-nav.nav-grande .nav-seta { width: 54px; height: 54px; }
 .viagem-nav.nav-grande .nav-seta svg { width: 40px; height: 40px; }
+/* Alternador Satélite <-> Mapa leve (canto do mapa). */
+.map-tipo-btn {
+    margin: 0 0 12px 10px;
+    padding: 7px 12px;
+    border: 1.5px solid rgba(234, 210, 152, 0.75);
+    border-radius: 999px;
+    background: rgba(15, 61, 62, 0.85);
+    color: #EAD298;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
 /* Botão flutuante de recentralizar o mapa na própria posição. */
 .viagem-recenter { position: absolute; top: 10px; right: 10px; z-index: 5;
     width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
