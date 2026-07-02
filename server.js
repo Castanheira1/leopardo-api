@@ -234,7 +234,7 @@ async function notificarMotoristasProximos(ped) {
            AND h.motorista_id <> $3
          ORDER BY h.motorista_id, h.created_at DESC
        ) s
-       WHERE s.dist <= 15
+       WHERE s.dist <= 50
        ORDER BY s.dist ASC
        LIMIT 8`,
       [ped.origem_lat, ped.origem_lng, ped.passageiro_id]

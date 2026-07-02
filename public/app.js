@@ -128,14 +128,23 @@ function carregarMaps() {
 
 /* -------------------- Geolocalização -------------------- */
 function obterLocalizacao(opts = {}) {
-    return new Promise((resolve, reject) => {
+    const pedir = (o) => new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('Geolocalização indisponível'));
         navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
             (err) => reject(err),
-            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0, ...opts }
+            o
         );
     });
+    // 1ª tentativa precisa. Se falhar por timeout/indisponível (comum no iPhone),
+    // tenta de novo aceitando posição aproximada/cacheada — no iOS a segunda
+    // tentativa "grossa" costuma responder. Permissão negada (code 1) não
+    // re-tenta: só resolve liberando a localização nos ajustes.
+    return pedir({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0, ...opts })
+        .catch((err) => {
+            if (err && err.code === 1) throw err;
+            return pedir({ enableHighAccuracy: false, timeout: 8000, maximumAge: 60000, ...opts });
+        });
 }
 
 /* -------------------- Câmera (captura AO VIVO, sem anexar arquivo) -------------------- */

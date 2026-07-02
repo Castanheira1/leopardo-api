@@ -506,7 +506,16 @@
     async function criarSeletor(mapId, inputId, comoCarro) {
         g = await carregarMaps();
         let origem = null;
-        try { origem = await obterLocalizacao(); } catch (_) { origem = { lat: -6.40, lng: -49.85 }; } // fallback ~Canaã/S11D
+        // gpsOk/origemAjustada: um pedido/carona NUNCA pode sair com a origem no
+        // fallback fantasma — era o bug do iPhone: GPS negado, pino caía em Canaã
+        // em silêncio e o pedido nascia a dezenas de km do passageiro real.
+        const estado = { gpsOk: true, origemAjustada: false };
+        try { origem = await obterLocalizacao(); }
+        catch (_) {
+            estado.gpsOk = false;
+            origem = { lat: -6.40, lng: -49.85 };   // ~Canaã/S11D: só para abrir o mapa
+            msg('Não achamos sua localização — arraste o pino até onde você está, ou libere o GPS nos ajustes.', 'error');
+        }
         const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
@@ -603,7 +612,7 @@
             dicaToque();
         });
         map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
-        mkOrigem.addListener('dragend', tracarRota);
+        mkOrigem.addListener('dragend', () => { estado.origemAjustada = true; tracarRota(); });
 
         const inputEl = document.getElementById(inputId);
         const ac = new g.maps.places.Autocomplete(inputEl, { fields: ['geometry', 'name', 'formatted_address'] });
@@ -622,11 +631,14 @@
         async function recentrar() {
             try {
                 const p = await obterLocalizacao();
+                estado.gpsOk = true;   // GPS voltou (ex.: usuário liberou nos ajustes)
                 mkOrigem.setPosition(p);
                 if (pulseOrigem) pulseOrigem.setPosition(p);
                 map.panTo(p);
                 if (destino) tracarRota();
-            } catch (_) { /* sem GPS agora: mantém a posição atual */ }
+            } catch (_) {
+                if (!estado.gpsOk) msg('Ainda sem sua localização. Libere o GPS nos ajustes ou arraste o pino até onde você está.', 'error');
+            }
         }
 
         return {
@@ -635,6 +647,8 @@
             getDestino: () => destino,
             recentrar,
             dica: () => dicaToque(true),
+            // Origem vale para publicar? GPS respondeu OU o usuário posicionou o pino.
+            origemConfiavel: () => estado.gpsOk || estado.origemAjustada,
         };
     }
     async function initMapPedir() {
@@ -695,6 +709,12 @@
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
+        // Origem fantasma (GPS falhou e o pino não foi ajustado): bloqueia — o
+        // pedido nasceria longe do passageiro real e o motorista nunca o acharia.
+        if (!selPed.origemConfiavel()) {
+            selPed.recentrar();   // re-tenta o GPS; se voltou, o próximo toque passa
+            return msg('Confirme sua localização: arraste o pino até onde você está.', 'error');
+        }
         const origem = selPed.getOrigem();
         try {
             const selfie = await obterSelfieSeguranca('Selfie (segurança da viagem)');
@@ -826,6 +846,10 @@
         if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
         const dest = selOfe && selOfe.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
+        if (!selOfe.origemConfiavel()) {
+            selOfe.recentrar();
+            return msg('Confirme sua localização: arraste o carrinho até onde você está.', 'error');
+        }
         const origem = selOfe.getOrigem();
         const origemTexto = await geocodeReverso(origem);   // nome do ponto de saída
         const body = {
