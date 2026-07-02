@@ -503,6 +503,12 @@
             veiculoPend = null;
             document.getElementById('modalVeiculo').style.display = 'none';
             msg('Modo motorista ativado!');
+            // Motorista precisa do push para ser avisado de pedidos por perto
+            // (inclusive com o app fechado). Gesto válido: pede a permissão aqui.
+            registrarPush();
+            if ('Notification' in window && Notification.permission === 'denied') {
+                msg('Notificações bloqueadas no navegador — ative-as para ser avisado de pedidos por perto.', 'error');
+            }
         } catch (_) { set('Erro de conexão. Tente novamente.', '#ef9a9a'); }
     }
 

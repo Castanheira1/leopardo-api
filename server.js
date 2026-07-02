@@ -94,16 +94,21 @@ async function enviarPush(usuarioId, payload) {
       "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE usuario_id = $1",
       [usuarioId]
     );
+    if (!rows.length) { console.log(`push: usuário ${usuarioId} SEM inscrição — notificação não sai`); return; }
     const data = JSON.stringify(payload);
+    let falhas = 0;
     await Promise.all(rows.map(async (s) => {
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, data);
       } catch (err) {
+        falhas++;
+        console.warn(`push: falha para usuário ${usuarioId} (${err.statusCode || err.message})`);
         if (err.statusCode === 404 || err.statusCode === 410) {
           await pool.query("DELETE FROM push_subscriptions WHERE endpoint = $1", [s.endpoint]).catch(() => {});
         }
       }
     }));
+    console.log(`push: usuário ${usuarioId} — ${rows.length} inscrição(ões), ${falhas} falha(s)`);
   } catch (err) {
     console.error("enviarPush:", err.message);
   }
@@ -274,6 +279,21 @@ setInterval(async () => {
     console.error("Erro ao notificar pedidos agendados:", err.message);
   }
 }, 60 * 1000);
+
+// Keep-alive: o plano FREE do Render hiberna o serviço após ~15 min sem
+// tráfego — a próxima visita paga 30-60s de partida a frio e os agendadores
+// param (aviso de pedido agendado, expiração). Um auto-ping a cada 10 min
+// mantém tudo acordado. O Render define RENDER_EXTERNAL_URL sozinho; sem a
+// env (dev local), não faz nada. Alternativa definitiva: plan starter.
+const KEEPALIVE_MS = Number(process.env.KEEPALIVE_MS || 10 * 60 * 1000);
+if (process.env.RENDER_EXTERNAL_URL) {
+  setInterval(() => {
+    fetch(`${process.env.RENDER_EXTERNAL_URL}/api/config`)
+      .then((r) => { if (!r.ok) console.warn("keep-alive: resposta", r.status); })
+      .catch((e) => console.warn("keep-alive:", e.message));
+  }, KEEPALIVE_MS);
+  console.log(`Keep-alive ativo (${KEEPALIVE_MS / 1000}s) em ${process.env.RENDER_EXTERNAL_URL}`);
+}
 
 // Marca pedidos antigos como cancelados (limpeza leve): "para agora" parados há mais
 // de 3h, e agendados cujo horário já passou há mais de 3h.
@@ -1345,6 +1365,31 @@ app.get("/api/admin/overview", verificarAuth, verificarAdmin, async (req, res) =
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao carregar painel" });
+  }
+});
+
+// Raio-X das notificações: por que um motorista (não) recebe o push?
+// Lista os habilitados nas últimas 24h com: inscrições de push no aparelho,
+// idade da última localização e desde quando o modo motorista está ativo.
+app.get("/api/admin/push-status", verificarAuth, verificarAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (u.id) u.id, u.nome, u.matricula,
+              h.created_at AS habilitado_em,
+              (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.usuario_id = u.id) AS inscricoes_push,
+              l.atualizado_em AS localizacao_em,
+              ROUND(EXTRACT(EPOCH FROM (NOW() - l.atualizado_em)) / 60) AS localizacao_min
+       FROM habilitacoes_motorista h
+       JOIN usuarios u ON u.id = h.motorista_id
+       LEFT JOIN localizacoes_online l ON l.usuario_id = u.id
+       WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
+       ORDER BY u.id, h.created_at DESC`
+    );
+    const total = (await pool.query("SELECT COUNT(*) FROM push_subscriptions")).rows[0].count;
+    res.json({ pushConfigurado, totalInscricoes: +total, motoristas: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar status do push" });
   }
 });
 
