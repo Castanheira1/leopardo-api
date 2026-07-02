@@ -565,6 +565,7 @@
         async function tracarRota() {
             if (!destino) return;
             try {
+                dirRenderer.setMap(map);   // religa caso limparRota tenha desligado
                 const resp = await dirService.route({
                     origin: mkOrigem.getPosition(),
                     destination: { lat: destino.lat, lng: destino.lng },
@@ -577,9 +578,19 @@
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
+        // Tira do mapa a rota/destino antigos (após concluir uma viagem ou encerrar
+        // a carona) — sem isso a linha ficava "presa" na tela até recarregar.
+        function limparRota() {
+            destino = null;
+            mkDestino.setMap(null);
+            dirRenderer.setMap(null);
+            rotaInfo.style.display = 'none';
+        }
+
         let geocoder = null;
         function setDestino(pos, texto) {
             destino = { lat: pos.lat, lng: pos.lng, texto: texto || '' };
+            mkDestino.setMap(map);   // religa caso limparRota tenha tirado
             mkDestino.setPosition(pos);
             map.panTo(pos);
             tracarRota();
@@ -659,6 +670,7 @@
             getDestino: () => destino,
             recentrar,
             dica: () => dicaToque(true),
+            limparRota,
             // Origem vale para publicar? Só se veio do GPS de verdade.
             origemConfiavel: () => estado.gpsOk,
         };
@@ -822,6 +834,7 @@
         fecharChamando();
         if (prop) { propostasTratadas.add(prop); await fetchWithAuth('/api/propostas/' + prop + '/cancelar', { method: 'POST' }).catch(() => {}); }
         if (ped) { await fetchWithAuth('/api/pedidos/' + ped, { method: 'DELETE' }).catch(() => {}); }
+        if (selPed) selPed.limparRota();   // cancelou: o mapa não fica com a rota presa
         msg('Chamada cancelada.');
         loadPropostas();
     }
@@ -917,6 +930,7 @@
         await fetchWithAuth('/api/caronas/' + caronaId, { method: 'DELETE' });
         document.getElementById('btnViagemAndamento').style.display = 'none';
         msg('Carona encerrada.');
+        if (selOfe) selOfe.limparRota();   // a rota publicada não fica presa no mapa
         escolherPapel('motorista');
     }
 
@@ -962,6 +976,7 @@
         const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
+        if (selPed) selPed.limparRota();   // cancelou: o mapa não fica com a rota presa
         msg('Solicitação cancelada.');
         loadMeusPedidos();
     }
@@ -984,8 +999,10 @@
                      <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
         } else if (aceito) {
             const wpp = linkWhatsApp(tel);
+            // Número visível: dá para conferir DE QUEM é o WhatsApp que vai abrir
+            // (se abrir o seu próprio chat, o cadastro do outro está com o seu número).
             acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank">${ICN.phone} WhatsApp</a>` : ''}`;
+                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank" title="${tel}">${ICN.phone} WhatsApp (${tel})</a>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
@@ -1225,7 +1242,8 @@
         const vv = viagemView; if (!vv) return;
         const titulo = document.getElementById('viagemTitulo');
         const ctrl = document.getElementById('viagemControles');
-        const wpp = vv.tel ? `<a class="btn btn-success" href="${linkWhatsApp(vv.tel)}" target="_blank">${ICN.phone} WhatsApp</a>` : '';
+        // Número no botão: transparência de para quem a conversa vai abrir.
+        const wpp = vv.tel ? `<a class="btn btn-success" href="${linkWhatsApp(vv.tel)}" target="_blank" title="${vv.tel}">${ICN.phone} WhatsApp (${vv.tel})</a>` : '';
         const btnAnd = document.getElementById('btnViagemAndamento');
         if (vv.status !== 'em_andamento') {
             // Concluída: esconde o atalho "Em andamento" e oferece a saída.
@@ -1488,6 +1506,9 @@
         viagemView = null;
         localStorage.removeItem('viagemAtiva');
         document.getElementById('btnViagemAndamento').style.display = 'none';
+        // A viagem acabou: a rota antiga não pode ficar presa nos mapas de pedir/oferecer.
+        if (selPed) selPed.limparRota();
+        if (selOfe) selOfe.limparRota();
         escolherPapel(localStorage.getItem('papel') || 'passageiro');
     }
 
