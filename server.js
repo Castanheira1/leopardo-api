@@ -22,6 +22,10 @@ const RAIO_KM = Number(process.env.RAIO_MATCH_KM || 3);
 // Raio (km) de VISIBILIDADE no mapa e nos avisos: carona é coisa de gente
 // próxima — mais que isso pega outra cidade e vira bagunça.
 const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
+// Raio (km) do aviso com o APP FECHADO: motorista habilitado que está BEM
+// perto (última posição do dia) é avisado por push mesmo sem app aberto e
+// sem carona publicada — "estou na sala e alguém pediu aqui do lado".
+const RAIO_PUSH_PERTO_KM = Number(process.env.RAIO_PUSH_PERTO_KM || 1);
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -220,31 +224,36 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
     + sin(radians(${pLat})) * sin(radians(${latCol}))
   ))))`;
 
-// Notifica os motoristas ativos MAIS PERTO do embarque de um pedido (não espalha
-// para todos nem para quem está longe) e marca o pedido como notificado. Usado tanto
-// no POST (pedido "para agora") quanto pelo agendador (pedido com horário marcado).
+// Notifica os motoristas MAIS PERTO do embarque de um pedido em duas faixas:
+// - posição FRESCA (app aberto há <=10 min): até RAIO_VISIVEL_KM;
+// - posição do DIA (app pode estar fechado): até RAIO_PUSH_PERTO_KM — o
+//   motorista habilitado que está "na sala" a 1 km é avisado por push mesmo
+//   sem app aberto e sem carona publicada.
+// Marca o pedido como notificado. Usado no POST (pedido "para agora") e pelo
+// agendador (pedido com horário marcado).
 async function notificarMotoristasProximos(ped) {
   try {
     const nome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [ped.passageiro_id])).rows[0]?.nome || "Um colega";
     const motoristas = (await pool.query(
       `SELECT motorista_id FROM (
-         SELECT DISTINCT ON (h.motorista_id) h.motorista_id,
+         SELECT DISTINCT ON (h.motorista_id) h.motorista_id, l.atualizado_em,
                 ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
          FROM habilitacoes_motorista h
          JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
          WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
-           AND l.atualizado_em > NOW() - INTERVAL '10 minutes'
            AND h.motorista_id <> $3
          ORDER BY h.motorista_id, h.created_at DESC
        ) s
-       WHERE s.dist <= $4
+       WHERE (s.atualizado_em > NOW() - INTERVAL '10 minutes' AND s.dist <= $4)
+          OR s.dist <= $5
        ORDER BY s.dist ASC
        LIMIT 8`,
-      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_VISIVEL_KM]
+      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_VISIVEL_KM, RAIO_PUSH_PERTO_KM]
     )).rows;
+    const destino = ped.destino_texto ? ` para ${ped.destino_texto}` : " aqui perto";
     motoristas.forEach((m) => enviarPush(m.motorista_id, {
       title: "🙋 Carona perto de você",
-      body: `${nome} está pedindo carona aqui perto. Abra o app para oferecer.`,
+      body: `${nome} está pedindo carona${destino}. Abra o app para oferecer.`,
       url: "/dashboard.html",
     }));
   } catch (e) { console.warn("notificarMotoristasProximos:", e.message); }
@@ -256,7 +265,7 @@ async function notificarMotoristasProximos(ped) {
 setInterval(async () => {
   try {
     const { rows } = await pool.query(`
-      SELECT id, passageiro_id, origem_lat, origem_lng FROM pedidos
+      SELECT id, passageiro_id, origem_lat, origem_lng, destino_texto FROM pedidos
       WHERE status = 'aberto' AND notificado = FALSE
         AND horario IS NOT NULL AND horario <= NOW()
     `);
