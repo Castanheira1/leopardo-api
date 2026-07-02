@@ -17,8 +17,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || "veiculos";
-// Raio (km) de proximidade para considerar origem/destino "perto"
+// Raio (km) de proximidade para considerar origem/destino "perto" (match)
 const RAIO_KM = Number(process.env.RAIO_MATCH_KM || 3);
+// Raio (km) de VISIBILIDADE no mapa e nos avisos: carona é coisa de gente
+// próxima — mais que isso pega outra cidade e vira bagunça.
+const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -234,10 +237,10 @@ async function notificarMotoristasProximos(ped) {
            AND h.motorista_id <> $3
          ORDER BY h.motorista_id, h.created_at DESC
        ) s
-       WHERE s.dist <= 50
+       WHERE s.dist <= $4
        ORDER BY s.dist ASC
        LIMIT 8`,
-      [ped.origem_lat, ped.origem_lng, ped.passageiro_id]
+      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_VISIVEL_KM]
     )).rows;
     motoristas.forEach((m) => enviarPush(m.motorista_id, {
       title: "🙋 Carona perto de você",
@@ -597,8 +600,10 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       return res.json(rows);
     }
 
+    // Com lat/lng, mostra só caronas dentro do raio de visibilidade.
     const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
-    const params = lat && lng ? [lat, lng] : [];
+    const raio = lat && lng ? `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $3` : "";
+    const params = lat && lng ? [lat, lng, RAIO_VISIVEL_KM] : [];
     const orderBy = lat && lng ? "dist_origem ASC" : "c.created_at DESC";
 
     const { rows } = await pool.query(
@@ -607,6 +612,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
        WHERE c.status = 'ativa'
+       ${raio}
        ORDER BY ${orderBy}`,
       params
     );
@@ -695,20 +701,23 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       return res.json(rows);
     }
 
-    // Com lat/lng (mapa do motorista): TODOS os pedidos abertos, os mais perto
-    // primeiro (o motorista decide até onde vai; o LIMIT segura casos extremos).
+    // Com lat/lng (mapa do motorista): só pedidos DENTRO do raio de visibilidade,
+    // os mais perto primeiro — carona é entre gente próxima.
     if (lat && lng) {
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
       const { rows } = await pool.query(
-        `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
-                ${distOrigem} AS dist_origem
-         FROM pedidos p
-         JOIN usuarios u ON p.passageiro_id = u.id
-         WHERE p.status = 'aberto'
-           AND (p.horario IS NULL OR p.horario <= NOW())
-         ORDER BY dist_origem ASC
+        `SELECT * FROM (
+           SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
+                  ${distOrigem} AS dist_origem
+           FROM pedidos p
+           JOIN usuarios u ON p.passageiro_id = u.id
+           WHERE p.status = 'aberto'
+             AND (p.horario IS NULL OR p.horario <= NOW())
+         ) s
+         WHERE s.dist_origem <= $3
+         ORDER BY s.dist_origem ASC
          LIMIT 60`,
-        [lat, lng]
+        [lat, lng, RAIO_VISIVEL_KM]
       );
       return res.json(rows);
     }
@@ -1111,9 +1120,13 @@ app.delete("/api/localizacao", verificarAuth, async (req, res) => {
 
 // Motoristas com carona publicada e online nos últimos 3 min (vistos pelo passageiro).
 app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
+  const { lat, lng } = req.query;
   try {
     // Só motoristas com uma carona publicada (rota): o passageiro clica no
-    // carro no mapa e pede vaga naquela carona.
+    // carro no mapa e pede vaga naquela carona. Com lat/lng, corta pelo raio
+    // de visibilidade (carona é entre gente próxima).
+    const raio = lat && lng ? `AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4` : "";
+    const params = lat && lng ? [req.user.id, lat, lng, RAIO_VISIVEL_KM] : [req.user.id];
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
               u.id, u.nome, u.sexo, l.lat, l.lng,
@@ -1129,9 +1142,10 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
        WHERE l.disponivel = TRUE
          AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
          AND u.id <> $1
+         ${raio}
        ORDER BY u.id, ca.created_at DESC, h.created_at DESC
        LIMIT 100`,
-      [req.user.id]
+      params
     );
     res.json(rows);
   } catch (err) {

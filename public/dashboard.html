@@ -506,15 +506,15 @@
     async function criarSeletor(mapId, inputId, comoCarro) {
         g = await carregarMaps();
         let origem = null;
-        // gpsOk/origemAjustada: um pedido/carona NUNCA pode sair com a origem no
-        // fallback fantasma — era o bug do iPhone: GPS negado, pino caía em Canaã
-        // em silêncio e o pedido nascia a dezenas de km do passageiro real.
-        const estado = { gpsOk: true, origemAjustada: false };
+        // A origem é SEMPRE a posição real do GPS — não dá para arrastar e "se
+        // colocar" onde quiser. Sem GPS não se pede nem se oferece carona
+        // (gpsOk falso trava a publicação com aviso claro).
+        const estado = { gpsOk: true };
         try { origem = await obterLocalizacao(); }
         catch (_) {
             estado.gpsOk = false;
             origem = { lat: -6.40, lng: -49.85 };   // ~Canaã/S11D: só para abrir o mapa
-            msg('Não achamos sua localização — arraste o pino até onde você está, ou libere o GPS nos ajustes.', 'error');
+            msg('Ative a localização (GPS) — ela é obrigatória para pedir ou oferecer carona.', 'error');
         }
         const map = new g.maps.Map(document.getElementById(mapId), { center: origem, zoom: 15, mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', disableDoubleClickZoom: true });
 
@@ -527,14 +527,27 @@
             iconeUser = comoCarro ? CAR_ICON_URL
                 : { path: g.maps.SymbolPath.CIRCLE, scale: 18, fillColor: '#000', fillOpacity: 0.001, strokeWeight: 0 };
         } catch (_) { iconeUser = undefined; }
-        const mkOrigem = new g.maps.Marker({ position: origem, map, draggable: true, icon: iconeUser, title: comoCarro ? 'Seu carro (arraste para ajustar a saída)' : 'Você (arraste para ajustar o embarque)' });
+        const mkOrigem = new g.maps.Marker({ position: origem, map, icon: iconeUser, title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)' });
         let pulseOrigem = null;
         if (!comoCarro) {
             try {
                 pulseOrigem = criarPulse(map, origem, user.sexo, null, 'Você');
-                mkOrigem.addListener('drag', () => { const p = mkOrigem.getPosition(); pulseOrigem.setPosition({ lat: p.lat(), lng: p.lng() }); });
             } catch (_) { /* sem pulso: segue só com o marcador */ }
         }
+        // Origem viva: acompanha o GPS de tempos em tempos (sem panejar o mapa,
+        // para não brigar com o usuário olhando em volta).
+        setInterval(async () => {
+            if (document.hidden) return;
+            try {
+                const p = await obterLocalizacao();
+                estado.gpsOk = true;
+                const atual = mkOrigem.getPosition();
+                const moveu = Math.abs(atual.lat() - p.lat) + Math.abs(atual.lng() - p.lng) > 0.0005; // ~50 m
+                mkOrigem.setPosition(p);
+                if (pulseOrigem) pulseOrigem.setPosition(p);
+                if (moveu && destino) tracarRota();
+            } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
+        }, 10000);
         let destino = null;
         const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
 
@@ -612,7 +625,6 @@
             dicaToque();
         });
         map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
-        mkOrigem.addListener('dragend', () => { estado.origemAjustada = true; tracarRota(); });
 
         const inputEl = document.getElementById(inputId);
         const ac = new g.maps.places.Autocomplete(inputEl, { fields: ['geometry', 'name', 'formatted_address'] });
@@ -637,7 +649,7 @@
                 map.panTo(p);
                 if (destino) tracarRota();
             } catch (_) {
-                if (!estado.gpsOk) msg('Ainda sem sua localização. Libere o GPS nos ajustes ou arraste o pino até onde você está.', 'error');
+                if (!estado.gpsOk) msg('Ainda sem sua localização. Libere o GPS nos ajustes do aparelho para continuar.', 'error');
             }
         }
 
@@ -647,8 +659,8 @@
             getDestino: () => destino,
             recentrar,
             dica: () => dicaToque(true),
-            // Origem vale para publicar? GPS respondeu OU o usuário posicionou o pino.
-            origemConfiavel: () => estado.gpsOk || estado.origemAjustada,
+            // Origem vale para publicar? Só se veio do GPS de verdade.
+            origemConfiavel: () => estado.gpsOk,
         };
     }
     async function initMapPedir() {
@@ -709,11 +721,11 @@
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
-        // Origem fantasma (GPS falhou e o pino não foi ajustado): bloqueia — o
-        // pedido nasceria longe do passageiro real e o motorista nunca o acharia.
+        // Sem GPS não tem pedido: a origem seria um ponto fantasma longe do
+        // passageiro real e o motorista nunca o acharia.
         if (!selPed.origemConfiavel()) {
             selPed.recentrar();   // re-tenta o GPS; se voltou, o próximo toque passa
-            return msg('Confirme sua localização: arraste o pino até onde você está.', 'error');
+            return msg('Ative sua localização (GPS) para pedir carona.', 'error');
         }
         const origem = selPed.getOrigem();
         try {
@@ -848,7 +860,7 @@
         if (!dest) return msg('Defina um destino no mapa', 'error');
         if (!selOfe.origemConfiavel()) {
             selOfe.recentrar();
-            return msg('Confirme sua localização: arraste o carrinho até onde você está.', 'error');
+            return msg('Ative sua localização (GPS) para oferecer carona.', 'error');
         }
         const origem = selOfe.getOrigem();
         const origemTexto = await geocodeReverso(origem);   // nome do ponto de saída
@@ -1521,7 +1533,9 @@
         async function tick() {
             if (document.hidden) return;   // segundo plano: não polla
             try {
-                const r = await fetchWithAuth('/api/motoristas-online');
+                // Posição do passageiro: o servidor devolve só carros no raio de 10 km.
+                const o = selPed ? selPed.getOrigem() : null;
+                const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
                 const lista = await r.json();
                 const vistos = {};
