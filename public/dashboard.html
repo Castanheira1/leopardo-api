@@ -834,6 +834,7 @@
         fecharChamando();
         if (prop) { propostasTratadas.add(prop); await fetchWithAuth('/api/propostas/' + prop + '/cancelar', { method: 'POST' }).catch(() => {}); }
         if (ped) { await fetchWithAuth('/api/pedidos/' + ped, { method: 'DELETE' }).catch(() => {}); }
+        if (selPed) selPed.limparRota();   // cancelou: o mapa não fica com a rota presa
         msg('Chamada cancelada.');
         loadPropostas();
     }
@@ -975,6 +976,7 @@
         const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
+        if (selPed) selPed.limparRota();   // cancelou: o mapa não fica com a rota presa
         msg('Solicitação cancelada.');
         loadMeusPedidos();
     }
