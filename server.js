@@ -205,6 +205,11 @@ const verificarAdmin = (req, res, next) => {
   next();
 };
 
+// Horário vindo do cliente: só aceita data que parseia; senão vira NULL ("agora").
+// Protege contra datetime-local degradado (iOS antigo) mandando texto inválido,
+// que gravaria um pedido/carona invisível para sempre.
+const horarioValido = (h) => (h && !isNaN(Date.parse(h)) ? h : null);
+
 // Expressão Haversine (km) entre uma coluna (latCol/lngCol) e parâmetros $i/$j
 const haversine = (latCol, lngCol, pLat, pLng) => `
   (6371 * acos(LEAST(1, GREATEST(-1,
@@ -563,7 +568,7 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
       [
         req.user.id, hab.id, origem_texto || null, origem_lat, origem_lng,
         destino_texto || null, destino_lat, destino_lng,
-        horario || null, vagas || 1, observacao || null,
+        horarioValido(horario), vagas || 1, observacao || null,
       ]
     );
     res.json(rows[0]);
@@ -654,7 +659,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
        RETURNING *`,
       [
         req.user.id, origem_texto || null, origem_lat, origem_lng,
-        destino_texto || null, destino_lat, destino_lng, horario || null, observacao || null, nPessoas,
+        destino_texto || null, destino_lat, destino_lng, horarioValido(horario), observacao || null, nPessoas,
         selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
       ]
     );

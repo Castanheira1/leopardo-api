@@ -651,8 +651,12 @@
     }
 
     function horarioISO(id) {
+        // Guarda contra valor inválido do datetime-local (iOS antigo degrada o
+        // campo para texto livre): data que não parseia vira "agora" (null).
         const v = document.getElementById(id).value;
-        return v ? new Date(v).toISOString() : null;
+        if (!v) return null;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d.toISOString();
     }
 
     /* -------- pedir carona -------- */

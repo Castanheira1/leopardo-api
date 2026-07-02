@@ -164,58 +164,115 @@ function capturarFoto(opts = {}) {
 
         const video = overlay.querySelector('.cam-video');
         const status = overlay.querySelector('.cam-status');
+        const btnShot = overlay.querySelector('.cam-shot');
         let stream = null;
 
         const encerrar = () => {
             if (stream) stream.getTracks().forEach((t) => t.stop());
             overlay.remove();
         };
-
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false })
-            .then((s) => { stream = s; video.srcObject = s; })
-            .catch((e) => { encerrar(); reject(new Error('Não foi possível acessar a câmera: ' + e.message)); });
-
         overlay.querySelector('.cam-cancel').onclick = () => { encerrar(); reject(new Error('cancelado')); };
 
-        overlay.querySelector('.cam-shot').onclick = async () => {
+        // Pipeline comum (câmera ao vivo e fallback nativo): desenha a fonte no
+        // canvas com teto de 1280px, carimba GPS/hora, roda o OCR quando pedido
+        // e envia. Resolve a promise com { url, lat, lng, em, placa? }.
+        async function processarEnviar(fonte, w, h) {
+            const canvas = document.createElement('canvas');
+            const escala = Math.min(1, 1280 / Math.max(w, h));
+            canvas.width = Math.round(w * escala);
+            canvas.height = Math.round(h * escala);
+            canvas.getContext('2d').drawImage(fonte, 0, 0, canvas.width, canvas.height);
+
+            // Localização e horário do instante da captura
+            let loc = { lat: null, lng: null };
+            try { loc = await obterLocalizacao(); } catch (_) { /* segue sem GPS */ }
+            const em = new Date().toISOString();
+
+            let placa = null;
+            if (ocrPlaca) {
+                status.textContent = 'Lendo a placa...';
+                placa = await lerPlaca(canvas);
+            }
+
+            status.textContent = 'Enviando foto...';
+            const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+            const fd = new FormData();
+            fd.append('foto', blob, `${tipo}.jpg`);
+            fd.append('tipo', tipo);
+            const resp = await fetchWithAuth('/api/fotos', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Falha no upload');
+
+            encerrar();
+            resolve({ url: data.url, lat: loc.lat, lng: loc.lng, em, placa });
+        }
+
+        // Fallback iPhone/PWA: quando a câmera web (getUserMedia) não existe ou não
+        // abre — comum no iOS em app instalado ou permissão negada — usa a câmera
+        // NATIVA via input capture. Continua sendo foto tirada na hora: o capture
+        // abre direto a câmera do aparelho, não a galeria.
+        function usarCameraNativa(motivo) {
+            if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+            video.style.display = 'none';
+            status.textContent = motivo || '';
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            // setAttribute (não a propriedade): é o ATRIBUTO html que o iOS lê
+            // para abrir a câmera direto em vez da galeria.
+            input.setAttribute('capture', facing === 'user' ? 'user' : 'environment');
+            input.style.display = 'none';
+            overlay.appendChild(input);
+            btnShot.textContent = 'Abrir câmera';
+            btnShot.onclick = () => input.click();
+            input.onchange = async () => {
+                const file = input.files && input.files[0];
+                if (!file) return;
+                const url = URL.createObjectURL(file);
+                try {
+                    status.textContent = 'Processando...';
+                    const img = new Image();
+                    await new Promise((ok, err) => {
+                        img.onload = ok;
+                        img.onerror = () => err(new Error('Não deu para ler a foto. Tente de novo.'));
+                        img.src = url;
+                    });
+                    await processarEnviar(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
+                } catch (e) {
+                    status.textContent = 'Erro: ' + e.message;
+                } finally { URL.revokeObjectURL(url); }
+            };
+        }
+
+        btnShot.onclick = async () => {
             try {
                 status.textContent = 'Processando...';
-                const canvas = document.createElement('canvas');
-                // Teto de 1280px no lado maior: câmeras modernas geram fotos enormes
-                // que só encarecem o upload — o enquadramento não muda.
-                const vw = video.videoWidth || 720, vh = video.videoHeight || 960;
-                const escala = Math.min(1, 1280 / Math.max(vw, vh));
-                canvas.width = Math.round(vw * escala);
-                canvas.height = Math.round(vh * escala);
-                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                // Localização e horário do instante da captura
-                let loc = { lat: null, lng: null };
-                try { loc = await obterLocalizacao(); } catch (_) { /* segue sem GPS */ }
-                const em = new Date().toISOString();
-
-                // OCR da placa (Tesseract) antes de enviar
-                let placa = null;
-                if (ocrPlaca) {
-                    status.textContent = 'Lendo a placa...';
-                    placa = await lerPlaca(canvas);
+                // iOS às vezes demora a soltar as dimensões do vídeo — esperar o
+                // metadata evita capturar uma selfie preta de 0x0.
+                if (!video.videoWidth) {
+                    await new Promise((ok) => {
+                        video.addEventListener('loadedmetadata', ok, { once: true });
+                        setTimeout(ok, 2000);
+                    });
                 }
-
-                status.textContent = 'Enviando foto...';
-                const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
-                const fd = new FormData();
-                fd.append('foto', blob, `${tipo}.jpg`);
-                fd.append('tipo', tipo);
-                const resp = await fetchWithAuth('/api/fotos', { method: 'POST', body: fd });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || 'Falha no upload');
-
-                encerrar();
-                resolve({ url: data.url, lat: loc.lat, lng: loc.lng, em, placa });
+                await processarEnviar(video, video.videoWidth || 720, video.videoHeight || 960);
             } catch (e) {
                 status.textContent = 'Erro: ' + e.message;
             }
         };
+
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false })
+                .then((s) => {
+                    stream = s;
+                    video.srcObject = s;
+                    // iOS nem sempre respeita o autoplay mesmo com playsinline+muted.
+                    const p = video.play(); if (p && p.catch) p.catch(() => {});
+                })
+                .catch(() => usarCameraNativa('A câmera do navegador não abriu — toque em "Abrir câmera" para usar a câmera do aparelho.'));
+        } else {
+            usarCameraNativa('Toque em "Abrir câmera" para tirar a foto com a câmera do aparelho.');
+        }
     });
 }
 
