@@ -180,7 +180,7 @@ body {
 .tab-btn.active {
     color: var(--vale-blue);
     background: #ffffff;
-    border-bottom: 3px solid var(--vale-cyan);
+    border-bottom: 3px solid #EAD298;
 }
 
 /* CONTEÚDO DAS TABS */
@@ -385,11 +385,14 @@ body {
 .form-group select:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: var(--vale-cyan);
-    box-shadow: 0 0 0 3px rgba(0, 169, 206, 0.25);
+    border-color: #EAD298;
+    box-shadow: 0 0 0 3px rgba(234, 210, 152, 0.3);
 }
 
 /* BOTÕES */
+/* Identidade única DOURADA para todos os botões (sem verde/vermelho/ciano):
+   primário/success = dourado sólido; secundário = contorno dourado;
+   danger = bronze (tom mais fundo do mesmo dourado, distinguível). */
 .btn {
     padding: 10px 18px;
     border-radius: 10px;
@@ -397,49 +400,45 @@ body {
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
+    text-decoration: none;   /* links <a class="btn"> (ex.: WhatsApp) sem sublinhado */
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
+a.btn { display: inline-block; text-align: center; }
 
 .btn:active {
     transform: translateY(1px);
     box-shadow: none;
 }
 
-.btn-primary {
-    background: var(--vale-cyan);
-    color: #fff;
-    box-shadow: 0 8px 20px rgba(0, 169, 206, 0.35);
+.btn-primary,
+.btn-success {
+    background: #EAD298;
+    color: #0F3D3E;
+    box-shadow: 0 6px 18px rgba(234, 210, 152, 0.25);
 }
 
-.btn-primary:hover {
-    background: var(--vale-cyan-dark);
+.btn-primary:hover,
+.btn-success:hover {
+    background: #e0c98a;
 }
 
 .btn-secondary {
-    background: #64748b;
-    color: #fff;
+    background: rgba(15, 61, 62, 0.55);
+    color: #EAD298;
+    border: 1.5px solid rgba(234, 210, 152, 0.7);
 }
 
 .btn-secondary:hover {
-    background: #475569;
+    background: rgba(15, 61, 62, 0.8);
 }
 
 .btn-danger {
-    background: #ef4444;
-    color: #fff;
+    background: #c9a96a;   /* bronze: mesma família do dourado, lê-se "cuidado" */
+    color: #0F3D3E;
 }
 
 .btn-danger:hover {
-    background: #dc2626;
-}
-
-.btn-success {
-    background: var(--vale-green);
-    color: #fff;
-}
-
-.btn-success:hover {
-    background: #16a34a;
+    background: #b89553;
 }
 
 .btn-sm {
@@ -510,8 +509,8 @@ body {
 }
 .map-search:focus {
     outline: none;
-    border-color: var(--vale-cyan);
-    box-shadow: 0 0 0 3px rgba(0, 169, 206, 0.25);
+    border-color: #EAD298;
+    box-shadow: 0 0 0 3px rgba(234, 210, 152, 0.3);
 }
 .map-search-float {
     position: absolute;
@@ -606,7 +605,7 @@ body.theme-dark { background: #0b0b0d; }
 .theme-dark .tabs { background: transparent; border-bottom-color: rgba(255, 255, 255, 0.1); }
 .theme-dark .tab-btn { color: #9aa0a6; }
 .theme-dark .tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.04); }
-.theme-dark .tab-btn.active { color: #fff; background: transparent; border-bottom-color: var(--vale-cyan); }
+.theme-dark .tab-btn.active { color: #fff; background: transparent; border-bottom-color: #EAD298; }
 /* cards "achatados": sem fundo, borda ou sombra — o conteúdo fica direto na tela preta */
 .theme-dark .card { background: transparent; border: none; box-shadow: none; color: #e8eaed; padding: 14px 0; margin-bottom: 10px; }
 .theme-dark .card h3 { color: #fff; }
@@ -620,10 +619,7 @@ body.theme-dark { background: #0b0b0d; }
 /* itens de lista têm uma leve superfície (são itens, não "tela sobre tela") */
 .theme-dark .ride-item { background: #161719; border-color: #25262a; color: #e8eaed; box-shadow: none; }
 /* todos os botões na cor da marca (dourado) */
-.theme-dark .btn-primary,
-.theme-dark .btn-secondary { background: #EAD298; color: #0F3D3E; box-shadow: none; }
-.theme-dark .btn-primary:hover,
-.theme-dark .btn-secondary:hover { background: #e0c98a; }
+/* (botões já são dourados por padrão — sem override de tema) */
 
 /* ===== Solicitação recebida estilo Uber (bottom sheet) ===== */
 .sol-box { text-align: center; }
@@ -696,8 +692,8 @@ body.theme-dark { background: #0b0b0d; }
 }
 /* Pulso "radar" no mapa do motorista: passageiro pedindo carona, cor por sexo (--cor) */
 .map-pulse { position: absolute; transform: translate(-50%, -50%); width: 0; height: 0; cursor: pointer; }
-.map-pulse .mp-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--cor); box-shadow: 0 0 10px var(--cor); }
-.map-pulse .mp-ring { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--cor); animation: mpExpand 1.8s ease-out infinite; }
+.map-pulse .mp-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--cor); border: 2px solid #fff; box-shadow: 0 0 14px var(--cor), 0 0 4px var(--cor); }
+.map-pulse .mp-ring { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--cor); animation: mpExpand 1.8s ease-out infinite; }
 .map-pulse .mp-ring:nth-child(2) { animation-delay: 0.9s; }
 /* Rótulo abaixo do pulso (ex.: destino do pedido) — o motorista vê para onde
    a pessoa quer ir sem tocar no marcador. */
@@ -705,7 +701,7 @@ body.theme-dark { background: #0b0b0d; }
     white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis;
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
     border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
-@keyframes mpExpand { 0% { transform: scale(0.6); opacity: 0.85; } 100% { transform: scale(3.4); opacity: 0; } }
+@keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
 .viagem-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease; touch-action: none; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; }
@@ -812,7 +808,7 @@ body.theme-dark { background: #0b0b0d; }
     max-height: 60vh;
 }
 .cam-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
-.cam-status { margin-top: 8px; font-size: 0.85rem; color: var(--vale-cyan-dark); min-height: 18px; }
+.cam-status { margin-top: 8px; font-size: 0.85rem; color: #EAD298; min-height: 18px; }
 
 /* Modal de perfil (reusa cam-overlay/cam-box, mas alinhado à esquerda) */
 .perfil-box { text-align: left; }
