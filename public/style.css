@@ -543,7 +543,7 @@ a.btn { display: inline-block; text-align: center; }
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--sheet-kbd, 0px);   /* sobe quando o teclado virtual aparece (JS) */
     z-index: 6;
     background: #161719;
     border-radius: 18px 18px 0 0;
@@ -551,8 +551,14 @@ a.btn { display: inline-block; text-align: center; }
     /* Folga extra embaixo p/ o botão não encostar na barra inferior/gestos do
        celular (env() adapta por modelo; o +34px é a folga acima da barra de gestos). */
     padding: 0 16px calc(34px + env(safe-area-inset-bottom));
-    transition: transform 0.22s ease;
-    touch-action: none;
+    transition: transform 0.22s ease, bottom 0.22s ease;
+    touch-action: pan-y;   /* permite rolar o conteúdo com teclado aberto */
+    overscroll-behavior: contain;
+}
+.acao-sheet.teclado-aberto {
+    max-height: calc(var(--appvh, 1vh) * 72);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 /* colapsado: a "meia bola" dourada fica sempre visível e convidativa sobre o mapa */
 .acao-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
@@ -564,6 +570,7 @@ a.btn { display: inline-block; text-align: center; }
     gap: 6px;
     padding: 30px 0 12px;     /* espaço para a meia bola que projeta acima da barra */
     cursor: grab;
+    touch-action: none;   /* só a alça bloqueia gestos — o resto do sheet pode rolar */
 }
 /* Alça em meia bola (semicírculo) que se projeta acima da barra — fácil de ver e pegar */
 .acao-handle {
@@ -739,9 +746,10 @@ body.theme-dark {
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
     border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
-.viagem-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease; touch-action: none; }
+.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: pan-y; overscroll-behavior: contain; }
+.viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
-.sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; }
+.sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; touch-action: none; }
 .sheet-grip span { width: 44px; height: 5px; border-radius: 3px; background: #44464b; display: block; }
 .sheet-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .sheet-top strong { color: #fff; font-size: 1.05rem; }
