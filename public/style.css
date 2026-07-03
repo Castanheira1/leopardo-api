@@ -522,7 +522,12 @@ a.btn { display: inline-block; text-align: center; }
     margin: 0;
     background: #fff;
     border-color: transparent;
+    border-radius: 24px;
+    padding: 12px 16px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.map-search-float:focus {
+    border-radius: 24px;
 }
 
 /* Mapa em satélite ocupando a tela + sheet de ação por cima (pedir/oferecer) */
