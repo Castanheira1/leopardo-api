@@ -7,7 +7,6 @@ const rateLimit = require("express-rate-limit");
 const compression = require("compression");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
-const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { createClient } = require("@supabase/supabase-js");
 const webpush = require("web-push");
@@ -27,7 +26,6 @@ const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
 // perto (última posição do dia) é avisado por push mesmo sem app aberto e
 // sem carona publicada — "estou na sala e alguém pediu aqui do lado".
 const RAIO_PUSH_PERTO_KM = Number(process.env.RAIO_PUSH_PERTO_KM || 1);
-const SENHA_MINIMA = 6;
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -361,18 +359,11 @@ app.get("/api/projetos", async (req, res) => {
 });
 
 /* ============================ AUTH ============================ */
-function gerarSenhaTemporaria() {
-  return crypto.randomBytes(12).toString("base64url");
-}
-
 app.post("/api/register", async (req, res) => {
   const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, centro_custo, sexo } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   if (!nome || !matricula || !senha || !telefone || !email) {
     return res.status(400).json({ error: "Nome, matrícula, telefone, email e senha são obrigatórios" });
-  }
-  if (String(senha).length < SENHA_MINIMA) {
-    return res.status(400).json({ error: `A senha deve ter pelo menos ${SENHA_MINIMA} caracteres` });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
     return res.status(400).json({ error: "Email inválido" });
@@ -443,8 +434,8 @@ app.post("/api/recuperar-senha", async (req, res) => {
   if (!matricula || !telefone || !nova_senha) {
     return res.status(400).json({ error: "Preencha matrícula, telefone e a nova senha" });
   }
-  if (String(nova_senha).length < SENHA_MINIMA) {
-    return res.status(400).json({ error: `A nova senha deve ter pelo menos ${SENHA_MINIMA} caracteres` });
+  if (String(nova_senha).length < 4) {
+    return res.status(400).json({ error: "A nova senha deve ter pelo menos 4 caracteres" });
   }
 
   // Compara apenas os dígitos, ignorando formatação ((11) 9 9999-9999 etc.).
@@ -1406,18 +1397,13 @@ app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, re
   const { matricula } = req.body;
   if (!matricula || matricula.length < 6) return res.status(400).json({ error: "Matrícula inválida" });
   try {
-    const senhaTemporaria = gerarSenhaTemporaria();
-    const senha_hash = await bcrypt.hash(senhaTemporaria, 10);
+    const senha_hash = await bcrypt.hash("123456", 10);
     const { rowCount } = await pool.query(
       "UPDATE usuarios SET senha_hash = $1 WHERE matricula = $2",
       [senha_hash, matricula.trim()]
     );
     if (rowCount === 0) return res.status(404).json({ error: "Usuário não encontrado" });
-    res.json({
-      success: true,
-      senha_temporaria: senhaTemporaria,
-      message: `Senha temporária de ${matricula}: ${senhaTemporaria}`,
-    });
+    res.json({ success: true, message: `Senha de ${matricula} resetada para: 123456` });
   } catch (err) {
     res.status(500).json({ error: "Erro interno" });
   }
