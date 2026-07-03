@@ -147,6 +147,22 @@ function validarSenha6Digitos(senha) {
   return SENHA_REGEX.test(String(senha || ""));
 }
 
+const CODIGOS_PROJETO = ["S11D", "SALOBO", "CARAJAS", "SOSSEGO"];
+
+async function resolverProjetoId(projeto_id, projeto_codigo) {
+  if (projeto_codigo) {
+    const cod = String(projeto_codigo).trim().toUpperCase();
+    if (!CODIGOS_PROJETO.includes(cod)) return null;
+    const { rows } = await pool.query(
+      "SELECT id FROM projetos WHERE codigo = $1 AND COALESCE(ativo, TRUE) = TRUE",
+      [cod]
+    );
+    return rows[0]?.id || null;
+  }
+  const pid = projeto_id ? parseInt(projeto_id, 10) : null;
+  return pid || null;
+}
+
 async function garantirColunasPedidos() {
   try {
     await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1");
@@ -545,9 +561,10 @@ app.get("/api/projetos", async (req, res) => {
 
 /* ============================ AUTH ============================ */
 app.post("/api/register", async (req, res) => {
-  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, centro_custo, sexo } = req.body;
+  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, projeto_codigo, centro_custo, sexo } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
-  if (!nome || !matricula || !senha || !telefone || !email || !empresa_nome || !projeto_id) {
+  const pid = await resolverProjetoId(projeto_id, projeto_codigo);
+  if (!nome || !matricula || !senha || !telefone || !email || !empresa_nome || !pid) {
     return res.status(400).json({ error: "Nome, matrícula, empresa, projeto, telefone, email e senha são obrigatórios" });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
@@ -570,7 +587,6 @@ app.post("/api/register", async (req, res) => {
 
     const senha_hash = await bcrypt.hash(senha, 10);
     const is_admin = matricula === "000000";
-    const pid = projeto_id ? parseInt(projeto_id, 10) || null : null;
 
     const { rows } = await pool.query(
       `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo)
@@ -1961,13 +1977,14 @@ app.post("/api/admin/reset-senha", verificarAuth, carregarAdminEscopo, async (re
 
 // Solicitar acesso admin (validação manual futura)
 app.post("/api/admin/chamados", async (req, res) => {
-  const { nome, matricula, empresa_nome, projeto_id, telefone, email, justificativa } = req.body;
+  const { nome, matricula, empresa_nome, projeto_id, projeto_codigo, telefone, email, justificativa } = req.body;
   if (!nome || !matricula || !telefone) return res.status(400).json({ error: "Nome, matrícula e telefone são obrigatórios" });
   try {
+    const pid = await resolverProjetoId(projeto_id, projeto_codigo);
     await pool.query(
       `INSERT INTO admin_chamados (nome, matricula, empresa_nome, projeto_id, telefone, email, justificativa)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [nome, matricula, empresa_nome || null, projeto_id || null, telefone, email || null, justificativa || null]
+      [nome, matricula, empresa_nome || null, pid, telefone, email || null, justificativa || null]
     );
     res.json({ message: "Solicitação recebida. Nossa equipe entrará em contato em breve." });
   } catch (e) {
