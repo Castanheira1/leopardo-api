@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidade — VAP (Vagão)</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root { --teal: #0F3D3E; --gold: #EAD298; --ink: #12333a; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: var(--teal); color: #e8eef0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6; padding: 24px 16px 64px;
+        }
+        .doc { max-width: 760px; margin: 0 auto; }
+        .card {
+            background: #0b2e2f; border: 1px solid rgba(234,210,152,.18);
+            border-radius: 16px; padding: 24px 22px; margin-top: 18px;
+        }
+        h1 { color: var(--gold); font-size: 1.5rem; margin: 0 0 4px; }
+        h2 { color: var(--gold); font-size: 1.1rem; margin: 26px 0 8px; }
+        .meta { color: #9fb3b4; font-size: .85rem; margin-bottom: 6px; }
+        a { color: var(--gold); }
+        ul { padding-left: 20px; }
+        li { margin: 4px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .92rem; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+        th { color: var(--gold); font-weight: 600; }
+        .aviso {
+            background: rgba(234,210,152,.10); border: 1px dashed rgba(234,210,152,.4);
+            border-radius: 10px; padding: 12px 14px; font-size: .9rem; margin-top: 12px;
+        }
+        .voltar { display: inline-block; margin-top: 24px; color: var(--gold); text-decoration: none; font-weight: 600; }
+        .placeholder { color: #ffd27a; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="doc">
+        <h1>Política de Privacidade</h1>
+        <p class="meta">Aplicativo VAP (Vagão) — caronas entre colaboradores</p>
+        <p class="meta">Versão 1.0 · Vigente desde 03/07/2026</p>
+
+        <div class="aviso">
+            <strong>Antes de publicar:</strong> substitua os campos marcados em
+            <span class="placeholder">destaque</span> pelos dados reais do controlador
+            (razão social, CNPJ, endereço) e do encarregado (DPO). Esta política é um
+            modelo alinhado à LGPD (Lei nº 13.709/2018) e não substitui revisão jurídica.
+        </div>
+
+        <div class="card">
+            <h2>1. Quem é o controlador dos dados</h2>
+            <p>O controlador dos dados pessoais tratados neste aplicativo é
+            <span class="placeholder">[RAZÃO SOCIAL DO CONTROLADOR]</span>, inscrita no CNPJ
+            <span class="placeholder">[CNPJ]</span>, com sede em
+            <span class="placeholder">[ENDEREÇO]</span>. O aplicativo é de uso interno,
+            destinado a organizar caronas entre colaboradores.</p>
+
+            <h2>2. Encarregado (DPO) e contato</h2>
+            <p>Para exercer seus direitos ou tirar dúvidas sobre esta política, fale com o
+            nosso Encarregado pelo Tratamento de Dados Pessoais:
+            <span class="placeholder">[NOME DO ENCARREGADO]</span> —
+            <a href="mailto:[EMAIL-DPO]"><span class="placeholder">[EMAIL-DPO]</span></a>.</p>
+
+            <h2>3. Quais dados coletamos</h2>
+            <table>
+                <tr><th>Categoria</th><th>Dados</th></tr>
+                <tr><td>Cadastro / identificação</td><td>Nome, matrícula, função, sexo, empresa, projeto, centro de custo, telefone (WhatsApp) e email.</td></tr>
+                <tr><td>Autenticação</td><td>Senha (armazenada apenas como <em>hash</em> bcrypt — nunca em texto).</td></tr>
+                <tr><td>Segurança da viagem</td><td>Selfie ao vivo (motorista e passageiro) e foto do veículo com placa, cada uma com data/hora e localização (GPS) do momento da captura.</td></tr>
+                <tr><td>Geolocalização</td><td>Posição GPS em tempo real durante o uso (mapa) e o traçado completo (rota) das viagens realizadas.</td></tr>
+                <tr><td>Uso do app</td><td>Caronas ofertadas, pedidos, propostas, viagens, distância percorrida e registros de acesso.</td></tr>
+            </table>
+            <p>Não coletamos dados de crianças e adolescentes nem categorias sensíveis além
+            das imagens necessárias à segurança das caronas.</p>
+
+            <h2>4. Para que usamos (finalidades) e base legal</h2>
+            <ul>
+                <li><strong>Operar as caronas</strong> (cadastro, login, match por proximidade, contato entre as partes) — execução de contrato/procedimentos preliminares e legítimo interesse.</li>
+                <li><strong>Segurança das viagens</strong> (selfie ao vivo, foto do carro/placa e rota GPS que permitem identificar quem dirigiu, quem embarcou e o trajeto) — legítimo interesse na segurança dos colaboradores, com o seu <strong>consentimento</strong> para o uso de imagem e localização.</li>
+                <li><strong>Gestão e rateio de custos</strong> por empresa/projeto/centro de custo — legítimo interesse e cumprimento de obrigações contratuais.</li>
+                <li><strong>Recuperação de senha e comunicação operacional</strong> por email — execução do serviço.</li>
+            </ul>
+
+            <h2>5. Com quem compartilhamos</h2>
+            <p>Seus dados <strong>não são vendidos</strong>. São acessíveis apenas:</p>
+            <ul>
+                <li>ao outro participante da carona, e somente o necessário: o telefone é revelado <strong>apenas após o aceite</strong> da proposta;</li>
+                <li>aos administradores do seu projeto, para segurança e rateio;</li>
+                <li>a operadores que hospedam a infraestrutura (banco de dados e armazenamento de fotos na Supabase; hospedagem na Render), que tratam os dados sob nossa instrução.</li>
+            </ul>
+
+            <h2>6. Por quanto tempo guardamos</h2>
+            <p>As <strong>fotos de segurança</strong> (selfies e foto do carro) são apagadas
+            automaticamente <strong>após 30 dias</strong>. Os demais dados de cadastro e o
+            histórico de viagens são mantidos enquanto sua conta estiver ativa e pelo prazo
+            necessário ao cumprimento de obrigações legais e ao rateio. Você pode solicitar a
+            exclusão a qualquer momento (ver item 8).</p>
+
+            <h2>7. Como protegemos</h2>
+            <ul>
+                <li>Senhas guardadas apenas como <em>hash</em> (bcrypt).</li>
+                <li>Acesso autenticado por token (JWT) e consultas ao banco parametrizadas.</li>
+                <li>Fotos só por câmera ao vivo (galeria bloqueada), com carimbo de data/hora e GPS.</li>
+                <li>Comunicação por HTTPS e limite de tentativas de login (proteção contra força bruta).</li>
+                <li>Isolamento por projeto: colaboradores de projetos diferentes não interagem entre si.</li>
+            </ul>
+
+            <h2>8. Seus direitos (LGPD, art. 18)</h2>
+            <p>Você pode, a qualquer momento: confirmar a existência de tratamento; acessar,
+            corrigir ou atualizar seus dados; solicitar anonimização, bloqueio ou exclusão de
+            dados desnecessários; pedir a portabilidade; obter informação sobre
+            compartilhamento; e <strong>revogar o consentimento</strong>. Para exercer, escreva
+            ao Encarregado (item 2). Parte dos dados você mesmo edita no seu perfil dentro do app.</p>
+
+            <h2>9. Cookies e armazenamento local</h2>
+            <p>Não usamos cookies de rastreamento ou publicidade. O app guarda no seu próprio
+            aparelho (armazenamento local do navegador) apenas o token de sessão e informações
+            básicas do perfil, para manter você conectado.</p>
+
+            <h2>10. Alterações desta política</h2>
+            <p>Podemos atualizar esta política. Quando houver mudança relevante, informaremos no
+            app e, se necessário, pediremos um novo consentimento. A versão vigente é sempre a
+            publicada nesta página.</p>
+        </div>
+
+        <a class="voltar" href="registro.html">← Voltar ao cadastro</a>
+        &nbsp;·&nbsp;
+        <a class="voltar" href="index.html">Ir para o login</a>
+    </div>
+</body>
+</html>

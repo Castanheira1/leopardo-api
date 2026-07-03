@@ -118,6 +118,8 @@ function novoUsuario(n, projeto_codigo) {
     projeto_codigo,
     centro_custo: "CC1",
     sexo: n % 2 ? "M" : "F",
+    aceite_politica: true,
+    politica_versao: "1.0",
   };
 }
 
@@ -200,6 +202,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     });
     await test("register rejeita matrícula duplicada (400)", async () => {
       const { status } = await api("POST", "/api/register", { body: uDriver });
+      eq(status, 400, "status");
+    });
+    await test("register exige aceite da Política de Privacidade — LGPD (400)", async () => {
+      const semAceite = { ...novoUsuario(14, "S11D") };
+      delete semAceite.aceite_politica;
+      const { status } = await api("POST", "/api/register", { body: semAceite });
       eq(status, 400, "status");
     });
     await test("POST /api/login com credenciais corretas", async () => {

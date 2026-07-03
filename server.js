@@ -89,6 +89,8 @@ async function garantirColunasUsuarios() {
     "admin_projeto_id INTEGER",
     "sexo VARCHAR(10)",
     "ativo BOOLEAN DEFAULT TRUE",
+    "politica_aceita_em TIMESTAMP",
+    "politica_versao VARCHAR(20)",
   ];
   for (const c of colunas) {
     try {
@@ -629,7 +631,7 @@ app.get("/api/projetos", async (req, res) => {
 
 /* ============================ AUTH ============================ */
 app.post("/api/register", authLimiter, async (req, res) => {
-  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, projeto_codigo, centro_custo, sexo } = req.body;
+  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, projeto_codigo, centro_custo, sexo, aceite_politica, politica_versao } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   const pid = await resolverProjetoId(projeto_id, projeto_codigo);
   if (!nome || !matricula || !senha || !telefone || !email || !empresa_nome || !pid) {
@@ -641,6 +643,12 @@ app.post("/api/register", authLimiter, async (req, res) => {
   if (!validarSenha6Digitos(senha)) {
     return res.status(400).json({ error: "A senha deve ter exatamente 6 dígitos numéricos" });
   }
+  // LGPD: o consentimento é obrigatório para criar a conta (uso de selfie, foto do
+  // veículo e localização). Registramos o momento e a versão da política aceita.
+  if (aceite_politica !== true) {
+    return res.status(400).json({ error: "É necessário aceitar a Política de Privacidade para criar a conta." });
+  }
+  const politicaVersao = String(politica_versao || "1.0").slice(0, 20);
 
   try {
     const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [matricula]);
@@ -657,11 +665,11 @@ app.post("/api/register", authLimiter, async (req, res) => {
     const is_admin = matricula === "000000";
 
     const { rows } = await pool.query(
-      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo, politica_aceita_em, politica_versao)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12)
        RETURNING id`,
       [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin,
-       empresa_nome || null, pid, centro_custo || null, sexoNorm]
+       empresa_nome || null, pid, centro_custo || null, sexoNorm, politicaVersao]
     );
 
     const userFront = await buscarUsuarioFront(rows[0].id);
