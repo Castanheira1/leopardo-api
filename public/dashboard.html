@@ -303,15 +303,52 @@
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
 
-    /* -------- altura real da tela -------- */
+    /* -------- altura real da tela + compensação do teclado virtual -------- */
     // Fallback p/ navegadores sem "dvh": 100vh passa da área visível e CORTA a
     // barra de baixo — e como a tela é travada (sem rolagem), o botão fica
     // inalcançável. Mede a altura de verdade e expõe em --appvh.
-    function ajustarAltura() {
-        document.documentElement.style.setProperty('--appvh', (window.innerHeight * 0.01) + 'px');
+    // Com teclado aberto, visualViewport.height encolhe — usamos isso p/ subir
+    // o bottom sheet (--sheet-kbd) e manter campos/botões acessíveis.
+    function insetTeclado() {
+        const vv = window.visualViewport;
+        if (!vv) return 0;
+        return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     }
+    function compensarTeclado() {
+        const vv = window.visualViewport;
+        const h = vv ? vv.height : window.innerHeight;
+        const inset = insetTeclado();
+        document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
+        document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
+        document.documentElement.classList.toggle('teclado-aberto', inset > 40);
+    }
+    function ajustarAltura() { compensarTeclado(); }
     ajustarAltura();
     window.addEventListener('resize', ajustarAltura);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', compensarTeclado);
+        window.visualViewport.addEventListener('scroll', compensarTeclado);
+    }
+    document.addEventListener('focusin', (e) => {
+        const sheet = e.target.closest?.('.acao-sheet, .viagem-sheet');
+        if (!sheet || !e.target.matches('input, select, textarea')) return;
+        sheet.classList.remove('collapsed');
+        sheet.classList.add('teclado-aberto');
+        compensarTeclado();
+        requestAnimationFrame(() => {
+            try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+        });
+    });
+    document.addEventListener('focusout', (e) => {
+        const sheet = e.target.closest?.('.acao-sheet, .viagem-sheet');
+        if (!sheet) return;
+        setTimeout(() => {
+            const ativo = document.activeElement;
+            if (sheet.contains(ativo) && ativo.matches('input, select, textarea')) return;
+            sheet.classList.remove('teclado-aberto');
+            compensarTeclado();
+        }, 120);
+    });
 
     /* -------- buzina (aviso de novo pedido de carona) -------- */
     // Duas buzinadas curtas + duas vibradas no celular do motorista. O AudioContext
