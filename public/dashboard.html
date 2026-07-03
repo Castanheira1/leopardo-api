@@ -148,8 +148,10 @@
 
             <div class="perfil-secao">
                 <p style="font-size:0.8rem;color:#9aa0a6;margin-bottom:8px;">Dados do cadastro (usados no painel comercial)</p>
-                <label>Projeto</label>
-                <input id="perfilProjeto" class="map-search" readonly style="opacity:0.85;margin-bottom:8px;">
+                <label for="perfilProjeto">Projeto</label>
+                <select id="perfilProjeto" class="map-search" style="margin-bottom:8px;">
+                    <option value="">Selecione o projeto</option>
+                </select>
                 <label>Empresa</label>
                 <input id="perfilEmpresa" class="map-search" placeholder="Ex: Vale, MCA, Serveng">
                 <label for="perfilCentroCusto" style="margin-top:8px;display:block;">Centro de custo <small>(opcional)</small></label>
@@ -478,6 +480,38 @@
     }
 
     /* -------- perfil / telefone -------- */
+    const PROJETOS_PERFIL = [
+        { codigo: 'S11D', label: 'S11D' },
+        { codigo: 'SALOBO', label: 'SALOBO' },
+        { codigo: 'CARAJAS', label: 'CARAJÁS' },
+        { codigo: 'SOSSEGO', label: 'SOSSEGO' },
+    ];
+    let projetosPerfilCarregados = false;
+
+    async function carregarOpcoesProjetoPerfil() {
+        const sel = document.getElementById('perfilProjeto');
+        if (!sel) return;
+        let lista = [...PROJETOS_PERFIL];
+        try {
+            const r = await fetch('/api/projetos');
+            if (r.ok) {
+                const api = await r.json();
+                const map = new Map(lista.map((p) => [p.codigo, p]));
+                api.forEach((p) => {
+                    if (p.codigo && !map.has(p.codigo)) {
+                        map.set(p.codigo, { codigo: p.codigo, label: p.nome || p.codigo });
+                    }
+                });
+                lista = Array.from(map.values());
+            }
+        } catch (_) {}
+        const atual = user?.projeto_codigo || '';
+        sel.innerHTML = '<option value="">Selecione o projeto</option>' +
+            lista.map((p) => `<option value="${p.codigo}">${p.label}</option>`).join('');
+        if (atual) sel.value = atual;
+        projetosPerfilCarregados = true;
+    }
+
     function checarTelefone() {
         document.getElementById('avisoTelefone').style.display = user.telefone ? 'none' : 'block';
     }
@@ -501,11 +535,16 @@
             aplicarPerfilNaTela();
         } catch (_) {}
     }
-    function abrirPerfil() {
-        document.getElementById('perfilProjeto').value = user.projeto_codigo || user.projeto_nome || '';
+    async function abrirPerfil() {
+        if (!projetosPerfilCarregados) await carregarOpcoesProjetoPerfil();
+        const sel = document.getElementById('perfilProjeto');
+        sel.value = user.projeto_codigo || '';
         document.getElementById('perfilEmpresa').value = user.empresa_nome || '';
         document.getElementById('perfilCentroCusto').value = user.centro_custo || '';
-        document.getElementById('perfilEmail').value = user.email || '';
+        const emailEl = document.getElementById('perfilEmail');
+        emailEl.value = user.email || '';
+        emailEl.readOnly = !!user.email;
+        emailEl.style.opacity = user.email ? '0.85' : '1';
         document.getElementById('perfilTelefone').value = user.telefone || '';
         document.getElementById('perfilSexo').value = user.sexo || '';
         document.getElementById('modalPerfil').style.display = 'flex';
@@ -518,15 +557,25 @@
         const sexo = document.getElementById('perfilSexo').value || null;
         const empresa = document.getElementById('perfilEmpresa').value.trim();
         const centro = document.getElementById('perfilCentroCusto').value.trim();
+        const projeto = document.getElementById('perfilProjeto').value;
+        const emailEl = document.getElementById('perfilEmail');
+        const email = emailEl.readOnly ? null : emailEl.value.trim();
         const out = document.getElementById('perfilMsg');
         const setMsg = (t, cor) => { if (out) { out.textContent = t; out.style.color = cor || ''; } };
         if (tel.replace(/\D/g, '').length < 10) return setMsg('Informe um telefone válido com DDD.', '#ef9a9a');
         if (!empresa) return setMsg('Informe a empresa.', '#ef9a9a');
+        if (!projeto) return setMsg('Selecione o projeto.', '#ef9a9a');
+        if (!user.email && !email) return setMsg('Informe o email para recuperação de senha.', '#ef9a9a');
+        if (!user.email && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return setMsg('Informe um email válido.', '#ef9a9a');
+        }
         setMsg('Salvando...', '');
         try {
+            const body = { telefone: tel, sexo, empresa_nome: empresa, centro_custo: centro || null, projeto_codigo: projeto };
+            if (email) body.email = email;
             const r = await fetchWithAuth('/api/perfil', {
                 method: 'PATCH',
-                body: JSON.stringify({ telefone: tel, sexo, empresa_nome: empresa, centro_custo: centro || null }),
+                body: JSON.stringify(body),
             });
             const d = await r.json();
             if (r.ok) {
@@ -2026,6 +2075,7 @@
     (async function init() {
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
         await sincronizarPerfil();
+        await carregarOpcoesProjetoPerfil();
         checarTelefone();
         checarCadastro();
         await carregarHabilitacao().catch(() => {});

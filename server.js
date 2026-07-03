@@ -840,9 +840,34 @@ app.get("/api/perfil", verificarAuth, async (req, res) => {
 });
 
 app.patch("/api/perfil", verificarAuth, async (req, res) => {
-  const { telefone, nome, funcao, sexo, empresa_nome, centro_custo } = req.body;
+  const { telefone, nome, funcao, sexo, empresa_nome, centro_custo, projeto_codigo, projeto_id, email } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   try {
+    const atual = await buscarUsuarioFront(req.user.id);
+    if (!atual) return res.status(404).json({ error: "Usuário não encontrado" });
+
+    let pid = null;
+    if (projeto_codigo || projeto_id) {
+      pid = await resolverProjetoId(projeto_id, projeto_codigo);
+      if (!pid) return res.status(400).json({ error: "Selecione um projeto válido" });
+    }
+
+    let emailNovo = null;
+    if (email != null && String(email).trim()) {
+      if (atual.email) {
+        return res.status(400).json({ error: "O email não pode ser alterado pelo perfil. Use recuperação de senha no login." });
+      }
+      emailNovo = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNovo)) {
+        return res.status(400).json({ error: "Email inválido" });
+      }
+      const dup = await pool.query(
+        "SELECT 1 FROM usuarios WHERE email = $1 AND id <> $2",
+        [emailNovo, req.user.id]
+      );
+      if (dup.rows.length) return res.status(409).json({ error: "Este email já está em uso" });
+    }
+
     await pool.query(
       `UPDATE usuarios SET
          telefone = COALESCE($1, telefone),
@@ -850,11 +875,13 @@ app.patch("/api/perfil", verificarAuth, async (req, res) => {
          funcao = COALESCE($3, funcao),
          sexo = COALESCE($4, sexo),
          empresa_nome = COALESCE($5, empresa_nome),
-         centro_custo = COALESCE($6, centro_custo)
-       WHERE id = $7`,
+         centro_custo = COALESCE($6, centro_custo),
+         projeto_id = COALESCE($7, projeto_id),
+         email = COALESCE($8, email)
+       WHERE id = $9`,
       [
         telefone || null, nome || null, funcao || null, sexoNorm,
-        empresa_nome || null, centro_custo ?? null, req.user.id,
+        empresa_nome || null, centro_custo ?? null, pid, emailNovo, req.user.id,
       ]
     );
     const userFront = await buscarUsuarioFront(req.user.id);
