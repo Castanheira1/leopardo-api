@@ -190,10 +190,10 @@ CREATE TABLE IF NOT EXISTS projetos (
     created_at TIMESTAMP DEFAULT NOW()
 );
 INSERT INTO projetos (nome, codigo) VALUES
-    ('S11D Eliezer Batista', 'S11D'),
+    ('S11D', 'S11D'),
     ('Salobo', 'SALOBO'),
     ('Carajás', 'CARAJAS'),
-    ('Parauapebas', 'PARAUAPEBAS')
+    ('Sossego', 'SOSSEGO')
 ON CONFLICT (codigo) DO NOTHING;
 
 -- ------------------------------------------------------------

@@ -201,15 +201,15 @@
                 </div>
             </form>
 
-            <!-- RECUPERAÇÃO DE SENHA: matrícula + telefone cadastrado (sem email) -->
+            <!-- RECUPERAÇÃO DE SENHA: matrícula + email cadastrado -->
             <form id="recuperarForm" style="display:none;">
                 <p style="color:#EAD298;font-size:13px;margin-bottom:12px;line-height:1.4;">
-                    Informe sua matrícula e o telefone cadastrado para redefinir sua senha.
+                    Informe sua matrícula, o email cadastrado e uma nova senha de 6 dígitos.
                 </p>
                 <div class="input-group">
                     <input type="text" id="rec_matricula" required placeholder="Matrícula">
-                    <input type="tel" id="rec_telefone" required placeholder="Telefone cadastrado">
-                    <input type="password" id="rec_senha" required placeholder="Nova senha">
+                    <input type="email" id="rec_email" required placeholder="Email cadastrado">
+                    <input type="password" id="rec_senha" required placeholder="Nova senha (6 dígitos)" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric">
                 </div>
                 <button type="submit">REDEFINIR SENHA</button>
                 <div class="register-link">
@@ -270,17 +270,24 @@
             }
             document.getElementById('linkRecuperar').addEventListener('click', (e) => { e.preventDefault(); mostrar('rec'); });
             document.getElementById('linkVoltarLogin').addEventListener('click', (e) => { e.preventDefault(); mostrar('login'); });
+            if (location.hash === '#recuperar') mostrar('rec');
 
             recForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const matricula = document.getElementById('rec_matricula').value;
-                const telefone = document.getElementById('rec_telefone').value;
+                const email = document.getElementById('rec_email').value;
                 const nova_senha = document.getElementById('rec_senha').value;
+                if (!/^\d{6}$/.test(nova_senha)) {
+                    errDiv.textContent = 'A nova senha deve ter exatamente 6 dígitos numéricos';
+                    errDiv.style.display = 'block';
+                    errDiv.style.color = '';
+                    return;
+                }
                 try {
                     const r = await fetch('/api/recuperar-senha', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ matricula, telefone, nova_senha })
+                        body: JSON.stringify({ matricula, email, nova_senha })
                     });
                     const data = await r.json();
                     errDiv.textContent = data.message || data.error || '';

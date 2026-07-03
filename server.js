@@ -130,9 +130,21 @@ async function garantirSchemaComercial() {
     await pool.query(`
       UPDATE usuarios SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1)
       WHERE matricula = '000000' AND admin_projeto_id IS NULL`);
+    await pool.query(`
+      INSERT INTO projetos (nome, codigo) VALUES
+        ('S11D', 'S11D'),
+        ('Salobo', 'SALOBO'),
+        ('Carajás', 'CARAJAS'),
+        ('Sossego', 'SOSSEGO')
+      ON CONFLICT (codigo) DO NOTHING`);
   } catch (e) {
     console.warn("garantirSchemaComercial:", e.message);
   }
+}
+
+const SENHA_REGEX = /^\d{6}$/;
+function validarSenha6Digitos(senha) {
+  return SENHA_REGEX.test(String(senha || ""));
 }
 
 async function garantirColunasPedidos() {
@@ -476,11 +488,14 @@ app.get("/api/projetos", async (req, res) => {
 app.post("/api/register", async (req, res) => {
   const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, centro_custo, sexo } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
-  if (!nome || !matricula || !senha || !telefone || !email) {
-    return res.status(400).json({ error: "Nome, matrícula, telefone, email e senha são obrigatórios" });
+  if (!nome || !matricula || !senha || !telefone || !email || !empresa_nome || !projeto_id) {
+    return res.status(400).json({ error: "Nome, matrícula, empresa, projeto, telefone, email e senha são obrigatórios" });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
     return res.status(400).json({ error: "Email inválido" });
+  }
+  if (!validarSenha6Digitos(senha)) {
+    return res.status(400).json({ error: "A senha deve ter exatamente 6 dígitos numéricos" });
   }
 
   try {
@@ -555,32 +570,29 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Recuperação de senha SEM email: o usuário comprova identidade com a matrícula
-// + o telefone que cadastrou, e define uma nova senha na hora. Opção gratuita,
-// sem SMS/email. Para quem não cadastrou telefone, sobra o reset pelo admin.
+// Recuperação de senha: matrícula + email cadastrado + nova senha de 6 dígitos.
 app.post("/api/recuperar-senha", async (req, res) => {
-  const { matricula, telefone, nova_senha } = req.body;
-  if (!matricula || !telefone || !nova_senha) {
-    return res.status(400).json({ error: "Preencha matrícula, telefone e a nova senha" });
+  const { matricula, email, nova_senha } = req.body;
+  if (!matricula || !email || !nova_senha) {
+    return res.status(400).json({ error: "Preencha matrícula, email e a nova senha" });
   }
-  if (String(nova_senha).length < 4) {
-    return res.status(400).json({ error: "A nova senha deve ter pelo menos 4 caracteres" });
+  if (!validarSenha6Digitos(nova_senha)) {
+    return res.status(400).json({ error: "A nova senha deve ter exatamente 6 dígitos numéricos" });
   }
 
-  // Compara apenas os dígitos, ignorando formatação ((11) 9 9999-9999 etc.).
-  const soDigitos = (v) => String(v || "").replace(/\D/g, "");
+  const normEmail = (v) => String(v || "").trim().toLowerCase();
 
   try {
     const { rows } = await pool.query(
-      "SELECT id, telefone FROM usuarios WHERE matricula = $1",
+      "SELECT id, email FROM usuarios WHERE matricula = $1",
       [String(matricula).trim()]
     );
     const user = rows[0];
     // Mensagem genérica para não revelar se a matrícula existe.
-    if (!user || !user.telefone) {
+    if (!user || !user.email) {
       return res.status(400).json({ error: "Dados não conferem. Procure o administrador." });
     }
-    if (soDigitos(user.telefone) !== soDigitos(telefone)) {
+    if (normEmail(user.email) !== normEmail(email)) {
       return res.status(400).json({ error: "Dados não conferem. Procure o administrador." });
     }
 

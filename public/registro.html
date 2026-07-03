@@ -457,15 +457,15 @@
                     <div class="field">
                         <label for="email">Email</label>
                         <input type="email" id="email" required placeholder="seu.email@empresa.com" autocomplete="email">
-                        <small>Para recuperação de acesso</small>
+                        <small>Obrigatório — usado para recuperar senha no login</small>
                     </div>
                     <div class="field">
-                        <label for="senha">Senha</label>
-                        <input type="password" id="senha" required placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password">
+                        <label for="senha">Senha (6 dígitos)</label>
+                        <input type="password" id="senha" required placeholder="Ex: 123456" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
                     </div>
                     <div class="field">
                         <label for="confirmarSenha">Confirmar senha</label>
-                        <input type="password" id="confirmarSenha" required placeholder="Digite a senha novamente" autocomplete="new-password">
+                        <input type="password" id="confirmarSenha" required placeholder="Repita os 6 dígitos" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
                     </div>
                 </div>
 
@@ -480,6 +480,8 @@
 
             <div class="signup-links">
                 <a href="index.html">Já tenho conta</a>
+                <span class="sep">·</span>
+                <a href="index.html#recuperar">Esqueci a senha</a>
                 <span class="sep">·</span>
                 <a href="#" id="linkAdmin">Solicitar acesso admin</a>
             </div>
@@ -537,6 +539,12 @@
         let passo = 1;
         const TOTAL = 3;
         const labels = ['Quem é você?', 'Onde você trabalha?', 'Seus dados de acesso'];
+        const PROJETOS_FIXOS = [
+            { codigo: 'S11D', label: 'S11D' },
+            { codigo: 'SALOBO', label: 'SALOBO' },
+            { codigo: 'CARAJAS', label: 'CARAJÁS' },
+            { codigo: 'SOSSEGO', label: 'SOSSEGO' },
+        ];
         let projetosLista = [];
 
         function setSexo(val) {
@@ -553,20 +561,25 @@
             });
         }
 
-        function renderProjetos(projetos) {
-            projetosLista = projetos;
+        function renderProjetos(apiProjetos) {
+            const porCodigo = Object.fromEntries(apiProjetos.map(p => [p.codigo, p]));
+            const disponiveis = PROJETOS_FIXOS
+                .map(f => ({ ...f, id: porCodigo[f.codigo]?.id }))
+                .filter(p => p.id);
+            projetosLista = disponiveis;
+
             const grid = document.getElementById('projetoGrid');
             const select = document.getElementById('a_projeto');
-            if (!projetos.length) {
-                grid.innerHTML = '<div class="projeto-loading">Nenhum projeto disponível</div>';
-                select.innerHTML = '<option value="">Nenhum projeto</option>';
+            if (!disponiveis.length) {
+                grid.innerHTML = '<div class="projeto-loading">Projetos indisponíveis. Tente mais tarde.</div>';
+                select.innerHTML = '<option value="">Indisponível</option>';
                 return;
             }
-            grid.innerHTML = projetos.map(p =>
-                `<button type="button" class="projeto-card" data-id="${p.id}" onclick="setProjeto(${p.id})">${p.nome}</button>`
+            grid.innerHTML = disponiveis.map(p =>
+                `<button type="button" class="projeto-card" data-id="${p.id}" onclick="setProjeto(${p.id})">${p.label}</button>`
             ).join('');
             select.innerHTML = '<option value="">Selecione o projeto</option>' +
-                projetos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+                disponiveis.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
         }
 
         async function carregarProjetos() {
@@ -634,11 +647,18 @@
             }
 
             if (n === 3) {
+                const email = document.getElementById('email').value.trim();
                 const senha = document.getElementById('senha').value;
                 const conf = document.getElementById('confirmarSenha').value;
-                if (senha.length < 6) {
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                     msg.className = 'message error';
-                    msg.textContent = 'A senha deve ter no mínimo 6 caracteres';
+                    msg.textContent = 'Informe um email válido';
+                    msg.style.display = 'block';
+                    return false;
+                }
+                if (!/^\d{6}$/.test(senha)) {
+                    msg.className = 'message error';
+                    msg.textContent = 'A senha deve ter exatamente 6 dígitos numéricos';
                     msg.style.display = 'block';
                     return false;
                 }
@@ -648,6 +668,13 @@
                     msg.style.display = 'block';
                     return false;
                 }
+            }
+
+            if (n === 2 && !document.getElementById('projeto_id').value) {
+                msg.className = 'message error';
+                msg.textContent = 'Selecione o projeto';
+                msg.style.display = 'block';
+                return false;
             }
 
             msg.style.display = 'none';
