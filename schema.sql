@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS projetos (
     id SERIAL PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
     codigo VARCHAR(30) UNIQUE NOT NULL,
+    valor_contrato_mensal NUMERIC(12,2) DEFAULT 0,
     ativo BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -216,6 +217,18 @@ ON CONFLICT DO NOTHING;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+
+-- ------------------------------------------------------------
+-- Matrículas bloqueadas (ex-funcionários — impedem novo cadastro)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS matriculas_bloqueadas (
+    id SERIAL PRIMARY KEY,
+    matricula VARCHAR(50) UNIQUE NOT NULL,
+    motivo TEXT,
+    bloqueada_em TIMESTAMP DEFAULT NOW(),
+    bloqueada_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
+);
 
 -- ------------------------------------------------------------
 -- Contratos (quem paga por quem em cada projeto)
@@ -277,8 +290,14 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions (usuario_id);
 
--- Admin padrão (000000 / admin123)
-INSERT INTO usuarios (nome, funcao, matricula, senha_hash, is_admin)
+-- Admin padrão (000000 / admin123) — escopo S11D
+INSERT INTO usuarios (nome, funcao, matricula, senha_hash, is_admin, admin_projeto_id, ativo)
 SELECT 'Administrador', 'Administrador', '000000',
-'$2b$10$CU7Cm/xiJrJ10FM9GNmAYu/RrIx67TpjYhJww.gX5kh/JRu5UDpAO', TRUE
+'$2b$10$CU7Cm/xiJrJ10FM9GNmAYu/RrIx67TpjYhJww.gX5kh/JRu5UDpAO', TRUE,
+(SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1), TRUE
 WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE matricula = '000000');
+
+UPDATE usuarios SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1)
+WHERE matricula = '000000' AND admin_projeto_id IS NULL;
+
+ALTER TABLE projetos ADD COLUMN IF NOT EXISTS valor_contrato_mensal NUMERIC(12,2) DEFAULT 0;

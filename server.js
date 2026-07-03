@@ -49,7 +49,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); garantirColunasPedidos(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -64,6 +64,7 @@ async function garantirColunasUsuarios() {
     "projeto_id INTEGER",
     "admin_projeto_id INTEGER",
     "sexo VARCHAR(10)",
+    "ativo BOOLEAN DEFAULT TRUE",
   ];
   for (const c of colunas) {
     try {
@@ -114,7 +115,26 @@ async function enviarPush(usuarioId, payload) {
   }
 }
 
-// Auto-heal: o pedido guarda quantas pessoas vão na carona.
+async function garantirSchemaComercial() {
+  try {
+    await pool.query("ALTER TABLE projetos ADD COLUMN IF NOT EXISTS valor_contrato_mensal NUMERIC(12,2) DEFAULT 0");
+    await pool.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS matriculas_bloqueadas (
+        id SERIAL PRIMARY KEY,
+        matricula VARCHAR(50) UNIQUE NOT NULL,
+        motivo TEXT,
+        bloqueada_em TIMESTAMP DEFAULT NOW(),
+        bloqueada_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
+      )`);
+    await pool.query(`
+      UPDATE usuarios SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1)
+      WHERE matricula = '000000' AND admin_projeto_id IS NULL`);
+  } catch (e) {
+    console.warn("garantirSchemaComercial:", e.message);
+  }
+}
+
 async function garantirColunasPedidos() {
   try {
     await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1");
@@ -190,6 +210,24 @@ const uploadToSupabase = async (file, pasta = "") => {
   }
 };
 
+function pathFromPublicUrl(url) {
+  if (!url) return null;
+  const marker = `/storage/v1/object/public/${SUPABASE_BUCKET}/`;
+  const i = url.indexOf(marker);
+  if (i === -1) return null;
+  return decodeURIComponent(url.slice(i + marker.length));
+}
+
+async function apagarFotoStorage(url) {
+  const p = pathFromPublicUrl(url);
+  if (!p || !supabaseConfigurado) return;
+  try {
+    await supabase.storage.from(SUPABASE_BUCKET).remove([p]);
+  } catch (e) {
+    console.warn("apagarFotoStorage:", e.message);
+  }
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 6 * 1024 * 1024 },
@@ -216,6 +254,78 @@ const verificarAdmin = (req, res, next) => {
   if (!req.user?.is_admin) return res.status(403).json({ error: "Apenas administradores" });
   next();
 };
+
+// Carrega o projeto do admin (ex.: S11D) — todas as rotas comerciais usam este escopo.
+const carregarAdminEscopo = async (req, res, next) => {
+  if (!req.user?.is_admin) return res.status(403).json({ error: "Apenas administradores" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.admin_projeto_id, p.nome AS projeto_nome, p.codigo AS projeto_codigo,
+              COALESCE(p.valor_contrato_mensal, 0) AS valor_contrato_mensal
+       FROM usuarios u
+       LEFT JOIN projetos p ON p.id = u.admin_projeto_id
+       WHERE u.id = $1 AND u.is_admin = TRUE AND COALESCE(u.ativo, TRUE) = TRUE`,
+      [req.user.id]
+    );
+    if (!rows.length) return res.status(403).json({ error: "Administrador inválido ou inativo" });
+    if (!rows[0].admin_projeto_id) {
+      return res.status(403).json({ error: "Admin sem projeto vinculado (admin_projeto_id)" });
+    }
+    req.adminEscopo = rows[0];
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar escopo do projeto" });
+  }
+};
+
+function periodoFromQuery(de, ate) {
+  const fim = ate ? new Date(ate) : new Date();
+  const inicio = de ? new Date(de) : new Date(fim.getFullYear(), fim.getMonth(), 1);
+  if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) return null;
+  return { de: inicio.toISOString(), ate: fim.toISOString() };
+}
+
+// Viagens cujo motorista pertence ao projeto do admin.
+function filtroProjetoMotorista(projetoId, alias = "m") {
+  return { sql: `${alias}.projeto_id = $1`, params: [projetoId] };
+}
+
+async function projetoDoUsuario(userId) {
+  const { rows } = await pool.query(
+    "SELECT projeto_id FROM usuarios WHERE id = $1 AND COALESCE(ativo, TRUE) = TRUE",
+    [userId]
+  );
+  return rows[0]?.projeto_id ?? null;
+}
+
+async function aplicarRetencaoFotos() {
+  if (!supabaseConfigurado) return;
+  const limite = "NOW() - INTERVAL '30 days'";
+  const fontes = [
+    { tabela: "habilitacoes_motorista", data: "created_at", cols: ["selfie_url", "foto_carro_url"] },
+    { tabela: "pedidos", data: "created_at", cols: ["selfie_url"] },
+    { tabela: "propostas", data: "created_at", cols: ["selfie_url"] },
+  ];
+  for (const f of fontes) {
+    for (const col of f.cols) {
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, ${col} AS url FROM ${f.tabela}
+           WHERE ${col} IS NOT NULL AND ${col} <> '' AND ${f.data} < ${limite}
+           LIMIT 200`
+        );
+        for (const r of rows) {
+          await apagarFotoStorage(r.url);
+          await pool.query(`UPDATE ${f.tabela} SET ${col} = NULL WHERE id = $1`, [r.id]);
+        }
+        if (rows.length) console.log(`retencao: ${rows.length} foto(s) em ${f.tabela}.${col}`);
+      } catch (e) {
+        console.warn("aplicarRetencaoFotos:", f.tabela, e.message);
+      }
+    }
+  }
+}
 
 // Horário vindo do cliente: só aceita data que parseia; senão vira NULL ("agora").
 // Protege contra datetime-local degradado (iOS antigo) mandando texto inválido,
@@ -311,6 +421,10 @@ setInterval(async () => {
   }
 }, 5 * 60 * 1000);
 
+// Retenção de fotos de segurança: apaga do Storage após 30 dias.
+setInterval(() => { aplicarRetencaoFotos().catch((e) => console.warn("retencao:", e.message)); }, 24 * 60 * 60 * 1000);
+setTimeout(() => { aplicarRetencaoFotos().catch(() => {}); }, 60 * 1000);
+
 /* ============================ CONFIG ============================ */
 app.get("/api/config", (req, res) => {
   res.json({ mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "", pushPublicKey: VAPID_PUBLIC });
@@ -370,6 +484,11 @@ app.post("/api/register", async (req, res) => {
   }
 
   try {
+    const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [matricula]);
+    if (bloqueada.rows.length > 0) {
+      return res.status(400).json({ error: "Matrícula bloqueada. Procure o administrador." });
+    }
+
     const check = await pool.query("SELECT id FROM usuarios WHERE matricula = $1", [matricula]);
     if (check.rows.length > 0) {
       return res.status(400).json({ error: "Matrícula já cadastrada" });
@@ -400,7 +519,10 @@ app.post("/api/login", async (req, res) => {
   if (!matricula || !senha) return res.status(400).json({ error: "Campos obrigatórios" });
 
   try {
-    const { rows } = await pool.query("SELECT * FROM usuarios WHERE matricula = $1", [matricula]);
+    const { rows } = await pool.query(
+      "SELECT * FROM usuarios WHERE matricula = $1 AND COALESCE(ativo, TRUE) = TRUE",
+      [matricula]
+    );
     if (rows.length === 0) return res.status(401).json({ error: "Credenciais inválidas" });
 
     const user = rows[0];
@@ -408,7 +530,13 @@ app.post("/api/login", async (req, res) => {
     if (!valido) return res.status(401).json({ error: "Credenciais inválidas" });
 
     const token = jwt.sign(
-      { id: user.id, matricula: user.matricula, is_admin: user.is_admin },
+      {
+        id: user.id,
+        matricula: user.matricula,
+        is_admin: user.is_admin,
+        projeto_id: user.projeto_id,
+        admin_projeto_id: user.admin_projeto_id,
+      },
       JWT_SECRET,
       { expiresIn: "8h" }
     );
@@ -418,6 +546,7 @@ app.post("/api/login", async (req, res) => {
       user: {
         id: user.id, nome: user.nome, matricula: user.matricula,
         telefone: user.telefone, is_admin: user.is_admin, sexo: user.sexo,
+        projeto_id: user.projeto_id, admin_projeto_id: user.admin_projeto_id,
       },
     });
   } catch (err) {
@@ -630,9 +759,12 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     }
 
     // Com lat/lng, mostra só caronas dentro do raio de visibilidade.
+    const pid = await projetoDoUsuario(req.user.id);
     const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
     const raio = lat && lng ? `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $3` : "";
     const params = lat && lng ? [lat, lng, RAIO_VISIVEL_KM] : [];
+    if (pid) { params.push(pid); }
+    const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
     const orderBy = lat && lng ? "dist_origem ASC" : "c.created_at DESC";
 
     const { rows } = await pool.query(
@@ -640,7 +772,8 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
-       WHERE c.status = 'ativa'
+       WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
+       ${filtroProj}
        ${raio}
        ORDER BY ${orderBy}`,
       params
@@ -733,7 +866,11 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
     // Com lat/lng (mapa do motorista): só pedidos DENTRO do raio de visibilidade,
     // os mais perto primeiro — carona é entre gente próxima.
     if (lat && lng) {
+      const pid = await projetoDoUsuario(req.user.id);
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
+      const params = [lat, lng, RAIO_VISIVEL_KM];
+      if (pid) params.push(pid);
+      const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
       const { rows } = await pool.query(
         `SELECT * FROM (
            SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
@@ -741,23 +878,32 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
            FROM pedidos p
            JOIN usuarios u ON p.passageiro_id = u.id
            WHERE p.status = 'aberto'
+             AND COALESCE(u.ativo, TRUE) = TRUE
              AND (p.horario IS NULL OR p.horario <= NOW())
+             ${filtroProj}
          ) s
          WHERE s.dist_origem <= $3
          ORDER BY s.dist_origem ASC
          LIMIT 60`,
-        [lat, lng, RAIO_VISIVEL_KM]
+        params
       );
       return res.json(rows);
     }
 
+    const pid = await projetoDoUsuario(req.user.id);
+    const params = [];
+    if (pid) params.push(pid);
+    const filtroProj = pid ? `AND u.projeto_id = $1` : "";
     const { rows } = await pool.query(
       `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo
        FROM pedidos p
        JOIN usuarios u ON p.passageiro_id = u.id
        WHERE p.status = 'aberto'
+         AND COALESCE(u.ativo, TRUE) = TRUE
          AND (p.horario IS NULL OR p.horario <= NOW())
-       ORDER BY p.created_at DESC`
+         ${filtroProj}
+       ORDER BY p.created_at DESC`,
+      params
     );
     res.json(rows);
   } catch (err) {
@@ -1154,8 +1300,11 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     // Só motoristas com uma carona publicada (rota): o passageiro clica no
     // carro no mapa e pede vaga naquela carona. Com lat/lng, corta pelo raio
     // de visibilidade (carona é entre gente próxima).
-    const raio = lat && lng ? `AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4` : "";
+    const pid = await projetoDoUsuario(req.user.id);
     const params = lat && lng ? [req.user.id, lat, lng, RAIO_VISIVEL_KM] : [req.user.id];
+    if (pid) params.push(pid);
+    const raio = lat && lng ? `AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4` : "";
+    const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
               u.id, u.nome, u.sexo, l.lat, l.lng,
@@ -1169,8 +1318,10 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
             AND h.created_at > NOW() - INTERVAL '24 hours'
        JOIN caronas ca ON ca.motorista_id = u.id AND ca.status = 'ativa'
        WHERE l.disponivel = TRUE
+         AND COALESCE(u.ativo, TRUE) = TRUE
          AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
          AND u.id <> $1
+         ${filtroProj}
          ${raio}
        ORDER BY u.id, ca.created_at DESC, h.created_at DESC
        LIMIT 100`,
@@ -1336,14 +1487,43 @@ app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
 });
 
 /* ============================ ADMIN ============================ */
-app.get("/api/admin/overview", verificarAuth, verificarAdmin, async (req, res) => {
+app.get("/api/admin/context", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  res.json({
+    projeto_id: req.adminEscopo.admin_projeto_id,
+    projeto_nome: req.adminEscopo.projeto_nome,
+    projeto_codigo: req.adminEscopo.projeto_codigo,
+    valor_contrato_mensal: Number(req.adminEscopo.valor_contrato_mensal) || 0,
+  });
+});
+
+app.get("/api/admin/overview", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const pid = req.adminEscopo.admin_projeto_id;
   try {
     const [u, c, p, vEm, vCon] = await Promise.all([
-      pool.query("SELECT COUNT(*) FROM usuarios"),
-      pool.query("SELECT COUNT(*) FROM caronas WHERE status = 'ativa'"),
-      pool.query("SELECT COUNT(*) FROM pedidos WHERE status = 'aberto'"),
-      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'em_andamento'"),
-      pool.query("SELECT COUNT(*) FROM viagens WHERE status = 'concluida'"),
+      pool.query(
+        "SELECT COUNT(*) FROM usuarios WHERE projeto_id = $1 AND COALESCE(ativo, TRUE) AND is_admin = FALSE",
+        [pid]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM caronas c JOIN usuarios u ON c.motorista_id = u.id
+         WHERE c.status = 'ativa' AND u.projeto_id = $1`,
+        [pid]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM pedidos p JOIN usuarios u ON p.passageiro_id = u.id
+         WHERE p.status = 'aberto' AND u.projeto_id = $1`,
+        [pid]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM viagens v JOIN usuarios m ON v.motorista_id = m.id
+         WHERE v.status = 'em_andamento' AND m.projeto_id = $1`,
+        [pid]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM viagens v JOIN usuarios m ON v.motorista_id = m.id
+         WHERE v.status = 'concluida' AND m.projeto_id = $1`,
+        [pid]
+      ),
     ]);
     const viagens = (await pool.query(
       `SELECT v.id, v.status, v.distancia_km, v.iniciada_em,
@@ -1351,10 +1531,14 @@ app.get("/api/admin/overview", verificarAuth, verificarAdmin, async (req, res) =
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
-       ORDER BY v.created_at DESC LIMIT 50`
+       WHERE m.projeto_id = $1
+       ORDER BY v.created_at DESC LIMIT 50`,
+      [pid]
     )).rows;
 
     res.json({
+      projeto_nome: req.adminEscopo.projeto_nome,
+      projeto_codigo: req.adminEscopo.projeto_codigo,
       totalUsuarios: +u.rows[0].count,
       caronasAtivas: +c.rows[0].count,
       pedidosAbertos: +p.rows[0].count,
@@ -1368,10 +1552,272 @@ app.get("/api/admin/overview", verificarAuth, verificarAdmin, async (req, res) =
   }
 });
 
-// Raio-X das notificações: por que um motorista (não) recebe o push?
-// Lista os habilitados nas últimas 24h com: inscrições de push no aparelho,
-// idade da última localização e desde quando o modo motorista está ativo.
-app.get("/api/admin/push-status", verificarAuth, verificarAdmin, async (req, res) => {
+app.get("/api/admin/metricas", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const periodo = periodoFromQuery(req.query.de, req.query.ate);
+  if (!periodo) return res.status(400).json({ error: "Período inválido" });
+  const pid = req.adminEscopo.admin_projeto_id;
+  try {
+    const [agg, ativos] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*) AS viagens,
+           COALESCE(SUM(v.distancia_km), 0) AS total_km,
+           COUNT(*) FILTER (WHERE pa.sexo = 'F') AS mulheres_transportadas,
+           COUNT(*) FILTER (WHERE pa.sexo = 'M') AS homens_transportados
+         FROM viagens v
+         JOIN usuarios m ON v.motorista_id = m.id
+         JOIN usuarios pa ON v.passageiro_id = pa.id
+         WHERE m.projeto_id = $1
+           AND v.status = 'concluida'
+           AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz`,
+        [pid, periodo.de, periodo.ate]
+      ),
+      pool.query(
+        `SELECT COUNT(DISTINCT sub.uid) AS usuarios_ativos
+         FROM (
+           SELECT v.motorista_id AS uid FROM viagens v
+           JOIN usuarios m ON v.motorista_id = m.id
+           WHERE m.projeto_id = $1 AND v.status = 'concluida'
+             AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+           UNION
+           SELECT v.passageiro_id FROM viagens v
+           JOIN usuarios m ON v.motorista_id = m.id
+           WHERE m.projeto_id = $1 AND v.status = 'concluida'
+             AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+         ) sub`,
+        [pid, periodo.de, periodo.ate]
+      ),
+    ]);
+    const r = agg.rows[0];
+    res.json({
+      periodo: { de: periodo.de, ate: periodo.ate },
+      usuarios_ativos: +ativos.rows[0].usuarios_ativos,
+      viagens: +r.viagens,
+      total_km: Math.round(Number(r.total_km) * 100) / 100,
+      mulheres_transportadas: +r.mulheres_transportadas,
+      homens_transportados: +r.homens_transportados,
+      valor_contrato_mensal: Number(req.adminEscopo.valor_contrato_mensal) || 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar métricas" });
+  }
+});
+
+app.patch("/api/admin/projeto/contrato", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const valor = Number(req.body.valor_contrato_mensal);
+  if (!Number.isFinite(valor) || valor < 0) {
+    return res.status(400).json({ error: "Valor de contrato inválido" });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE projetos SET valor_contrato_mensal = $1 WHERE id = $2 RETURNING nome, codigo, valor_contrato_mensal`,
+      [valor, req.adminEscopo.admin_projeto_id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao salvar contrato" });
+  }
+});
+
+app.get("/api/admin/rateio", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const periodo = periodoFromQuery(req.query.de, req.query.ate);
+  if (!periodo) return res.status(400).json({ error: "Período inválido" });
+  const pid = req.adminEscopo.admin_projeto_id;
+  const valorContrato = Number(req.adminEscopo.valor_contrato_mensal) || 0;
+  try {
+    const base = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(TRIM(pa.empresa_nome), ''), 'Sem empresa') AS empresa_nome,
+         COALESCE(NULLIF(TRIM(pa.centro_custo), ''), 'Sem CC') AS centro_custo,
+         COUNT(*)::int AS viagens,
+         COALESCE(SUM(v.distancia_km), 0) AS km
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       JOIN usuarios pa ON v.passageiro_id = pa.id
+       WHERE m.projeto_id = $1 AND v.status = 'concluida'
+         AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+       GROUP BY 1, 2`,
+      [pid, periodo.de, periodo.ate]
+    );
+    const totais = await pool.query(
+      `SELECT COUNT(*)::int AS viagens, COALESCE(SUM(v.distancia_km), 0) AS km
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       WHERE m.projeto_id = $1 AND v.status = 'concluida'
+         AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz`,
+      [pid, periodo.de, periodo.ate]
+    );
+    const ativosQ = await pool.query(
+      `SELECT COUNT(DISTINCT sub.uid) AS usuarios_ativos
+       FROM (
+         SELECT v.motorista_id AS uid FROM viagens v
+         JOIN usuarios m ON v.motorista_id = m.id
+         WHERE m.projeto_id = $1 AND v.status = 'concluida'
+           AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+         UNION
+         SELECT v.passageiro_id FROM viagens v
+         JOIN usuarios m ON v.motorista_id = m.id
+         WHERE m.projeto_id = $1 AND v.status = 'concluida'
+           AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+       ) sub`,
+      [pid, periodo.de, periodo.ate]
+    );
+    const totalViagens = totais.rows[0].viagens || 0;
+    const totalKm = Number(totais.rows[0].km) || 0;
+    const usuariosAtivos = ativosQ.rows[0].usuarios_ativos || 0;
+
+    const porEmpresaMap = {};
+    const porCc = [];
+    for (const row of base.rows) {
+      const share = totalViagens ? row.viagens / totalViagens : 0;
+      const custo = Math.round(valorContrato * share * 100) / 100;
+      porCc.push({
+        empresa_nome: row.empresa_nome,
+        centro_custo: row.centro_custo,
+        viagens: row.viagens,
+        km: Math.round(Number(row.km) * 100) / 100,
+        custo_alocado: custo,
+        percentual: Math.round(share * 10000) / 100,
+      });
+      if (!porEmpresaMap[row.empresa_nome]) {
+        porEmpresaMap[row.empresa_nome] = { empresa_nome: row.empresa_nome, viagens: 0, km: 0, custo_alocado: 0 };
+      }
+      porEmpresaMap[row.empresa_nome].viagens += row.viagens;
+      porEmpresaMap[row.empresa_nome].km += Number(row.km);
+      porEmpresaMap[row.empresa_nome].custo_alocado += custo;
+    }
+    const porEmpresa = Object.values(porEmpresaMap).map((e) => ({
+      ...e,
+      km: Math.round(e.km * 100) / 100,
+      custo_alocado: Math.round(e.custo_alocado * 100) / 100,
+      percentual: totalViagens ? Math.round((e.viagens / totalViagens) * 10000) / 100 : 0,
+    })).sort((a, b) => b.viagens - a.viagens);
+
+    res.json({
+      periodo: { de: periodo.de, ate: periodo.ate },
+      valor_contrato_mensal: valorContrato,
+      totais: {
+        viagens: totalViagens,
+        km: Math.round(totalKm * 100) / 100,
+        usuarios_ativos: usuariosAtivos,
+        custo_por_km: totalKm ? Math.round((valorContrato / totalKm) * 100) / 100 : 0,
+        custo_por_usuario: usuariosAtivos ? Math.round((valorContrato / usuariosAtivos) * 100) / 100 : 0,
+        custo_por_viagem: totalViagens ? Math.round((valorContrato / totalViagens) * 100) / 100 : 0,
+      },
+      por_empresa: porEmpresa,
+      por_centro_custo: porCc.sort((a, b) => b.viagens - a.viagens),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao calcular rateio" });
+  }
+});
+
+
+app.post("/api/admin/usuarios/:matricula/desativar", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const matricula = String(req.params.matricula || "").trim();
+  const motivo = String(req.body.motivo || "Desligamento").trim();
+  if (!matricula || matricula.length < 6) return res.status(400).json({ error: "Matrícula inválida" });
+  const pid = req.adminEscopo.admin_projeto_id;
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, matricula, is_admin FROM usuarios WHERE matricula = $1 AND projeto_id = $2",
+      [matricula, pid]
+    );
+    const alvo = rows[0];
+    if (!alvo) return res.status(404).json({ error: "Usuário não encontrado neste projeto" });
+    if (alvo.is_admin) return res.status(400).json({ error: "Não é possível desativar administrador" });
+
+    await pool.query("UPDATE usuarios SET ativo = FALSE WHERE id = $1", [alvo.id]);
+    await pool.query(
+      `INSERT INTO matriculas_bloqueadas (matricula, motivo, bloqueada_por)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (matricula) DO UPDATE SET motivo = EXCLUDED.motivo, bloqueada_em = NOW(), bloqueada_por = EXCLUDED.bloqueada_por`,
+      [matricula, motivo, req.user.id]
+    );
+    await pool.query("DELETE FROM localizacoes_online WHERE usuario_id = $1", [alvo.id]);
+    await pool.query("DELETE FROM push_subscriptions WHERE usuario_id = $1", [alvo.id]);
+    await pool.query(
+      "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
+      [alvo.id]
+    );
+    await pool.query(
+      "UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto'",
+      [alvo.id]
+    );
+    res.json({ success: true, message: `Matrícula ${matricula} desativada e bloqueada.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao desativar usuário" });
+  }
+});
+
+app.get("/api/admin/seguranca", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const pid = req.adminEscopo.admin_projeto_id;
+  const matricula = String(req.query.matricula || "").trim();
+  const de = req.query.de ? new Date(req.query.de) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const ate = req.query.ate ? new Date(req.query.ate) : new Date();
+  if (isNaN(de.getTime()) || isNaN(ate.getTime())) {
+    return res.status(400).json({ error: "Datas inválidas" });
+  }
+  try {
+    const params = [pid, de.toISOString(), ate.toISOString()];
+    let filtroMat = "";
+    if (matricula) {
+      params.push(matricula);
+      filtroMat = `AND (m.matricula = $${params.length} OR pa.matricula = $${params.length})`;
+    }
+    const viagens = (await pool.query(
+      `SELECT v.id, v.status, v.iniciada_em, v.finalizada_em, v.distancia_km,
+              m.matricula AS motorista_matricula, m.nome AS motorista_nome,
+              pa.matricula AS passageiro_matricula, pa.nome AS passageiro_nome,
+              h.selfie_url AS motorista_selfie, h.foto_carro_url, h.placa,
+              pr.selfie_url AS proposta_selfie, pd.selfie_url AS pedido_selfie
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       JOIN usuarios pa ON v.passageiro_id = pa.id
+       LEFT JOIN habilitacoes_motorista h ON v.habilitacao_id = h.id
+       LEFT JOIN propostas pr ON v.proposta_id = pr.id
+       LEFT JOIN pedidos pd ON v.pedido_id = pd.id
+       WHERE m.projeto_id = $1
+         AND v.iniciada_em >= $2::timestamptz AND v.iniciada_em < $3::timestamptz
+         ${filtroMat}
+       ORDER BY v.iniciada_em DESC
+       LIMIT 200`,
+      params
+    )).rows;
+
+    const habParams = [pid, de.toISOString(), ate.toISOString()];
+    let habFiltroMat = "";
+    if (matricula) {
+      habParams.push(matricula);
+      habFiltroMat = `AND u.matricula = $${habParams.length}`;
+    }
+    const habilitacoes = (await pool.query(
+      `SELECT h.id, h.created_at, h.placa, h.selfie_url, h.foto_carro_url,
+              h.selfie_lat, h.selfie_lng, h.foto_carro_lat, h.foto_carro_lng,
+              u.matricula, u.nome
+       FROM habilitacoes_motorista h
+       JOIN usuarios u ON h.motorista_id = u.id
+       WHERE u.projeto_id = $1
+         AND h.created_at >= $2::timestamptz AND h.created_at < $3::timestamptz
+         ${habFiltroMat}
+       ORDER BY h.created_at DESC
+       LIMIT 100`,
+      habParams
+    )).rows;
+
+    res.json({ viagens, habilitacoes, retencao_dias: 30 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar registros de segurança" });
+  }
+});
+
+app.get("/api/admin/push-status", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const pid = req.adminEscopo.admin_projeto_id;
   try {
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id) u.id, u.nome, u.matricula,
@@ -1383,7 +1829,9 @@ app.get("/api/admin/push-status", verificarAuth, verificarAdmin, async (req, res
        JOIN usuarios u ON u.id = h.motorista_id
        LEFT JOIN localizacoes_online l ON l.usuario_id = u.id
        WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
-       ORDER BY u.id, h.created_at DESC`
+         AND u.projeto_id = $1 AND COALESCE(u.ativo, TRUE) = TRUE
+       ORDER BY u.id, h.created_at DESC`,
+      [pid]
     );
     const total = (await pool.query("SELECT COUNT(*) FROM push_subscriptions")).rows[0].count;
     res.json({ pushConfigurado, totalInscricoes: +total, motoristas: rows });
@@ -1393,62 +1841,20 @@ app.get("/api/admin/push-status", verificarAuth, verificarAdmin, async (req, res
   }
 });
 
-app.post("/api/admin/reset-senha", verificarAuth, verificarAdmin, async (req, res) => {
+app.post("/api/admin/reset-senha", verificarAuth, carregarAdminEscopo, async (req, res) => {
   const { matricula } = req.body;
   if (!matricula || matricula.length < 6) return res.status(400).json({ error: "Matrícula inválida" });
+  const pid = req.adminEscopo.admin_projeto_id;
   try {
     const senha_hash = await bcrypt.hash("123456", 10);
     const { rowCount } = await pool.query(
-      "UPDATE usuarios SET senha_hash = $1 WHERE matricula = $2",
-      [senha_hash, matricula.trim()]
+      "UPDATE usuarios SET senha_hash = $1 WHERE matricula = $2 AND projeto_id = $3",
+      [senha_hash, matricula.trim(), pid]
     );
-    if (rowCount === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (rowCount === 0) return res.status(404).json({ error: "Usuário não encontrado neste projeto" });
     res.json({ success: true, message: `Senha de ${matricula} resetada para: 123456` });
   } catch (err) {
     res.status(500).json({ error: "Erro interno" });
-  }
-});
-
-// Rateio: usuários ativos nos últimos 40 dias, agrupado por projeto/empresa/CC
-app.get("/api/rateio", verificarAuth, async (req, res) => {
-  if (!req.user.is_admin) return res.status(403).json({ error: "Acesso negado" });
-  try {
-    const projeto_id = req.query.projeto_id || null;
-    const params = [];
-    let filtro = "";
-    if (projeto_id) { params.push(projeto_id); filtro = `AND u.projeto_id = $${params.length}`; }
-
-    const { rows } = await pool.query(`
-      SELECT
-          u.id,
-          u.nome,
-          u.matricula,
-          u.empresa_nome,
-          u.centro_custo,
-          p.nome AS projeto,
-          p.codigo AS projeto_codigo,
-          COUNT(DISTINCT v.id) AS viagens,
-          5.00 AS custo_mensal
-      FROM usuarios u
-      LEFT JOIN projetos p ON p.id = u.projeto_id
-      LEFT JOIN (
-          SELECT motorista_id AS usuario_id, iniciada_em FROM viagens WHERE iniciada_em >= NOW() - INTERVAL '40 days'
-          UNION ALL
-          SELECT passageiro_id AS usuario_id, iniciada_em FROM viagens WHERE iniciada_em >= NOW() - INTERVAL '40 days'
-      ) v ON v.usuario_id = u.id
-      WHERE u.is_admin = FALSE
-        AND v.usuario_id IS NOT NULL
-        ${filtro}
-      GROUP BY u.id, u.nome, u.matricula, u.empresa_nome, u.centro_custo, p.nome, p.codigo
-      ORDER BY p.nome, u.empresa_nome, u.nome
-    `, params);
-
-    const total_usuarios = rows.length;
-    const total_custo = total_usuarios * 5;
-
-    res.json({ usuarios: rows, total_usuarios, total_custo, periodo_dias: 40 });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
   }
 });
 

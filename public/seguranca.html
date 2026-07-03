@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0F3D3E">
+    <script src="/pwa.js" defer></script>
+    <title>VAP - Central de Segurança</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js"></script>
+    <style>
+        .seg-top { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin:16px 0; }
+        .seg-top input { padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; }
+        .seg-card { border:1px solid #e2e8f0; border-radius:12px; padding:14px; margin-bottom:12px; background:#fff; }
+        .seg-fotos { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+        .seg-fotos img { width:120px; height:90px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; }
+        .seg-meta { font-size:0.85rem; color:#475569; line-height:1.5; }
+    </style>
+</head>
+<body>
+<nav class="navbar">
+    <div class="nav-container">
+        <div class="nav-left">
+            <img src="/logo-vap.png" class="nav-logo" alt="VAP">
+            <span class="nav-tag">SEGURANÇA</span>
+        </div>
+        <div class="nav-links">
+            <a href="admin.html" class="btn btn-secondary btn-sm">Painel</a>
+            <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card">
+        <h3>Central de segurança</h3>
+        <p class="cam-hint">Fotos e registros dos últimos 30 dias (retenção automática). Busque por matrícula ou período.</p>
+        <div class="seg-top">
+            <div>
+                <label>Matrícula</label><br>
+                <input id="buscaMat" placeholder="Opcional">
+            </div>
+            <div>
+                <label>De</label><br>
+                <input type="date" id="buscaDe">
+            </div>
+            <div>
+                <label>Até</label><br>
+                <input type="date" id="buscaAte">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="carregar()">Buscar</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Viagens</h3>
+        <div id="listaViagens"></div>
+    </div>
+
+    <div class="card">
+        <h3>Habilitações de motorista</h3>
+        <div id="listaHab"></div>
+    </div>
+</div>
+
+<script>
+checkAuth(true);
+
+function iniDatas() {
+    const ate = new Date();
+    const de = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    document.getElementById('buscaDe').value = de.toISOString().slice(0, 10);
+    document.getElementById('buscaAte').value = ate.toISOString().slice(0, 10);
+}
+
+function query() {
+    const q = new URLSearchParams();
+    const m = document.getElementById('buscaMat').value.trim();
+    const de = document.getElementById('buscaDe').value;
+    const ate = document.getElementById('buscaAte').value;
+    if (m) q.set('matricula', m);
+    if (de) q.set('de', de);
+    if (ate) q.set('ate', ate);
+    return `?${q}`;
+}
+
+function img(url, leg) {
+    if (!url) return '';
+    return `<figure><img src="${url}" alt="${leg}"><figcaption style="font-size:0.75rem;color:#64748b;">${leg}</figcaption></figure>`;
+}
+
+async function carregar() {
+    const r = await fetchWithAuth('/api/admin/seguranca' + query());
+    const d = await r.json();
+    if (!r.ok) { mostrarToast(d.error || 'Erro', 'error'); return; }
+
+    document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => `
+        <div class="seg-card">
+            <strong>Viagem #${v.id}</strong> — ${v.motorista_nome} (${v.motorista_matricula}) → ${v.passageiro_nome} (${v.passageiro_matricula})
+            <div class="seg-meta">${fmtData(v.iniciada_em)}${v.finalizada_em ? ' → ' + fmtData(v.finalizada_em) : ''} • ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}${v.placa ? ' • ' + v.placa : ''}</div>
+            <div class="seg-fotos">
+                ${img(v.motorista_selfie, 'Selfie motorista')}
+                ${img(v.foto_carro_url, 'Foto carro')}
+                ${img(v.pedido_selfie, 'Selfie pedido')}
+                ${img(v.proposta_selfie, 'Selfie proposta')}
+            </div>
+        </div>`).join('') || '<p class="cam-hint">Nenhuma viagem no período.</p>';
+
+    document.getElementById('listaHab').innerHTML = (d.habilitacoes || []).map(h => `
+        <div class="seg-card">
+            <strong>${h.nome}</strong> (${h.matricula}) — placa ${h.placa || '—'}
+            <div class="seg-meta">${fmtData(h.created_at)}${h.selfie_lat != null ? ` • GPS selfie: ${h.selfie_lat}, ${h.selfie_lng}` : ''}</div>
+            <div class="seg-fotos">
+                ${img(h.selfie_url, 'Selfie')}
+                ${img(h.foto_carro_url, 'Carro')}
+            </div>
+        </div>`).join('') || '<p class="cam-hint">Nenhuma habilitação no período.</p>';
+}
+
+iniDatas();
+carregar();
+</script>
+</body>
+</html>
