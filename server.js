@@ -311,6 +311,56 @@ async function projetoDoUsuario(userId) {
   return rows[0]?.projeto_id ?? null;
 }
 
+const SQL_USUARIO_FRONT = `
+  SELECT u.id, u.nome, u.funcao, u.matricula, u.telefone, u.email, u.is_admin, u.sexo,
+         u.empresa_nome, u.centro_custo, u.projeto_id, u.admin_projeto_id,
+         p.nome AS projeto_nome, p.codigo AS projeto_codigo
+  FROM usuarios u
+  LEFT JOIN projetos p ON p.id = u.projeto_id`;
+
+function usuarioParaFront(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    nome: row.nome,
+    funcao: row.funcao || null,
+    matricula: row.matricula,
+    telefone: row.telefone,
+    email: row.email || null,
+    is_admin: !!row.is_admin,
+    sexo: row.sexo || null,
+    empresa_nome: row.empresa_nome || null,
+    centro_custo: row.centro_custo || null,
+    projeto_id: row.projeto_id || null,
+    projeto_nome: row.projeto_nome || null,
+    projeto_codigo: row.projeto_codigo || null,
+    admin_projeto_id: row.admin_projeto_id || null,
+  };
+}
+
+async function buscarUsuarioFront(userId) {
+  const { rows } = await pool.query(`${SQL_USUARIO_FRONT} WHERE u.id = $1`, [userId]);
+  return usuarioParaFront(rows[0]);
+}
+
+async function exigirProjeto(userId, res) {
+  const pid = await projetoDoUsuario(userId);
+  if (!pid) {
+    res.status(403).json({ error: "Cadastro incompleto: projeto não vinculado. Atualize seu cadastro." });
+    return null;
+  }
+  return pid;
+}
+
+async function validarMesmoProjeto(userIdA, userIdB, res) {
+  const [pidA, pidB] = await Promise.all([projetoDoUsuario(userIdA), projetoDoUsuario(userIdB)]);
+  if (!pidA || !pidB || pidA !== pidB) {
+    res.status(403).json({ error: "Ação permitida apenas entre usuários do mesmo projeto." });
+    return false;
+  }
+  return true;
+}
+
 async function aplicarRetencaoFotos() {
   if (!supabaseConfigurado) return;
   const limite = "NOW() - INTERVAL '30 days'";
@@ -360,22 +410,31 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
 // agendador (pedido com horário marcado).
 async function notificarMotoristasProximos(ped) {
   try {
-    const nome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [ped.passageiro_id])).rows[0]?.nome || "Um colega";
+    const passInfo = (await pool.query(
+      "SELECT nome, projeto_id FROM usuarios WHERE id = $1",
+      [ped.passageiro_id]
+    )).rows[0];
+    if (!passInfo?.projeto_id) return;
+
+    const nome = passInfo.nome || "Um colega";
     const motoristas = (await pool.query(
       `SELECT motorista_id FROM (
          SELECT DISTINCT ON (h.motorista_id) h.motorista_id, l.atualizado_em,
                 ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
          FROM habilitacoes_motorista h
          JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
+         JOIN usuarios um ON um.id = h.motorista_id
          WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
            AND h.motorista_id <> $3
+           AND um.projeto_id = $6
+           AND COALESCE(um.ativo, TRUE) = TRUE
          ORDER BY h.motorista_id, h.created_at DESC
        ) s
        WHERE (s.atualizado_em > NOW() - INTERVAL '10 minutes' AND s.dist <= $4)
           OR s.dist <= $5
        ORDER BY s.dist ASC
        LIMIT 8`,
-      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_VISIVEL_KM, RAIO_PUSH_PERTO_KM]
+      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_VISIVEL_KM, RAIO_PUSH_PERTO_KM, passInfo.projeto_id]
     )).rows;
     const destino = ped.destino_texto ? ` para ${ped.destino_texto}` : " aqui perto";
     motoristas.forEach((m) => enviarPush(m.motorista_id, {
@@ -516,13 +575,24 @@ app.post("/api/register", async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING id, nome, matricula, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo`,
+       RETURNING id`,
       [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin,
        empresa_nome || null, pid, centro_custo || null, sexoNorm]
     );
 
-    const token = jwt.sign({ id: rows[0].id, matricula, is_admin }, JWT_SECRET, { expiresIn: "8h" });
-    res.json({ success: true, token, user: rows[0] });
+    const userFront = await buscarUsuarioFront(rows[0].id);
+    const token = jwt.sign(
+      {
+        id: userFront.id,
+        matricula,
+        is_admin,
+        projeto_id: userFront.projeto_id,
+        admin_projeto_id: userFront.admin_projeto_id,
+      },
+      JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+    res.json({ success: true, token, user: userFront });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar conta" });
@@ -556,14 +626,8 @@ app.post("/api/login", async (req, res) => {
       { expiresIn: "8h" }
     );
 
-    res.json({
-      token,
-      user: {
-        id: user.id, nome: user.nome, matricula: user.matricula,
-        telefone: user.telefone, is_admin: user.is_admin, sexo: user.sexo,
-        projeto_id: user.projeto_id, admin_projeto_id: user.admin_projeto_id,
-      },
-    });
+    const userFront = await buscarUsuarioFront(user.id);
+    res.json({ token, user: userFront });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro interno" });
@@ -607,31 +671,34 @@ app.post("/api/recuperar-senha", async (req, res) => {
 
 app.get("/api/perfil", verificarAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      "SELECT id, nome, funcao, matricula, telefone, is_admin, sexo FROM usuarios WHERE id = $1",
-      [req.user.id]
-    );
-    res.json(rows[0]);
+    const userFront = await buscarUsuarioFront(req.user.id);
+    if (!userFront) return res.status(404).json({ error: "Usuário não encontrado" });
+    res.json(userFront);
   } catch (err) {
     res.status(500).json({ error: "Erro ao carregar perfil" });
   }
 });
 
 app.patch("/api/perfil", verificarAuth, async (req, res) => {
-  const { telefone, nome, funcao, sexo } = req.body;
+  const { telefone, nome, funcao, sexo, empresa_nome, centro_custo } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   try {
-    const { rows } = await pool.query(
+    await pool.query(
       `UPDATE usuarios SET
          telefone = COALESCE($1, telefone),
          nome = COALESCE($2, nome),
          funcao = COALESCE($3, funcao),
-         sexo = COALESCE($4, sexo)
-       WHERE id = $5
-       RETURNING id, nome, funcao, matricula, telefone, is_admin, sexo`,
-      [telefone || null, nome || null, funcao || null, sexoNorm, req.user.id]
+         sexo = COALESCE($4, sexo),
+         empresa_nome = COALESCE($5, empresa_nome),
+         centro_custo = COALESCE($6, centro_custo)
+       WHERE id = $7`,
+      [
+        telefone || null, nome || null, funcao || null, sexoNorm,
+        empresa_nome || null, centro_custo ?? null, req.user.id,
+      ]
     );
-    res.json(rows[0]);
+    const userFront = await buscarUsuarioFront(req.user.id);
+    res.json(userFront);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao atualizar perfil" });
@@ -729,6 +796,9 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
   }
 
   try {
+    const pid = await exigirProjeto(req.user.id, res);
+    if (!pid) return;
+
     const hab = await habilitacaoAtiva(req.user.id);
     if (!hab) return res.status(403).json({ error: "Ative o modo motorista (foto do carro + selfie) antes de oferecer carona" });
 
@@ -772,6 +842,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
 
     // Com lat/lng, mostra só caronas dentro do raio de visibilidade.
     const pid = await projetoDoUsuario(req.user.id);
+    if (!pid) return res.json([]);
     const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
     const raio = lat && lng ? `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $3` : "";
     const params = lat && lng ? [lat, lng, RAIO_VISIVEL_KM] : [];
@@ -827,6 +898,9 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
   if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória para pedir carona" });
 
   try {
+    const pid = await exigirProjeto(req.user.id, res);
+    if (!pid) return;
+
     // Um pedido aberto por passageiro: cancela os anteriores (evita bonequinhos
     // duplicados no mapa do motorista).
     await pool.query("UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto'", [req.user.id]);
@@ -879,6 +953,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
     // os mais perto primeiro — carona é entre gente próxima.
     if (lat && lng) {
       const pid = await projetoDoUsuario(req.user.id);
+      if (!pid) return res.json([]);
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
       const params = [lat, lng, RAIO_VISIVEL_KM];
       if (pid) params.push(pid);
@@ -903,9 +978,9 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
     }
 
     const pid = await projetoDoUsuario(req.user.id);
-    const params = [];
-    if (pid) params.push(pid);
-    const filtroProj = pid ? `AND u.projeto_id = $1` : "";
+    if (!pid) return res.json([]);
+    const params = [pid];
+    const filtroProj = `AND u.projeto_id = $1`;
     const { rows } = await pool.query(
       `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo
        FROM pedidos p
@@ -951,8 +1026,12 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
   const { pedido_id } = req.query;
   if (!pedido_id) return res.status(400).json({ error: "pedido_id obrigatório" });
   try {
+    const pid = await exigirProjeto(req.user.id, res);
+    if (!pid) return;
+
     const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedido_id])).rows[0];
     if (!ped) return res.status(404).json({ error: "Pedido não encontrado" });
+    if (ped.passageiro_id !== req.user.id) return res.status(403).json({ error: "Pedido de outro usuário" });
 
     const { rows } = await pool.query(
       `SELECT * FROM (
@@ -963,13 +1042,15 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
          JOIN usuarios u ON c.motorista_id = u.id
          LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
          WHERE c.status = 'ativa' AND c.motorista_id <> $5
+           AND u.projeto_id = $8
+           AND COALESCE(u.ativo, TRUE) = TRUE
            AND (c.horario IS NULL OR $7::timestamp IS NULL
                 OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
        ) s
        WHERE s.dist_origem <= $6 AND s.dist_destino <= $6
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
-      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario]
+      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario, pid]
     );
     res.json(rows);
   } catch (err) {
@@ -983,6 +1064,9 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
   const { carona_id } = req.query;
   if (!carona_id) return res.status(400).json({ error: "carona_id obrigatório" });
   try {
+    const pid = await exigirProjeto(req.user.id, res);
+    if (!pid) return;
+
     const car = (await pool.query("SELECT * FROM caronas WHERE id = $1", [carona_id])).rows[0];
     if (!car) return res.status(404).json({ error: "Carona não encontrada" });
 
@@ -994,13 +1078,15 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
          FROM pedidos p
          JOIN usuarios u ON p.passageiro_id = u.id
          WHERE p.status = 'aberto' AND p.passageiro_id <> $5
+           AND u.projeto_id = $8
+           AND COALESCE(u.ativo, TRUE) = TRUE
            AND (p.horario IS NULL OR $7::timestamp IS NULL
                 OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
        ) s
        WHERE s.dist_origem <= $6 AND s.dist_destino <= $6
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
-      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario]
+      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario, pid]
     );
     res.json(rows);
   } catch (err) {
@@ -1023,6 +1109,7 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       const car = (await pool.query("SELECT * FROM caronas WHERE id = $1 AND status = 'ativa'", [carona_id])).rows[0];
       if (!car) return res.status(404).json({ error: "Carona indisponível" });
       if (car.motorista_id === req.user.id) return res.status(400).json({ error: "Você é o motorista desta carona" });
+      if (!(await validarMesmoProjeto(req.user.id, car.motorista_id, res))) return;
       para_usuario_id = car.motorista_id;
       dadosSelfie = { selfie_url, selfie_lat, selfie_lng, selfie_em: selfie_em || new Date() };
     } else {
@@ -1032,6 +1119,7 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1 AND status = 'aberto'", [pedido_id])).rows[0];
       if (!ped) return res.status(404).json({ error: "Pedido indisponível" });
       if (ped.passageiro_id === req.user.id) return res.status(400).json({ error: "Este pedido é seu" });
+      if (!(await validarMesmoProjeto(req.user.id, ped.passageiro_id, res))) return;
       para_usuario_id = ped.passageiro_id;
     }
 
@@ -1313,10 +1401,11 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     // carro no mapa e pede vaga naquela carona. Com lat/lng, corta pelo raio
     // de visibilidade (carona é entre gente próxima).
     const pid = await projetoDoUsuario(req.user.id);
+    if (!pid) return res.json([]);
     const params = lat && lng ? [req.user.id, lat, lng, RAIO_VISIVEL_KM] : [req.user.id];
-    if (pid) params.push(pid);
+    params.push(pid);
     const raio = lat && lng ? `AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4` : "";
-    const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
+    const filtroProj = `AND u.projeto_id = $${params.length}`;
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
               u.id, u.nome, u.sexo, l.lat, l.lng,

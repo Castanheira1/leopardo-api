@@ -59,6 +59,9 @@
         <div id="avisoTelefone" class="message error" style="display:none;">
             Cadastre seu telefone/WhatsApp no <a href="#" onclick="abrirPerfil();return false;">Perfil</a> para combinar caronas.
         </div>
+        <div id="avisoCadastro" class="message error" style="display:none;">
+            Cadastro incompleto (empresa, projeto ou email). Esses dados alimentam o painel comercial e o rateio de viagens.
+        </div>
 
         <div class="dashboard">
             <div class="modo-bar">
@@ -142,6 +145,19 @@
     <div id="modalPerfil" class="cam-overlay" style="display:none;">
         <div class="cam-box perfil-box">
             <h3>Perfil</h3>
+
+            <div class="perfil-secao">
+                <p style="font-size:0.8rem;color:#9aa0a6;margin-bottom:8px;">Dados do cadastro (usados no painel comercial)</p>
+                <label>Projeto</label>
+                <input id="perfilProjeto" class="map-search" readonly style="opacity:0.85;margin-bottom:8px;">
+                <label>Empresa</label>
+                <input id="perfilEmpresa" class="map-search" placeholder="Ex: Vale, MCA, Serveng">
+                <label for="perfilCentroCusto" style="margin-top:8px;display:block;">Centro de custo <small>(opcional)</small></label>
+                <input id="perfilCentroCusto" class="map-search" placeholder="Ex: CC-1234">
+                <label for="perfilEmail" style="margin-top:8px;display:block;">Email</label>
+                <input id="perfilEmail" class="map-search" readonly style="opacity:0.85;">
+                <small style="display:block;margin-top:6px;color:#9aa0a6;">O email é usado para recuperar senha no login.</small>
+            </div>
 
             <div class="perfil-secao">
                 <label for="perfilTelefone">WhatsApp (com DDD)</label>
@@ -465,7 +481,31 @@
     function checarTelefone() {
         document.getElementById('avisoTelefone').style.display = user.telefone ? 'none' : 'block';
     }
+    function checarCadastro() {
+        const ok = user.projeto_id && user.empresa_nome && user.email;
+        const el = document.getElementById('avisoCadastro');
+        if (el) el.style.display = ok ? 'none' : 'block';
+    }
+    function aplicarPerfilNaTela() {
+        const nomeEl = document.getElementById('userName');
+        if (nomeEl && user?.nome) nomeEl.textContent = `Olá, ${user.nome.split(' ')[0]}!`;
+        checarTelefone();
+        checarCadastro();
+    }
+    async function sincronizarPerfil() {
+        try {
+            const r = await fetchWithAuth('/api/perfil');
+            if (!r.ok) return;
+            user = await r.json();
+            localStorage.setItem('user', JSON.stringify(user));
+            aplicarPerfilNaTela();
+        } catch (_) {}
+    }
     function abrirPerfil() {
+        document.getElementById('perfilProjeto').value = user.projeto_codigo || user.projeto_nome || '';
+        document.getElementById('perfilEmpresa').value = user.empresa_nome || '';
+        document.getElementById('perfilCentroCusto').value = user.centro_custo || '';
+        document.getElementById('perfilEmail').value = user.email || '';
         document.getElementById('perfilTelefone').value = user.telefone || '';
         document.getElementById('perfilSexo').value = user.sexo || '';
         document.getElementById('modalPerfil').style.display = 'flex';
@@ -476,17 +516,23 @@
     async function salvarPerfil() {
         const tel = document.getElementById('perfilTelefone').value.trim();
         const sexo = document.getElementById('perfilSexo').value || null;
+        const empresa = document.getElementById('perfilEmpresa').value.trim();
+        const centro = document.getElementById('perfilCentroCusto').value.trim();
         const out = document.getElementById('perfilMsg');
         const setMsg = (t, cor) => { if (out) { out.textContent = t; out.style.color = cor || ''; } };
         if (tel.replace(/\D/g, '').length < 10) return setMsg('Informe um telefone válido com DDD.', '#ef9a9a');
+        if (!empresa) return setMsg('Informe a empresa.', '#ef9a9a');
         setMsg('Salvando...', '');
         try {
-            const r = await fetchWithAuth('/api/perfil', { method: 'PATCH', body: JSON.stringify({ telefone: tel, sexo }) });
+            const r = await fetchWithAuth('/api/perfil', {
+                method: 'PATCH',
+                body: JSON.stringify({ telefone: tel, sexo, empresa_nome: empresa, centro_custo: centro || null }),
+            });
             const d = await r.json();
             if (r.ok) {
-                user = { ...user, telefone: d.telefone, sexo: d.sexo };
+                user = d;
                 localStorage.setItem('user', JSON.stringify(user));
-                checarTelefone();
+                aplicarPerfilNaTela();
                 setMsg('✓ Perfil salvo!', '#86efac');
             } else setMsg(d.error || 'Erro ao salvar', '#ef9a9a');
         } catch (_) {
@@ -1979,7 +2025,9 @@
     /* -------- init -------- */
     (async function init() {
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
+        await sincronizarPerfil();
         checarTelefone();
+        checarCadastro();
         await carregarHabilitacao().catch(() => {});
         if (habHoje) iniciarBroadcastLocalizacao();
         await loadPropostas();
