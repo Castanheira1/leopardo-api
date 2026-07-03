@@ -1,4 +1,4 @@
-# Política de Privacidade — VAP (Vagão)
+# Política de Privacidade — VAP
 
 **Versão 1.0 — vigente desde 03/07/2026**
 

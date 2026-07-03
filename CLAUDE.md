@@ -4,7 +4,7 @@ Guidance for AI assistants (and humans) working in this repository.
 
 ## What this is
 
-**Vagão** — an internal **ride-sharing** app ("mini-Uber") for coworkers. The same
+**VAP** — an internal **ride-sharing** app ("mini-Uber") for coworkers. The same
 user switches between **motorista** (driver) and **passageiro** (passenger). Safety is
 enforced with **live camera selfies** and **full trip logging with the GPS route**.
 

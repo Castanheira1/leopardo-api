@@ -1,4 +1,4 @@
-# Relatório de prontidão para comercialização — Vagão
+# Relatório de prontidão para comercialização — VAP
 
 Data: 2026-07-03 · Base: branch `claude/automated-test-commercialization-check-lumy6z`
 
@@ -22,7 +22,7 @@ app que guarda **selfies, rota de GPS e telefone** de funcionários.
 
 ---
 
-## O que passou ✅
+## O que passou
 
 - **Boot e healthcheck** (`/api/config`, `/`).
 - **Cadastro/login** com todas as validações (senha de 6 dígitos, email, projeto,
@@ -41,36 +41,36 @@ app que guarda **selfies, rota de GPS e telefone** de funcionários.
 
 ---
 
-## Atualização — correções aplicadas neste branch ✅
+## Atualização — correções aplicadas neste branch
 
 Depois do diagnóstico inicial, os itens de **código** foram corrigidos:
 
-- ✅ **XSS armazenado**: adicionado `escapeHtml()`/`esc()` em `public/app.js` e
+- **XSS armazenado**: adicionado `escapeHtml()`/`esc()` em `public/app.js` e
   aplicado em **todas** as interpolações de dados de usuário nos innerHTML de
   `dashboard.html`, `admin.html`, `historico.html` e `seguranca.html` (nomes,
   tag, placa, observação, mensagem, rota, empresa, justificativa etc.). Service
   worker teve a `VERSION` bumpada (v89) para os clientes receberem a correção.
-- ✅ **CORS**: `origin:"*"` trocado por allowlist via `CORS_ORIGINS` (padrão: sem
+- **CORS**: `origin:"*"` trocado por allowlist via `CORS_ORIGINS` (padrão: sem
   origem externa; o PWA same-origin segue funcionando).
-- ✅ **Força-bruta no login**: novo `authLimiter` (padrão 20 tentativas/15min por
+- **Força-bruta no login**: novo `authLimiter` (padrão 20 tentativas/15min por
   IP via `AUTH_RATE_MAX`) em login/cadastro/recuperação, coberto por teste (429).
-- ✅ **LGPD (base)**: nova página `politica-privacidade.html`, **consentimento
+- **LGPD (base)**: nova página `politica-privacidade.html`, **consentimento
   obrigatório no cadastro** (checkbox no front + validação no back), gravando
   `politica_aceita_em` e `politica_versao` em `usuarios`. Coberto por teste
   (cadastro sem aceite → 400). Service worker → v90.
 
 **Ainda PENDENTE:**
-- 🟠 **LGPD (preencher/juridicо)** — a política tem *placeholders* a preencher
+- **LGPD (preencher/juridicо)** — a política tem *placeholders* a preencher
   (razão social do controlador, CNPJ, endereço e email do encarregado/DPO) e
   precisa de revisão jurídica. Usuários **já cadastrados** antes desta versão não
   têm consentimento registrado — recomendável pedir aceite no próximo login.
-- 🟠 **Política de senha** — segue 6 dígitos (mantido a pedido; aumentar a força
+- **Política de senha** — segue 6 dígitos (mantido a pedido; aumentar a força
   quebraria as senhas atuais). Mitigado pelo rate-limit.
-- 🟠 Trocar o admin padrão `000000/admin123` e restringir a Maps API key por domínio.
+- Trocar o admin padrão `000000/admin123` e restringir a Maps API key por domínio.
 
 ---
 
-## Bloqueadores para comercializar 🔴
+## Bloqueadores para comercializar
 
 ### 1. XSS armazenado (roubo de conta) — **crítico**
 Campos livres controlados pelo usuário (`nome`, `tag` do carro, `observacao`,
@@ -99,7 +99,7 @@ camada jurídica).
 
 ---
 
-## Fortemente recomendado antes de vender 🟠
+## Fortemente recomendado antes de vender
 
 - **Senha fraca:** exatamente 6 dígitos numéricos (`server.js:172`) = só 1 milhão
   de combinações, e o login tem apenas um limitador **global** de 1200 req/15min
@@ -111,7 +111,7 @@ camada jurídica).
 - **Google Maps API key** é exposta em `/api/config` (por design): restrinja por
   domínio/HTTP referrer no Google Cloud para não virar conta de terceiros.
 
-## Bom ter 🟡
+## Bom ter
 
 - **CI**: rodar `npm test` (esta suíte) automaticamente a cada PR.
 - Cobrir no futuro o que exige serviços externos/navegador (upload Supabase, OCR,
@@ -123,12 +123,12 @@ camada jurídica).
 
 | Dimensão | Situação |
 |---|---|
-| Funcionalidade do core | ✅ Pronta (47/47) |
-| Schema / deploy | ✅ Aplica limpo e idempotente |
-| Segurança (XSS/auth/CORS) | 🔴 Corrigir antes |
-| Conformidade LGPD | 🔴 Falta base jurídica |
+| Funcionalidade do core | Pronta (47/47) |
+| Schema / deploy | Aplica limpo e idempotente |
+| Segurança (XSS/auth/CORS) | Corrigir antes |
+| Conformidade LGPD | Falta base jurídica |
 
-**Recomendação:** o produto funciona, mas **trate os 2 bloqueadores 🔴 (XSS e
-LGPD) e os itens 🟠 de autenticação antes de cobrar de clientes.** Feito isso, é
+**Recomendação:** o produto funciona, mas **trate os 2 bloqueadores (XSS e
+LGPD) e os itens de autenticação antes de cobrar de clientes.** Feito isso, é
 comercializável. Posso implementar as correções de XSS/CORS/senha se você quiser —
 é o próximo passo natural.

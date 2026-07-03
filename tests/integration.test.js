@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Teste de integração ponta-a-ponta do Vagão.
+ * Teste de integração ponta-a-ponta do VAP.
  *
  * Sobe o próprio server.js (processo filho) apontado para um Postgres de teste
  * e exercita as rotas HTTP reais: cadastro/login, habilitação, caronas,

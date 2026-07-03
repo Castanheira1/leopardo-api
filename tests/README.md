@@ -1,4 +1,4 @@
-# Testes automatizados — Vagão
+# Testes automatizados — VAP
 
 Suíte de **integração ponta-a-ponta** que sobe o `server.js` real e exercita as
 rotas HTTP contra um Postgres com o `schema.sql` aplicado. Sem framework nem
@@ -46,6 +46,6 @@ O banco precisa ter o `schema.sql` aplicado (tabelas + projetos-semente
 - **Localização ao vivo:** coordenadas válidas/ inválidas.
 - **Admin:** login, bloqueio de não-admin, overview/métricas/rateio/segurança.
 
-> ⚠️ **Não coberto** (precisa de serviços externos / navegador): upload real de
+> **Não coberto** (precisa de serviços externos / navegador): upload real de
 > fotos ao Supabase Storage, captura pela câmera + OCR de placa, envio de push
 > (VAPID), envio de email de recuperação (Resend) e o front-end no browser.

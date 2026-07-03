@@ -528,7 +528,7 @@ async function notificarMotoristasProximos(ped) {
     )).rows;
     const destino = ped.destino_texto ? ` para ${ped.destino_texto}` : " aqui perto";
     motoristas.forEach((m) => enviarPush(m.motorista_id, {
-      title: "🙋 Carona perto de você",
+      title: "Carona perto de você",
       body: `${nome} está pedindo carona${destino}. Abra o app para oferecer.`,
       url: "/dashboard.html",
     }));
@@ -2425,5 +2425,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Vagão rodando em http://localhost:${PORT}`);
+  console.log(`VAP rodando em http://localhost:${PORT}`);
 });

@@ -1,4 +1,4 @@
-# Documentos jurídicos — VAP (Vagão)
+# Documentos jurídicos — VAP
 
 Documentos legais do aplicativo de caronas VAP, reunidos aqui para leitura e
 manutenção. Estão em formato Markdown (renderizam direto no GitHub).
@@ -20,7 +20,7 @@ manutenção. Estão em formato Markdown (renderizam direto no GitHub).
   [`public/politica-privacidade.html`](../../public/politica-privacidade.html) — ao
   alterar o conteúdo aqui, mantenha os dois em sincronia.
 
-## ⚠️ Antes de usar em produção
+## Antes de usar em produção
 
 1. **Preencher os campos entre colchetes `[ ]`** em todos os documentos: razão social,
    CNPJ, endereço, nome/e-mail do Encarregado (DPO), cidade/UF do foro e canal de suporte.
