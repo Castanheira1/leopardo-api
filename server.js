@@ -129,6 +129,20 @@ async function garantirSchemaComercial() {
         bloqueada_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
       )`);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_chamados (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(255) NOT NULL,
+        matricula VARCHAR(50) NOT NULL,
+        empresa_nome VARCHAR(150),
+        projeto_id INTEGER REFERENCES projetos(id),
+        telefone VARCHAR(20),
+        email VARCHAR(255),
+        justificativa TEXT,
+        status VARCHAR(20) DEFAULT 'pendente'
+          CHECK (status IN ('pendente', 'aprovado', 'recusado')),
+        created_at TIMESTAMP DEFAULT NOW()
+      )`);
+    await pool.query(`
       UPDATE usuarios SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1)
       WHERE matricula = '000000' AND admin_projeto_id IS NULL`);
     await pool.query(`
