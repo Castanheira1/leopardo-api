@@ -312,7 +312,12 @@
     function insetTeclado() {
         const vv = window.visualViewport;
         if (!vv) return 0;
-        return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        const foco = document.activeElement;
+        const emCampo = foco && foco.matches('input, select, textarea');
+        // Evita falso positivo quando só a barra do navegador encolhe/expande.
+        if (!emCampo && inset < 120) return 0;
+        return inset;
     }
     function compensarTeclado() {
         const vv = window.visualViewport;
@@ -320,7 +325,7 @@
         const inset = insetTeclado();
         document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
         document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
-        document.documentElement.classList.toggle('teclado-aberto', inset > 40);
+        document.documentElement.classList.toggle('teclado-aberto', inset > 80);
     }
     function ajustarAltura() { compensarTeclado(); }
     ajustarAltura();

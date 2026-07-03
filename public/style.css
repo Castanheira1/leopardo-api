@@ -557,13 +557,14 @@ a.btn { display: inline-block; text-align: center; }
        celular (env() adapta por modelo; o +34px é a folga acima da barra de gestos). */
     padding: 0 16px calc(34px + env(safe-area-inset-bottom));
     transition: transform 0.22s ease, bottom 0.22s ease;
-    touch-action: pan-y;   /* permite rolar o conteúdo com teclado aberto */
+    touch-action: none;   /* toque imediato nos botões; rolagem só com teclado aberto */
     overscroll-behavior: contain;
 }
 .acao-sheet.teclado-aberto {
     max-height: calc(var(--appvh, 1vh) * 72);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 /* colapsado: a "meia bola" dourada fica sempre visível e convidativa sobre o mapa */
 .acao-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
@@ -751,8 +752,8 @@ body.theme-dark {
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
     border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
-.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: pan-y; overscroll-behavior: contain; }
-.viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; }
+.viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; touch-action: none; }
 .sheet-grip span { width: 44px; height: 5px; border-radius: 3px; background: #44464b; display: block; }
@@ -779,7 +780,11 @@ body.theme-dark {
 /* Alvo de toque confortável nos botões das barras de baixo (48px = dedo). */
 .acao-sheet .btn,
 .sheet-acoes .btn,
-.sol-actions .btn { min-height: 48px; }
+.sol-actions .btn {
+    min-height: 48px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(234, 210, 152, 0.2);
+}
 .btn:disabled { opacity: 0.55; cursor: default; }
 
 /* Alternador Satélite <-> Mapa leve (canto do mapa). */
