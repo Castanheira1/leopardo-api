@@ -261,6 +261,16 @@ CREATE TABLE IF NOT EXISTS admin_chamados (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Tokens de recuperação de senha (link por email, expira em 1h)
+CREATE TABLE IF NOT EXISTS tokens_recuperacao (
+    id SERIAL PRIMARY KEY,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL,
+    expira_em TIMESTAMP NOT NULL,
+    usado BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- ------------------------------------------------------------
 -- Localização ao vivo (modo "Uber"): posição atual de cada usuário.
 -- Motoristas habilitados aparecem no mapa ao vivo; o passageiro acompanha

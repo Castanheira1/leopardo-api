@@ -82,6 +82,12 @@
     </div>
 
     <div class="card">
+        <h3>Solicitações de acesso admin</h3>
+        <p class="cam-hint">Quem preenche no cadastro cai aqui. Aprove para criar o usuário admin no banco (senha inicial <strong>123456</strong>).</p>
+        <div id="listaChamados"></div>
+    </div>
+
+    <div class="card">
         <h3>Rateio por empresa</h3>
         <div style="overflow-x:auto;">
             <table class="admin-table" id="tabEmpresas">
@@ -270,11 +276,57 @@ async function resetSenha() {
     mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
 }
 
+async function carregarChamados() {
+    const r = await fetchWithAuth('/api/admin/chamados?status=pendente');
+    const lista = await r.json();
+    const el = document.getElementById('listaChamados');
+    if (!el) return;
+    if (!r.ok) { el.innerHTML = `<p class="cam-hint">${lista.error || 'Erro ao carregar'}</p>`; return; }
+    if (!lista.length) {
+        el.innerHTML = '<p class="cam-hint">Nenhuma solicitação pendente.</p>';
+        return;
+    }
+    el.innerHTML = lista.map(c => `
+        <div class="agendamento-item" style="margin-bottom:12px;">
+            <div class="agendamento-header">
+                <strong>${c.nome}</strong>
+                <span class="badge badge-em-uso">pendente</span>
+            </div>
+            <small>
+                Matrícula ${c.matricula} • ${c.empresa_nome || '—'} • ${c.projeto_codigo || c.projeto_nome || '—'}<br>
+                ${c.email || ''} • ${c.telefone || ''}<br>
+                ${c.justificativa ? `<em>${c.justificativa}</em><br>` : ''}
+                ${fmtData(c.created_at)}
+            </small>
+            <div class="admin-actions">
+                <button class="btn btn-primary btn-sm" onclick="aprovarChamado(${c.id})">Aprovar admin</button>
+                <button class="btn btn-secondary btn-sm" onclick="recusarChamado(${c.id})">Recusar</button>
+            </div>
+        </div>`).join('');
+}
+
+async function aprovarChamado(id) {
+    if (!confirm('Aprovar e criar usuário admin com senha inicial 123456?')) return;
+    const r = await fetchWithAuth(`/api/admin/chamados/${id}/aprovar`, { method: 'POST' });
+    const d = await r.json();
+    mostrarToast(d.message || d.error, r.ok ? 'success' : 'error');
+    if (r.ok) { carregarChamados(); carregarOverview(); }
+}
+
+async function recusarChamado(id) {
+    if (!confirm('Recusar esta solicitação?')) return;
+    const r = await fetchWithAuth(`/api/admin/chamados/${id}/recusar`, { method: 'POST' });
+    const d = await r.json();
+    mostrarToast(d.message || d.error, r.ok ? 'success' : 'error');
+    if (r.ok) carregarChamados();
+}
+
 async function carregarTudo() {
     await carregarOverview();
     await carregarMetricas();
     await carregarRateio();
     await carregarPushStatus();
+    await carregarChamados();
 }
 
 const ADM_ICN = {

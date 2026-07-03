@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const crypto = require("crypto");
 const multer = require("multer");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -137,6 +138,18 @@ async function garantirSchemaComercial() {
         ('Carajás', 'CARAJAS'),
         ('Sossego', 'SOSSEGO')
       ON CONFLICT (codigo) DO NOTHING`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tokens_recuperacao (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        token_hash VARCHAR(64) NOT NULL,
+        expira_em TIMESTAMP NOT NULL,
+        usado BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )`);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_tokens_recup_hash
+      ON tokens_recuperacao(token_hash) WHERE usado = FALSE`);
   } catch (e) {
     console.warn("garantirSchemaComercial:", e.message);
   }
@@ -650,35 +663,152 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Recuperação de senha: matrícula + email cadastrado + nova senha de 6 dígitos.
-app.post("/api/recuperar-senha", async (req, res) => {
-  const { matricula, email, nova_senha } = req.body;
-  if (!matricula || !email || !nova_senha) {
-    return res.status(400).json({ error: "Preencha matrícula, email e a nova senha" });
+// Recuperação de senha em 2 passos: solicitar (email com link) → confirmar (nova senha).
+const normEmail = (v) => String(v || "").trim().toLowerCase();
+
+function gerarTokenRecuperacao() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function hashTokenRecuperacao(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+async function enviarEmailRecuperacao(usuario, token) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey || !usuario.email) {
+    console.warn(`recuperação usuário ${usuario.id}: email não enviado — configure RESEND_API_KEY`);
+    return false;
+  }
+  const from = process.env.EMAIL_FROM || "VAP <onboarding@resend.dev>";
+  const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || `http://localhost:${PORT}`;
+  const link = `${baseUrl}/recuperar-senha.html?token=${token}`;
+  const html = `
+    <h2>Recuperação de senha — VAP</h2>
+    <p>Olá, <strong>${usuario.nome}</strong>.</p>
+    <p>Recebemos um pedido para redefinir a senha da matrícula <strong>${usuario.matricula}</strong>.</p>
+    <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#EAD298;color:#0F3D3E;text-decoration:none;border-radius:8px;font-weight:bold;">Redefinir senha</a></p>
+    <p style="font-size:12px;color:#666;">O link expira em 1 hora. Se não foi você, ignore este email.</p>
+    <p style="font-size:12px;color:#666;">Ou copie: ${link}</p>
+  `;
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [usuario.email],
+        subject: "[VAP] Redefinir sua senha",
+        html,
+      }),
+    });
+    if (!r.ok) {
+      console.warn("Resend recuperação:", await r.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("enviarEmailRecuperacao:", e.message);
+    return false;
+  }
+}
+
+// Passo 1: usuário informa matrícula + email → envia link (se conferir).
+async function solicitarRecuperacaoSenha(matricula, email) {
+  const msgOk = {
+    success: true,
+    message: "Se os dados estiverem corretos, enviamos um link para redefinir a senha. Verifique seu email (e o spam).",
+  };
+
+  const { rows } = await pool.query(
+    "SELECT id, nome, matricula, email FROM usuarios WHERE matricula = $1 AND COALESCE(ativo, TRUE) = TRUE",
+    [String(matricula).trim()]
+  );
+  const user = rows[0];
+  if (!user?.email || normEmail(user.email) !== normEmail(email)) {
+    return { status: 200, body: msgOk };
+  }
+
+  await pool.query(
+    "UPDATE tokens_recuperacao SET usado = TRUE WHERE usuario_id = $1 AND usado = FALSE",
+    [user.id]
+  );
+
+  const token = gerarTokenRecuperacao();
+  const tokenHash = hashTokenRecuperacao(token);
+  await pool.query(
+    `INSERT INTO tokens_recuperacao (usuario_id, token_hash, expira_em)
+     VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+    [user.id, tokenHash]
+  );
+
+  const enviado = await enviarEmailRecuperacao(user, token);
+  if (!enviado && process.env.NODE_ENV === "production") {
+    return { status: 503, body: { error: "Serviço de email indisponível. Procure o administrador." } };
+  }
+  return { status: 200, body: msgOk };
+}
+
+app.post("/api/recuperar-senha/solicitar", async (req, res) => {
+  const { matricula, email } = req.body;
+  if (!matricula || !email) {
+    return res.status(400).json({ error: "Informe matrícula e email" });
+  }
+  try {
+    const out = await solicitarRecuperacaoSenha(matricula, email);
+    res.status(out.status).json(out.body);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+// Passo 2: link do email → nova senha de 6 dígitos.
+app.post("/api/recuperar-senha/confirmar", async (req, res) => {
+  const { token, nova_senha } = req.body;
+  if (!token || !nova_senha) {
+    return res.status(400).json({ error: "Token e nova senha são obrigatórios" });
   }
   if (!validarSenha6Digitos(nova_senha)) {
     return res.status(400).json({ error: "A nova senha deve ter exatamente 6 dígitos numéricos" });
   }
 
-  const normEmail = (v) => String(v || "").trim().toLowerCase();
-
   try {
+    const tokenHash = hashTokenRecuperacao(token);
     const { rows } = await pool.query(
-      "SELECT id, email FROM usuarios WHERE matricula = $1",
-      [String(matricula).trim()]
+      `SELECT t.id, t.usuario_id FROM tokens_recuperacao t
+       WHERE t.token_hash = $1 AND t.usado = FALSE AND t.expira_em > NOW()`,
+      [tokenHash]
     );
-    const user = rows[0];
-    // Mensagem genérica para não revelar se a matrícula existe.
-    if (!user || !user.email) {
-      return res.status(400).json({ error: "Dados não conferem. Procure o administrador." });
-    }
-    if (normEmail(user.email) !== normEmail(email)) {
-      return res.status(400).json({ error: "Dados não conferem. Procure o administrador." });
+    if (!rows.length) {
+      return res.status(400).json({ error: "Link inválido ou expirado. Solicite novamente no login." });
     }
 
     const senha_hash = await bcrypt.hash(String(nova_senha), 10);
-    await pool.query("UPDATE usuarios SET senha_hash = $1 WHERE id = $2", [senha_hash, user.id]);
+    await pool.query("UPDATE usuarios SET senha_hash = $1 WHERE id = $2", [senha_hash, rows[0].usuario_id]);
+    await pool.query("UPDATE tokens_recuperacao SET usado = TRUE WHERE id = $1", [rows[0].id]);
+
     res.json({ success: true, message: "Senha alterada! Já pode entrar com a nova senha." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+// Alias legado — use /solicitar (envia email) em vez de redefinir na hora.
+app.post("/api/recuperar-senha", async (req, res) => {
+  const { matricula, email, nova_senha } = req.body;
+  if (nova_senha) {
+    return res.status(400).json({
+      error: "Abra o link enviado por email para definir a nova senha.",
+    });
+  }
+  if (!matricula || !email) {
+    return res.status(400).json({ error: "Informe matrícula e email" });
+  }
+  try {
+    const out = await solicitarRecuperacaoSenha(matricula, email);
+    res.status(out.status).json(out.body);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro interno" });
@@ -1975,18 +2105,165 @@ app.post("/api/admin/reset-senha", verificarAuth, carregarAdminEscopo, async (re
   }
 });
 
-// Solicitar acesso admin (validação manual futura)
+// Solicitar acesso admin — grava chamado, notifica por email e aguarda aprovação no painel.
+async function notificarChamadoAdmin(chamado) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const destino = process.env.ADMIN_EMAIL_NOTIFICACAO;
+  if (!apiKey || !destino) {
+    console.warn(`chamado #${chamado.id}: email não enviado — configure RESEND_API_KEY e ADMIN_EMAIL_NOTIFICACAO no Render`);
+    return;
+  }
+  const from = process.env.EMAIL_FROM || "VAP <onboarding@resend.dev>";
+  const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || `http://localhost:${PORT}`;
+  const projeto = chamado.projeto_codigo || chamado.projeto_nome || "—";
+  const html = `
+    <h2>Nova solicitação de acesso admin — VAP</h2>
+    <p><strong>Nome:</strong> ${chamado.nome}</p>
+    <p><strong>Matrícula:</strong> ${chamado.matricula}</p>
+    <p><strong>Empresa:</strong> ${chamado.empresa_nome || "—"}</p>
+    <p><strong>Projeto:</strong> ${projeto}</p>
+    <p><strong>WhatsApp:</strong> ${chamado.telefone || "—"}</p>
+    <p><strong>Email:</strong> ${chamado.email || "—"}</p>
+    <p><strong>Justificativa:</strong><br>${(chamado.justificativa || "—").replace(/\n/g, "<br>")}</p>
+    <p style="margin-top:20px"><a href="${baseUrl}/admin.html">Abrir painel admin para aprovar ou recusar</a></p>
+  `;
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [destino],
+        subject: `[VAP] Solicitação admin — ${chamado.nome} (${chamado.matricula})`,
+        html,
+      }),
+    });
+    if (!r.ok) console.warn("Resend:", await r.text());
+  } catch (e) {
+    console.warn("notificarChamadoAdmin:", e.message);
+  }
+}
+
 app.post("/api/admin/chamados", async (req, res) => {
   const { nome, matricula, empresa_nome, projeto_id, projeto_codigo, telefone, email, justificativa } = req.body;
-  if (!nome || !matricula || !telefone) return res.status(400).json({ error: "Nome, matrícula e telefone são obrigatórios" });
+  if (!nome || !matricula || !telefone || !email) {
+    return res.status(400).json({ error: "Nome, matrícula, telefone e email são obrigatórios" });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+    return res.status(400).json({ error: "Email inválido" });
+  }
   try {
     const pid = await resolverProjetoId(projeto_id, projeto_codigo);
-    await pool.query(
-      `INSERT INTO admin_chamados (nome, matricula, empresa_nome, projeto_id, telefone, email, justificativa)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [nome, matricula, empresa_nome || null, pid, telefone, email || null, justificativa || null]
+    if (!pid) return res.status(400).json({ error: "Selecione um projeto válido" });
+
+    const pendente = await pool.query(
+      "SELECT 1 FROM admin_chamados WHERE matricula = $1 AND status = 'pendente'",
+      [String(matricula).trim()]
     );
-    res.json({ message: "Solicitação recebida. Nossa equipe entrará em contato em breve." });
+    if (pendente.rows.length > 0) {
+      return res.status(400).json({ error: "Já existe uma solicitação pendente para esta matrícula" });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO admin_chamados (nome, matricula, empresa_nome, projeto_id, telefone, email, justificativa)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [nome, String(matricula).trim(), empresa_nome || null, pid, telefone, String(email).trim().toLowerCase(), justificativa || null]
+    );
+    const chamado = rows[0];
+    const proj = (await pool.query("SELECT nome, codigo FROM projetos WHERE id = $1", [pid])).rows[0];
+    await notificarChamadoAdmin({ ...chamado, projeto_nome: proj?.nome, projeto_codigo: proj?.codigo });
+
+    const msgEmail = process.env.ADMIN_EMAIL_NOTIFICACAO
+      ? "Solicitação recebida. O administrador foi notificado por email."
+      : "Solicitação recebida. Aguarde contato da equipe.";
+    res.json({ message: msgEmail, id: chamado.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Fila de solicitações admin do projeto (painel comercial).
+app.get("/api/admin/chamados", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const pid = req.adminEscopo.admin_projeto_id;
+  const status = req.query.status || "pendente";
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
+       FROM admin_chamados c
+       LEFT JOIN projetos p ON p.id = c.projeto_id
+       WHERE c.projeto_id = $1 AND c.status = $2
+       ORDER BY c.created_at DESC`,
+      [pid, status]
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Aprova chamado: cria ou promove usuário a admin do projeto (senha inicial 123456).
+app.post("/api/admin/chamados/:id/aprovar", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const pid = req.adminEscopo.admin_projeto_id;
+  const chamadoId = parseInt(req.params.id, 10);
+  if (!chamadoId) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const { rows: chamados } = await pool.query(
+      "SELECT * FROM admin_chamados WHERE id = $1 AND projeto_id = $2 AND status = 'pendente'",
+      [chamadoId, pid]
+    );
+    const c = chamados[0];
+    if (!c) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
+
+    const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [c.matricula]);
+    if (bloqueada.rows.length > 0) {
+      return res.status(400).json({ error: "Matrícula bloqueada — não é possível aprovar" });
+    }
+
+    const senha_hash = await bcrypt.hash("123456", 10);
+    const existente = (await pool.query("SELECT id FROM usuarios WHERE matricula = $1", [c.matricula])).rows[0];
+
+    if (existente) {
+      await pool.query(
+        `UPDATE usuarios SET
+           is_admin = TRUE, admin_projeto_id = $1, projeto_id = $1,
+           nome = COALESCE($2, nome), empresa_nome = COALESCE($3, empresa_nome),
+           telefone = COALESCE($4, telefone), email = COALESCE($5, email),
+           ativo = TRUE
+         WHERE id = $6`,
+        [pid, c.nome, c.empresa_nome, c.telefone, c.email, existente.id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO usuarios (nome, matricula, senha_hash, telefone, email, is_admin, empresa_nome, projeto_id, admin_projeto_id, ativo)
+         VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$7,TRUE)`,
+        [c.nome, c.matricula, senha_hash, c.telefone, c.email, c.empresa_nome, pid]
+      );
+    }
+
+    await pool.query("UPDATE admin_chamados SET status = 'aprovado' WHERE id = $1", [chamadoId]);
+    res.json({
+      message: `Admin aprovado! Matrícula ${c.matricula} — senha inicial: 123456 (peça para trocar no primeiro login).`,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao aprovar solicitação" });
+  }
+});
+
+app.post("/api/admin/chamados/:id/recusar", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const pid = req.adminEscopo.admin_projeto_id;
+  const chamadoId = parseInt(req.params.id, 10);
+  if (!chamadoId) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const { rowCount } = await pool.query(
+      "UPDATE admin_chamados SET status = 'recusado' WHERE id = $1 AND projeto_id = $2 AND status = 'pendente'",
+      [chamadoId, pid]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
+    res.json({ message: "Solicitação recusada." });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

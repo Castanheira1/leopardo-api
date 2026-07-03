@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <title>Redefinir senha - VAP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Montserrat', sans-serif; }
+        body {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: #f0f0f0; padding: 24px;
+        }
+        .card {
+            width: 100%; max-width: 400px; padding: 40px 28px; border-radius: 20px;
+            background: #000; color: #EAD298; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        h1 { font-size: 1.1rem; margin-bottom: 8px; }
+        p { font-size: 0.85rem; opacity: 0.85; margin-bottom: 20px; line-height: 1.45; }
+        input {
+            width: 100%; padding: 14px; margin-bottom: 12px;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(234,210,152,0.3);
+            border-radius: 12px; color: #fff; font-size: 1rem;
+        }
+        input::placeholder { color: rgba(255,255,255,0.45); }
+        button {
+            width: 100%; padding: 14px; background: #EAD298; color: #0F3D3E;
+            border: none; border-radius: 50px; font-weight: 700; cursor: pointer; margin-top: 8px;
+        }
+        .msg { margin-top: 14px; padding: 10px; border-radius: 10px; font-size: 0.82rem; display: none; }
+        .msg.error { background: rgba(255,99,71,0.12); color: #ffb3b3; }
+        .msg.success { background: rgba(34,197,94,0.12); color: #86efac; }
+        a { color: #EAD298; font-size: 0.85rem; margin-top: 16px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <img src="/logo-vap.png" alt="VAP" style="width:160px;max-width:70%;margin-bottom:16px;">
+        <h1>Nova senha</h1>
+        <p id="subtitulo">Defina uma senha de 6 dígitos numéricos.</p>
+        <form id="form">
+            <input type="password" id="senha" required placeholder="Nova senha (6 dígitos)" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric">
+            <input type="password" id="conf" required placeholder="Confirmar senha" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric">
+            <button type="submit">SALVAR SENHA</button>
+        </form>
+        <div id="msg" class="msg"></div>
+        <a href="index.html">Voltar ao login</a>
+    </div>
+    <script>
+        const params = new URLSearchParams(location.search);
+        const token = params.get('token');
+        const msg = document.getElementById('msg');
+        const form = document.getElementById('form');
+
+        if (!token) {
+            document.getElementById('subtitulo').textContent = 'Link inválido. Solicite novamente no login.';
+            form.style.display = 'none';
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const senha = document.getElementById('senha').value;
+            const conf = document.getElementById('conf').value;
+            if (!/^\d{6}$/.test(senha)) {
+                msg.className = 'msg error'; msg.textContent = 'A senha deve ter 6 dígitos numéricos'; msg.style.display = 'block';
+                return;
+            }
+            if (senha !== conf) {
+                msg.className = 'msg error'; msg.textContent = 'As senhas não conferem'; msg.style.display = 'block';
+                return;
+            }
+            try {
+                const r = await fetch('/api/recuperar-senha/confirmar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, nova_senha: senha }),
+                });
+                const d = await r.json();
+                msg.style.display = 'block';
+                if (r.ok) {
+                    msg.className = 'msg success';
+                    msg.textContent = d.message;
+                    form.style.display = 'none';
+                    setTimeout(() => { location.href = 'index.html'; }, 2000);
+                } else {
+                    msg.className = 'msg error';
+                    msg.textContent = d.error || 'Erro ao redefinir';
+                }
+            } catch (_) {
+                msg.className = 'msg error';
+                msg.textContent = 'Erro de conexão';
+                msg.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
