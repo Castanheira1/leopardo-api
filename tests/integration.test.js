@@ -19,6 +19,7 @@
 
 const { spawn } = require("child_process");
 const path = require("path");
+const { Pool } = require("pg");
 
 const PORT = process.env.TEST_PORT || 3457;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -118,6 +119,8 @@ function novoUsuario(n, projeto_codigo) {
     projeto_codigo,
     centro_custo: "CC1",
     sexo: n % 2 ? "M" : "F",
+    aceite_politica: true,
+    politica_versao: "1.0",
   };
 }
 
@@ -200,6 +203,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     });
     await test("register rejeita matrícula duplicada (400)", async () => {
       const { status } = await api("POST", "/api/register", { body: uDriver });
+      eq(status, 400, "status");
+    });
+    await test("register exige aceite da Política de Privacidade — LGPD (400)", async () => {
+      const semAceite = { ...novoUsuario(14, "S11D") };
+      delete semAceite.aceite_politica;
+      const { status } = await api("POST", "/api/register", { body: semAceite });
       eq(status, 400, "status");
     });
     await test("POST /api/login com credenciais corretas", async () => {
@@ -482,6 +491,32 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     await test("GET /api/admin/seguranca (admin) → 200", async () => {
       const { status } = await api("GET", "/api/admin/seguranca", { token: tokAdmin });
       eq(status, 200, "status");
+    });
+
+    /* =================== LGPD: consentimento de usuário existente =================== */
+    grupo("LGPD — aceite de usuário já cadastrado (portão)");
+    await test("usuário legado (sem aceite) tem politica_pendente=true e aceita depois", async () => {
+      // Simula um usuário cadastrado ANTES da política: zera o aceite direto no banco.
+      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        await pg.query(
+          "UPDATE usuarios SET politica_aceita_em = NULL, politica_versao = NULL WHERE matricula = $1",
+          [uPax.matricula]
+        );
+      } finally {
+        await pg.end();
+      }
+
+      let r = await api("GET", "/api/perfil", { token: tokPax });
+      eq(r.status, 200, "status perfil");
+      eq(r.json.politica_pendente, true, "deveria estar pendente após zerar o aceite");
+
+      r = await api("POST", "/api/perfil/aceitar-politica", { token: tokPax, body: { politica_versao: "1.0" } });
+      eq(r.status, 200, "status aceite");
+      eq(r.json.politica_pendente, false, "após aceitar, não deve mais estar pendente");
+
+      r = await api("GET", "/api/perfil", { token: tokPax });
+      eq(r.json.politica_pendente, false, "perfil deve refletir o aceite persistido");
     });
 
     /* =================== ANTI-FORÇA-BRUTA (rate limit) =================== */

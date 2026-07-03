@@ -476,6 +476,15 @@
                         <label for="confirmarSenha">Confirmar senha</label>
                         <input type="password" id="confirmarSenha" required placeholder="Repita os 6 dígitos" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
                     </div>
+                    <div class="field" style="display:flex;gap:10px;align-items:flex-start;">
+                        <input type="checkbox" id="aceitePolitica" required style="width:auto;margin-top:5px;flex:0 0 auto;">
+                        <label for="aceitePolitica" style="font-weight:400;font-size:.92rem;line-height:1.45;">
+                            Li e concordo com a
+                            <a href="politica-privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>
+                            e autorizo o uso da minha selfie, foto do veículo e localização (GPS)
+                            para a segurança das caronas, conforme a LGPD.
+                        </label>
+                    </div>
                 </div>
 
                 <div class="wizard-nav">
@@ -658,6 +667,12 @@
                     msg.style.display = 'block';
                     return false;
                 }
+                if (!document.getElementById('aceitePolitica').checked) {
+                    msg.className = 'message error';
+                    msg.textContent = 'É preciso aceitar a Política de Privacidade para criar a conta';
+                    msg.style.display = 'block';
+                    return false;
+                }
             }
 
             if (n === 2 && !document.getElementById('projeto_codigo').value) {
@@ -703,6 +718,8 @@
                         telefone: document.getElementById('telefone').value,
                         email: document.getElementById('email').value,
                         senha: document.getElementById('senha').value,
+                        aceite_politica: document.getElementById('aceitePolitica').checked,
+                        politica_versao: '1.0',
                     })
                 });
                 const data = await response.json();

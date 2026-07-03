@@ -89,6 +89,8 @@ async function garantirColunasUsuarios() {
     "admin_projeto_id INTEGER",
     "sexo VARCHAR(10)",
     "ativo BOOLEAN DEFAULT TRUE",
+    "politica_aceita_em TIMESTAMP",
+    "politica_versao VARCHAR(20)",
   ];
   for (const c of colunas) {
     try {
@@ -398,6 +400,7 @@ async function projetoDoUsuario(userId) {
 const SQL_USUARIO_FRONT = `
   SELECT u.id, u.nome, u.funcao, u.matricula, u.telefone, u.email, u.is_admin, u.sexo,
          u.empresa_nome, u.centro_custo, u.projeto_id, u.admin_projeto_id,
+         u.politica_aceita_em,
          p.nome AS projeto_nome, p.codigo AS projeto_codigo
   FROM usuarios u
   LEFT JOIN projetos p ON p.id = u.projeto_id`;
@@ -419,6 +422,9 @@ function usuarioParaFront(row) {
     projeto_nome: row.projeto_nome || null,
     projeto_codigo: row.projeto_codigo || null,
     admin_projeto_id: row.admin_projeto_id || null,
+    // LGPD: usuários cadastrados antes do consentimento têm politica_aceita_em NULL.
+    // O front usa isto para exibir o portão de consentimento no próximo acesso.
+    politica_pendente: !row.politica_aceita_em,
   };
 }
 
@@ -629,7 +635,7 @@ app.get("/api/projetos", async (req, res) => {
 
 /* ============================ AUTH ============================ */
 app.post("/api/register", authLimiter, async (req, res) => {
-  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, projeto_codigo, centro_custo, sexo } = req.body;
+  const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, projeto_codigo, centro_custo, sexo, aceite_politica, politica_versao } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   const pid = await resolverProjetoId(projeto_id, projeto_codigo);
   if (!nome || !matricula || !senha || !telefone || !email || !empresa_nome || !pid) {
@@ -641,6 +647,12 @@ app.post("/api/register", authLimiter, async (req, res) => {
   if (!validarSenha6Digitos(senha)) {
     return res.status(400).json({ error: "A senha deve ter exatamente 6 dígitos numéricos" });
   }
+  // LGPD: o consentimento é obrigatório para criar a conta (uso de selfie, foto do
+  // veículo e localização). Registramos o momento e a versão da política aceita.
+  if (aceite_politica !== true) {
+    return res.status(400).json({ error: "É necessário aceitar a Política de Privacidade para criar a conta." });
+  }
+  const politicaVersao = String(politica_versao || "1.0").slice(0, 20);
 
   try {
     const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [matricula]);
@@ -657,11 +669,11 @@ app.post("/api/register", authLimiter, async (req, res) => {
     const is_admin = matricula === "000000";
 
     const { rows } = await pool.query(
-      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo, politica_aceita_em, politica_versao)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12)
        RETURNING id`,
       [nome, matricula, senha_hash, funcao || null, telefone, String(email).trim().toLowerCase(), is_admin,
-       empresa_nome || null, pid, centro_custo || null, sexoNorm]
+       empresa_nome || null, pid, centro_custo || null, sexoNorm, politicaVersao]
     );
 
     const userFront = await buscarUsuarioFront(rows[0].id);
@@ -877,6 +889,27 @@ app.get("/api/perfil", verificarAuth, async (req, res) => {
     res.json(userFront);
   } catch (err) {
     res.status(500).json({ error: "Erro ao carregar perfil" });
+  }
+});
+
+// LGPD: aceite da Política por usuário JÁ logado (portão de consentimento para
+// quem se cadastrou antes desta versão). Só grava se ainda não havia aceite, para
+// preservar o carimbo original de quem já consentiu.
+app.post("/api/perfil/aceitar-politica", verificarAuth, async (req, res) => {
+  const versao = String(req.body?.politica_versao || "1.0").slice(0, 20);
+  try {
+    await pool.query(
+      `UPDATE usuarios
+         SET politica_aceita_em = COALESCE(politica_aceita_em, NOW()),
+             politica_versao = COALESCE(politica_versao, $1)
+       WHERE id = $2`,
+      [versao, req.user.id]
+    );
+    const userFront = await buscarUsuarioFront(req.user.id);
+    res.json(userFront);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao registrar o aceite" });
   }
 });
 

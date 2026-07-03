@@ -54,11 +54,18 @@ Depois do diagnóstico inicial, os itens de **código** foram corrigidos:
   origem externa; o PWA same-origin segue funcionando).
 - ✅ **Força-bruta no login**: novo `authLimiter` (padrão 20 tentativas/15min por
   IP via `AUTH_RATE_MAX`) em login/cadastro/recuperação, coberto por teste (429).
+- ✅ **LGPD (base)**: nova página `politica-privacidade.html`, **consentimento
+  obrigatório no cadastro** (checkbox no front + validação no back), gravando
+  `politica_aceita_em` e `politica_versao` em `usuarios`. Coberto por teste
+  (cadastro sem aceite → 400). Service worker → v90.
 
-**Ainda PENDENTE (decisão sua, não é código puro):**
-- 🔴 **LGPD** — política de privacidade, termos e consentimento (jurídico).
-- 🟠 **Política de senha** — segue 6 dígitos. Aumentar a força quebraria as senhas
-  atuais dos usuários; é uma decisão de produto (ver abaixo).
+**Ainda PENDENTE:**
+- 🟠 **LGPD (preencher/juridicо)** — a política tem *placeholders* a preencher
+  (razão social do controlador, CNPJ, endereço e email do encarregado/DPO) e
+  precisa de revisão jurídica. Usuários **já cadastrados** antes desta versão não
+  têm consentimento registrado — recomendável pedir aceite no próximo login.
+- 🟠 **Política de senha** — segue 6 dígitos (mantido a pedido; aumentar a força
+  quebraria as senhas atuais). Mitigado pelo rate-limit.
 - 🟠 Trocar o admin padrão `000000/admin123` e restringir a Maps API key por domínio.
 
 ---

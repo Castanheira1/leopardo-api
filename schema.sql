@@ -36,6 +36,9 @@ ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(20);
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(150);
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS centro_custo VARCHAR(100);
+-- LGPD: momento e versão da Política de Privacidade aceita no cadastro.
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS politica_aceita_em TIMESTAMP;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS politica_versao VARCHAR(20);
 
 -- ------------------------------------------------------------
 -- Habilitação de motorista (selfie + foto do carro, válida no dia)
