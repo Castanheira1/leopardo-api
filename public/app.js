@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = sessionStorage.getItem('flashToast');
         if (t) { sessionStorage.removeItem('flashToast'); mostrarToast(t, 'error'); }
     } catch (_) {}
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        preCarregarOcr();
+    }
 });
 
 function logout() {
@@ -152,6 +155,17 @@ function obterLocalizacao(opts = {}) {
             return p;
         });
 }
+
+// GPS com teto curto na captura de foto — não segura selfie/upload esperando 12s+.
+function obterLocalizacaoRapida() {
+    const fallback = () => ultimaPosConhecida() || { lat: null, lng: null };
+    if (!navigator.geolocation) return Promise.resolve(fallback());
+    return Promise.race([
+        obterLocalizacao({ enableHighAccuracy: false, timeout: 3500, maximumAge: 180000 }),
+        new Promise((r) => setTimeout(() => r(fallback()), 3800)),
+    ]).catch(() => fallback());
+}
+
 // Última posição conhecida (para abrir o mapa instantaneamente). Vale por 7 dias.
 function ultimaPosConhecida() {
     try {
@@ -167,7 +181,11 @@ function ultimaPosConhecida() {
    -> resolve { url, lat, lng, em, placa? }  (placa só quando ocrPlaca = true)
 */
 function capturarFoto(opts = {}) {
-    const { tipo = 'outros', facing = 'environment', ocrPlaca = false, titulo = 'Tirar foto' } = opts;
+    const { tipo = 'outros', facing = 'environment', ocrPlaca = false, titulo = 'Tirar foto', hint } = opts;
+    const hintPadrao = ocrPlaca
+        ? 'Enquadre a placa dianteira do veículo'
+        : 'Posicione o rosto e capture';
+    const hintTexto = hint || hintPadrao;
 
     return new Promise((resolve, reject) => {
         const overlay = document.createElement('div');
@@ -176,7 +194,7 @@ function capturarFoto(opts = {}) {
             <div class="cam-box">
                 <h3>${titulo}</h3>
                 <video class="cam-video" autoplay playsinline muted></video>
-                <p class="cam-hint">${ocrPlaca ? 'Enquadre a placa dianteira do veículo' : 'Posicione o rosto e capture'} • foto ao vivo (não é possível anexar)</p>
+                <p class="cam-hint">${hintTexto} • foto ao vivo (não é possível anexar)</p>
                 <div class="cam-actions">
                     <button type="button" class="btn btn-secondary cam-cancel">Cancelar</button>
                     <button type="button" class="btn btn-primary cam-shot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Capturar</button>
@@ -196,38 +214,37 @@ function capturarFoto(opts = {}) {
         };
         overlay.querySelector('.cam-cancel').onclick = () => { encerrar(); reject(new Error('cancelado')); };
 
-        // Pipeline comum (câmera ao vivo e fallback nativo): desenha a fonte no
-        // canvas com teto de 1280px, carimba GPS/hora, roda o OCR quando pedido
-        // e envia. Resolve a promise com { url, lat, lng, em, placa? }.
+        // Pipeline: redimensiona, carimba GPS/hora, OCR (placa) e upload em paralelo.
         async function processarEnviar(fonte, w, h) {
+            const maxDim = tipo === 'selfies' ? 720 : (ocrPlaca ? 1280 : 960);
+            const qualidade = tipo === 'selfies' ? 0.72 : 0.8;
             const canvas = document.createElement('canvas');
-            const escala = Math.min(1, 1280 / Math.max(w, h));
+            const escala = Math.min(1, maxDim / Math.max(w, h));
             canvas.width = Math.round(w * escala);
             canvas.height = Math.round(h * escala);
             canvas.getContext('2d').drawImage(fonte, 0, 0, canvas.width, canvas.height);
 
-            // Localização e horário do instante da captura
-            let loc = { lat: null, lng: null };
-            try { loc = await obterLocalizacao(); } catch (_) { /* segue sem GPS */ }
             const em = new Date().toISOString();
+            status.textContent = ocrPlaca ? 'Enviando e lendo placa...' : 'Enviando foto...';
 
-            let placa = null;
-            if (ocrPlaca) {
-                status.textContent = 'Lendo a placa...';
-                placa = await lerPlaca(canvas);
-            }
+            const locPromise = obterLocalizacaoRapida();
+            const blobPromise = new Promise((r) => canvas.toBlob(r, 'image/jpeg', qualidade));
+            const ocrPromise = ocrPlaca ? lerPlaca(canvas) : Promise.resolve(null);
 
-            status.textContent = 'Enviando foto...';
-            const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
-            const fd = new FormData();
-            fd.append('foto', blob, `${tipo}.jpg`);
-            fd.append('tipo', tipo);
-            const resp = await fetchWithAuth('/api/fotos', { method: 'POST', body: fd });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error || 'Falha no upload');
+            const uploadPromise = blobPromise.then(async (blob) => {
+                const fd = new FormData();
+                fd.append('foto', blob, `${tipo}.jpg`);
+                fd.append('tipo', tipo);
+                const resp = await fetchWithAuth('/api/fotos', { method: 'POST', body: fd });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Falha no upload');
+                return data.url;
+            });
+
+            const [url, placa, loc] = await Promise.all([uploadPromise, ocrPromise, locPromise]);
 
             encerrar();
-            resolve({ url: data.url, lat: loc.lat, lng: loc.lng, em, placa });
+            resolve({ url, lat: loc.lat, lng: loc.lng, em, placa });
         }
 
         // Fallback iPhone/PWA: quando a câmera web (getUserMedia) não existe ou não
@@ -285,7 +302,10 @@ function capturarFoto(opts = {}) {
         };
 
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false })
+            navigator.mediaDevices.getUserMedia({
+                video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 960 } },
+                audio: false,
+            })
                 .then((s) => {
                     stream = s;
                     video.srcObject = s;
@@ -300,32 +320,64 @@ function capturarFoto(opts = {}) {
 }
 
 /* -------------------- OCR de placa (Tesseract.js) -------------------- */
-// O Tesseract pesa vários MB (script + worker + wasm + traineddata). Pré-aquecer
-// o worker no INÍCIO do fluxo (preCarregarOcr, fire-and-forget) faz o download
-// acontecer enquanto o usuário tira as fotos, em vez de travar no "Lendo a placa...".
 const _TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 let _ocrWorkerPromise = null;
+
 function preCarregarOcr() {
     if (!_ocrWorkerPromise) {
         _ocrWorkerPromise = (async () => {
             await carregarScript(_TESSERACT_SRC);
-            const worker = await Tesseract.createWorker('eng');
-            await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+            const worker = await Tesseract.createWorker('eng', 1, {
+                logger: () => {},
+            });
+            await worker.setParameters({
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+                tessedit_pageseg_mode: '7',
+            });
             return worker;
         })();
-        _ocrWorkerPromise.catch(() => { _ocrWorkerPromise = null; });   // permite nova tentativa
+        _ocrWorkerPromise.catch(() => { _ocrWorkerPromise = null; });
     }
     return _ocrWorkerPromise;
 }
+
+function canvasRecortePlaca(src) {
+    const w = src.width;
+    const h = src.height;
+    const cw = Math.round(w * 0.9);
+    const ch = Math.round(h * 0.34);
+    const sx = Math.round((w - cw) / 2);
+    const sy = Math.max(0, h - ch - Math.round(h * 0.06));
+    const ocrMax = 520;
+    const scale = Math.min(1, ocrMax / cw);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(cw * scale));
+    out.height = Math.max(1, Math.round(ch * scale));
+    const ctx = out.getContext('2d');
+    ctx.drawImage(src, sx, sy, cw, ch, 0, 0, out.width, out.height);
+    const img = ctx.getImageData(0, 0, out.width, out.height);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        const v = g > 155 ? 255 : g < 85 ? 0 : g;
+        d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(img, 0, 0);
+    return out;
+}
+
+function extrairPlacaTexto(texto) {
+    const limpo = (texto || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const m = limpo.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);
+    return m ? m[0] : null;
+}
+
 async function lerPlaca(canvas) {
     try {
         const worker = await preCarregarOcr();
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        const { data } = await worker.recognize(dataUrl);
-        const texto = (data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        // Mercosul: ABC1D23 | Antiga: ABC1234
-        const m = texto.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);
-        return m ? m[0] : null;
+        const crop = canvasRecortePlaca(canvas);
+        const { data } = await worker.recognize(crop);
+        return extrairPlacaTexto(data.text);
     } catch (e) {
         console.warn('OCR falhou:', e.message);
         return null;

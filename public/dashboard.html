@@ -623,12 +623,27 @@
         try {
             preCarregarOcr();
             const reutilizarSelfie = trocar && selfieAindaValida(habHoje);
-            msg(reutilizarSelfie ? 'Troca de veículo: só foto do carro (selfie válida por 12h).' : 'Iniciando câmera...');
+            msg(reutilizarSelfie
+                ? 'Troca de veículo: tire a foto do carro NOVO (só a placa, selfie já vale 12h).'
+                : 'Iniciando câmera...');
             let selfie = null;
             if (!reutilizarSelfie) {
-                selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
+                selfie = await capturarFoto({
+                    tipo: 'selfies',
+                    facing: 'user',
+                    titulo: 'Selfie de identificação',
+                    hint: 'Posicione o rosto bem iluminado e capture',
+                });
             }
-            const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do veículo — placa dianteira' });
+            const carro = await capturarFoto({
+                tipo: 'carros',
+                facing: 'environment',
+                ocrPlaca: true,
+                titulo: reutilizarSelfie ? 'Foto do veículo NOVO' : 'Foto do veículo — placa dianteira',
+                hint: reutilizarSelfie
+                    ? 'Tire a foto do carro que você vai usar agora — placa dianteira obrigatória'
+                    : 'Enquadre a placa dianteira do veículo',
+            });
             veiculoPend = { selfie, carro, reutilizarSelfie, trocar };
             document.getElementById('veicPlaca').value = (carro.placa || '').toUpperCase();
             document.getElementById('veicTag').value = reutilizarSelfie && habHoje?.tag ? habHoje.tag : '';
