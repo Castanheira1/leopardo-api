@@ -201,17 +201,16 @@
                 </div>
             </form>
 
-            <!-- RECUPERAÇÃO DE SENHA: matrícula + email cadastrado -->
+            <!-- RECUPERAÇÃO DE SENHA: matrícula + email → link por email -->
             <form id="recuperarForm" style="display:none;">
                 <p style="color:#EAD298;font-size:13px;margin-bottom:12px;line-height:1.4;">
-                    Informe sua matrícula, o email cadastrado e uma nova senha de 6 dígitos.
+                    Informe matrícula e email cadastrados. Enviaremos um link para criar uma nova senha de 6 dígitos.
                 </p>
                 <div class="input-group">
                     <input type="text" id="rec_matricula" required placeholder="Matrícula">
                     <input type="email" id="rec_email" required placeholder="Email cadastrado">
-                    <input type="password" id="rec_senha" required placeholder="Nova senha (6 dígitos)" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric">
                 </div>
-                <button type="submit">REDEFINIR SENHA</button>
+                <button type="submit">ENVIAR LINK</button>
                 <div class="register-link">
                     <a href="#" id="linkVoltarLogin">Voltar</a>
                 </div>
@@ -276,24 +275,17 @@
                 e.preventDefault();
                 const matricula = document.getElementById('rec_matricula').value;
                 const email = document.getElementById('rec_email').value;
-                const nova_senha = document.getElementById('rec_senha').value;
-                if (!/^\d{6}$/.test(nova_senha)) {
-                    errDiv.textContent = 'A nova senha deve ter exatamente 6 dígitos numéricos';
-                    errDiv.style.display = 'block';
-                    errDiv.style.color = '';
-                    return;
-                }
                 try {
-                    const r = await fetch('/api/recuperar-senha', {
+                    const r = await fetch('/api/recuperar-senha/solicitar', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ matricula, email, nova_senha })
+                        body: JSON.stringify({ matricula, email })
                     });
                     const data = await r.json();
                     errDiv.textContent = data.message || data.error || '';
                     errDiv.style.display = 'block';
                     errDiv.style.color = r.ok ? '#22c55e' : '';
-                    if (r.ok) { recForm.reset(); setTimeout(() => mostrar('login'), 1800); }
+                    if (r.ok) { recForm.reset(); setTimeout(() => mostrar('login'), 4000); }
                 } catch (_) {
                     errDiv.textContent = 'Erro de conexão. Tente novamente.';
                     errDiv.style.display = 'block';
