@@ -723,7 +723,9 @@
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
                     localStorage.removeItem('papel');
-                    setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
+                    setTimeout(() => {
+                        window.location.href = data.user.is_admin ? 'admin.html' : 'dashboard.html';
+                    }, 1200);
                 } else {
                     messageDiv.className = 'message error';
                     messageDiv.textContent = data.error || 'Erro ao criar conta';
