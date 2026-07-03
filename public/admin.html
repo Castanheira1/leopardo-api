@@ -191,7 +191,7 @@ async function carregarOverview() {
     document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => `
         <div class="agendamento-item ${v.status === 'concluida' ? 'completed' : v.status === 'em_andamento' ? 'in-progress' : ''}">
             <div class="agendamento-header">
-                <strong>${v.motorista_nome} → ${v.passageiro_nome}</strong>
+                <strong>${esc(v.motorista_nome)} → ${esc(v.passageiro_nome)}</strong>
                 <span class="badge ${v.status === 'concluida' ? 'badge-ativo' : 'badge-em-uso'}">${v.status}</span>
             </div>
             <small>${fmtData(v.iniciada_em)}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}</small>
@@ -221,11 +221,11 @@ async function carregarRateio() {
         `por viagem: <strong>${fmtMoeda(t.custo_por_viagem)}</strong>`;
 
     document.querySelector('#tabEmpresas tbody').innerHTML = (d.por_empresa || []).map(e => `
-        <tr><td>${e.empresa_nome}</td><td>${e.viagens}</td><td>${e.km}</td><td>${e.percentual}%</td><td>${fmtMoeda(e.custo_alocado)}</td></tr>`
+        <tr><td>${esc(e.empresa_nome)}</td><td>${e.viagens}</td><td>${e.km}</td><td>${e.percentual}%</td><td>${fmtMoeda(e.custo_alocado)}</td></tr>`
     ).join('') || '<tr><td colspan="5">Sem viagens no período.</td></tr>';
 
     document.querySelector('#tabCc tbody').innerHTML = (d.por_centro_custo || []).map(c => `
-        <tr><td>${c.empresa_nome}</td><td>${c.centro_custo}</td><td>${c.viagens}</td><td>${c.km}</td><td>${c.percentual}%</td><td>${fmtMoeda(c.custo_alocado)}</td></tr>`
+        <tr><td>${esc(c.empresa_nome)}</td><td>${esc(c.centro_custo)}</td><td>${c.viagens}</td><td>${c.km}</td><td>${c.percentual}%</td><td>${fmtMoeda(c.custo_alocado)}</td></tr>`
     ).join('') || '<tr><td colspan="6">Sem viagens no período.</td></tr>';
 }
 
@@ -238,7 +238,7 @@ async function carregarPushStatus() {
         div.innerHTML = (d.motoristas || []).map(m => {
             const push = +m.inscricoes_push > 0 ? `push OK (${m.inscricoes_push})` : 'SEM push';
             const loc = m.localizacao_em ? `loc ${m.localizacao_min} min` : 'sem loc';
-            return `<div class="agendamento-item"><div class="agendamento-header"><strong>${m.nome}</strong><span class="badge badge-ativo">${m.matricula}</span></div><small>${push} • ${loc}</small></div>`;
+            return `<div class="agendamento-item"><div class="agendamento-header"><strong>${esc(m.nome)}</strong><span class="badge badge-ativo">${esc(m.matricula)}</span></div><small>${push} • ${loc}</small></div>`;
         }).join('') || '<p class="cam-hint">Nenhum motorista habilitado nas últimas 12h.</p>';
     } catch (_) {}
 }
@@ -289,13 +289,13 @@ async function carregarChamados() {
     el.innerHTML = lista.map(c => `
         <div class="agendamento-item" style="margin-bottom:12px;">
             <div class="agendamento-header">
-                <strong>${c.nome}</strong>
+                <strong>${esc(c.nome)}</strong>
                 <span class="badge badge-em-uso">pendente</span>
             </div>
             <small>
-                Matrícula ${c.matricula} • ${c.empresa_nome || '—'} • ${c.projeto_codigo || c.projeto_nome || '—'}<br>
-                ${c.email || ''} • ${c.telefone || ''}<br>
-                ${c.justificativa ? `<em>${c.justificativa}</em><br>` : ''}
+                Matrícula ${esc(c.matricula)} • ${esc(c.empresa_nome || '—')} • ${esc(c.projeto_codigo || c.projeto_nome || '—')}<br>
+                ${esc(c.email || '')} • ${esc(c.telefone || '')}<br>
+                ${c.justificativa ? `<em>${esc(c.justificativa)}</em><br>` : ''}
                 ${fmtData(c.created_at)}
             </small>
             <div class="admin-actions">

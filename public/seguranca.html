@@ -87,7 +87,7 @@ function query() {
 
 function img(url, leg) {
     if (!url) return '';
-    return `<figure><img src="${url}" alt="${leg}"><figcaption style="font-size:0.75rem;color:#64748b;">${leg}</figcaption></figure>`;
+    return `<figure><img src="${esc(url)}" alt="${esc(leg)}"><figcaption style="font-size:0.75rem;color:#64748b;">${esc(leg)}</figcaption></figure>`;
 }
 
 async function carregar() {
@@ -97,8 +97,8 @@ async function carregar() {
 
     document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => `
         <div class="seg-card">
-            <strong>Viagem #${v.id}</strong> — ${v.motorista_nome} (${v.motorista_matricula}) → ${v.passageiro_nome} (${v.passageiro_matricula})
-            <div class="seg-meta">${fmtData(v.iniciada_em)}${v.finalizada_em ? ' → ' + fmtData(v.finalizada_em) : ''} • ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}${v.placa ? ' • ' + v.placa : ''}</div>
+            <strong>Viagem #${v.id}</strong> — ${esc(v.motorista_nome)} (${esc(v.motorista_matricula)}) → ${esc(v.passageiro_nome)} (${esc(v.passageiro_matricula)})
+            <div class="seg-meta">${fmtData(v.iniciada_em)}${v.finalizada_em ? ' → ' + fmtData(v.finalizada_em) : ''} • ${esc(v.status)}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}${v.placa ? ' • ' + esc(v.placa) : ''}</div>
             <div class="seg-fotos">
                 ${img(v.motorista_selfie, 'Selfie motorista')}
                 ${img(v.foto_carro_url, 'Foto carro')}
@@ -109,7 +109,7 @@ async function carregar() {
 
     document.getElementById('listaHab').innerHTML = (d.habilitacoes || []).map(h => `
         <div class="seg-card">
-            <strong>${h.nome}</strong> (${h.matricula}) — placa ${h.placa || '—'}
+            <strong>${esc(h.nome)}</strong> (${esc(h.matricula)}) — placa ${esc(h.placa || '—')}
             <div class="seg-meta">${fmtData(h.created_at)}${h.selfie_lat != null ? ` • GPS selfie: ${h.selfie_lat}, ${h.selfie_lng}` : ''}</div>
             <div class="seg-fotos">
                 ${img(h.selfie_url, 'Selfie')}

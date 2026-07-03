@@ -363,6 +363,22 @@ async function lerPlaca(canvas) {
 }
 
 /* -------------------- Utilidades -------------------- */
+// Escapa texto vindo do usuário antes de interpolar em innerHTML/atributos.
+// Sem isso, um nome/observação/tag como "<img onerror=...>" executaria script
+// no navegador de OUTRO usuário (XSS armazenado → roubo do token no localStorage).
+// Use SEMPRE que jogar dado de usuário numa template string de HTML.
+function escapeHtml(v) {
+    if (v == null) return '';
+    return String(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+// Alias curto para deixar as templates legíveis.
+const esc = escapeHtml;
+
 function linkWhatsApp(telefone) {
     if (!telefone) return null;
     let n = String(telefone).replace(/\D/g, '');
