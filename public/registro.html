@@ -12,8 +12,10 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <script src="/pwa.js" defer></script>
     <title>Criar conta - VAP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <style type="text/css">@font-face {font-family:Montserrat;font-style:normal;font-weight:400;src:url(/cf-fonts/v/montserrat/5.0.16/latin/wght/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}@font-face {font-family:Montserrat;font-style:normal;font-weight:600;src:url(/cf-fonts/v/montserrat/5.0.16/latin/wght/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}@font-face {font-family:Montserrat;font-style:normal;font-weight:700;src:url(/cf-fonts/v/montserrat/5.0.16/latin/wght/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}</style>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Montserrat', sans-serif; }
 
@@ -108,7 +110,15 @@
             letter-spacing: 0.5px;
             text-transform: uppercase;
             opacity: 0.75;
+            margin-bottom: 6px;
+        }
+
+        .step-hint {
+            text-align: center;
+            font-size: 0.68rem;
+            opacity: 0.5;
             margin-bottom: 18px;
+            line-height: 1.35;
         }
 
         .wizard-step { display: none; }
@@ -394,6 +404,7 @@
                 <span class="wizard-dot" data-step="3"></span>
             </div>
             <p class="step-label" id="stepLabel">Quem é você?</p>
+            <p class="step-hint" id="stepHint">Em seguida: empresa, projeto e dados de acesso</p>
 
             <form id="registerForm" novalidate>
                 <!-- Etapa 1: Identidade -->
@@ -436,10 +447,8 @@
                     </div>
                     <div class="field">
                         <label>Projeto / Local de trabalho</label>
-                        <input type="hidden" id="projeto_id" required>
-                        <div class="projeto-grid" id="projetoGrid">
-                            <div class="projeto-loading">Carregando projetos...</div>
-                        </div>
+                        <input type="hidden" id="projeto_codigo" required>
+                        <div class="projeto-grid" id="projetoGrid"></div>
                     </div>
                     <div class="field">
                         <label for="centro_custo">Centro de custo <span style="opacity:0.5;font-weight:400">(opcional)</span></label>
@@ -514,7 +523,7 @@
                 <div class="field">
                     <label for="a_projeto">Projeto / Local</label>
                     <select id="a_projeto" required>
-                        <option value="">Carregando...</option>
+                        <option value="">Selecione o projeto</option>
                     </select>
                 </div>
                 <div class="field">
@@ -545,62 +554,36 @@
             { codigo: 'CARAJAS', label: 'CARAJÁS' },
             { codigo: 'SOSSEGO', label: 'SOSSEGO' },
         ];
-        let projetosLista = [];
+        const hints = [
+            'Em seguida: empresa, projeto e dados de acesso',
+            'Depois: WhatsApp, email e senha de 6 dígitos',
+            'Pronto para criar sua conta',
+        ];
 
-        function setSexo(val) {
-            document.getElementById('sexo').value = val;
-            document.querySelectorAll('.sexo-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.sexo === val);
-            });
-        }
-
-        function setProjeto(id) {
-            document.getElementById('projeto_id').value = id;
+        function setProjeto(codigo) {
+            document.getElementById('projeto_codigo').value = codigo;
             document.querySelectorAll('.projeto-card').forEach(c => {
-                c.classList.toggle('active', String(c.dataset.id) === String(id));
+                c.classList.toggle('active', c.dataset.codigo === codigo);
             });
         }
 
-        function renderProjetos(apiProjetos) {
-            const porCodigo = Object.fromEntries(apiProjetos.map(p => [p.codigo, p]));
-            const disponiveis = PROJETOS_FIXOS
-                .map(f => ({ ...f, id: porCodigo[f.codigo]?.id }))
-                .filter(p => p.id);
-            projetosLista = disponiveis;
-
+        function renderProjetosFixos() {
             const grid = document.getElementById('projetoGrid');
-            const select = document.getElementById('a_projeto');
-            if (!disponiveis.length) {
-                grid.innerHTML = '<div class="projeto-loading">Projetos indisponíveis. Tente mais tarde.</div>';
-                select.innerHTML = '<option value="">Indisponível</option>';
-                return;
-            }
-            grid.innerHTML = disponiveis.map(p =>
-                `<button type="button" class="projeto-card" data-id="${p.id}" onclick="setProjeto(${p.id})">${p.label}</button>`
+            grid.innerHTML = PROJETOS_FIXOS.map(p =>
+                `<button type="button" class="projeto-card" data-codigo="${p.codigo}" onclick="setProjeto('${p.codigo}')">${p.label}</button>`
             ).join('');
+            const select = document.getElementById('a_projeto');
             select.innerHTML = '<option value="">Selecione o projeto</option>' +
-                disponiveis.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
+                PROJETOS_FIXOS.map(p => `<option value="${p.codigo}">${p.label}</option>`).join('');
         }
-
-        async function carregarProjetos() {
-            try {
-                const r = await fetch('/api/projetos');
-                const projetos = await r.json();
-                renderProjetos(projetos);
-            } catch (_) {
-                document.getElementById('projetoGrid').innerHTML =
-                    '<div class="projeto-loading">Erro ao carregar projetos</div>';
-                document.getElementById('a_projeto').innerHTML =
-                    '<option value="">Erro ao carregar</option>';
-            }
-        }
-        carregarProjetos();
+        renderProjetosFixos();
 
         function atualizarUI() {
             document.querySelectorAll('.wizard-step').forEach(s => {
                 s.classList.toggle('active', Number(s.dataset.step) === passo);
             });
             document.getElementById('stepLabel').textContent = labels[passo - 1];
+            document.getElementById('stepHint').textContent = hints[passo - 1];
 
             const dots = document.querySelectorAll('.wizard-dot');
             const lines = document.querySelectorAll('.wizard-line');
@@ -617,9 +600,16 @@
             document.getElementById('message').style.display = 'none';
         }
 
+        function setSexo(val) {
+            document.getElementById('sexo').value = val;
+            document.querySelectorAll('.sexo-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.sexo === val);
+            });
+        }
+
         function camposEtapa(n) {
             if (n === 1) return ['nome', 'sexo', 'matricula'];
-            if (n === 2) return ['empresa_nome', 'projeto_id'];
+            if (n === 2) return ['empresa_nome', 'projeto_codigo'];
             return ['telefone', 'email', 'senha', 'confirmarSenha'];
         }
 
@@ -670,7 +660,7 @@
                 }
             }
 
-            if (n === 2 && !document.getElementById('projeto_id').value) {
+            if (n === 2 && !document.getElementById('projeto_codigo').value) {
                 msg.className = 'message error';
                 msg.textContent = 'Selecione o projeto';
                 msg.style.display = 'block';
@@ -708,7 +698,7 @@
                         sexo: document.getElementById('sexo').value,
                         matricula: document.getElementById('matricula').value,
                         empresa_nome: document.getElementById('empresa_nome').value,
-                        projeto_id: document.getElementById('projeto_id').value || null,
+                        projeto_codigo: document.getElementById('projeto_codigo').value,
                         centro_custo: document.getElementById('centro_custo').value,
                         telefone: document.getElementById('telefone').value,
                         email: document.getElementById('email').value,
@@ -764,7 +754,7 @@
                         nome: document.getElementById('a_nome').value,
                         matricula: document.getElementById('a_matricula').value,
                         empresa_nome: document.getElementById('a_empresa').value,
-                        projeto_id: document.getElementById('a_projeto').value || null,
+                        projeto_codigo: document.getElementById('a_projeto').value || null,
                         telefone: document.getElementById('a_telefone').value,
                         email: document.getElementById('a_email').value,
                         justificativa: document.getElementById('a_justificativa').value,
