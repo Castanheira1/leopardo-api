@@ -1,5 +1,5 @@
 # TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS PESSOAIS
-### Aplicativo VAP (Vagão) — caronas entre colaboradores
+### Aplicativo VAP — caronas entre colaboradores
 
 **Versão 1.0 — vigente desde 03/07/2026**
 
@@ -12,7 +12,7 @@
 ## 1. Partes
 
 **Controlador dos dados:** [RAZÃO SOCIAL], inscrita no CNPJ nº [CNPJ], com sede em
-[ENDEREÇO] (doravante "Controlador"), responsável pelo aplicativo VAP (Vagão).
+[ENDEREÇO] (doravante "Controlador"), responsável pelo aplicativo VAP.
 
 **Titular dos dados:** você, colaborador(a) usuário(a) do aplicativo, identificado(a)
 pela matrícula informada no cadastro (doravante "Titular").

@@ -1,5 +1,5 @@
 # TERMO DE USO
-### Aplicativo VAP (Vagão) — caronas entre colaboradores
+### Aplicativo VAP — caronas entre colaboradores
 
 **Versão 1.1 — vigente desde 03/07/2026**
 
@@ -11,7 +11,7 @@
 
 ## 1. Aceitação
 
-Ao criar uma conta ou utilizar o aplicativo VAP (Vagão) ("Aplicativo" ou "Plataforma"),
+Ao criar uma conta ou utilizar o aplicativo VAP ("Aplicativo" ou "Plataforma"),
 você ("Usuário") declara que leu, entendeu e concorda com este Termo de Uso, com a
 Política de Privacidade e com o Termo de Consentimento. Caso não concorde, não utilize o
 Aplicativo.

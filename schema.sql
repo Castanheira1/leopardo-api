@@ -1,5 +1,5 @@
 -- ============================================================
--- VAGÃO - Esquema do banco (app de carona interno)
+-- VAP - Esquema do banco (app de carona interno)
 -- Pivot do antigo sistema de reserva de veículos.
 -- ============================================================
 

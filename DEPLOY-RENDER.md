@@ -1,10 +1,10 @@
-# 🚀 Deploy do Vagão no Render
+# Deploy do VAP no Render
 
 Guia passo a passo para colocar o app no ar. O banco (schema) **já foi aplicado**
 no Supabase `vsxnqtecnvhhvekmkshb`; falta hospedar a aplicação e ligar as
 variáveis de ambiente.
 
-> ⚠️ **HTTPS é obrigatório.** Câmera (selfie/foto do carro) e GPS só funcionam
+> **HTTPS é obrigatório.** Câmera (selfie/foto do carro) e GPS só funcionam
 > em `https://` (ou `localhost`). O Render entrega HTTPS automático, então está OK.
 
 ---
@@ -13,7 +13,7 @@ variáveis de ambiente.
 
 1. Supabase → **Storage** → **New bucket**
 2. Nome: **`veiculos`**
-3. Marque como **Public bucket** ✅
+3. Marque como **Public bucket**
    *(o app gera URLs públicas com `getPublicUrl` para exibir as fotos no histórico).*
 4. Create bucket.
 
@@ -26,7 +26,7 @@ ignora as policies de Storage — então não precisa criar policy de INSERT.
 
 No Supabase → botão **Connect** (topo) → aba **Connection string**.
 
-> 🔴 **Importante:** use a string do **Session pooler** (IPv4), **não** a
+> **Importante:** use a string do **Session pooler** (IPv4), **não** a
 > "Direct connection". O Render free roda em IPv4 e o host direto
 > (`db.vsxnqtecnvhhvekmkshb.supabase.co`) só responde em IPv6 — a conexão direta
 > falha com timeout.
@@ -69,7 +69,7 @@ Supabase → **Project Settings → Database → Reset database password**.
    Já vêm prontas do blueprint: `NODE_VERSION=22`, `NODE_ENV=production`,
    `JWT_SECRET` (gerado automático), `SUPABASE_BUCKET=veiculos`, `RAIO_MATCH_KM=3`.
 
-   > 🔴 **Node 22 é obrigatório.** O `@supabase/supabase-js` quebra no boot em Node < 22
+   > **Node 22 é obrigatório.** O `@supabase/supabase-js` quebra no boot em Node < 22
    > (`Node.js NN detected without native WebSocket support`, erro no `createClient`).
    > O repositório já fixa isso via `.node-version` (`22`) e `engines`. **Se você criou o
    > serviço manualmente** (sem o blueprint) e ele subir em Node 18/20, adicione a

@@ -1,4 +1,4 @@
--- Atualização idempotente do banco Vagão (projeto leopardo)
+-- Atualização idempotente do banco VAP (projeto leopardo)
 -- Seguro para rodar várias vezes. NÃO use schema.sql completo em produção (ele faz DROP).
 
 -- Colunas em usuarios

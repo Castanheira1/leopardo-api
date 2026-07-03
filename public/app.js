@@ -1,5 +1,5 @@
 /* ============================================================
-   Vagão - utilidades globais (auth, mapa, câmera, OCR)
+   VAP - utilidades globais (auth, mapa, câmera, OCR)
    ============================================================ */
 
 function checkAuth(adminOnly = false) {

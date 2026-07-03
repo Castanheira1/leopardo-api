@@ -1,7 +1,7 @@
 {
   "name": "vagao",
   "version": "2.0.0",
-  "description": "Vagão - app interno de caronas entre funcionários",
+  "description": "VAP - app interno de caronas entre funcionários",
   "main": "server.js",
   "engines": {
     "node": ">=22"

@@ -1,4 +1,4 @@
-# 🚃 VAGÃO - Carona entre colaboradores
+# VAP - Carona entre colaboradores
 
 App interno de **carona** (estilo "mini Uber") para o ambiente de trabalho. O mesmo
 usuário alterna entre **motorista** e **passageiro**, com verificação de segurança por
@@ -7,7 +7,7 @@ usuário alterna entre **motorista** e **passageiro**, com verificação de segu
 > Pivot do antigo *Leopardo* (sistema de reserva de veículos). A base de usuários,
 > a autenticação e o armazenamento de fotos (Supabase Storage) foram reaproveitados.
 
-## ✨ Funcionalidades
+## Funcionalidades
 
 - **Modo motorista/passageiro** no mesmo app (alternância rápida).
 - **Pedir carona:** mostra sua localização (GPS), escolhe o destino no mapa, tira uma
@@ -22,7 +22,7 @@ usuário alterna entre **motorista** e **passageiro**, com verificação de segu
 - **Histórico de segurança:** toda viagem guarda a rota e as fotos (selfies + carro)
   com **data e local** — registro para proteção em caso de abuso.
 
-## 🔒 Segurança das fotos
+## Segurança das fotos
 
 As fotos são **capturadas ao vivo pela câmera** (`getUserMedia`), **sem opção de
 anexar arquivo**. Cada foto recebe carimbo de **horário e localização**. As imagens
@@ -30,14 +30,14 @@ vão para o **Supabase Storage** e as tabelas guardam a URL + metadados.
 
 > Câmera e GPS exigem **HTTPS** (ou `localhost` em desenvolvimento).
 
-## 🛠️ Tecnologias
+## Tecnologias
 
 - **Backend:** Node.js + Express, PostgreSQL (Supabase), JWT + bcrypt, Helmet, Multer.
 - **Frontend:** HTML/CSS/JS puro, **Google Maps** (mapa + Places Autocomplete),
   **Tesseract.js** (OCR de placa, via CDN).
 - **Storage:** Supabase Storage (mesmo mecanismo das fotos de carro).
 
-## 📦 Instalação
+## Instalação
 
 ```bash
 npm install
@@ -54,11 +54,11 @@ Veja `.env.example`. Destaques:
 - `GOOGLE_MAPS_API_KEY` — chave do Google Maps (Maps JavaScript API + Places).
 - `RAIO_MATCH_KM` — raio de proximidade do match (padrão 3 km).
 
-## 👤 Usuário padrão
+## Usuário padrão
 
 Após o `schema.sql`: admin **000000 / admin123** (altere em produção).
 
-## 📊 Principais endpoints
+## Principais endpoints
 
 | Área | Endpoint |
 |------|----------|
@@ -72,7 +72,7 @@ Após o `schema.sql`: admin **000000 / admin123** (altere em produção).
 | Viagens | `POST /api/viagens`, `POST /api/viagens/:id/pontos`, `.../finalizar`, `GET /api/viagens`, `GET /api/viagens/:id` |
 | Admin | `GET /api/admin/overview`, `POST /api/admin/reset-senha` |
 
-## 📁 Estrutura
+## Estrutura
 
 ```
 ├── server.js          # Backend (Express + Postgres + Supabase Storage)
@@ -90,4 +90,4 @@ Após o `schema.sql`: admin **000000 / admin123** (altere em produção).
 
 ---
 
-Desenvolvido para facilitar caronas entre colaboradores. 🚃
+Desenvolvido para facilitar caronas entre colaboradores.
