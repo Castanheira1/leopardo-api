@@ -37,7 +37,30 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 // 1200: o polling legítimo de um motorista em viagem chega perto de 600/15min
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1200 }));
-app.use(cors({ origin: "*" }));
+
+// CORS restrito. O front (PWA) é servido pela MESMA origem desta API, então não
+// precisa de CORS cross-origin no uso normal. Por padrão, nenhuma origem externa
+// é liberada (same-origin continua funcionando). Para liberar um app/origem
+// específica, defina CORS_ORIGINS="https://a.com,https://b.com" no ambiente.
+// Antes era origin:"*", que deixava qualquer site chamar a API com o token do usuário.
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+app.use(cors({
+  origin: CORS_ORIGINS.length ? CORS_ORIGINS : false, // false = sem CORS externo (só mesma origem)
+  credentials: true,
+}));
+
+// Anti-força-bruta nas rotas de credencial (login/cadastro/recuperação): limite
+// bem mais apertado que o global. Como a senha é curta (6 dígitos), travar
+// tentativas por IP é essencial. Configure com AUTH_RATE_MAX (padrão 20/15min).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_MAX || 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." },
+});
+
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -605,7 +628,7 @@ app.get("/api/projetos", async (req, res) => {
 });
 
 /* ============================ AUTH ============================ */
-app.post("/api/register", async (req, res) => {
+app.post("/api/register", authLimiter, async (req, res) => {
   const { nome, funcao, matricula, telefone, email, senha, empresa_nome, projeto_id, projeto_codigo, centro_custo, sexo } = req.body;
   const sexoNorm = sexo === "M" || sexo === "F" ? sexo : null;
   const pid = await resolverProjetoId(projeto_id, projeto_codigo);
@@ -660,7 +683,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", authLimiter, async (req, res) => {
   const { matricula, senha } = req.body;
   if (!matricula || !senha) return res.status(400).json({ error: "Campos obrigatórios" });
 
@@ -781,7 +804,7 @@ async function solicitarRecuperacaoSenha(matricula, email) {
   return { status: 200, body: msgOk };
 }
 
-app.post("/api/recuperar-senha/solicitar", async (req, res) => {
+app.post("/api/recuperar-senha/solicitar", authLimiter, async (req, res) => {
   const { matricula, email } = req.body;
   if (!matricula || !email) {
     return res.status(400).json({ error: "Informe matrícula e email" });
@@ -796,7 +819,7 @@ app.post("/api/recuperar-senha/solicitar", async (req, res) => {
 });
 
 // Passo 2: link do email → nova senha de 6 dígitos.
-app.post("/api/recuperar-senha/confirmar", async (req, res) => {
+app.post("/api/recuperar-senha/confirmar", authLimiter, async (req, res) => {
   const { token, nova_senha } = req.body;
   if (!token || !nova_senha) {
     return res.status(400).json({ error: "Token e nova senha são obrigatórios" });
@@ -828,7 +851,7 @@ app.post("/api/recuperar-senha/confirmar", async (req, res) => {
 });
 
 // Alias legado — use /solicitar (envia email) em vez de redefinir na hora.
-app.post("/api/recuperar-senha", async (req, res) => {
+app.post("/api/recuperar-senha", authLimiter, async (req, res) => {
   const { matricula, email, nova_senha } = req.body;
   if (nova_senha) {
     return res.status(400).json({

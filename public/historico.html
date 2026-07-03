@@ -60,8 +60,8 @@
         div.innerHTML = viagens.map(v => `
             <div class="ride-item">
                 <div class="ride-info">
-                    <strong>${v.origem_texto || 'Origem'} → ${v.destino_texto || 'Destino'}</strong><br>
-                    <small>Motorista: ${v.motorista_nome} • Passageiro: ${v.passageiro_nome}</small><br>
+                    <strong>${esc(v.origem_texto || 'Origem')} → ${esc(v.destino_texto || 'Destino')}</strong><br>
+                    <small>Motorista: ${esc(v.motorista_nome)} • Passageiro: ${esc(v.passageiro_nome)}</small><br>
                     <small>${fmtData(v.iniciada_em)} • ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''} • ${v.qtd_pontos} pontos GPS</small>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="ver(${v.id})">Ver rota e fotos</button>
@@ -73,9 +73,9 @@
         const v = await r.json();
         document.getElementById('detalhe').style.display = 'block';
         document.getElementById('detalheInfo').innerHTML = `
-            <p><strong>Rota:</strong> ${v.origem_texto || '—'} → ${v.destino_texto || '—'}</p>
-            <p><strong>Motorista:</strong> ${v.motorista_nome} ${v.placa ? '• ' + v.placa : ''} ${v.tag ? '(TAG ' + v.tag + ')' : ''}</p>
-            <p><strong>Passageiro:</strong> ${v.passageiro_nome}</p>
+            <p><strong>Rota:</strong> ${esc(v.origem_texto || '—')} → ${esc(v.destino_texto || '—')}</p>
+            <p><strong>Motorista:</strong> ${esc(v.motorista_nome)} ${v.placa ? '• ' + esc(v.placa) : ''} ${v.tag ? '(TAG ' + esc(v.tag) + ')' : ''}</p>
+            <p><strong>Passageiro:</strong> ${esc(v.passageiro_nome)}</p>
             <p><strong>Início:</strong> ${fmtData(v.iniciada_em)} • <strong>Fim:</strong> ${fmtData(v.finalizada_em)} • <strong>Distância:</strong> ${v.distancia_km || 0} km</p>`;
 
         const g = await carregarMaps();
@@ -95,8 +95,8 @@
         ].filter(f => f.url);
         document.getElementById('fotosSeg').innerHTML = fotos.map(f => `
             <div class="foto-card">
-                <img src="${f.url}">
-                <small>${f.t}${f.em ? ' • ' + fmtData(f.em) : ''}</small>
+                <img src="${esc(f.url)}">
+                <small>${esc(f.t)}${f.em ? ' • ' + fmtData(f.em) : ''}</small>
             </div>`).join('') || '<p class="cam-hint">Sem fotos registradas.</p>';
 
         document.getElementById('detalhe').scrollIntoView({ behavior: 'smooth' });

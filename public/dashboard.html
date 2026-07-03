@@ -1055,11 +1055,11 @@
     function cardCarona(c, comBotao) {
         const dist = c.dist_origem != null ? ` • ${Number(c.dist_origem).toFixed(1)} km` : '';
         return `<div class="ride-item">
-            ${c.foto_carro_url ? `<img src="${c.foto_carro_url}" class="ride-thumb">` : ''}
+            ${c.foto_carro_url ? `<img src="${esc(c.foto_carro_url)}" class="ride-thumb">` : ''}
             <div class="ride-info">
-                <strong>${c.motorista_nome}</strong> ${c.placa ? '• ' + c.placa : ''} ${c.tag ? '(TAG ' + c.tag + ')' : ''}<br>
-                <small>${ICN.pin} ${c.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(c.horario)} • ${c.vagas} vaga(s)${dist}</small>
-                ${c.observacao ? `<br><small>"${c.observacao}"</small>` : ''}
+                <strong>${esc(c.motorista_nome)}</strong> ${c.placa ? '• ' + esc(c.placa) : ''} ${c.tag ? '(TAG ' + esc(c.tag) + ')' : ''}<br>
+                <small>${ICN.pin} ${esc(c.destino_texto || 'Destino no mapa')} • ${ICN.clock} ${fmtHorario(c.horario)} • ${c.vagas} vaga(s)${dist}</small>
+                ${c.observacao ? `<br><small>"${esc(c.observacao)}"</small>` : ''}
             </div>
             ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Solicitar</button>` : ''}
         </div>`;
@@ -1088,7 +1088,7 @@
         document.getElementById('chamandoTitulo').textContent = pedidoId ? 'Procurando motorista…' : 'Chamando…';
         document.getElementById('chamandoSub').innerHTML = pedidoId
             ? 'Avisamos os motoristas perto de você'
-            : `Aguardando <strong>${nome || 'o motorista'}</strong> aceitar`;
+            : `Aguardando <strong>${esc(nome || 'o motorista')}</strong> aceitar`;
         document.getElementById('modalChamando').style.display = 'flex';
     }
     function fecharChamando() {
@@ -1112,8 +1112,8 @@
         carroSel = m;
         document.getElementById('carroNome').textContent = m.nome || 'Motorista';
         document.getElementById('carroRota').innerHTML =
-            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${m.origem_texto || 'Local do motorista'}</div>`
-            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${m.destino_texto || 'Destino no mapa'}</div>`;
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(m.origem_texto || 'Local do motorista')}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(m.destino_texto || 'Destino no mapa')}</div>`;
         const placa = document.getElementById('carroPlaca');
         placa.textContent = m.placa || '';
         placa.style.display = m.placa ? 'inline-block' : 'none';
@@ -1238,7 +1238,7 @@
         return `<div class="ride-item">
             <div class="ride-info">
                 <strong>Solicitação ativa</strong><br>
-                <small>${ICN.pin} ${p.destino_texto || 'Destino no mapa'} • ${ICN.clock} ${fmtHorario(p.horario)} • ${p.pessoas || 1} pessoa(s)</small>
+                <small>${ICN.pin} ${esc(p.destino_texto || 'Destino no mapa')} • ${ICN.clock} ${fmtHorario(p.horario)} • ${p.pessoas || 1} pessoa(s)</small>
                 <br>${status}
             </div>
             <div class="ride-actions"><button class="btn btn-danger btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button></div>
@@ -1259,9 +1259,9 @@
     }
     function cardProposta(p) {
         const tipo = p.carona_id ? 'Passageiro' : 'Motorista';
-        const outro = p.sou_destinatario ? p.de_nome : p.para_nome;
+        const outro = esc(p.sou_destinatario ? p.de_nome : p.para_nome);
         const tel = p.sou_destinatario ? p.de_telefone : p.para_telefone;
-        const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
+        const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
         const souMotorista = (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
         const aceito = p.status === 'aceito';
 
@@ -1274,7 +1274,7 @@
             // Número visível: dá para conferir DE QUEM é o WhatsApp que vai abrir
             // (se abrir o seu próprio chat, o cadastro do outro está com o seu número).
             acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank" title="${tel}">${ICN.phone} WhatsApp (${tel})</a>` : ''}`;
+                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</a>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
@@ -1292,18 +1292,18 @@
         const thumb = (verMotorista && p.motorista_selfie) ? p.motorista_selfie : p.selfie_url;
         const blocoCarro = verMotorista ? `
                 <div class="prop-motorista">
-                    ${p.motorista_carro ? `<img src="${p.motorista_carro}" class="prop-carro" alt="carro do motorista">` : ''}
-                    <small>${ICN.car} ${p.motorista_placa || 'veículo'}${p.motorista_tag ? ' • ' + p.motorista_tag : ''}</small>
+                    ${p.motorista_carro ? `<img src="${esc(p.motorista_carro)}" class="prop-carro" alt="carro do motorista">` : ''}
+                    <small>${ICN.car} ${esc(p.motorista_placa || 'veículo')}${p.motorista_tag ? ' • ' + esc(p.motorista_tag) : ''}</small>
                     ${p.motorista_carro_em ? `<br><small class="foto-meta">Foto do carro: ${fmtData(p.motorista_carro_em)}</small>` : ''}
                     ${p.motorista_selfie_em ? `<br><small class="foto-meta">Selfie do motorista: ${fmtData(p.motorista_selfie_em)}</small>` : ''}
                 </div>` : '';
 
         return `<div class="ride-item">
-            ${thumb ? `<img src="${thumb}" class="ride-thumb">` : ''}
+            ${thumb ? `<img src="${esc(thumb)}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${outro}</strong> <small>(${tipo})</small><br>
                 <small>${rota}</small>
-                ${p.mensagem ? `<br><small>"${p.mensagem}"</small>` : ''}
+                ${p.mensagem ? `<br><small>"${esc(p.mensagem)}"</small>` : ''}
                 ${blocoCarro}
             </div>
             <div class="ride-actions">${acoes}</div>
@@ -1338,7 +1338,7 @@
         buzinar();   // chegou gente pedindo: toca e vibra
         solicitacaoAtual = p;
         const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
-        const rota = p.carona_id ? `${p.c_origem || ''} → ${p.c_destino || ''}` : `${p.p_origem || ''} → ${p.p_destino || ''}`;
+        const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
         document.getElementById('solNome').textContent = p.de_nome || 'Solicitação';
         document.getElementById('solTipo').textContent = tipo;
         document.getElementById('solRota').innerHTML = `${ICN.pin} ${rota}`;
@@ -2019,8 +2019,8 @@
         pedidoSel = p;
         document.getElementById('pedidoNome').textContent = p.passageiro_nome || 'Passageiro';
         document.getElementById('pedidoRota').innerHTML =
-            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${p.origem_texto || 'Local do passageiro'}</div>`
-            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${p.destino_texto || 'Destino no mapa'}</div>`
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(p.destino_texto || 'Destino no mapa')}</div>`
             + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${p.pessoas || 1} pessoa(s)</div>`;
         const sf = document.getElementById('pedidoSelfie');
         if (p.selfie_url) { sf.src = p.selfie_url; sf.style.display = 'block'; } else { sf.style.display = 'none'; }

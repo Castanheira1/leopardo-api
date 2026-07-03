@@ -41,6 +41,28 @@ app que guarda **selfies, rota de GPS e telefone** de funcionários.
 
 ---
 
+## Atualização — correções aplicadas neste branch ✅
+
+Depois do diagnóstico inicial, os itens de **código** foram corrigidos:
+
+- ✅ **XSS armazenado**: adicionado `escapeHtml()`/`esc()` em `public/app.js` e
+  aplicado em **todas** as interpolações de dados de usuário nos innerHTML de
+  `dashboard.html`, `admin.html`, `historico.html` e `seguranca.html` (nomes,
+  tag, placa, observação, mensagem, rota, empresa, justificativa etc.). Service
+  worker teve a `VERSION` bumpada (v89) para os clientes receberem a correção.
+- ✅ **CORS**: `origin:"*"` trocado por allowlist via `CORS_ORIGINS` (padrão: sem
+  origem externa; o PWA same-origin segue funcionando).
+- ✅ **Força-bruta no login**: novo `authLimiter` (padrão 20 tentativas/15min por
+  IP via `AUTH_RATE_MAX`) em login/cadastro/recuperação, coberto por teste (429).
+
+**Ainda PENDENTE (decisão sua, não é código puro):**
+- 🔴 **LGPD** — política de privacidade, termos e consentimento (jurídico).
+- 🟠 **Política de senha** — segue 6 dígitos. Aumentar a força quebraria as senhas
+  atuais dos usuários; é uma decisão de produto (ver abaixo).
+- 🟠 Trocar o admin padrão `000000/admin123` e restringir a Maps API key por domínio.
+
+---
+
 ## Bloqueadores para comercializar 🔴
 
 ### 1. XSS armazenado (roubo de conta) — **crítico**

@@ -78,6 +78,8 @@ function bootServer() {
       NODE_ENV: "test",           // SSL off; produção usaria rejectUnauthorized:false
       RAIO_MATCH_KM: "3",
       RAIO_VISIVEL_KM: "10",
+      AUTH_RATE_MAX: "30",        // teto conhecido p/ validar o anti-força-bruta no fim
+      CORS_ORIGINS: "",           // sem CORS externo (comportamento padrão seguro)
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -480,6 +482,20 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     await test("GET /api/admin/seguranca (admin) → 200", async () => {
       const { status } = await api("GET", "/api/admin/seguranca", { token: tokAdmin });
       eq(status, 200, "status");
+    });
+
+    /* =================== ANTI-FORÇA-BRUTA (rate limit) =================== */
+    // Deve rodar por ÚLTIMO: estoura de propósito o teto de tentativas de login.
+    grupo("Anti-força-bruta no login (rate limit)");
+    await test("excesso de tentativas de login retorna 429", async () => {
+      let viu429 = false;
+      for (let i = 0; i < 40; i++) {
+        const { status } = await api("POST", "/api/login", {
+          body: { matricula: "999999", senha: "000000" },
+        });
+        if (status === 429) { viu429 = true; break; }
+      }
+      assert(viu429, "esperava um 429 após muitas tentativas de login");
     });
 
   } finally {
