@@ -190,7 +190,7 @@
     <!-- Confirmar veículo (após selfie + foto do carro) — sem prompt() -->
     <div id="modalVeiculo" class="cam-overlay" style="display:none;">
         <div class="cam-box perfil-box">
-            <h3>Confirmar veículo</h3>
+            <h3 id="veicTitulo">Confirmar veículo</h3>
             <img id="veicFoto" class="veic-foto" alt="" style="display:none;">
             <div class="perfil-secao" style="border-top:none;">
                 <label for="veicPlaca">Placa</label>
@@ -201,7 +201,7 @@
             </div>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="cancelarVeiculo()">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="confirmarVeiculo()">Ativar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarVeic" onclick="confirmarVeiculo()">Ativar</button>
             </div>
         </div>
     </div>
@@ -601,22 +601,44 @@
     }
 
     let veiculoPend = null;
+    const SELFIE_VALIDADE_MS = 12 * 60 * 60 * 1000;
+
+    function selfieAindaValida(hab) {
+        if (!hab) return false;
+        const t = new Date(hab.selfie_em || hab.created_at).getTime();
+        return Number.isFinite(t) && (Date.now() - t) < SELFIE_VALIDADE_MS;
+    }
+
     async function ativarMotorista(trocar) {
+        if (!habHoje) await carregarHabilitacao();
         if (!trocar) {
-            if (!habHoje) await carregarHabilitacao();      // reconfere no servidor (vale 24h)
-            if (habHoje) { msg('Modo motorista já está ativo (válido por 24h).'); return; }
+            if (habHoje && selfieAindaValida(habHoje)) {
+                msg('Modo motorista já está ativo (selfie válida por 12h).');
+                return;
+            }
+        } else if (!selfieAindaValida(habHoje)) {
+            msg('Selfie expirada — tire uma nova selfie e depois a foto do veículo.', 'error');
+            trocar = false;
         }
         try {
-            preCarregarOcr();   // baixa o Tesseract em paralelo enquanto tira as fotos
-            msg('Iniciando câmera...');
-            const selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
+            preCarregarOcr();
+            const reutilizarSelfie = trocar && selfieAindaValida(habHoje);
+            msg(reutilizarSelfie ? 'Troca de veículo: só foto do carro (selfie válida por 12h).' : 'Iniciando câmera...');
+            let selfie = null;
+            if (!reutilizarSelfie) {
+                selfie = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo: 'Selfie de identificação' });
+            }
             const carro = await capturarFoto({ tipo: 'carros', facing: 'environment', ocrPlaca: true, titulo: 'Foto do veículo — placa dianteira' });
-            veiculoPend = { selfie, carro };
+            veiculoPend = { selfie, carro, reutilizarSelfie, trocar };
             document.getElementById('veicPlaca').value = (carro.placa || '').toUpperCase();
-            document.getElementById('veicTag').value = '';
+            document.getElementById('veicTag').value = reutilizarSelfie && habHoje?.tag ? habHoje.tag : '';
             document.getElementById('veicMsg').textContent = '';
             const prev = document.getElementById('veicFoto');
             if (carro.url) { prev.src = carro.url; prev.style.display = 'block'; } else { prev.style.display = 'none'; }
+            const tituloVeic = document.getElementById('veicTitulo');
+            const btnVeic = document.getElementById('btnConfirmarVeic');
+            if (tituloVeic) tituloVeic.textContent = reutilizarSelfie ? 'Trocar veículo' : 'Confirmar veículo';
+            if (btnVeic) btnVeic.textContent = reutilizarSelfie ? 'Confirmar troca' : 'Ativar';
             document.getElementById('modalPerfil').style.display = 'none';
             document.getElementById('modalVeiculo').style.display = 'flex';
         } catch (e) {
@@ -635,12 +657,20 @@
         const set = (t, c) => { out.textContent = t; out.style.color = c || ''; };
         if (placa.replace(/[^A-Z0-9]/g, '').length < 7) return set('Confira a placa (7 caracteres).', '#ef9a9a');
         set('Ativando...', '');
-        const { selfie, carro } = veiculoPend;
+        const { selfie, carro, reutilizarSelfie } = veiculoPend;
         const body = {
             placa, tag,
             foto_carro_url: carro.url, foto_carro_lat: carro.lat, foto_carro_lng: carro.lng, foto_carro_em: carro.em,
-            selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
         };
+        if (reutilizarSelfie) {
+            body.reutilizar_selfie = true;
+            body.troca_veiculo = true;
+        } else {
+            body.selfie_url = selfie.url;
+            body.selfie_lat = selfie.lat;
+            body.selfie_lng = selfie.lng;
+            body.selfie_em = selfie.em;
+        }
         try {
             const r = await fetchWithAuth('/api/habilitacao', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
@@ -649,7 +679,7 @@
             await carregarHabilitacao();
             veiculoPend = null;
             document.getElementById('modalVeiculo').style.display = 'none';
-            msg('Modo motorista ativado!');
+            msg(reutilizarSelfie ? 'Veículo trocado!' : 'Modo motorista ativado!');
             // Motorista precisa do push para ser avisado de pedidos por perto
             // (inclusive com o app fechado). Gesto válido: pede a permissão aqui.
             registrarPush();

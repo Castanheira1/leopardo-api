@@ -161,6 +161,24 @@ function validarSenha6Digitos(senha) {
 }
 
 const CODIGOS_PROJETO = ["S11D", "SALOBO", "CARAJAS", "SOSSEGO"];
+const HAB_SELFIE_HORAS = 12;
+
+function sqlSelfieValida(alias = "") {
+  const p = alias ? `${alias}.` : "";
+  return `COALESCE(${p}selfie_em, ${p}created_at) > NOW() - INTERVAL '${HAB_SELFIE_HORAS} hours'`;
+}
+
+async function buscarSelfieRecente(userId) {
+  const { rows } = await pool.query(
+    `SELECT selfie_url, selfie_lat, selfie_lng, selfie_em
+     FROM habilitacoes_motorista
+     WHERE motorista_id = $1 AND selfie_url IS NOT NULL
+       AND ${sqlSelfieValida("")}
+     ORDER BY COALESCE(selfie_em, created_at) DESC LIMIT 1`,
+    [userId]
+  );
+  return rows[0] || null;
+}
 
 async function resolverProjetoId(projeto_id, projeto_codigo) {
   if (projeto_codigo) {
@@ -453,7 +471,7 @@ async function notificarMotoristasProximos(ped) {
          FROM habilitacoes_motorista h
          JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
          JOIN usuarios um ON um.id = h.motorista_id
-         WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
+         WHERE h.status = 'ativa' AND ${sqlSelfieValida("h")}
            AND h.motorista_id <> $3
            AND um.projeto_id = $6
            AND COALESCE(um.ativo, TRUE) = TRUE
@@ -895,7 +913,7 @@ app.get("/api/habilitacao/hoje", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT * FROM habilitacoes_motorista
        WHERE motorista_id = $1 AND status = 'ativa'
-         AND created_at > NOW() - INTERVAL '24 hours'
+         AND ${sqlSelfieValida("")}
        ORDER BY created_at DESC LIMIT 1`,
       [req.user.id]
     );
@@ -908,14 +926,34 @@ app.get("/api/habilitacao/hoje", verificarAuth, async (req, res) => {
 
 app.post("/api/habilitacao", verificarAuth, async (req, res) => {
   const {
-    placa, tag,
+    placa, tag, reutilizar_selfie, troca_veiculo,
     foto_carro_url, foto_carro_lat, foto_carro_lng, foto_carro_em,
     selfie_url, selfie_lat, selfie_lng, selfie_em,
   } = req.body;
 
   if (!placa) return res.status(400).json({ error: "Placa é obrigatória" });
   if (!foto_carro_url) return res.status(400).json({ error: "Foto do carro é obrigatória" });
-  if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória" });
+
+  let selfieFinal = {
+    url: selfie_url || null,
+    lat: selfie_lat || null,
+    lng: selfie_lng || null,
+    em: selfie_em || null,
+  };
+
+  if (!selfieFinal.url && (reutilizar_selfie || troca_veiculo)) {
+    const recent = await buscarSelfieRecente(req.user.id);
+    if (!recent) {
+      return res.status(400).json({ error: "Selfie expirada ou inexistente. Tire uma nova selfie (válida por 12h)." });
+    }
+    selfieFinal = {
+      url: recent.selfie_url,
+      lat: recent.selfie_lat,
+      lng: recent.selfie_lng,
+      em: recent.selfie_em,
+    };
+  }
+  if (!selfieFinal.url) return res.status(400).json({ error: "Selfie é obrigatória" });
 
   try {
     // Encerra habilitações ativas anteriores (troca de carro / nova ativação)
@@ -935,7 +973,7 @@ app.post("/api/habilitacao", verificarAuth, async (req, res) => {
       [
         req.user.id, placa.toUpperCase().trim(), tag || null,
         foto_carro_url, foto_carro_lat || null, foto_carro_lng || null, foto_carro_em || new Date(),
-        selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
+        selfieFinal.url, selfieFinal.lat || null, selfieFinal.lng || null, selfieFinal.em || new Date(),
       ]
     );
     res.json(rows[0]);
@@ -949,7 +987,7 @@ const habilitacaoAtiva = async (userId) => {
   const { rows } = await pool.query(
     `SELECT * FROM habilitacoes_motorista
      WHERE motorista_id = $1 AND status = 'ativa'
-       AND created_at > NOW() - INTERVAL '24 hours'
+       AND ${sqlSelfieValida("")}
      ORDER BY created_at DESC LIMIT 1`,
     [userId]
   );
@@ -1350,7 +1388,7 @@ app.get("/api/propostas", verificarAuth, async (req, res) => {
          SELECT selfie_url, selfie_em, foto_carro_url, foto_carro_em, placa, tag
          FROM habilitacoes_motorista
          WHERE motorista_id = pr.de_usuario_id AND status = 'ativa'
-           AND created_at > NOW() - INTERVAL '24 hours'
+           AND ${sqlSelfieValida("")}
          ORDER BY created_at DESC LIMIT 1
        ) hped ON pr.pedido_id IS NOT NULL
        WHERE pr.de_usuario_id = $1 OR pr.para_usuario_id = $1
@@ -1589,7 +1627,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
        JOIN usuarios u ON u.id = l.usuario_id
        JOIN habilitacoes_motorista h
          ON h.motorista_id = u.id AND h.status = 'ativa'
-            AND h.created_at > NOW() - INTERVAL '24 hours'
+            AND ${sqlSelfieValida("h")}
        JOIN caronas ca ON ca.motorista_id = u.id AND ca.status = 'ativa'
        WHERE l.disponivel = TRUE
          AND COALESCE(u.ativo, TRUE) = TRUE
@@ -2102,7 +2140,7 @@ app.get("/api/admin/push-status", verificarAuth, carregarAdminEscopo, async (req
        FROM habilitacoes_motorista h
        JOIN usuarios u ON u.id = h.motorista_id
        LEFT JOIN localizacoes_online l ON l.usuario_id = u.id
-       WHERE h.status = 'ativa' AND h.created_at > NOW() - INTERVAL '24 hours'
+       WHERE h.status = 'ativa' AND ${sqlSelfieValida("h")}
          AND u.projeto_id = $1 AND COALESCE(u.ativo, TRUE) = TRUE
        ORDER BY u.id, h.created_at DESC`,
       [pid]

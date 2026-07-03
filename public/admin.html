@@ -239,7 +239,7 @@ async function carregarPushStatus() {
             const push = +m.inscricoes_push > 0 ? `push OK (${m.inscricoes_push})` : 'SEM push';
             const loc = m.localizacao_em ? `loc ${m.localizacao_min} min` : 'sem loc';
             return `<div class="agendamento-item"><div class="agendamento-header"><strong>${m.nome}</strong><span class="badge badge-ativo">${m.matricula}</span></div><small>${push} • ${loc}</small></div>`;
-        }).join('') || '<p class="cam-hint">Nenhum motorista habilitado nas últimas 24h.</p>';
+        }).join('') || '<p class="cam-hint">Nenhum motorista habilitado nas últimas 12h.</p>';
     } catch (_) {}
 }
 
