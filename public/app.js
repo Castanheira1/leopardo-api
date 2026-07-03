@@ -194,7 +194,7 @@ function capturarFoto(opts = {}) {
             <div class="cam-box">
                 <h3>${titulo}</h3>
                 <video class="cam-video" autoplay playsinline muted></video>
-                <p class="cam-hint">${hintTexto} • foto ao vivo (não é possível anexar)</p>
+                <p class="cam-hint">${hintTexto} • só câmera ao vivo (galeria bloqueada)</p>
                 <div class="cam-actions">
                     <button type="button" class="btn btn-secondary cam-cancel">Cancelar</button>
                     <button type="button" class="btn btn-primary cam-shot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Capturar</button>
@@ -235,6 +235,8 @@ function capturarFoto(opts = {}) {
                 const fd = new FormData();
                 fd.append('foto', blob, `${tipo}.jpg`);
                 fd.append('tipo', tipo);
+                fd.append('capturado_em', em);
+                fd.append('origem', 'camera');
                 const resp = await fetchWithAuth('/api/fotos', { method: 'POST', body: fd });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Falha no upload');
@@ -247,75 +249,51 @@ function capturarFoto(opts = {}) {
             resolve({ url, lat: loc.lat, lng: loc.lng, em, placa });
         }
 
-        // Fallback iPhone/PWA: quando a câmera web (getUserMedia) não existe ou não
-        // abre — comum no iOS em app instalado ou permissão negada — usa a câmera
-        // NATIVA via input capture. Continua sendo foto tirada na hora: o capture
-        // abre direto a câmera do aparelho, não a galeria.
-        function usarCameraNativa(motivo) {
-            if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
-            video.style.display = 'none';
-            status.textContent = motivo || '';
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            // setAttribute (não a propriedade): é o ATRIBUTO html que o iOS lê
-            // para abrir a câmera direto em vez da galeria.
-            input.setAttribute('capture', facing === 'user' ? 'user' : 'environment');
-            input.style.display = 'none';
-            overlay.appendChild(input);
-            btnShot.textContent = 'Abrir câmera';
-            btnShot.onclick = () => input.click();
-            input.onchange = async () => {
-                const file = input.files && input.files[0];
-                if (!file) return;
-                const url = URL.createObjectURL(file);
-                try {
-                    status.textContent = 'Processando...';
-                    const img = new Image();
-                    await new Promise((ok, err) => {
-                        img.onload = ok;
-                        img.onerror = () => err(new Error('Não deu para ler a foto. Tente de novo.'));
-                        img.src = url;
-                    });
-                    await processarEnviar(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
-                } catch (e) {
-                    status.textContent = 'Erro: ' + e.message;
-                } finally { URL.revokeObjectURL(url); }
-            };
-        }
+        const falhaCamera = (motivo) => {
+            encerrar();
+            reject(new Error(motivo || 'Não foi possível abrir a câmera. Libere o acesso nas configurações do navegador. Só é permitida foto ao vivo — não é possível anexar da galeria.'));
+        };
 
         btnShot.onclick = async () => {
             try {
                 status.textContent = 'Processando...';
-                // iOS às vezes demora a soltar as dimensões do vídeo — esperar o
-                // metadata evita capturar uma selfie preta de 0x0.
                 if (!video.videoWidth) {
                     await new Promise((ok) => {
                         video.addEventListener('loadedmetadata', ok, { once: true });
                         setTimeout(ok, 2000);
                     });
                 }
-                await processarEnviar(video, video.videoWidth || 720, video.videoHeight || 960);
+                if (!video.videoWidth) {
+                    return falhaCamera('A câmera não iniciou. Feche e abra de novo, ou libere o acesso à câmera.');
+                }
+                await processarEnviar(video, video.videoWidth, video.videoHeight);
             } catch (e) {
                 status.textContent = 'Erro: ' + e.message;
             }
         };
 
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({
-                video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 960 } },
-                audio: false,
-            })
-                .then((s) => {
-                    stream = s;
-                    video.srcObject = s;
-                    // iOS nem sempre respeita o autoplay mesmo com playsinline+muted.
-                    const p = video.play(); if (p && p.catch) p.catch(() => {});
-                })
-                .catch(() => usarCameraNativa('A câmera do navegador não abriu — toque em "Abrir câmera" para usar a câmera do aparelho.'));
-        } else {
-            usarCameraNativa('Toque em "Abrir câmera" para tirar a foto com a câmera do aparelho.');
+        async function iniciarCamera() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                return falhaCamera('Câmera ao vivo indisponível neste navegador.');
+            }
+            const tentativas = [
+                { video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 960 } }, audio: false },
+                { video: { facingMode: facing }, audio: false },
+                { video: true, audio: false },
+            ];
+            for (const opts of tentativas) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(opts);
+                    video.srcObject = stream;
+                    const p = video.play();
+                    if (p && p.catch) p.catch(() => {});
+                    return;
+                } catch (_) { /* próxima tentativa */ }
+            }
+            falhaCamera();
         }
+
+        iniciarCamera();
     });
 }
 

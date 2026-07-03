@@ -901,6 +901,17 @@ app.patch("/api/perfil", verificarAuth, async (req, res) => {
 // A pasta separa selfies/carros dentro do mesmo bucket.
 app.post("/api/fotos", verificarAuth, upload.single("foto"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Foto é obrigatória" });
+  if (req.body.origem !== "camera") {
+    return res.status(400).json({ error: "Só é permitida foto capturada ao vivo pela câmera." });
+  }
+  const capturado = req.body.capturado_em ? new Date(req.body.capturado_em) : null;
+  if (!capturado || Number.isNaN(capturado.getTime())) {
+    return res.status(400).json({ error: "Carimbo de captura inválido." });
+  }
+  const diffMs = Date.now() - capturado.getTime();
+  if (diffMs < -5000 || diffMs > 120000) {
+    return res.status(400).json({ error: "Foto expirada ou inválida. Tire uma nova foto com a câmera." });
+  }
   const pasta = ["selfies", "carros"].includes(req.body.tipo) ? req.body.tipo : "outros";
   const url = await uploadToSupabase(req.file, pasta);
   if (!url) return res.status(500).json({ error: "Falha ao salvar a foto" });
