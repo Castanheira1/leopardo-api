@@ -334,46 +334,85 @@ function criarMarcador(opts = {}) {
     };
 }
 
-// Rotas modernas (Route.computeRoutes) — substitui DirectionsService + DirectionsRenderer.
+// Rotas: Route.computeRoutes (novo) com fallback para DirectionsService (legado).
 function criarRotaControle(map, polylineOptions = {}) {
     const estilo = { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95, ...polylineOptions };
     let polylines = [];
+    let dirRenderer = null;
+
+    function calcularLegado(origem, destino) {
+        const ds = new google.maps.DirectionsService();
+        return new Promise((resolve, reject) => {
+            ds.route({
+                origin: normalizarLatLng(origem),
+                destination: normalizarLatLng(destino),
+                travelMode: google.maps.TravelMode.DRIVING,
+            }, (result, status) => {
+                if (status === google.maps.DirectionsStatus.OK) resolve(result);
+                else reject(new Error(String(status)));
+            });
+        });
+    }
+
+    function desenharLegado(resp) {
+        if (!map) return;
+        dirRenderer = dirRenderer || new google.maps.DirectionsRenderer({
+            suppressMarkers: true,
+            preserveViewport: true,
+            polylineOptions: estilo,
+        });
+        dirRenderer.setMap(map);
+        dirRenderer.setDirections(resp);
+    }
 
     const ctrl = {
         async calcular(origem, destino) {
             ctrl.limpar();
-            const { routes } = await _RouteClass.computeRoutes({
-                origin: normalizarLatLng(origem),
-                destination: normalizarLatLng(destino),
-                travelMode: 'DRIVING',
-                fields: ['path', 'distance', 'duration', 'legs'],
-            });
-            if (!routes?.length) throw new Error('sem rota');
-            const route = routes[0];
-            if (map) {
-                polylines = route.createPolylines() || [];
-                polylines.forEach((pl) => {
-                    if (pl.setOptions) pl.setOptions(estilo);
-                    pl.setMap(map);
+            const o = normalizarLatLng(origem);
+            const d = normalizarLatLng(destino);
+            try {
+                const { routes } = await _RouteClass.computeRoutes({
+                    origin: o,
+                    destination: d,
+                    travelMode: 'DRIVING',
+                    fields: ['path', 'distance', 'duration', 'legs'],
                 });
+                if (!routes?.length) throw new Error('sem rota');
+                const route = routes[0];
+                if (map) {
+                    polylines = route.createPolylines() || [];
+                    if (!polylines.length) throw new Error('sem polyline');
+                    polylines.forEach((pl) => {
+                        if (pl.setOptions) pl.setOptions(estilo);
+                        pl.setMap(map);
+                    });
+                }
+                return respostaRotaLegada(route);
+            } catch (_) {
+                const resp = await calcularLegado(o, d);
+                desenharLegado(resp);
+                return resp;
             }
-            return respostaRotaLegada(route);
         },
         limpar() {
             polylines.forEach((pl) => pl.setMap(null));
             polylines = [];
+            if (dirRenderer) dirRenderer.setMap(null);
         },
         setMap(m) {
             if (!m) ctrl.limpar();
         },
         setDirections(resp) {
-            if (resp?._route && map) {
-                ctrl.limpar();
+            if (!map) return;
+            ctrl.limpar();
+            if (resp?._route) {
                 polylines = resp._route.createPolylines() || [];
                 polylines.forEach((pl) => {
                     if (pl.setOptions) pl.setOptions(estilo);
                     pl.setMap(map);
                 });
+            } else if (resp?.routes?.length) {
+                desenharLegado(resp);
             }
         },
     };
@@ -381,13 +420,28 @@ function criarRotaControle(map, polylineOptions = {}) {
 }
 
 // Autocomplete moderno (PlaceAutocompleteElement) no lugar do input legado.
-async function ligarPlaceAutocomplete(inputEl, { map, onPlace } = {}) {
+async function ligarPlaceAutocomplete(inputEl, { map, onPlace, onFocus } = {}) {
     const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
+    const wrap = document.createElement('div');
+    wrap.className = 'map-search-wrap';
+    inputEl.parentNode.insertBefore(wrap, inputEl);
+    wrap.appendChild(inputEl);
+
     const pac = new PlaceAutocompleteElement({});
     pac.placeholder = inputEl.placeholder || '';
-    if (inputEl.className) pac.className = inputEl.className;
+    pac.className = 'map-search-float';
     inputEl.style.display = 'none';
-    inputEl.insertAdjacentElement('afterend', pac);
+    wrap.appendChild(pac);
+
+    const fecharTeclado = () => {
+        try { pac.blur(); } catch (_) {}
+        const interno = pac.shadowRoot?.querySelector('input, [role="combobox"]');
+        if (interno) try { interno.blur(); } catch (_) {}
+        if (document.activeElement && document.activeElement !== document.body) {
+            try { document.activeElement.blur(); } catch (_) {}
+        }
+    };
+
     if (map) {
         const atualizarBias = () => {
             const b = map.getBounds();
@@ -396,6 +450,7 @@ async function ligarPlaceAutocomplete(inputEl, { map, onPlace } = {}) {
         atualizarBias();
         map.addListener('bounds_changed', atualizarBias);
     }
+    pac.addEventListener('focus', () => { if (onFocus) onFocus(); }, true);
     pac.addEventListener('gmp-select', async ({ placePrediction }) => {
         try {
             const place = placePrediction.toPlace();
@@ -407,6 +462,7 @@ async function ligarPlaceAutocomplete(inputEl, { map, onPlace } = {}) {
                 geometry: { location: posicaoLegada({ position: place.location }) },
             });
             pac.value = '';
+            fecharTeclado();
         } catch (_) { /* seleção inválida */ }
     });
     return pac;
@@ -472,17 +528,19 @@ function capturarFoto(opts = {}) {
 
     return new Promise((resolve, reject) => {
         const overlay = document.createElement('div');
-        overlay.className = 'cam-overlay';
+        overlay.className = 'cam-overlay cam-live';
         overlay.innerHTML = `
             <div class="cam-box">
                 <h3>${titulo}</h3>
-                <video class="cam-video" autoplay playsinline muted></video>
-                <p class="cam-hint">${hintTexto} • só câmera ao vivo (galeria bloqueada)</p>
+                <div class="cam-video-wrap">
+                    <video class="cam-video ${facing === 'user' ? 'cam-video-espelho' : ''}" autoplay playsinline muted></video>
+                    <p class="cam-hint">${hintTexto} • só câmera ao vivo (galeria bloqueada)</p>
+                </div>
+                <div class="cam-status"></div>
                 <div class="cam-actions">
                     <button type="button" class="btn btn-secondary cam-cancel">Cancelar</button>
                     <button type="button" class="btn btn-primary cam-shot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Capturar</button>
                 </div>
-                <div class="cam-status"></div>
             </div>`;
         document.body.appendChild(overlay);
 

@@ -2077,8 +2077,10 @@ app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
     const v = (await pool.query(
       `SELECT v.*, m.nome AS motorista_nome, m.telefone AS motorista_telefone, m.sexo AS motorista_sexo,
               pa.nome AS passageiro_nome, pa.telefone AS passageiro_telefone, pa.sexo AS passageiro_sexo,
-              h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url AS motorista_selfie,
-              pr.selfie_url AS passageiro_selfie, pd.selfie_url AS pedido_selfie
+              h.placa, h.tag, h.foto_carro_url, h.foto_carro_em,
+              h.selfie_url AS motorista_selfie, h.selfie_em AS motorista_selfie_em,
+              pr.selfie_url AS passageiro_selfie, pr.selfie_em AS passageiro_selfie_em,
+              pd.selfie_url AS pedido_selfie, pd.selfie_em AS pedido_selfie_em
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id

@@ -499,6 +499,7 @@ a.btn { display: inline-block; text-align: center; }
 /* ============ VAP CARONA ============ */
 
 /* Buscador de endereço (flutua sobre o mapa) */
+.map-search-hidden { display: none; }
 .map-search {
     width: 100%;
     padding: 11px 12px;
@@ -529,18 +530,32 @@ a.btn { display: inline-block; text-align: center; }
 .map-search-float:focus {
     border-radius: 24px;
 }
-gmp-place-autocomplete.map-search-float {
+/* Wrapper do PlaceAutocompleteElement: altura fixa, sem sobra branca abaixo da borda */
+.map-search-wrap {
     position: absolute;
     top: 10px;
     left: 10px;
     right: 10px;
-    width: auto;
     z-index: 40;
-    margin: 0;
-    --gmp-mat-color-surface: #fff;
-    --gmp-mat-color-on-surface: #111;
+    height: 48px;
+    overflow: hidden;
     border-radius: 24px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    background: #fff;
+}
+gmp-place-autocomplete.map-search-float {
+    display: block;
+    position: static;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 24px;
+    box-shadow: none;
+    --gmp-mat-color-surface: #fff;
+    --gmp-mat-color-on-surface: #111;
+    --gmp-mat-color-outline: #e2e8f0;
 }
 
 /* Mapa em satélite ocupando a tela + sheet de ação por cima (pedir/oferecer) */
@@ -897,6 +912,53 @@ body.theme-dark {
 }
 .cam-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
 .cam-status { margin-top: 8px; font-size: 0.85rem; color: #EAD298; min-height: 18px; }
+
+/* Câmera ao vivo em tela cheia (selfie/foto do carro) — melhor no celular */
+.cam-overlay.cam-live { align-items: stretch; justify-content: stretch; background: #000; }
+.cam-live .cam-box {
+    max-width: none;
+    max-height: none;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    padding: calc(10px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    animation: none;
+}
+.cam-live .cam-box h3 { margin: 0 0 8px; font-size: 1.05rem; text-align: center; }
+.cam-live .cam-video-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+}
+.cam-live .cam-video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: cover;
+    border-radius: 14px;
+}
+.cam-video-espelho { transform: scaleX(-1); }   /* selfie: espelha como o usuário espera */
+.cam-live .cam-hint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 10px;
+    margin: 0;
+    padding: 6px 12px;
+    text-align: center;
+    color: #fff;
+    font-size: 0.8rem;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+}
+.cam-live .cam-actions { margin-top: 10px; }
+.cam-live .cam-actions .btn { flex: 1; padding: 14px; font-size: 1rem; }
 
 /* Modal de perfil (reusa cam-overlay/cam-box, mas alinhado à esquerda) */
 .perfil-box { text-align: left; }

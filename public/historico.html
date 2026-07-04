@@ -89,14 +89,14 @@
         }
 
         const fotos = [
-            { url: v.foto_carro_url, t: 'Carro ' + (v.placa || ''), em: v.foto_carro_em },
-            { url: v.motorista_selfie, t: 'Selfie motorista' },
-            { url: v.passageiro_selfie || v.pedido_selfie, t: 'Selfie passageiro' },
+            { url: v.motorista_selfie, t: 'Selfie do motorista', quem: esc(v.motorista_nome || ''), em: v.motorista_selfie_em },
+            { url: v.passageiro_selfie || v.pedido_selfie, t: 'Selfie do passageiro', quem: esc(v.passageiro_nome || ''), em: v.passageiro_selfie_em || v.pedido_selfie_em },
+            { url: v.foto_carro_url, t: 'Foto do veículo', quem: v.placa ? esc(v.placa) : '', em: v.foto_carro_em },
         ].filter(f => f.url);
         document.getElementById('fotosSeg').innerHTML = fotos.map(f => `
             <div class="foto-card">
                 <img src="${esc(f.url)}">
-                <small>${esc(f.t)}${f.em ? ' • ' + fmtData(f.em) : ''}</small>
+                <small><strong>${esc(f.t)}</strong>${f.quem ? ' — ' + f.quem : ''}<br>${f.em ? fmtData(f.em) : 'Sem data registrada'}</small>
             </div>`).join('') || '<p class="cam-hint">Sem fotos registradas.</p>';
 
         document.getElementById('detalhe').scrollIntoView({ behavior: 'smooth' });
