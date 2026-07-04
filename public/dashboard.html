@@ -30,6 +30,30 @@
             border-radius: 10px;
             text-align: center;
         }
+        /* Favoritos (lista leve, estilo Uber) */
+        .fav-filtro {
+            width: 100%; box-sizing: border-box; margin: 4px 0 10px;
+            padding: 10px 12px; border-radius: 10px;
+            border: 1px solid rgba(234,210,152,.35);
+            background: #fff; color: #111; font-size: 15px;
+        }
+        .fav-lista { max-height: 52vh; overflow-y: auto; text-align: left; }
+        .fav-grupo {
+            font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+            color: #EAD298; opacity: .85; margin: 12px 2px 6px; font-weight: 700;
+        }
+        .fav-item {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            background: rgba(255,255,255,.05); border: 1px solid rgba(234,210,152,.18);
+            border-radius: 12px; padding: 11px 12px; margin-bottom: 7px;
+            color: #fff; font-size: 15px; text-align: left; cursor: pointer;
+        }
+        .fav-item:active { background: rgba(234,210,152,.16); }
+        .fav-item .fav-pin { flex-shrink: 0; color: #EAD298; display: flex; }
+        .fav-item .fav-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fav-item .fav-live { font-size: 10px; color: #7fd4a0; letter-spacing: .04em; flex-shrink: 0; }
+        .fav-item.fav-buscando { opacity: .55; pointer-events: none; }
+        .fav-vazio { color: #cbd5d5; text-align: center; padding: 18px 6px; font-size: 14px; }
     </style>
 </head>
 <body class="theme-dark">
@@ -46,6 +70,7 @@
                     <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
                     <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
                     <a href="historico.html" class="nav-menu-item">Histórico</a>
+                    <button onclick="abrirFavoritos()" class="nav-menu-item">Favoritos</button>
                     <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
                     <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
                     <button onclick="logout()" class="nav-menu-item">Sair</button>
@@ -297,6 +322,20 @@
         </div>
     </div>
 
+    <!-- Favoritos: locais do projeto (arquivo locais-favoritos.json), resolvidos AO VIVO no Google -->
+    <div id="painelFavoritos" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelFavoritos')">
+        <div class="cam-box perfil-box painel-box">
+            <h3>Favoritos</h3>
+            <p class="cam-hint" id="favSubtitulo">Toque num local para marcar como destino — igual à busca.</p>
+            <input id="favFiltro" class="fav-filtro" placeholder="Filtrar locais…" oninput="filtrarFavoritos()">
+            <div id="listaFavoritos" class="fav-lista"><div class="fav-vazio">Carregando…</div></div>
+            <div class="sol-actions">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="descobrirLocaisAoVivo()" id="btnFavDescobrir">Buscar novos locais no mapa</button>
+                <button type="button" class="btn btn-secondary" onclick="fecharPainel('painelFavoritos')">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Tela inicial: escolher o papel (trava no modo escolhido) -->
     <div id="telaPapel" class="papel-overlay" style="display:none;">
         <div class="papel-box">
@@ -464,6 +503,202 @@
     function painelAberto() {
         return document.getElementById('painelPassageiro').style.display === 'flex'
             || document.getElementById('painelMotorista').style.display === 'flex';
+    }
+
+    /* -------- Favoritos: locais do projeto, resolvidos AO VIVO no Google --------
+       A lista vem de /locais-favoritos.json (por projeto). Ao tocar num local o app
+       consulta a API do Places NA HORA (findPlaceFromQuery) — se o lugar mudou de
+       posição ou ganhou registro novo no Google, o app usa a posição atualizada.
+       As coordenadas "ref" do arquivo são só um plano B se o Google não encontrar. */
+    let favCatalogo = null;        // JSON completo
+    let favProjeto = null;         // bloco do projeto do usuário
+    let favLocais = [];            // lista achatada [{nome, busca, ref, grupo}]
+    let favDescobertos = [];       // achados ao vivo pela descoberta
+
+    async function carregarCatalogoFavoritos() {
+        if (favCatalogo) return favCatalogo;
+        const r = await fetch('/locais-favoritos.json', { cache: 'no-store' });
+        if (!r.ok) throw new Error('catalogo');
+        favCatalogo = await r.json();
+        return favCatalogo;
+    }
+
+    function montarFavLocais() {
+        favLocais = [];
+        (favProjeto?.grupos || []).forEach((gr) => {
+            (gr.locais || []).forEach((l) => favLocais.push({ ...l, grupo: gr.titulo }));
+        });
+    }
+
+    async function abrirFavoritos() {
+        fecharMenu();
+        document.getElementById('painelFavoritos').style.display = 'flex';
+        const lista = document.getElementById('listaFavoritos');
+        try {
+            await carregarCatalogoFavoritos();
+            const cod = (user?.projeto_codigo || '').toUpperCase();
+            favProjeto = favCatalogo.projetos?.[cod] || null;
+            if (!favProjeto) {
+                document.getElementById('favSubtitulo').textContent =
+                    'Seu projeto ainda não tem locais cadastrados. Defina o projeto no Perfil.';
+                lista.innerHTML = '<div class="fav-vazio">Sem locais para este projeto.</div>';
+                return;
+            }
+            document.getElementById('favSubtitulo').textContent =
+                `${favProjeto.nome} — toque num local para marcar como destino.`;
+            montarFavLocais();
+            renderFavoritos();
+        } catch (_) {
+            lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar os favoritos. Verifique a internet.</div>';
+        }
+    }
+
+    const FAV_PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>';
+
+    function renderFavoritos() {
+        const lista = document.getElementById('listaFavoritos');
+        const filtro = (document.getElementById('favFiltro').value || '').trim().toLowerCase();
+        const todos = favLocais.concat(favDescobertos);
+        const visiveis = filtro ? todos.filter((l) => l.nome.toLowerCase().includes(filtro)) : todos;
+        if (!visiveis.length) {
+            lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
+            return;
+        }
+        let html = '';
+        let grupoAtual = null;
+        visiveis.forEach((l) => {
+            if (l.grupo !== grupoAtual) {
+                grupoAtual = l.grupo;
+                html += `<div class="fav-grupo">${esc(grupoAtual)}</div>`;
+            }
+            const key = esc(l.nome).replace(/"/g, '&quot;');
+            html += `<button type="button" class="fav-item" data-nome="${key}" onclick="escolherFavorito(this)">
+                <span class="fav-pin">${FAV_PIN}</span>
+                <span class="fav-nome">${esc(l.nome)}</span>
+                <span class="fav-live">AO VIVO</span>
+            </button>`;
+        });
+        lista.innerHTML = html;
+    }
+
+    function filtrarFavoritos() { renderFavoritos(); }
+
+    function seletorAtivo() {
+        const papel = localStorage.getItem('papel');
+        return papel === 'motorista' ? selOfe : selPed;
+    }
+
+    function favLocationBias() {
+        const reg = favProjeto?.regiao;
+        if (!reg) return undefined;
+        return { center: { lat: reg.lat, lng: reg.lng }, radius: (reg.raio_km || 40) * 1000 };
+    }
+
+    // Resolve o local AO VIVO no Google. Ordem: findPlaceFromQuery (posição atual
+    // do lugar) → textSearch → coordenada "ref" do arquivo (último recurso).
+    function resolverLocalAoVivo(local) {
+        return new Promise(async (resolve) => {
+            try {
+                g = g || await carregarMaps();
+                const sel = seletorAtivo();
+                const svc = new g.maps.places.PlacesService(sel ? sel.map : document.createElement('div'));
+                const bias = favLocationBias();
+                svc.findPlaceFromQuery(
+                    { query: local.busca || local.nome, fields: ['name', 'geometry'], locationBias: bias ? new g.maps.Circle(bias) : undefined },
+                    (res, status) => {
+                        if (status === 'OK' && res && res[0]?.geometry) {
+                            return resolve({
+                                lat: res[0].geometry.location.lat(),
+                                lng: res[0].geometry.location.lng(),
+                                nome: res[0].name || local.nome,
+                            });
+                        }
+                        svc.textSearch(
+                            { query: local.busca || local.nome, location: bias ? bias.center : undefined, radius: bias ? bias.radius : undefined },
+                            (res2, status2) => {
+                                if (status2 === 'OK' && res2 && res2[0]?.geometry) {
+                                    return resolve({
+                                        lat: res2[0].geometry.location.lat(),
+                                        lng: res2[0].geometry.location.lng(),
+                                        nome: res2[0].name || local.nome,
+                                    });
+                                }
+                                if (local.ref) return resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome, aproximado: true });
+                                resolve(null);
+                            }
+                        );
+                    }
+                );
+            } catch (_) {
+                if (local.ref) return resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome, aproximado: true });
+                resolve(null);
+            }
+        });
+    }
+
+    async function escolherFavorito(btn) {
+        const nome = btn.dataset.nome;
+        const local = favLocais.concat(favDescobertos).find((l) => l.nome === nome);
+        if (!local) return;
+        const sel = seletorAtivo();
+        if (!sel) { msg('Abra o mapa primeiro para marcar o destino.', 'error'); return; }
+        btn.classList.add('fav-buscando');
+        const achado = await resolverLocalAoVivo(local);
+        btn.classList.remove('fav-buscando');
+        if (!achado) { msg('Local não encontrado no Google Maps agora. Tente a busca.', 'error'); return; }
+        fecharPainel('painelFavoritos');
+        sel.irPara({ lat: achado.lat, lng: achado.lng }, achado.nome);
+        if (achado.aproximado) msg(`${achado.nome}: usando posição aproximada (não achei no Google agora).`);
+    }
+
+    // Descoberta AO VIVO: varre o Google em volta do projeto procurando lugares
+    // novos (canteiro que mudou, local recém-criado) e soma à lista da sessão.
+    async function descobrirLocaisAoVivo() {
+        if (!favProjeto) return;
+        const botao = document.getElementById('btnFavDescobrir');
+        botao.disabled = true;
+        botao.textContent = 'Buscando no mapa…';
+        try {
+            g = g || await carregarMaps();
+            const sel = seletorAtivo();
+            const svc = new g.maps.places.PlacesService(sel ? sel.map : document.createElement('div'));
+            const bias = favLocationBias();
+            const consultas = favProjeto.descoberta || [];
+            const jaTem = new Set(favLocais.concat(favDescobertos).map((l) => l.nome.toLowerCase()));
+            for (const q of consultas) {
+                await new Promise((fim) => {
+                    svc.textSearch(
+                        { query: q, location: bias ? bias.center : undefined, radius: bias ? bias.radius : undefined },
+                        (res, status) => {
+                            if (status === 'OK' && res) {
+                                res.forEach((p) => {
+                                    if (!p.name || !p.geometry) return;
+                                    const k = p.name.toLowerCase();
+                                    if (jaTem.has(k)) return;
+                                    jaTem.add(k);
+                                    favDescobertos.push({
+                                        nome: p.name,
+                                        busca: p.name,
+                                        ref: { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() },
+                                        grupo: 'Encontrados agora no mapa',
+                                    });
+                                });
+                            }
+                            fim();
+                        }
+                    );
+                });
+            }
+            renderFavoritos();
+            msg(favDescobertos.length
+                ? `${favDescobertos.length} local(is) encontrados ao vivo no Google Maps.`
+                : 'Nenhum local novo além dos favoritos.');
+        } catch (_) {
+            msg('Não foi possível varrer o mapa agora.', 'error');
+        } finally {
+            botao.disabled = false;
+            botao.textContent = 'Buscar novos locais no mapa';
+        }
     }
 
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
@@ -927,6 +1162,8 @@
             map,
             getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
             getDestino: () => destino,
+            // Favoritos e afins: define o destino como se tivesse buscado na barra.
+            irPara: (pos, texto) => setDestino(pos, texto),
             recentrar,
             dica: () => dicaToque(true),
             limparRota,

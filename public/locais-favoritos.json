@@ -1,0 +1,104 @@
+{
+  "versao": 1,
+  "descricao": "Locais favoritos por projeto. O app resolve cada local AO VIVO na API do Google Places usando o campo 'busca' (com viés na região do projeto); 'ref' é só um fallback aproximado caso o Google não encontre. Para adicionar um projeto novo, copie o bloco do S11D e ajuste.",
+  "projetos": {
+    "S11D": {
+      "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
+      "regiao": { "lat": -6.428, "lng": -50.285, "raio_km": 45 },
+      "descoberta": ["S11D", "Vale S11D", "Serra Sul S11D", "Canteiro S11D", "Usina S11D"],
+      "grupos": [
+        {
+          "titulo": "Acessos e apoio",
+          "locais": [
+            { "nome": "Portaria S11D", "busca": "Portaria S11D", "ref": { "lat": -6.4545, "lng": -50.2081 } },
+            { "nome": "Central de Operações S11D", "busca": "Central de Operações S11D", "ref": { "lat": -6.4390, "lng": -50.2408 } },
+            { "nome": "Rodoviária Arara Azul — Usina", "busca": "Rodoviária Arara Azul Usina S11D", "ref": { "lat": -6.4469, "lng": -50.2417 } },
+            { "nome": "Restaurante Arara Azul — Usina", "busca": "Restaurante Arara Azul Usina S11D", "ref": { "lat": -6.4474, "lng": -50.2413 } },
+            { "nome": "Estação de Bombeiros", "busca": "Estação de Bombeiros S11D Canaã dos Carajás", "ref": { "lat": -6.4417, "lng": -50.2013 } },
+            { "nome": "Espaço Quali — Complexo Serra Sul", "busca": "Espaço Quali Complexo Serra Sul S11D", "ref": { "lat": -6.4520, "lng": -50.3146 } },
+            { "nome": "Área do Condomínio da Infraestrutura", "busca": "Área do Condomínio da Infraestrutura S11D", "ref": { "lat": -6.4392, "lng": -50.2419 } }
+          ]
+        },
+        {
+          "titulo": "Usina",
+          "locais": [
+            { "nome": "Usina A", "busca": "Usina A S11D", "ref": { "lat": -6.4478, "lng": -50.2478 } },
+            { "nome": "Usina B", "busca": "Usina B S11D", "ref": { "lat": -6.4472, "lng": -50.2492 } },
+            { "nome": "Britagem Terciária B", "busca": "Britagem Terciária B S11D", "ref": { "lat": -6.4438, "lng": -50.2440 } },
+            { "nome": "Britagem Terciária C", "busca": "Britagem Terciária C S11D", "ref": { "lat": -6.4430, "lng": -50.2452 } },
+            { "nome": "Pátio do Produto", "busca": "Pátio do Produto S11D", "ref": { "lat": -6.4405, "lng": -50.2360 } },
+            { "nome": "Pátio de Regularização", "busca": "Pátio de Regularização S11D", "ref": { "lat": -6.4415, "lng": -50.2485 } },
+            { "nome": "Armazém Mina — Usina", "busca": "Armazém Mina S11D", "ref": { "lat": -6.4452, "lng": -50.2380 } },
+            { "nome": "Retorno Usina", "busca": "Retorno Usina S11D", "ref": { "lat": -6.4345, "lng": -50.2380 } },
+            { "nome": "Oficina de Subconjuntos — Usina", "busca": "Oficina de Subconjuntos Usina Serra Sul S11D", "ref": { "lat": -6.4480, "lng": -50.2408 } },
+            { "nome": "Gaveteiro Central Usina", "busca": "Gaveteiro Central Usina S11D", "ref": { "lat": -6.4482, "lng": -50.2470 } }
+          ]
+        },
+        {
+          "titulo": "Mina — Serra Sul",
+          "locais": [
+            { "nome": "Mina de Ferro do Complexo Serra Sul", "busca": "Mina de Ferro do Complexo Serra Sul", "ref": { "lat": -6.4074, "lng": -50.3330 } },
+            { "nome": "Complexo Serra Sul (S11D)", "busca": "Complexo Serra Sul S11D", "ref": { "lat": -6.4160, "lng": -50.3180 } },
+            { "nome": "Britagem de Compactos", "busca": "Britagem de Compactos Serra Sul Vale", "ref": { "lat": -6.4185, "lng": -50.3265 } },
+            { "nome": "Mirante Britagem de Compactos", "busca": "Mirante Britagem de Compactos Serra Sul", "ref": { "lat": -6.4175, "lng": -50.3290 } },
+            { "nome": "Mirante do BSM — Mina S11D", "busca": "Mirante do BSM Mina S11D", "ref": { "lat": -6.4090, "lng": -50.3390 } },
+            { "nome": "SMD", "busca": "SMD S11D", "ref": { "lat": -6.4028, "lng": -50.3195 } },
+            { "nome": "Fase Zero", "busca": "Fase Zero S11D", "ref": { "lat": -6.4020, "lng": -50.3130 } },
+            { "nome": "Plantas Móveis de Peneiramento", "busca": "Plantas Móveis de Peneiramento S11D", "ref": { "lat": -6.4632, "lng": -50.3262 } },
+            { "nome": "Overland", "busca": "Overland S11D", "ref": { "lat": -6.4602, "lng": -50.3232 } },
+            { "nome": "Pilha de Estéril de S11D", "busca": "Pilha de Estéril de S11D", "ref": { "lat": -6.4572, "lng": -50.3222 } },
+            { "nome": "Pilha Norte", "busca": "Pilha Norte Vale S11D", "ref": { "lat": -6.3990, "lng": -50.3600 } }
+          ]
+        },
+        {
+          "titulo": "Oficinas e manutenção",
+          "locais": [
+            { "nome": "Oficina de Manutenção de Equipamentos", "busca": "Oficina de Manutenção de Equipamentos S11D", "ref": { "lat": -6.4212, "lng": -50.3162 } },
+            { "nome": "Oficina de Vulcanização (S11D)", "busca": "Oficina de Vulcanização S11D", "ref": { "lat": -6.4232, "lng": -50.3152 } }
+          ]
+        },
+        {
+          "titulo": "Canteiros e obras",
+          "locais": [
+            { "nome": "Canteiro 07 — Vale S11D", "busca": "Canteiro 07 Vale S11D", "ref": { "lat": -6.4518, "lng": -50.3138 } },
+            { "nome": "Canteiro 15 — Vale S11D", "busca": "Canteiro 15 Vale S11D", "ref": { "lat": -6.4440, "lng": -50.2522 } },
+            { "nome": "Canteiro Central 040 — Obras Civis", "busca": "Canteiro Central 040 Obras Civis S11D", "ref": { "lat": -6.4495, "lng": -50.2455 } },
+            { "nome": "Canteiro CBM — Usina", "busca": "Canteiro CBM Usina S11D", "ref": { "lat": -6.4402, "lng": -50.2472 } },
+            { "nome": "Canteiro CBM — Mina", "busca": "Canteiro CBM Mina S11D", "ref": { "lat": -6.4262, "lng": -50.3142 } },
+            { "nome": "Canteiro MS Terraplenagem", "busca": "Canteiro MS Terraplenagem S11D", "ref": { "lat": -6.4612, "lng": -50.3212 } },
+            { "nome": "Canteiro Gonçalves Dias", "busca": "Canteiro Gonçalves Dias S11D", "ref": { "lat": -6.4422, "lng": -50.2022 } },
+            { "nome": "SAO — Sistema de Apontamentos de Obras", "busca": "SAO Sistema de Apontamentos de Obras S11D", "ref": { "lat": -6.4382, "lng": -50.2472 } },
+            { "nome": "Escritório TECWISE", "busca": "Escritório TECWISE S11D", "ref": { "lat": -6.4172, "lng": -50.3222 } },
+            { "nome": "Base Geosol", "busca": "Base Geosol S11D", "ref": { "lat": -6.3932, "lng": -50.3622 } },
+            { "nome": "Aterro Berma TR 3083", "busca": "Aterro Berma TR 3083 S11D", "ref": { "lat": -6.4632, "lng": -50.3302 } }
+          ]
+        },
+        {
+          "titulo": "Outros pontos",
+          "locais": [
+            { "nome": "Lagoa do Amendoim", "busca": "Lagoa do Amendoim Canaã dos Carajás", "ref": { "lat": -6.3952, "lng": -50.3762 } },
+            { "nome": "Lagoa do Violão", "busca": "Lagoa do Violão Canaã dos Carajás", "ref": { "lat": -6.3942, "lng": -50.3682 } }
+          ]
+        }
+      ]
+    },
+    "SALOBO": {
+      "nome": "Salobo (Marabá/PA)",
+      "regiao": { "lat": -5.79, "lng": -50.53, "raio_km": 40 },
+      "descoberta": ["Salobo Vale", "Mina Salobo"],
+      "grupos": []
+    },
+    "CARAJAS": {
+      "nome": "Carajás (Parauapebas/PA)",
+      "regiao": { "lat": -6.06, "lng": -50.16, "raio_km": 40 },
+      "descoberta": ["Carajás Vale", "Mina de Carajás"],
+      "grupos": []
+    },
+    "SOSSEGO": {
+      "nome": "Sossego (Canaã dos Carajás/PA)",
+      "regiao": { "lat": -6.43, "lng": -50.06, "raio_km": 30 },
+      "descoberta": ["Mina do Sossego Vale"],
+      "grupos": []
+    }
+  }
+}
