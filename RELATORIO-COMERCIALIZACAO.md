@@ -1,6 +1,6 @@
 # Relatório de prontidão para comercialização — VAP
 
-Data: 2026-07-03 · Base: branch `claude/automated-test-commercialization-check-lumy6z`
+Data: 2026-07-03
 
 ## Resumo
 
