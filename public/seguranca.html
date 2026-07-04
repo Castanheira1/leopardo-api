@@ -284,6 +284,15 @@ async function carregar() {
 
 iniDatas();
 carregar();
+
+document.getElementById('listaViagens').addEventListener('click', (e) => {
+    const img = e.target.closest('img[data-zoom]');
+    if (img) abrirFoto(img.dataset.zoom);
+});
+document.getElementById('listaHab').addEventListener('click', (e) => {
+    const img = e.target.closest('img[data-zoom]');
+    if (img) abrirFoto(img.dataset.zoom);
+});
 </script>
 </body>
 </html>
