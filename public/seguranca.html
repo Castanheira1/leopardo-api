@@ -4,64 +4,185 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#0F3D3E">
+    <meta name="theme-color" content="#0a0a0a">
     <script src="/pwa.js" defer></script>
     <title>VAP - Central de Segurança</title>
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
-        .seg-top { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin:16px 0; }
-        .seg-top input { padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; }
-        .seg-card { border:1px solid #e2e8f0; border-radius:12px; padding:14px; margin-bottom:12px; background:#fff; }
-        .seg-fotos { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
-        .seg-fotos img { width:120px; height:90px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; }
-        .seg-meta { font-size:0.85rem; color:#475569; line-height:1.5; }
+        :root {
+            --bg: #0e0e0e; --bg-main: #141414; --card: #1c1c1c; --card-2: #242424;
+            --ink: #f1f3f5; --muted: #9ca3af; --line: #2e2e2e;
+            --gold: #d4a843; --gold-bright: #ead298; --gold-dim: rgba(212,168,67,.15);
+        }
+        body { background: var(--bg-main) !important; color: var(--ink); margin: 0; }
+
+        .seg-app { min-height: 100vh; display: flex; flex-direction: column; }
+        .seg-topbar {
+            background: #0a0a0a; border-bottom: 1px solid var(--line);
+            padding: 12px 20px; display: flex; align-items: center;
+            justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        }
+        .seg-brand { display: flex; align-items: center; gap: 10px; }
+        .seg-brand img { height: 30px; }
+        .seg-tag {
+            font-size: .6rem; letter-spacing: .14em; font-weight: 800;
+            background: var(--gold); color: #0a0a0a; padding: 3px 8px; border-radius: 4px;
+        }
+        .seg-nav { display: flex; gap: 8px; }
+        .seg-btn {
+            background: var(--card); color: var(--ink); border: 1px solid var(--line);
+            padding: 8px 14px; border-radius: 10px; font-size: .85rem; font-weight: 600;
+            cursor: pointer; text-decoration: none;
+        }
+        .seg-btn:hover { border-color: var(--gold); color: var(--gold); }
+        .seg-btn-gold {
+            background: var(--gold); color: #0a0a0a; border: none; font-weight: 700;
+            padding: 9px 16px; border-radius: 10px; cursor: pointer; font-size: .86rem;
+        }
+        .seg-btn-gold:hover { background: var(--gold-bright); }
+
+        .seg-main { flex: 1; padding: 18px 20px 32px; max-width: 1100px; margin: 0 auto; width: 100%; }
+        .seg-head { margin-bottom: 16px; }
+        .seg-head h1 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #fff; }
+        .seg-head p { margin: 4px 0 0; font-size: .84rem; color: var(--muted); line-height: 1.45; }
+
+        .seg-filtro {
+            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 14px 16px; margin-bottom: 16px;
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+        }
+        .seg-field label { display: block; font-size: .68rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+        .seg-field input {
+            background: #fff; border: 1px solid #d1d5db; color: #111827;
+            padding: 8px 10px; border-radius: 8px; font-size: .88rem;
+        }
+        .seg-field input:focus { outline: none; border-color: var(--gold); }
+        .seg-field-mat { width: 130px; }
+        .seg-field-date { width: 150px; }
+
+        .seg-sec { margin-bottom: 20px; }
+        .seg-sec-h {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px; gap: 8px;
+        }
+        .seg-sec-h h2 { margin: 0; font-size: .95rem; font-weight: 700; color: #fff; }
+        .seg-count { font-size: .75rem; color: var(--muted); }
+
+        .seg-list { display: grid; gap: 12px; }
+        .seg-card {
+            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 14px 16px;
+        }
+        .seg-card-top {
+            display: flex; flex-wrap: wrap; align-items: flex-start;
+            justify-content: space-between; gap: 8px; margin-bottom: 8px;
+        }
+        .seg-card-top strong { font-size: .92rem; color: #fff; }
+        .seg-badge {
+            font-size: .66rem; font-weight: 700; padding: 3px 8px; border-radius: 20px;
+            background: var(--gold-dim); color: var(--gold-bright);
+        }
+        .seg-meta { font-size: .78rem; color: var(--muted); line-height: 1.5; }
+        .seg-meta span { color: var(--gold-bright); }
+
+        .seg-fotos {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px; margin-top: 12px;
+        }
+        .seg-foto {
+            background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+            overflow: hidden;
+        }
+        .seg-foto img {
+            width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block;
+            cursor: pointer;
+        }
+        .seg-foto figcaption {
+            font-size: .68rem; color: var(--muted); padding: 6px 8px; text-align: center;
+        }
+        .seg-empty {
+            color: var(--muted); font-size: .85rem; padding: 16px;
+            background: var(--card); border: 1px dashed var(--line); border-radius: 12px;
+            text-align: center;
+        }
+
+        .seg-lightbox {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,.88);
+            z-index: 100; align-items: center; justify-content: center; padding: 20px;
+        }
+        .seg-lightbox.open { display: flex; }
+        .seg-lightbox img { max-width: 100%; max-height: 90vh; border-radius: 8px; }
+        .seg-lightbox button {
+            position: absolute; top: 16px; right: 16px; background: var(--card);
+            border: 1px solid var(--line); color: #fff; border-radius: 8px;
+            padding: 8px 12px; cursor: pointer;
+        }
+
+        @media (max-width: 600px) {
+            .seg-main { padding: 14px 12px 28px; }
+            .seg-field-mat, .seg-field-date { width: 100%; flex: 1 1 100%; }
+            .seg-filtro .seg-btn-gold { width: 100%; }
+            .seg-fotos { grid-template-columns: repeat(2, 1fr); }
+        }
     </style>
 </head>
 <body>
-<nav class="navbar">
-    <div class="nav-container">
-        <div class="nav-left">
-            <img src="/logo-vap.png" class="nav-logo" alt="VAP">
-            <span class="nav-tag">SEGURANÇA</span>
+<div class="seg-app">
+    <header class="seg-topbar">
+        <div class="seg-brand">
+            <img src="/logo-vap.png" alt="VAP">
+            <span class="seg-tag">SEGURANÇA</span>
         </div>
-        <div class="nav-links">
-            <a href="admin.html" class="btn btn-secondary btn-sm">Painel</a>
-            <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
-        </div>
-    </div>
-</nav>
+        <nav class="seg-nav">
+            <a href="admin.html" class="seg-btn">Painel</a>
+            <button onclick="logout()" class="seg-btn">Sair</button>
+        </nav>
+    </header>
 
-<div class="container">
-    <div class="card">
-        <h3>Central de segurança</h3>
-        <p class="cam-hint">Fotos e registros dos últimos 30 dias (retenção automática). Busque por matrícula ou período.</p>
-        <div class="seg-top">
-            <div>
-                <label>Matrícula</label><br>
-                <input id="buscaMat" placeholder="Opcional">
+    <main class="seg-main">
+        <div class="seg-head">
+            <h1>Central de segurança</h1>
+            <p>Fotos e registros dos últimos 30 dias. Busque por matrícula ou período.</p>
+        </div>
+
+        <form class="seg-filtro" onsubmit="event.preventDefault(); carregar();">
+            <div class="seg-field seg-field-mat">
+                <label>Matrícula</label>
+                <input id="buscaMat" placeholder="000000" maxlength="12" inputmode="numeric">
             </div>
-            <div>
-                <label>De</label><br>
+            <div class="seg-field seg-field-date">
+                <label>De</label>
                 <input type="date" id="buscaDe">
             </div>
-            <div>
-                <label>Até</label><br>
+            <div class="seg-field seg-field-date">
+                <label>Até</label>
                 <input type="date" id="buscaAte">
             </div>
-            <button class="btn btn-primary btn-sm" onclick="carregar()">Buscar</button>
-        </div>
-    </div>
+            <button type="submit" class="seg-btn-gold">Buscar</button>
+        </form>
 
-    <div class="card">
-        <h3>Viagens</h3>
-        <div id="listaViagens"></div>
-    </div>
+        <section class="seg-sec">
+            <div class="seg-sec-h">
+                <h2>Viagens</h2>
+                <span class="seg-count" id="cntViagens"></span>
+            </div>
+            <div class="seg-list" id="listaViagens"></div>
+        </section>
 
-    <div class="card">
-        <h3>Habilitações de motorista</h3>
-        <div id="listaHab"></div>
-    </div>
+        <section class="seg-sec">
+            <div class="seg-sec-h">
+                <h2>Habilitações de motorista</h2>
+                <span class="seg-count" id="cntHab"></span>
+            </div>
+            <div class="seg-list" id="listaHab"></div>
+        </section>
+    </main>
+</div>
+
+<div class="seg-lightbox" id="lightbox" onclick="fecharFoto()">
+    <button type="button" onclick="fecharFoto()">Fechar</button>
+    <img id="lightboxImg" src="" alt="">
 </div>
 
 <script>
@@ -85,9 +206,61 @@ function query() {
     return `?${q}`;
 }
 
+function abrirFoto(url) {
+    if (!url) return;
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('open');
+}
+function fecharFoto() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.getElementById('lightboxImg').src = '';
+}
+
 function img(url, leg) {
     if (!url) return '';
-    return `<figure><img src="${esc(url)}" alt="${esc(leg)}"><figcaption style="font-size:0.75rem;color:#64748b;">${esc(leg)}</figcaption></figure>`;
+    const u = esc(url);
+    return `<figure class="seg-foto">
+        <img src="${u}" alt="${esc(leg)}" loading="lazy" data-zoom="${u}">
+        <figcaption>${esc(leg)}</figcaption>
+    </figure>`;
+}
+
+function cardViagem(v) {
+    const km = Number(v.distancia_km) > 0 ? `${v.distancia_km} km` : '';
+    return `<article class="seg-card">
+        <div class="seg-card-top">
+            <strong>Viagem #${v.id} — ${esc(v.motorista_nome)} → ${esc(v.passageiro_nome)}</strong>
+            <span class="seg-badge">${esc(v.status)}</span>
+        </div>
+        <div class="seg-meta">
+            <span>${esc(v.motorista_matricula)}</span> → <span>${esc(v.passageiro_matricula)}</span><br>
+            ${fmtData(v.iniciada_em)}${v.finalizada_em ? ' → ' + fmtData(v.finalizada_em) : ''}
+            ${km ? ' • ' + esc(km) : ''}${v.placa ? ' • placa ' + esc(v.placa) : ''}
+        </div>
+        <div class="seg-fotos">
+            ${img(v.motorista_selfie, 'Selfie motorista')}
+            ${img(v.foto_carro_url, 'Foto carro')}
+            ${img(v.pedido_selfie, 'Selfie pedido')}
+            ${img(v.proposta_selfie, 'Selfie proposta')}
+        </div>
+    </article>`;
+}
+
+function cardHab(h) {
+    return `<article class="seg-card">
+        <div class="seg-card-top">
+            <strong>${esc(h.nome)}</strong>
+            <span class="seg-badge">${esc(h.matricula)}</span>
+        </div>
+        <div class="seg-meta">
+            Placa ${esc(h.placa || '—')} • ${fmtData(h.created_at)}
+            ${h.selfie_lat != null ? `<br>GPS selfie: ${h.selfie_lat}, ${h.selfie_lng}` : ''}
+        </div>
+        <div class="seg-fotos">
+            ${img(h.selfie_url, 'Selfie')}
+            ${img(h.foto_carro_url, 'Carro')}
+        </div>
+    </article>`;
 }
 
 async function carregar() {
@@ -95,27 +268,18 @@ async function carregar() {
     const d = await r.json();
     if (!r.ok) { mostrarToast(d.error || 'Erro', 'error'); return; }
 
-    document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => `
-        <div class="seg-card">
-            <strong>Viagem #${v.id}</strong> — ${esc(v.motorista_nome)} (${esc(v.motorista_matricula)}) → ${esc(v.passageiro_nome)} (${esc(v.passageiro_matricula)})
-            <div class="seg-meta">${fmtData(v.iniciada_em)}${v.finalizada_em ? ' → ' + fmtData(v.finalizada_em) : ''} • ${esc(v.status)}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}${v.placa ? ' • ' + esc(v.placa) : ''}</div>
-            <div class="seg-fotos">
-                ${img(v.motorista_selfie, 'Selfie motorista')}
-                ${img(v.foto_carro_url, 'Foto carro')}
-                ${img(v.pedido_selfie, 'Selfie pedido')}
-                ${img(v.proposta_selfie, 'Selfie proposta')}
-            </div>
-        </div>`).join('') || '<p class="cam-hint">Nenhuma viagem no período.</p>';
+    const viagens = d.viagens || [];
+    const habs = d.habilitacoes || [];
+    document.getElementById('cntViagens').textContent = viagens.length ? `${viagens.length} registro(s)` : '';
+    document.getElementById('cntHab').textContent = habs.length ? `${habs.length} registro(s)` : '';
 
-    document.getElementById('listaHab').innerHTML = (d.habilitacoes || []).map(h => `
-        <div class="seg-card">
-            <strong>${esc(h.nome)}</strong> (${esc(h.matricula)}) — placa ${esc(h.placa || '—')}
-            <div class="seg-meta">${fmtData(h.created_at)}${h.selfie_lat != null ? ` • GPS selfie: ${h.selfie_lat}, ${h.selfie_lng}` : ''}</div>
-            <div class="seg-fotos">
-                ${img(h.selfie_url, 'Selfie')}
-                ${img(h.foto_carro_url, 'Carro')}
-            </div>
-        </div>`).join('') || '<p class="cam-hint">Nenhuma habilitação no período.</p>';
+    document.getElementById('listaViagens').innerHTML = viagens.length
+        ? viagens.map(cardViagem).join('')
+        : '<div class="seg-empty">Nenhuma viagem no período.</div>';
+
+    document.getElementById('listaHab').innerHTML = habs.length
+        ? habs.map(cardHab).join('')
+        : '<div class="seg-empty">Nenhuma habilitação no período.</div>';
 }
 
 iniDatas();
