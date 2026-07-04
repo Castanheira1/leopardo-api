@@ -27,6 +27,10 @@ const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
 // perto (última posição do dia) é avisado por push mesmo sem app aberto e
 // sem carona publicada — "estou na sala e alguém pediu aqui do lado".
 const RAIO_PUSH_PERTO_KM = Number(process.env.RAIO_PUSH_PERTO_KM || 1);
+// Viagem só conta no rateio/admin se o GPS registrar deslocamento real (não simulação parado).
+const KM_MINIMO_VIAGEM = Number(process.env.KM_MINIMO_VIAGEM || 0.5);
+const KM_SEGMENTO_MIN = Number(process.env.KM_SEGMENTO_MIN || 0.03);
+const KM_VELOCIDADE_MAX_H = Number(process.env.KM_VELOCIDADE_MAX_H || 120);
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -261,6 +265,7 @@ async function garantirColunasPedidos() {
 async function garantirColunasViagens() {
   try {
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS fase TEXT DEFAULT 'encontro'");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS deslocamento_valido BOOLEAN DEFAULT FALSE");
   } catch (e) {
     console.warn("garantirColunasViagens:", e.message);
   }
@@ -502,6 +507,64 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
     cos(radians(${pLat})) * cos(radians(${latCol})) * cos(radians(${lngCol}) - radians(${pLng}))
     + sin(radians(${pLat})) * sin(radians(${latCol}))
   ))))`;
+
+function haversineKmCoord(lat1, lng1, lat2, lng2) {
+  const p1 = Number(lat1);
+  const p2 = Number(lat2);
+  const g1 = Number(lng1);
+  const g2 = Number(lng2);
+  if (![p1, p2, g1, g2].every(Number.isFinite)) return 0;
+  const dLat = ((p2 - p1) * Math.PI) / 180;
+  const dLng = ((g2 - g1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos((p1 * Math.PI) / 180) * Math.cos((p2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calcularKmGpsFromPontos(pontos) {
+  if (!Array.isArray(pontos) || pontos.length < 2) {
+    return { km: 0, valido: false, kmBruto: 0, segmentosValidos: 0, deslocamentoLinha: 0 };
+  }
+  let km = 0;
+  let segmentosValidos = 0;
+  for (let i = 1; i < pontos.length; i++) {
+    const prev = pontos[i - 1];
+    const cur = pontos[i];
+    const seg = haversineKmCoord(prev.lat, prev.lng, cur.lat, cur.lng);
+    const t0 = new Date(prev.registrado_em || prev.em || 0).getTime();
+    const t1 = new Date(cur.registrado_em || cur.em || 0).getTime();
+    const dtH = t1 > t0 ? (t1 - t0) / 3600000 : 0;
+    if (dtH > 0 && seg / dtH > KM_VELOCIDADE_MAX_H) continue;
+    if (seg < KM_SEGMENTO_MIN) continue;
+    km += seg;
+    segmentosValidos++;
+  }
+  const primeiro = pontos[0];
+  const ultimo = pontos[pontos.length - 1];
+  const deslocamentoLinha = haversineKmCoord(primeiro.lat, primeiro.lng, ultimo.lat, ultimo.lng);
+  const kmArred = Math.round(km * 100) / 100;
+  const valido = segmentosValidos >= 3
+    && kmArred >= KM_MINIMO_VIAGEM
+    && deslocamentoLinha >= KM_MINIMO_VIAGEM * 0.6;
+  return {
+    km: valido ? kmArred : 0,
+    valido,
+    kmBruto: kmArred,
+    segmentosValidos,
+    deslocamentoLinha: Math.round(deslocamentoLinha * 100) / 100,
+  };
+}
+
+async function calcularKmGpsViagem(viagemId) {
+  const { rows } = await pool.query(
+    `SELECT lat::float8 AS lat, lng::float8 AS lng, registrado_em
+     FROM viagem_pontos WHERE viagem_id = $1 ORDER BY registrado_em`,
+    [viagemId]
+  );
+  return calcularKmGpsFromPontos(rows);
+}
+
+const sqlViagemKmValido = (alias = "v") => `${alias}.deslocamento_valido = TRUE`;
 
 // Notifica os motoristas MAIS PERTO do embarque de um pedido em duas faixas:
 // - posição FRESCA (app aberto há <=10 min): até RAIO_VISIVEL_KM;
@@ -1798,30 +1861,14 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
     if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
     if (req.user.id !== v.motorista_id) return res.status(403).json({ error: "Apenas o motorista finaliza" });
 
-    // Distância total somando os trechos consecutivos (Haversine via LAG)
-    const distQ = await pool.query(
-      `WITH p AS (
-         SELECT lat, lng,
-                LAG(lat) OVER (ORDER BY registrado_em) AS plat,
-                LAG(lng) OVER (ORDER BY registrado_em) AS plng
-         FROM viagem_pontos WHERE viagem_id = $1)
-       SELECT COALESCE(SUM(
-         6371 * acos(LEAST(1, GREATEST(-1,
-           cos(radians(plat)) * cos(radians(lat)) * cos(radians(lng) - radians(plng))
-           + sin(radians(plat)) * sin(radians(lat))
-         )))
-       ), 0) AS km
-       FROM p WHERE plat IS NOT NULL`,
-      [req.params.id]
-    );
-
-    const km = Math.round(Number(distQ.rows[0].km) * 100) / 100;
+    const calc = await calcularKmGpsViagem(req.params.id);
     const { rows } = await pool.query(
-      `UPDATE viagens SET status = 'concluida', finalizada_em = NOW(), distancia_km = $2
+      `UPDATE viagens SET status = 'concluida', finalizada_em = NOW(),
+              distancia_km = $2, deslocamento_valido = $3
        WHERE id = $1 RETURNING *`,
-      [req.params.id, km]
+      [req.params.id, calc.km, calc.valido]
     );
-    res.json(rows[0]);
+    res.json({ ...rows[0], deslocamento_valido: calc.valido, km_bruto: calc.kmBruto });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao finalizar viagem" });
@@ -1926,12 +1973,12 @@ app.get("/api/admin/overview", verificarAuth, carregarAdminEscopo, async (req, r
       ),
       pool.query(
         `SELECT COUNT(*) FROM viagens v JOIN usuarios m ON v.motorista_id = m.id
-         WHERE v.status = 'concluida' AND m.projeto_id = $1`,
+         WHERE v.status = 'concluida' AND ${sqlViagemKmValido("v")} AND m.projeto_id = $1`,
         [pid]
       ),
     ]);
     const viagens = (await pool.query(
-      `SELECT v.id, v.status, v.distancia_km, v.iniciada_em,
+      `SELECT v.id, v.status, v.distancia_km, v.deslocamento_valido, v.iniciada_em,
               m.nome AS motorista_nome, pa.nome AS passageiro_nome
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
@@ -1974,6 +2021,7 @@ app.get("/api/admin/metricas", verificarAuth, carregarAdminEscopo, async (req, r
          JOIN usuarios pa ON v.passageiro_id = pa.id
          WHERE m.projeto_id = $1
            AND v.status = 'concluida'
+           AND ${sqlViagemKmValido("v")}
            AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz`,
         [pid, periodo.de, periodo.ate]
       ),
@@ -1982,12 +2030,12 @@ app.get("/api/admin/metricas", verificarAuth, carregarAdminEscopo, async (req, r
          FROM (
            SELECT v.motorista_id AS uid FROM viagens v
            JOIN usuarios m ON v.motorista_id = m.id
-           WHERE m.projeto_id = $1 AND v.status = 'concluida'
+           WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
              AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
            UNION
            SELECT v.passageiro_id FROM viagens v
            JOIN usuarios m ON v.motorista_id = m.id
-           WHERE m.projeto_id = $1 AND v.status = 'concluida'
+           WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
              AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
          ) sub`,
         [pid, periodo.de, periodo.ate]
@@ -2041,7 +2089,7 @@ app.get("/api/admin/rateio", verificarAuth, carregarAdminEscopo, async (req, res
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
-       WHERE m.projeto_id = $1 AND v.status = 'concluida'
+       WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
          AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
        GROUP BY 1, 2`,
       [pid, periodo.de, periodo.ate]
@@ -2050,7 +2098,7 @@ app.get("/api/admin/rateio", verificarAuth, carregarAdminEscopo, async (req, res
       `SELECT COUNT(*)::int AS viagens, COALESCE(SUM(v.distancia_km), 0) AS km
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
-       WHERE m.projeto_id = $1 AND v.status = 'concluida'
+       WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
          AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz`,
       [pid, periodo.de, periodo.ate]
     );
@@ -2059,12 +2107,12 @@ app.get("/api/admin/rateio", verificarAuth, carregarAdminEscopo, async (req, res
        FROM (
          SELECT v.motorista_id AS uid FROM viagens v
          JOIN usuarios m ON v.motorista_id = m.id
-         WHERE m.projeto_id = $1 AND v.status = 'concluida'
+         WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
            AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
          UNION
          SELECT v.passageiro_id FROM viagens v
          JOIN usuarios m ON v.motorista_id = m.id
-         WHERE m.projeto_id = $1 AND v.status = 'concluida'
+         WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
            AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
        ) sub`,
       [pid, periodo.de, periodo.ate]

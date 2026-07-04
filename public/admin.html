@@ -420,7 +420,7 @@ async function carregarViagens() {
         return `<div class="item"><div class="top">
             <strong>${esc(v.motorista_nome)} → ${esc(v.passageiro_nome)}</strong>
             <span class="badge ${cls}">${esc(v.status)}</span></div>
-            <small>${fmtData(v.iniciada_em)}${v.distancia_km ? ' · ' + v.distancia_km + ' km' : ''}</small></div>`;
+            <small>${fmtData(v.iniciada_em)}${v.deslocamento_valido && v.distancia_km ? ' · ' + v.distancia_km + ' km GPS' : (v.status === 'concluida' ? ' · sem deslocamento GPS' : '')}</small></div>`;
     }).join('') || '<div class="empty">Nenhuma viagem ainda.</div>';
 }
 
