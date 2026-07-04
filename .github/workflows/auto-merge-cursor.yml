@@ -1,0 +1,35 @@
+# Faz merge automático na main de PRs abertos por agentes (branch cursor/*).
+# Requer em GitHub → Settings → Actions → General: "Read and write permissions".
+name: Auto-merge cursor PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: startsWith(github.head_ref, 'cursor/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Squash-merge PR cursor/* → main
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr || pr.draft) return;
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_request_number: pr.number,
+                merge_method: 'squash',
+              });
+              core.info(`Merged PR #${pr.number} (${pr.head.ref})`);
+            } catch (e) {
+              core.warning(`Auto-merge falhou (proteção de branch?): ${e.message}`);
+            }
