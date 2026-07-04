@@ -469,6 +469,46 @@ async function ligarPlaceAutocomplete(inputEl, { map, onPlace, onFocus } = {}) {
     return pac;
 }
 
+// Mesma fonte do buscador do mapa (Place.searchByText + viés do mapa).
+async function buscarLugarGoogle(textQuery, { map, locationBias, nomePreferido } = {}) {
+    if (!textQuery) return null;
+    const { Place } = await google.maps.importLibrary('places');
+    const bias = locationBias || map?.getBounds?.() || null;
+    const req = {
+        textQuery: String(textQuery),
+        fields: ['displayName', 'formattedAddress', 'location'],
+        maxResultCount: 8,
+        language: 'pt-BR',
+        region: 'br',
+    };
+    if (bias) req.locationBias = bias;
+    const { places } = await Place.searchByText(req);
+    if (!places?.length) return null;
+
+    const norm = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '')
+        .replace(/[—–-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    const alvo = nomePreferido ? norm(nomePreferido) : '';
+    let escolhido = places[0];
+    if (alvo) {
+        const hit = places.find((p) => {
+            const dn = norm(p.displayName);
+            return dn === alvo || dn.includes(alvo) || alvo.includes(dn);
+        });
+        if (hit) escolhido = hit;
+    }
+
+    await escolhido.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+    if (!escolhido.location) return null;
+    const lat = typeof escolhido.location.lat === 'function' ? escolhido.location.lat() : escolhido.location.lat;
+    const lng = typeof escolhido.location.lng === 'function' ? escolhido.location.lng() : escolhido.location.lng;
+    return {
+        lat: Number(lat),
+        lng: Number(lng),
+        nome: nomePreferido || escolhido.displayName || textQuery,
+        formatted_address: escolhido.formattedAddress,
+    };
+}
+
 /* -------------------- Geolocalização -------------------- */
 function obterLocalizacao(opts = {}) {
     const pedir = (o) => new Promise((resolve, reject) => {
