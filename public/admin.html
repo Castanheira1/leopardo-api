@@ -148,7 +148,7 @@
         .adm-user-name { font-size: .84rem; font-weight: 600; color: #fff; }
         .adm-user-role { font-size: .68rem; color: var(--muted); }
 
-        .adm-content { padding: 22px 28px 0; flex: 1; }
+        .adm-content { padding: 16px 24px 0; flex: 1; }
         .adm-section { display: none; }
         .adm-section.active { display: block; }
         .adm-foot {
@@ -162,60 +162,66 @@
         }
         .btn-gold:hover { background: var(--gold-bright); }
         .btn-ghost {
-            background: #fff; color: #111827; border: 1px solid #d1d5db;
+            background: var(--card); color: var(--ink); border: 1px solid var(--line);
             padding: 9px 14px; border-radius: 10px; cursor: pointer; font-size: .85rem;
         }
         .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
 
-        /* KPIs */
-        .kpis {
-            display: grid; grid-template-columns: repeat(6, 1fr);
-            gap: 12px; margin-bottom: 18px;
+        /* KPIs — faixa compacta */
+        .kpi-strip {
+            display: flex; flex-wrap: wrap; background: var(--card);
+            border: 1px solid var(--line); border-radius: 12px;
+            margin-bottom: 14px; overflow: hidden;
         }
-        @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 640px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
-        .kpi {
-            background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
-            padding: 14px 14px 12px; min-width: 0; display: flex; gap: 12px; align-items: flex-start;
-            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        .kpi-strip .kpi {
+            flex: 1 1 150px; min-width: 0; background: transparent;
+            border: none; border-right: 1px solid var(--line); border-radius: 0;
+            padding: 11px 14px; box-shadow: none; gap: 10px;
         }
+        .kpi-strip .kpi:last-child { border-right: none; }
         .kpi-ico {
-            width: 36px; height: 36px; border-radius: 10px; background: var(--gold-dim);
+            width: 30px; height: 30px; border-radius: 8px; background: var(--gold-dim);
             display: flex; align-items: center; justify-content: center; flex-shrink: 0;
             color: var(--gold);
         }
-        .kpi-ico svg { width: 18px; height: 18px; }
+        .kpi-ico svg { width: 15px; height: 15px; }
         .kpi-body { min-width: 0; flex: 1; }
-        .kpi .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+        .kpi .lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
         .kpi .val {
-            font-size: clamp(.95rem, 1.8vw, 1.15rem); font-weight: 800; margin-top: 4px;
-            color: #111827; line-height: 1.15;
+            font-size: .98rem; font-weight: 800; margin-top: 2px;
+            color: var(--gold-bright); line-height: 1.15;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .kpi .hint { font-size: .7rem; color: #6b7280; margin-top: 3px; }
-        .kpi.destaque { border-color: var(--gold); background: #fff; box-shadow: 0 2px 8px rgba(212,168,67,.18); }
+        .kpi .hint { font-size: .66rem; color: var(--muted); margin-top: 2px; }
+        .kpi.destaque { background: rgba(212,168,67,.06); }
+        .kpi.destaque .val { color: var(--gold); }
+        @media (max-width: 640px) {
+            .kpi-strip .kpi { border-right: none; border-bottom: 1px solid var(--line); flex: 1 1 100%; }
+            .kpi-strip .kpi:last-child { border-bottom: none; }
+        }
 
-        .grid { display: grid; gap: 14px; }
+        .grid { display: grid; gap: 12px; }
         .cols-2 { grid-template-columns: 1fr 1fr; }
         .cols-3 { grid-template-columns: 1.4fr 1fr; }
         @media (max-width: 900px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
 
         .panel {
-            background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
-            padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 14px 16px; box-shadow: none;
         }
-        .panel-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+        .panel-compact .panel-head { margin-bottom: 10px; }
+        .panel-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
         .panel-ico {
-            width: 36px; height: 36px; border-radius: 10px; background: var(--gold-dim);
+            width: 28px; height: 28px; border-radius: 8px; background: var(--gold-dim);
             display: flex; align-items: center; justify-content: center; color: var(--gold); flex-shrink: 0;
         }
-        .panel-ico svg { width: 18px; height: 18px; }
-        .panel h3 { margin: 0; font-size: .95rem; font-weight: 700; color: #111827; }
-        .panel .cap { color: #6b7280; font-size: .78rem; margin: 3px 0 0; line-height: 1.4; }
-        .panel-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+        .panel-ico svg { width: 15px; height: 15px; }
+        .panel h3 { margin: 0; font-size: .88rem; font-weight: 700; color: #fff; }
+        .panel .cap { color: var(--muted); font-size: .74rem; margin: 2px 0 0; line-height: 1.35; }
+        .panel-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
         .panel-select {
-            background: #fff; border: 1px solid #d1d5db; color: #111827;
-            padding: 6px 10px; border-radius: 8px; font-size: .78rem; cursor: pointer;
+            background: var(--card-2); border: 1px solid var(--line); color: var(--muted);
+            padding: 5px 8px; border-radius: 8px; font-size: .74rem; cursor: pointer;
         }
 
         .chart { width: 100%; }
@@ -223,36 +229,38 @@
             display: grid; grid-template-columns: minmax(80px,26%) 1fr auto;
             align-items: center; gap: 10px; margin: 9px 0;
         }
-        .bar-row .k { font-size: .82rem; color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bar-track { background: #e5e7eb; border-radius: 6px; height: 14px; overflow: hidden; }
-        .bar-fill { height: 100%; border-radius: 6px; background: var(--gold); min-width: 3px; }
-        .bar-row .v { font-size: .82rem; font-weight: 700; white-space: nowrap; color: #111827; }
-        .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: .82rem; color: #4b5563; }
-        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
-        .legend strong { color: #111827; }
+        .kpi { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
 
-        .spark { display: flex; align-items: flex-end; gap: 6px; height: 120px; margin-top: 6px; }
-        .spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; }
-        .spark .bar { width: 100%; max-width: 28px; background: var(--gold); border-radius: 5px 5px 0 0; min-height: 4px; }
-        .spark .cl { font-size: .62rem; color: #6b7280; white-space: nowrap; }
-        .empty { color: #6b7280; font-size: .85rem; padding: 12px 0; }
+        .bar-row .k { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-track { background: #2a2a2a; border-radius: 6px; height: 12px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 6px; background: var(--gold); min-width: 3px; }
+        .bar-row .v { font-size: .8rem; font-weight: 700; white-space: nowrap; color: var(--gold-bright); }
+        .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: .8rem; color: var(--muted); }
+        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+        .legend strong { color: #fff; }
+
+        .spark { display: flex; align-items: flex-end; gap: 5px; height: 88px; margin-top: 4px; }
+        .spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; min-width: 0; }
+        .spark .bar { width: 100%; max-width: 24px; background: var(--gold); border-radius: 4px 4px 0 0; min-height: 3px; }
+        .spark .cl { font-size: .6rem; color: var(--muted); white-space: nowrap; }
+        .empty { color: var(--muted); font-size: .8rem; padding: 4px 0; }
 
         .tbl-wrap { overflow-x: auto; }
-        table.adm { width: 100%; border-collapse: collapse; font-size: .86rem; }
-        table.adm th, table.adm td { padding: 10px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
-        table.adm th { color: #6b7280; font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; background: #f9fafb; }
-        table.adm td { color: #111827; }
+        table.adm { width: 100%; border-collapse: collapse; font-size: .84rem; }
+        table.adm th, table.adm td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+        table.adm th { color: var(--muted); font-weight: 700; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; background: var(--card-2); }
+        table.adm td { color: var(--ink); }
         table.adm td.num, table.adm th.num { text-align: right; }
-        table.adm tr:hover td { background: #f9fafb; }
+        table.adm tr:hover td { background: rgba(255,255,255,.03); }
 
         .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
         .field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
         .field { flex: 1; min-width: 130px; }
         .field label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 4px; }
-        .item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+        .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
         .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-        .item strong { font-size: .92rem; color: #111827; }
-        .item small { color: #6b7280; font-size: .78rem; }
+        .item strong { font-size: .88rem; color: #fff; }
+        .item small { color: var(--muted); font-size: .76rem; }
         .badge { font-size: .66rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
         .badge.ok { background: rgba(74,222,128,.15); color: var(--good); }
         .badge.warn { background: rgba(251,191,36,.15); color: var(--warn); }
@@ -360,36 +368,36 @@
 
         <div class="adm-content">
             <section id="sec-resumo" class="adm-section active">
-                <div class="kpis" id="kpis"></div>
+                <div class="kpi-strip" id="kpis"></div>
                 <div class="grid cols-3">
-                    <div class="panel">
+                    <div class="panel panel-compact">
                         <div class="panel-head">
                             <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg></span>
                             <div>
                                 <h3>Rateio por empresa</h3>
-                                <p class="cap">Participação de cada empresa no custo do contrato no período.</p>
+                                <p class="cap">Participação no custo do contrato.</p>
                             </div>
                         </div>
                         <div id="chartEmpresas" class="chart"></div>
                     </div>
-                    <div class="panel">
+                    <div class="panel panel-compact">
                         <div class="panel-head">
                             <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                             <div>
                                 <h3>Passageiros por gênero</h3>
-                                <p class="cap">Transportados no período (viagens com GPS válido).</p>
+                                <p class="cap">Viagens com GPS válido.</p>
                             </div>
                         </div>
                         <div id="chartGenero" class="chart"></div>
                     </div>
                 </div>
-                <div class="panel" style="margin-top:14px;">
+                <div class="panel panel-compact" style="margin-top:12px;">
                     <div class="panel-head-row">
                         <div class="panel-head" style="margin:0">
                             <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
                             <div>
                                 <h3>Viagens por dia</h3>
-                                <p class="cap">Volume de viagens concluídas com deslocamento GPS nos últimos dias.</p>
+                                <p class="cap">Volume com deslocamento GPS.</p>
                             </div>
                         </div>
                         <select class="panel-select" id="filtroDiasChart" onchange="atualizarChartViagens()">
@@ -641,7 +649,7 @@ function chartViagensPorDia(el, viagens, diasLimite) {
         const h = 10 + Math.round((dias[k] / max) * 86);
         const dd = k.slice(8, 10) + '/' + k.slice(5, 7);
         return `<div class="col" title="${dd}: ${dias[k]} viagem(ns)">
-            <span class="cl" style="color:#111827;font-weight:700;">${dias[k]}</span>
+            <span class="cl" style="color:var(--gold-bright);font-weight:700;">${dias[k]}</span>
             <div class="bar" style="height:${h}px"></div>
             <span class="cl">${dd}</span>
         </div>`;
