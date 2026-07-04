@@ -400,13 +400,6 @@ const carregarAdminEscopo = async (req, res, next) => {
   }
 };
 
-function periodoFromQuery(de, ate) {
-  const fim = ate ? new Date(ate) : new Date();
-  const inicio = de ? new Date(de) : new Date(fim.getFullYear(), fim.getMonth(), 1);
-  if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) return null;
-  return { de: inicio.toISOString(), ate: fim.toISOString() };
-}
-
 // Viagens cujo motorista pertence ao projeto do admin.
 function filtroProjetoMotorista(projetoId, alias = "m") {
   return { sql: `${alias}.projeto_id = $1`, params: [projetoId] };
@@ -571,6 +564,63 @@ async function calcularKmGpsViagem(viagemId) {
 }
 
 const sqlViagemKmValido = (alias = "v") => `${alias}.deslocamento_valido = TRUE`;
+
+// Data da viagem no período: usa finalização; viagens antigas sem esse campo caem na data de início.
+const sqlViagemNoPeriodo = (alias = "v") =>
+  `COALESCE(${alias}.finalizada_em, ${alias}.iniciada_em) >= $2::timestamptz AND COALESCE(${alias}.finalizada_em, ${alias}.iniciada_em) < $3::timestamptz`;
+
+function parseDataCalendario(str) {
+  const m = String(str || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const y = +m[1];
+  const mo = +m[2];
+  const d = +m[3];
+  return {
+    y, mo, d,
+    label: `${String(d).padStart(2, "0")}/${String(mo).padStart(2, "0")}/${y}`,
+  };
+}
+
+// 00:00 em Brasília (UTC-3) = 03:00 UTC no mesmo dia civil.
+function inicioDiaBrUtc(ymd) {
+  return new Date(Date.UTC(ymd.y, ymd.mo - 1, ymd.d, 3, 0, 0, 0));
+}
+
+function fimDiaBrUtcExclusivo(ymd) {
+  return new Date(Date.UTC(ymd.y, ymd.mo - 1, ymd.d + 1, 3, 0, 0, 0));
+}
+
+function hojeBrYmd() {
+  const agoraBr = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  return {
+    y: agoraBr.getUTCFullYear(),
+    mo: agoraBr.getUTCMonth() + 1,
+    d: agoraBr.getUTCDate(),
+  };
+}
+
+function periodoFromQuery(de, ate) {
+  const hoje = hojeBrYmd();
+  const deYmd = parseDataCalendario(de) || { ...hoje, mo: hoje.mo, d: 1, label: `01/${String(hoje.mo).padStart(2, "0")}/${hoje.y}` };
+  const ateYmd = parseDataCalendario(ate) || {
+    ...hoje,
+    label: `${String(hoje.d).padStart(2, "0")}/${String(hoje.mo).padStart(2, "0")}/${hoje.y}`,
+  };
+  const inicio = inicioDiaBrUtc(deYmd);
+  const fimExcl = fimDiaBrUtcExclusivo(ateYmd);
+  if (isNaN(inicio.getTime()) || isNaN(fimExcl.getTime()) || fimExcl <= inicio) return null;
+  return {
+    de: inicio.toISOString(),
+    ate: fimExcl.toISOString(),
+    deLabel: deYmd.label,
+    ateLabel: ateYmd.label,
+  };
+}
+
+function numSeguro(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
 // Notifica os motoristas MAIS PERTO do embarque de um pedido em duas faixas:
 // - posição FRESCA (app aberto há <=10 min): até RAIO_VISIVEL_KM;
@@ -2028,7 +2078,7 @@ app.get("/api/admin/metricas", verificarAuth, carregarAdminEscopo, async (req, r
          WHERE m.projeto_id = $1
            AND v.status = 'concluida'
            AND ${sqlViagemKmValido("v")}
-           AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz`,
+           AND ${sqlViagemNoPeriodo("v")}`,
         [pid, periodo.de, periodo.ate]
       ),
       pool.query(
@@ -2037,12 +2087,12 @@ app.get("/api/admin/metricas", verificarAuth, carregarAdminEscopo, async (req, r
            SELECT v.motorista_id AS uid FROM viagens v
            JOIN usuarios m ON v.motorista_id = m.id
            WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-             AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+             AND ${sqlViagemNoPeriodo("v")}
            UNION
            SELECT v.passageiro_id FROM viagens v
            JOIN usuarios m ON v.motorista_id = m.id
            WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-             AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+             AND ${sqlViagemNoPeriodo("v")}
          ) sub`,
         [pid, periodo.de, periodo.ate]
       ),
@@ -2095,7 +2145,7 @@ function fmtDataHoraBr(iso) {
 }
 
 async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
-  const [base, totais, ativosQ, porUsuarioQ, viagensQ] = await Promise.all([
+  const [base, totais, ativosQ, porUsuarioQ, viagensQ, concluidasQ] = await Promise.all([
     pool.query(
       `SELECT
          COALESCE(NULLIF(TRIM(pa.empresa_nome), ''), 'Sem empresa') AS empresa_nome,
@@ -2106,7 +2156,7 @@ async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
        WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-         AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+         AND ${sqlViagemNoPeriodo("v")}
        GROUP BY 1, 2`,
       [pid, periodo.de, periodo.ate]
     ),
@@ -2115,7 +2165,7 @@ async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
        WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-         AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz`,
+         AND ${sqlViagemNoPeriodo("v")}`,
       [pid, periodo.de, periodo.ate]
     ),
     pool.query(
@@ -2124,12 +2174,12 @@ async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
          SELECT v.motorista_id AS uid FROM viagens v
          JOIN usuarios m ON v.motorista_id = m.id
          WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-           AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+           AND ${sqlViagemNoPeriodo("v")}
          UNION
          SELECT v.passageiro_id FROM viagens v
          JOIN usuarios m ON v.motorista_id = m.id
          WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-           AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+           AND ${sqlViagemNoPeriodo("v")}
        ) sub`,
       [pid, periodo.de, periodo.ate]
     ),
@@ -2145,7 +2195,7 @@ async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
        WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-         AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+         AND ${sqlViagemNoPeriodo("v")}
        GROUP BY pa.matricula, pa.nome, 3, 4
        ORDER BY viagens DESC, km DESC`,
       [pid, periodo.de, periodo.ate]
@@ -2166,15 +2216,23 @@ async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
        WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemKmValido("v")}
-         AND v.finalizada_em >= $2::timestamptz AND v.finalizada_em < $3::timestamptz
+         AND ${sqlViagemNoPeriodo("v")}
        ORDER BY v.finalizada_em DESC`,
+      [pid, periodo.de, periodo.ate]
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS viagens
+       FROM viagens v
+       JOIN usuarios m ON v.motorista_id = m.id
+       WHERE m.projeto_id = $1 AND v.status = 'concluida' AND ${sqlViagemNoPeriodo("v")}`,
       [pid, periodo.de, periodo.ate]
     ),
   ]);
 
-  const totalViagens = totais.rows[0].viagens || 0;
-  const totalKm = Number(totais.rows[0].km) || 0;
-  const usuariosAtivos = ativosQ.rows[0].usuarios_ativos || 0;
+  const totalViagens = numSeguro(totais.rows[0].viagens);
+  const totalKm = numSeguro(totais.rows[0].km);
+  const usuariosAtivos = numSeguro(ativosQ.rows[0].usuarios_ativos);
+  const viagensConcluidasPeriodo = numSeguro(concluidasQ.rows[0].viagens);
   const custoPorViagem = totalViagens ? Math.round((valorContrato / totalViagens) * 100) / 100 : 0;
 
   const porEmpresaMap = {};
@@ -2233,14 +2291,20 @@ async function buscarDadosRateioCompleto(pid, periodo, valorContrato) {
   }));
 
   return {
-    periodo: { de: periodo.de, ate: periodo.ate },
+    periodo: {
+      de: periodo.de,
+      ate: periodo.ate,
+      deLabel: periodo.deLabel,
+      ateLabel: periodo.ateLabel,
+    },
     valor_contrato_mensal: valorContrato,
     totais: {
       viagens: totalViagens,
+      viagens_concluidas_periodo: viagensConcluidasPeriodo,
       km: Math.round(totalKm * 100) / 100,
       usuarios_ativos: usuariosAtivos,
-      custo_por_km: totalKm ? Math.round((valorContrato / totalKm) * 100) / 100 : 0,
-      custo_por_usuario: usuariosAtivos ? Math.round((valorContrato / usuariosAtivos) * 100) / 100 : 0,
+      custo_por_km: totalKm > 0 ? Math.round((valorContrato / totalKm) * 100) / 100 : 0,
+      custo_por_usuario: usuariosAtivos > 0 ? Math.round((valorContrato / usuariosAtivos) * 100) / 100 : 0,
       custo_por_viagem: custoPorViagem,
     },
     por_empresa: porEmpresa,
@@ -2377,8 +2441,8 @@ async function gerarWorkbookRateio(dados, meta) {
 
   const info = [
     ["Projeto", meta.projeto_nome || "—", "Código", meta.projeto_codigo || "—"],
-    ["Período", `${fmtDataBr(dados.periodo.de)} a ${fmtDataBr(dados.periodo.ate)}`, "Gerado em", geradoEm],
-    ["Contrato mensal (R$)", dados.valor_contrato_mensal, "", ""],
+    ["Período (de)", dados.periodo.deLabel || fmtDataBr(dados.periodo.de), "Período (até)", dados.periodo.ateLabel || fmtDataBr(dados.periodo.ate)],
+    ["Gerado em", geradoEm, "Contrato mensal (R$)", dados.valor_contrato_mensal],
   ];
   let r = 3;
   info.forEach((linha) => {
@@ -2392,9 +2456,9 @@ async function gerarWorkbookRateio(dados, meta) {
           ...xlsEstiloSubtitulo(),
           font: { ...xlsEstiloSubtitulo().font, bold: true },
         };
-      } else if (typeof v === "number" && linha[0].includes("Contrato")) {
-        cell.style = xlsEstiloCelula(false, "right");
-        cell.numFmt = XLS_FMT.moeda;
+      } else if (typeof v === "number") {
+        cell.style = xlsEstiloCelula(false, i === 3 ? "right" : "left");
+        if (linha[0].includes("Contrato") || (i === 3 && linha[2]?.includes("Contrato"))) cell.numFmt = XLS_FMT.moeda;
       } else {
         cell.style = xlsEstiloCelula(false, "left");
       }
@@ -2411,19 +2475,19 @@ async function gerarWorkbookRateio(dados, meta) {
 
   const t = dados.totais;
   const indicadores = [
-    ["Viagens válidas", t.viagens, "Km percorridos", t.km],
-    ["Usuários ativos", t.usuarios_ativos, "Custo por viagem", t.custo_por_viagem],
-    ["Custo por km", t.custo_por_km, "Custo por usuário", t.custo_por_usuario],
+    ["Viagens válidas (GPS)", numSeguro(t.viagens), "Km percorridos", numSeguro(t.km)],
+    ["Usuários ativos", numSeguro(t.usuarios_ativos), "Custo por viagem", numSeguro(t.custo_por_viagem)],
+    ["Custo por km", numSeguro(t.custo_por_km), "Custo por usuário", numSeguro(t.custo_por_usuario)],
   ];
   indicadores.forEach((linha) => {
     const row = wsResumo.getRow(r++);
     row.height = 24;
     linha.forEach((v, i) => {
       const cell = row.getCell(i + 1);
-      cell.value = v;
+      cell.value = numSeguro(v);
       if (i % 2 === 0) {
         cell.style = { ...xlsEstiloSubtitulo(), font: { ...xlsEstiloSubtitulo().font, bold: true } };
-      } else if (typeof v === "number") {
+      } else if (typeof v === "number" || Number.isFinite(Number(v))) {
         cell.style = xlsEstiloCelula(false, "right");
         cell.numFmt = linha[i - 1].includes("Custo") ? XLS_FMT.moeda
           : linha[i - 1].includes("Km") ? XLS_FMT.km
@@ -2434,7 +2498,19 @@ async function gerarWorkbookRateio(dados, meta) {
     });
   });
 
-  r += 2;
+  const conclSemGps = numSeguro(t.viagens_concluidas_periodo) - numSeguro(t.viagens);
+  if (numSeguro(t.viagens) === 0 || conclSemGps > 0) {
+    r += 1;
+    wsResumo.mergeCells(`A${r}:D${r}`);
+    const obs = wsResumo.getCell(`A${r}`);
+    obs.value = numSeguro(t.viagens) === 0
+      ? `Observação: ${numSeguro(t.viagens_concluidas_periodo)} viagem(ns) concluída(s) no período, porém nenhuma com deslocamento GPS válido — só essas entram no rateio e na medição.`
+      : `Observação: ${conclSemGps} viagem(ns) concluída(s) no período ficaram de fora por não terem deslocamento GPS válido.`;
+    obs.style = { ...xlsEstiloSubtitulo(), font: { ...xlsEstiloSubtitulo().font, italic: true, color: { argb: "FF64748B" } } };
+    wsResumo.getRow(r).height = 28;
+  }
+
+  r += 1;
   wsResumo.mergeCells(`A${r}:D${r}`);
   wsResumo.getCell(`A${r}`).value = "Onde o valor do contrato está sendo empregado (por empresa)";
   wsResumo.getCell(`A${r}`).style = { ...xlsEstiloSubtitulo(), font: { ...xlsEstiloSubtitulo().font, bold: true, size: 12 } };
