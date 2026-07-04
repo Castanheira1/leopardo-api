@@ -54,7 +54,7 @@
         .fav-item .fav-live { font-size: 10px; color: #7fd4a0; letter-spacing: .04em; flex-shrink: 0; }
         .fav-item.fav-buscando { opacity: .55; pointer-events: none; }
         .fav-vazio { color: #cbd5d5; text-align: center; padding: 18px 6px; font-size: 14px; }
-        .fav-perfil-lista { max-height: 38vh; overflow-y: auto; margin-top: 6px; }
+        .fav-perfil-lista { max-height: min(50vh, calc(var(--appvh, 1vh) * 50)); overflow-y: auto; margin-top: 6px; flex: 1; min-height: 100px; }
         .fav-perfil-item {
             display: flex; align-items: center; gap: 8px; width: 100%;
             background: rgba(255,255,255,.04); border: 1px solid rgba(234,210,152,.14);
@@ -185,7 +185,7 @@
     </div>
 
     <!-- Modal de Perfil (contato + modo motorista) -->
-    <div id="modalPerfil" class="cam-overlay" style="display:none;">
+    <div id="modalPerfil" class="cam-overlay cam-overlay-alto" style="display:none;">
         <div class="cam-box perfil-box">
 
             <!-- Hub: escolhe o que editar -->
@@ -253,9 +253,9 @@
                     <button type="button" class="perfil-voltar" onclick="perfilIrPara('menu')" aria-label="Voltar">‹</button>
                     <h3>Meus locais favoritos</h3>
                 </div>
-                <div class="perfil-secao">
-                    <p style="font-size:0.78rem;color:#9aa0a6;margin-bottom:8px;">Marque os locais que você usa com mais frequência. Só você vê os seus favoritos. No menu <strong style="color:#EAD298;">Locais</strong> aparece o catálogo completo do projeto; em <strong style="color:#EAD298;">Meus locais favoritos</strong> só os que você marcou.</p>
-                    <input id="perfilFavFiltro" class="fav-filtro" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
+                <input id="perfilFavFiltro" class="fav-filtro fav-filtro-topo" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
+                <div class="perfil-secao perfil-fav-corpo">
+                    <p class="perfil-fav-dica">Marque os locais que você usa com frequência. No menu <strong style="color:#EAD298;">Locais</strong> está o catálogo completo; aqui você escolhe os seus.</p>
                     <div id="perfilFavCatalogo" class="fav-perfil-lista"><div class="fav-vazio">Abra o catálogo do seu projeto…</div></div>
                     <div id="perfilFavMsg" class="cam-status"></div>
                 </div>
@@ -374,11 +374,11 @@
     </div>
 
     <!-- Locais do projeto + Meus locais favoritos (dois modos no mesmo painel) -->
-    <div id="painelFavoritos" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelFavoritos')">
-        <div class="cam-box perfil-box painel-box">
+    <div id="painelFavoritos" class="cam-overlay cam-overlay-alto" style="display:none;" onclick="if(event.target===this) fecharPainel('painelFavoritos')">
+        <div class="cam-box perfil-box painel-box painel-locais">
             <h3 id="favTitulo">Locais</h3>
+            <input id="favFiltro" class="fav-filtro fav-filtro-topo" placeholder="Filtrar locais…" oninput="renderPainelLocais()" style="display:none;">
             <p class="cam-hint" id="favSubtitulo">Catálogo do projeto — toque para marcar destino.</p>
-            <input id="favFiltro" class="fav-filtro" placeholder="Filtrar locais…" oninput="renderPainelLocais()" style="display:none;">
             <div id="listaFavoritos" class="fav-lista"><div class="fav-vazio">Carregando…</div></div>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharPainel('painelFavoritos')">Fechar</button>
@@ -449,6 +449,15 @@
         window.visualViewport.addEventListener('scroll', compensarTeclado);
     }
     document.addEventListener('focusin', (e) => {
+        if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
+            const overlay = e.target.closest('.cam-overlay');
+            if (overlay) overlay.classList.add('teclado-aberto');
+            compensarTeclado();
+            requestAnimationFrame(() => {
+                try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+            });
+            return;
+        }
         const pac = e.target.closest?.('gmp-place-autocomplete');
         if (pac) {
             const stage = pac.closest('.map-stage');
@@ -467,6 +476,15 @@
         });
     });
     document.addEventListener('focusout', (e) => {
+        if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
+            setTimeout(() => {
+                const ativo = document.activeElement;
+                if (ativo?.matches('#perfilFavFiltro, #favFiltro')) return;
+                e.target.closest('.cam-overlay')?.classList.remove('teclado-aberto');
+                compensarTeclado();
+            }, 120);
+            return;
+        }
         const sheet = e.target.closest?.('.acao-sheet, .viagem-sheet');
         if (!sheet) return;
         setTimeout(() => {
@@ -985,7 +1003,11 @@
         });
         const alvo = document.getElementById(views[view] || 'perfilMenu');
         if (alvo) alvo.style.display = 'block';
-        if (view === 'favoritos') renderPerfilFavoritos();
+        if (view === 'favoritos') {
+            renderPerfilFavoritos();
+            const box = document.querySelector('#modalPerfil .cam-box');
+            if (box) box.scrollTop = 0;
+        }
     }
     async function abrirPerfil(view) {
         if (!projetosPerfilCarregados) await carregarOpcoesProjetoPerfil();
