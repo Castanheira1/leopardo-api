@@ -186,54 +186,83 @@
     <!-- Modal de Perfil (contato + modo motorista) -->
     <div id="modalPerfil" class="cam-overlay" style="display:none;">
         <div class="cam-box perfil-box">
-            <h3>Perfil</h3>
 
-            <div class="perfil-secao">
-                <p style="font-size:0.8rem;color:#9aa0a6;margin-bottom:8px;">Dados do cadastro (usados no painel comercial)</p>
-                <label for="perfilProjeto">Projeto</label>
-                <select id="perfilProjeto" class="map-search" style="margin-bottom:8px;">
-                    <option value="">Selecione o projeto</option>
-                </select>
-                <label>Empresa</label>
-                <input id="perfilEmpresa" class="map-search" placeholder="Ex: Vale, MCA, Serveng">
-                <label for="perfilCentroCusto" style="margin-top:8px;display:block;">Centro de custo <small>(opcional)</small></label>
-                <input id="perfilCentroCusto" class="map-search" placeholder="Ex: CC-1234">
-                <label for="perfilEmail" style="margin-top:8px;display:block;">Email</label>
-                <input id="perfilEmail" class="map-search" readonly style="opacity:0.85;">
-                <small style="display:block;margin-top:6px;color:#9aa0a6;">O email é usado para recuperar senha no login.</small>
-            </div>
-
-            <div class="perfil-secao">
-                <label for="perfilTelefone">WhatsApp (com DDD)</label>
-                <input id="perfilTelefone" class="map-search" placeholder="(00) 90000-0000">
-                <label for="perfilSexo" style="margin-top:10px;display:block;">Sexo (bonequinho no mapa)</label>
-                <select id="perfilSexo" class="map-search">
-                    <option value="">Não informar</option>
-                    <option value="M">Homem (azul)</option>
-                    <option value="F">Mulher (rosa)</option>
-                </select>
-                <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar contato</button>
-                <div id="perfilMsg" class="cam-status"></div>
-            </div>
-
-            <div class="perfil-secao">
-                <label>Meus favoritos</label>
-                <p style="font-size:0.78rem;color:#9aa0a6;margin-bottom:8px;">Marque os locais que você usa com mais frequência. No menu <strong style="color:#EAD298;">Favoritos</strong> aparece só esta lista enxuta.</p>
-                <input id="perfilFavFiltro" class="fav-filtro" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
-                <div id="perfilFavCatalogo" class="fav-perfil-lista"><div class="fav-vazio">Abra o catálogo do seu projeto…</div></div>
-                <div id="perfilFavMsg" class="cam-status"></div>
-            </div>
-
-            <div class="perfil-secao">
-                <div class="hab-actions">
-                    <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar para oferecer carona</button>
-                    <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
+            <!-- Hub: escolhe o que editar -->
+            <div id="perfilMenu" class="perfil-view">
+                <h3>Perfil</h3>
+                <button type="button" class="perfil-nav-btn" onclick="perfilIrPara('dados')">
+                    <span class="perfil-nav-tit">Dados pessoais</span>
+                    <small class="perfil-nav-sub">Projeto, empresa, WhatsApp, sexo</small>
+                </button>
+                <button type="button" class="perfil-nav-btn" onclick="perfilIrPara('favoritos')">
+                    <span class="perfil-nav-tit">Meus favoritos</span>
+                    <small class="perfil-nav-sub">Locais que aparecem só para você</small>
+                </button>
+                <div class="perfil-secao">
+                    <div class="hab-actions">
+                        <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar para oferecer carona</button>
+                        <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
+                    </div>
+                </div>
+                <div class="cam-actions">
+                    <button type="button" class="btn btn-secondary" onclick="fecharPerfil()">Fechar</button>
                 </div>
             </div>
 
-            <div class="cam-actions">
-                <button type="button" class="btn btn-secondary" onclick="fecharPerfil()">Fechar</button>
+            <!-- Dados pessoais -->
+            <div id="perfilViewDados" class="perfil-view" style="display:none;">
+                <div class="perfil-header">
+                    <button type="button" class="perfil-voltar" onclick="perfilIrPara('menu')" aria-label="Voltar">‹</button>
+                    <h3>Dados pessoais</h3>
+                </div>
+                <div class="perfil-secao">
+                    <p style="font-size:0.8rem;color:#9aa0a6;margin-bottom:8px;">Dados do cadastro (usados no painel comercial)</p>
+                    <label for="perfilProjeto">Projeto</label>
+                    <select id="perfilProjeto" class="map-search" style="margin-bottom:8px;">
+                        <option value="">Selecione o projeto</option>
+                    </select>
+                    <label>Empresa</label>
+                    <input id="perfilEmpresa" class="map-search" placeholder="Ex: Vale, MCA, Serveng">
+                    <label for="perfilCentroCusto" style="margin-top:8px;display:block;">Centro de custo <small>(opcional)</small></label>
+                    <input id="perfilCentroCusto" class="map-search" placeholder="Ex: CC-1234">
+                    <label for="perfilEmail" style="margin-top:8px;display:block;">Email</label>
+                    <input id="perfilEmail" class="map-search" readonly style="opacity:0.85;">
+                    <small style="display:block;margin-top:6px;color:#9aa0a6;">O email é usado para recuperar senha no login.</small>
+                </div>
+                <div class="perfil-secao">
+                    <label for="perfilTelefone">WhatsApp (com DDD)</label>
+                    <input id="perfilTelefone" class="map-search" placeholder="(00) 90000-0000">
+                    <label for="perfilSexo" style="margin-top:10px;display:block;">Sexo (bonequinho no mapa)</label>
+                    <select id="perfilSexo" class="map-search">
+                        <option value="">Não informar</option>
+                        <option value="M">Homem (azul)</option>
+                        <option value="F">Mulher (rosa)</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar contato</button>
+                    <div id="perfilMsg" class="cam-status"></div>
+                </div>
+                <div class="cam-actions">
+                    <button type="button" class="btn btn-secondary" onclick="perfilIrPara('menu')">Voltar</button>
+                </div>
             </div>
+
+            <!-- Meus favoritos -->
+            <div id="perfilViewFavoritos" class="perfil-view" style="display:none;">
+                <div class="perfil-header">
+                    <button type="button" class="perfil-voltar" onclick="perfilIrPara('menu')" aria-label="Voltar">‹</button>
+                    <h3>Meus favoritos</h3>
+                </div>
+                <div class="perfil-secao">
+                    <p style="font-size:0.78rem;color:#9aa0a6;margin-bottom:8px;">Marque os locais que você usa com mais frequência. Só você vê os seus favoritos — eles não afetam a lista de ninguém. No menu <strong style="color:#EAD298;">Favoritos</strong> aparece só esta lista.</p>
+                    <input id="perfilFavFiltro" class="fav-filtro" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
+                    <div id="perfilFavCatalogo" class="fav-perfil-lista"><div class="fav-vazio">Abra o catálogo do seu projeto…</div></div>
+                    <div id="perfilFavMsg" class="cam-status"></div>
+                </div>
+                <div class="cam-actions">
+                    <button type="button" class="btn btn-secondary" onclick="perfilIrPara('menu')">Voltar</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -664,7 +693,7 @@
     function renderFavoritosMenu() {
         const lista = document.getElementById('listaFavoritos');
         if (!favPessoais.length) {
-            lista.innerHTML = '<div class="fav-vazio">Nenhum favorito ainda.<br><br>Abra o <strong>Perfil</strong> e marque os locais que você usa com frequência.</div>';
+            lista.innerHTML = '<div class="fav-vazio">Nenhum favorito ainda.<br><br>Abra o <strong>Perfil → Meus favoritos</strong> e marque os locais que você usa com frequência.</div>';
             return;
         }
         lista.innerHTML = favPessoais.map((l) => {
@@ -817,7 +846,18 @@
             aplicarPerfilNaTela();
         } catch (_) {}
     }
-    async function abrirPerfil() {
+    // Navega entre o hub do Perfil e as sub-telas (dados / favoritos).
+    function perfilIrPara(view) {
+        const views = { menu: 'perfilMenu', dados: 'perfilViewDados', favoritos: 'perfilViewFavoritos' };
+        Object.values(views).forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        const alvo = document.getElementById(views[view] || 'perfilMenu');
+        if (alvo) alvo.style.display = 'block';
+        if (view === 'favoritos') renderPerfilFavoritos();
+    }
+    async function abrirPerfil(view) {
         if (!projetosPerfilCarregados) await carregarOpcoesProjetoPerfil();
         const sel = document.getElementById('perfilProjeto');
         sel.value = user.projeto_codigo || '';
@@ -830,10 +870,14 @@
         document.getElementById('perfilTelefone').value = user.telefone || '';
         document.getElementById('perfilSexo').value = user.sexo || '';
         document.getElementById('modalPerfil').style.display = 'flex';
+        perfilIrPara(typeof view === 'string' ? view : 'menu');
         try {
             await carregarFavoritosPessoais();
         } catch (_) { favPessoais = []; }
-        await renderPerfilFavoritos();
+        // Se o usuário já está na tela de favoritos, atualiza as estrelas.
+        if (document.getElementById('perfilViewFavoritos').style.display !== 'none') {
+            renderPerfilFavoritos();
+        }
     }
     function fecharPerfil() {
         document.getElementById('modalPerfil').style.display = 'none';
