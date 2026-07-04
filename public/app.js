@@ -295,6 +295,7 @@ function carregarMaps() {
 // Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
 function criarMarcador(opts = {}) {
     const { map, position, title, icon, label, zIndex, cor, invisivel } = opts;
+    let pinEl = null;
     let content = null;
     if (invisivel) {
         const d = document.createElement('div');
@@ -315,15 +316,16 @@ function criarMarcador(opts = {}) {
             scale: label ? 1.1 : 0.85,
         };
         if (label) pinOpts.glyphText = label;
-        content = new _PinElement(pinOpts);
+        pinEl = new _PinElement(pinOpts);
     }
     const mk = new _AdvancedMarkerElement({
         map: map || null,
         position: normalizarLatLng(position),
         title: title || '',
-        content,
+        content: content || null,
         zIndex,
     });
+    if (pinEl) mk.append(pinEl);
     return {
         setPosition(p) { mk.position = normalizarLatLng(p); },
         getPosition() { return posicaoLegada(mk); },
