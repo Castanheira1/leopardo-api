@@ -73,7 +73,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -191,6 +191,18 @@ async function garantirSchemaComercial() {
       ON tokens_recuperacao(token_hash) WHERE usado = FALSE`);
   } catch (e) {
     console.warn("garantirSchemaComercial:", e.message);
+  }
+}
+
+async function garantirRlsSupabase() {
+  const tabelas = ["matriculas_bloqueadas", "push_subscriptions", "tokens_recuperacao"];
+  for (const t of tabelas) {
+    try {
+      await pool.query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
+      await pool.query(`REVOKE ALL ON ${t} FROM anon, authenticated`);
+    } catch (e) {
+      console.warn(`garantirRlsSupabase(${t}):`, e.message);
+    }
   }
 }
 
