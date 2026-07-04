@@ -1429,6 +1429,15 @@
     }
 
     /* -------- viagem + rastreamento ao vivo -------- */
+    function distKmGps(a, b) {
+        const R = 6371;
+        const dLat = (b.lat - a.lat) * Math.PI / 180;
+        const dLng = (b.lng - a.lng) * Math.PI / 180;
+        const x = Math.sin(dLat / 2) ** 2
+            + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
     async function iniciarViagem(propostaId) {
         const r = await fetchWithAuth('/api/viagens', { method: 'POST', body: JSON.stringify({ proposta_id: propostaId }) });
         const d = await r.json();
@@ -1694,15 +1703,21 @@
         const vv = viagemView;
         if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
         if (acompTimer) clearInterval(acompTimer);
-        trackState = { viagemId: vv.id, buffer: [] };
+        trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null };
         localStorage.setItem('viagemAtiva', vv.id);
 
-        // 1) GPS próprio → marca a própria posição, transmite, e (motorista) grava o trajeto.
+        // 1) GPS próprio → grava trajeto só com deslocamento real (>= 25 m).
         let ultimoEnvioLoc = 0;
         trackState.watchId = navigator.geolocation.watchPosition((pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            if (vv.ehMotorista) { vv.posMotorista = pt; trackState.buffer.push(pt); }
-            else vv.posPassageiro = pt;
+            if (vv.ehMotorista) {
+                vv.posMotorista = pt;
+                const mover = !trackState.ultimoPonto || distKmGps(trackState.ultimoPonto, pt) >= 0.025;
+                if (mover) {
+                    trackState.buffer.push(pt);
+                    trackState.ultimoPonto = pt;
+                }
+            } else vv.posPassageiro = pt;
             renderViagem();
             if (Date.now() - ultimoEnvioLoc > 4000) {
                 ultimoEnvioLoc = Date.now();
@@ -1767,7 +1782,11 @@
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); limparRotaViagem(); }
-        msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos.`);
+        if (d.deslocamento_valido) {
+            msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos (GPS).`);
+        } else {
+            msg('Viagem encerrada sem deslocamento GPS suficiente — não entra no rateio/admin.', 'error');
+        }
     }
     // Sai da tela de viagem (concluída) e volta ao mapa do papel atual.
     function sairDaViagem() {

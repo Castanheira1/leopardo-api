@@ -162,9 +162,10 @@ CREATE TABLE viagens (
     status VARCHAR(20) DEFAULT 'em_andamento' CHECK (status IN ('em_andamento', 'concluida', 'cancelada')),
     -- fase da viagem: 'encontro' = motorista indo buscar; 'destino' = a caminho do destino
     fase VARCHAR(20) DEFAULT 'encontro' CHECK (fase IN ('encontro', 'destino')),
+    distancia_km NUMERIC(10,2),
+    deslocamento_valido BOOLEAN DEFAULT FALSE,
     iniciada_em TIMESTAMP DEFAULT NOW(),
     finalizada_em TIMESTAMP,
-    distancia_km NUMERIC(10,2),
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_viagens_proposta ON viagens (proposta_id);
