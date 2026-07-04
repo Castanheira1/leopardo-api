@@ -17,7 +17,7 @@ app que guarda **selfies, rota de GPS e telefone** de funcionários.
 
 > Nota de ambiente: os testes rodaram contra um Postgres **local** (o ambiente
 > bloqueia as portas 5432/6543, então não consegui falar direto com o banco
-> `leopardo` de produção daqui). Isso não muda o veredito — os testes validam o
+> de produção daqui). Isso não muda o veredito — os testes validam o
 > código que roda em produção.
 
 ---

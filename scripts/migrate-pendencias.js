@@ -10,7 +10,7 @@ const { Pool } = require("pg");
 
 const url = process.env.DATABASE_URL;
 if (!url || /\[SUA-SENHA\]|\[REF\]|\[YOUR-PASSWORD\]/i.test(url)) {
-  console.error("Defina DATABASE_URL com a senha real do pooler Supabase (leopardo).");
+  console.error("Defina DATABASE_URL com a senha real do pooler Supabase.");
   process.exit(1);
 }
 
