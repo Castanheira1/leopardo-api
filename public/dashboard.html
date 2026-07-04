@@ -54,6 +54,19 @@
         .fav-item .fav-live { font-size: 10px; color: #7fd4a0; letter-spacing: .04em; flex-shrink: 0; }
         .fav-item.fav-buscando { opacity: .55; pointer-events: none; }
         .fav-vazio { color: #cbd5d5; text-align: center; padding: 18px 6px; font-size: 14px; }
+        .fav-perfil-lista { max-height: 38vh; overflow-y: auto; margin-top: 6px; }
+        .fav-perfil-item {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            background: rgba(255,255,255,.04); border: 1px solid rgba(234,210,152,.14);
+            border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;
+        }
+        .fav-perfil-item .fav-nome { flex: 1; min-width: 0; font-size: 14px; color: #e8eaed; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fav-star {
+            flex-shrink: 0; background: none; border: none; cursor: pointer;
+            font-size: 20px; line-height: 1; padding: 2px 4px; color: #6b7280;
+        }
+        .fav-star.on { color: #EAD298; }
+        .fav-star:disabled { opacity: .5; cursor: wait; }
     </style>
 </head>
 <body class="theme-dark">
@@ -204,6 +217,14 @@
             </div>
 
             <div class="perfil-secao">
+                <label>Meus favoritos</label>
+                <p style="font-size:0.78rem;color:#9aa0a6;margin-bottom:8px;">Marque os locais que você usa com mais frequência. No menu <strong style="color:#EAD298;">Favoritos</strong> aparece só esta lista enxuta.</p>
+                <input id="perfilFavFiltro" class="fav-filtro" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
+                <div id="perfilFavCatalogo" class="fav-perfil-lista"><div class="fav-vazio">Abra o catálogo do seu projeto…</div></div>
+                <div id="perfilFavMsg" class="cam-status"></div>
+            </div>
+
+            <div class="perfil-secao">
                 <div class="hab-actions">
                     <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar para oferecer carona</button>
                     <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
@@ -322,12 +343,11 @@
         </div>
     </div>
 
-    <!-- Favoritos: locais do projeto (arquivo locais-favoritos.json), resolvidos AO VIVO no Google -->
+    <!-- Favoritos: só a lista pessoal (configurada no Perfil) -->
     <div id="painelFavoritos" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelFavoritos')">
         <div class="cam-box perfil-box painel-box">
             <h3>Favoritos</h3>
-            <p class="cam-hint" id="favSubtitulo">Toque num local para marcar como destino — igual à busca.</p>
-            <input id="favFiltro" class="fav-filtro" placeholder="Filtrar locais…" oninput="filtrarFavoritos()">
+            <p class="cam-hint" id="favSubtitulo">Seus locais frequentes — toque para marcar destino.</p>
             <div id="listaFavoritos" class="fav-lista"><div class="fav-vazio">Carregando…</div></div>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharPainel('painelFavoritos')">Fechar</button>
@@ -504,14 +524,14 @@
             || document.getElementById('painelMotorista').style.display === 'flex';
     }
 
-    /* -------- Favoritos: locais do projeto, resolvidos AO VIVO no Google --------
-       A lista vem de /locais-favoritos.json (por projeto). Ao tocar num local o app
-       consulta a API do Places NA HORA (findPlaceFromQuery) — se o lugar mudou de
-       posição ou ganhou registro novo no Google, o app usa a posição atualizada.
-       As coordenadas "ref" do arquivo são só um plano B se o Google não encontrar. */
-    let favCatalogo = null;        // JSON completo
-    let favProjeto = null;         // bloco do projeto do usuário
-    let favLocais = [];            // lista achatada [{nome, busca, ref, grupo}]
+    /* -------- Favoritos pessoais (Perfil) + lista enxuta no menu --------
+       Catálogo do projeto: locais-favoritos.json. O usuário marca no Perfil;
+       no menu Favoritos aparece só o que ele salvou. Posição resolvida AO VIVO
+       no Google Places ao tocar. */
+    let favCatalogo = null;
+    let favProjeto = null;
+    let favCatalogoLocais = [];   // todos do projeto [{nome, busca, ref, grupo}]
+    let favPessoais = [];         // salvos pelo usuário (API)
 
     async function carregarCatalogoFavoritos() {
         if (favCatalogo) return favCatalogo;
@@ -521,44 +541,92 @@
         return favCatalogo;
     }
 
-    function montarFavLocais() {
-        favLocais = [];
+    function montarCatalogoProjeto(codigo) {
+        favProjeto = favCatalogo?.projetos?.[codigo] || null;
+        favCatalogoLocais = [];
         (favProjeto?.grupos || []).forEach((gr) => {
-            (gr.locais || []).forEach((l) => favLocais.push({ ...l, grupo: gr.titulo }));
+            (gr.locais || []).forEach((l) => favCatalogoLocais.push({ ...l, grupo: gr.titulo }));
         });
     }
 
-    async function abrirFavoritos() {
-        fecharMenu();
-        document.getElementById('painelFavoritos').style.display = 'flex';
-        const lista = document.getElementById('listaFavoritos');
-        try {
-            await carregarCatalogoFavoritos();
-            const cod = (user?.projeto_codigo || '').toUpperCase();
-            favProjeto = favCatalogo.projetos?.[cod] || null;
-            if (!favProjeto) {
-                document.getElementById('favSubtitulo').textContent =
-                    'Seu projeto ainda não tem locais cadastrados. Defina o projeto no Perfil.';
-                lista.innerHTML = '<div class="fav-vazio">Sem locais para este projeto.</div>';
+    async function carregarFavoritosPessoais() {
+        const r = await fetchWithAuth('/api/perfil/favoritos');
+        if (!r || !r.ok) throw new Error('api');
+        favPessoais = await r.json();
+        return favPessoais;
+    }
+
+    async function salvarFavoritosPessoais() {
+        const r = await fetchWithAuth('/api/perfil/favoritos', {
+            method: 'PUT',
+            body: JSON.stringify({ favoritos: favPessoais }),
+        });
+        if (!r || !r.ok) {
+            const d = r ? await r.json().catch(() => ({})) : {};
+            throw new Error(d.error || 'Erro ao salvar');
+        }
+        favPessoais = await r.json();
+    }
+
+    function favEstaMarcado(nome) {
+        return favPessoais.some((f) => f.nome === nome);
+    }
+
+    async function toggleFavoritoPerfil(btn) {
+        const nome = decodeURIComponent(btn.dataset.nomeEnc || '');
+        const local = favCatalogoLocais.find((l) => l.nome === nome);
+        if (!local) return;
+        const msg = document.getElementById('perfilFavMsg');
+        if (favEstaMarcado(nome)) {
+            favPessoais = favPessoais.filter((f) => f.nome !== nome);
+        } else {
+            if (favPessoais.length >= 40) {
+                if (msg) msg.textContent = 'Máximo de 40 favoritos.';
                 return;
             }
-            document.getElementById('favSubtitulo').textContent =
-                `${favProjeto.nome} — toque num local para marcar como destino.`;
-            montarFavLocais();
-            renderFavoritos();
-        } catch (_) {
-            lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar os favoritos. Verifique a internet.</div>';
+            favPessoais.push({
+                nome: local.nome,
+                busca: local.busca || local.nome,
+                grupo: local.grupo,
+                ref: local.ref,
+            });
+        }
+        renderPerfilFavoritos();
+        try {
+            await salvarFavoritosPessoais();
+            if (msg) msg.textContent = favEstaMarcado(nome) ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.';
+        } catch (e) {
+            if (msg) msg.textContent = e.message || 'Erro ao salvar.';
+            await carregarFavoritosPessoais();
+            renderPerfilFavoritos();
         }
     }
 
-    const FAV_PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>';
-
-    function renderFavoritos() {
-        const lista = document.getElementById('listaFavoritos');
-        const filtro = (document.getElementById('favFiltro').value || '').trim().toLowerCase();
-        const visiveis = filtro ? favLocais.filter((l) => l.nome.toLowerCase().includes(filtro)) : favLocais;
+    async function renderPerfilFavoritos() {
+        const el = document.getElementById('perfilFavCatalogo');
+        if (!el) return;
+        const cod = (user?.projeto_codigo || '').toUpperCase();
+        if (!cod) {
+            el.innerHTML = '<div class="fav-vazio">Defina seu projeto acima para ver o catálogo.</div>';
+            return;
+        }
+        try {
+            await carregarCatalogoFavoritos();
+            montarCatalogoProjeto(cod);
+            if (!favCatalogoLocais.length) {
+                el.innerHTML = '<div class="fav-vazio">Catálogo ainda não disponível para este projeto.</div>';
+                return;
+            }
+        } catch (_) {
+            el.innerHTML = '<div class="fav-vazio">Não foi possível carregar o catálogo.</div>';
+            return;
+        }
+        const filtro = (document.getElementById('perfilFavFiltro')?.value || '').trim().toLowerCase();
+        const visiveis = filtro
+            ? favCatalogoLocais.filter((l) => l.nome.toLowerCase().includes(filtro) || (l.grupo || '').toLowerCase().includes(filtro))
+            : favCatalogoLocais;
         if (!visiveis.length) {
-            lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
+            el.innerHTML = '<div class="fav-vazio">Nenhum local no filtro.</div>';
             return;
         }
         let html = '';
@@ -568,17 +636,45 @@
                 grupoAtual = l.grupo;
                 html += `<div class="fav-grupo">${esc(grupoAtual)}</div>`;
             }
-            const key = esc(l.nome).replace(/"/g, '&quot;');
-            html += `<button type="button" class="fav-item" data-nome="${key}" onclick="escolherFavorito(this)">
-                <span class="fav-pin">${FAV_PIN}</span>
+            const on = favEstaMarcado(l.nome);
+            const enc = encodeURIComponent(l.nome);
+            html += `<div class="fav-perfil-item">
+                <button type="button" class="fav-star ${on ? 'on' : ''}" data-nome-enc="${enc}" title="${on ? 'Remover' : 'Adicionar'}" onclick="toggleFavoritoPerfil(this)">${on ? '★' : '☆'}</button>
                 <span class="fav-nome">${esc(l.nome)}</span>
-                <span class="fav-live">AO VIVO</span>
-            </button>`;
+            </div>`;
         });
-        lista.innerHTML = html;
+        el.innerHTML = html;
     }
 
-    function filtrarFavoritos() { renderFavoritos(); }
+    async function abrirFavoritos() {
+        fecharMenu();
+        document.getElementById('painelFavoritos').style.display = 'flex';
+        const lista = document.getElementById('listaFavoritos');
+        document.getElementById('favSubtitulo').textContent = 'Seus locais frequentes — toque para marcar destino.';
+        try {
+            await carregarFavoritosPessoais();
+            renderFavoritosMenu();
+        } catch (_) {
+            lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar seus favoritos.</div>';
+        }
+    }
+
+    const FAV_PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>';
+
+    function renderFavoritosMenu() {
+        const lista = document.getElementById('listaFavoritos');
+        if (!favPessoais.length) {
+            lista.innerHTML = '<div class="fav-vazio">Nenhum favorito ainda.<br><br>Abra o <strong>Perfil</strong> e marque os locais que você usa com frequência.</div>';
+            return;
+        }
+        lista.innerHTML = favPessoais.map((l) => {
+            const key = esc(l.nome).replace(/"/g, '&quot;');
+            return `<button type="button" class="fav-item" data-nome="${key}" onclick="escolherFavorito(this)">
+                <span class="fav-pin">${FAV_PIN}</span>
+                <span class="fav-nome">${esc(l.nome)}</span>
+            </button>`;
+        }).join('');
+    }
 
     function seletorAtivo() {
         const papel = localStorage.getItem('papel');
@@ -586,17 +682,17 @@
     }
 
     function favLocationBias() {
-        const reg = favProjeto?.regiao;
+        const cod = (user?.projeto_codigo || '').toUpperCase();
+        const reg = favCatalogo?.projetos?.[cod]?.regiao;
         if (!reg) return undefined;
         return { center: { lat: reg.lat, lng: reg.lng }, radius: (reg.raio_km || 40) * 1000 };
     }
 
-    // Resolve o local AO VIVO no Google. Ordem: findPlaceFromQuery (posição atual
-    // do lugar) → textSearch → coordenada "ref" do arquivo (último recurso).
     function resolverLocalAoVivo(local) {
         return new Promise(async (resolve) => {
             try {
                 g = g || await carregarMaps();
+                if (!favCatalogo) await carregarCatalogoFavoritos();
                 const sel = seletorAtivo();
                 const svc = new g.maps.places.PlacesService(sel ? sel.map : document.createElement('div'));
                 const bias = favLocationBias();
@@ -635,7 +731,7 @@
 
     async function escolherFavorito(btn) {
         const nome = btn.dataset.nome;
-        const local = favLocais.find((l) => l.nome === nome);
+        const local = favPessoais.find((l) => l.nome === nome);
         if (!local) return;
         const sel = seletorAtivo();
         if (!sel) { msg('Abra o mapa primeiro para marcar o destino.', 'error'); return; }
@@ -646,56 +742,6 @@
         fecharPainel('painelFavoritos');
         sel.irPara({ lat: achado.lat, lng: achado.lng }, achado.nome);
         if (achado.aproximado) msg(`${achado.nome}: usando posição aproximada (não achei no Google agora).`);
-    }
-
-    // Descoberta AO VIVO: varre o Google em volta do projeto procurando lugares
-    // novos (canteiro que mudou, local recém-criado) e soma à lista da sessão.
-    async function descobrirLocaisAoVivo() {
-        if (!favProjeto) return;
-        const botao = document.getElementById('btnFavDescobrir');
-        botao.disabled = true;
-        botao.textContent = 'Buscando no mapa…';
-        try {
-            g = g || await carregarMaps();
-            const sel = seletorAtivo();
-            const svc = new g.maps.places.PlacesService(sel ? sel.map : document.createElement('div'));
-            const bias = favLocationBias();
-            const consultas = favProjeto.descoberta || [];
-            const jaTem = new Set(favLocais.concat(favDescobertos).map((l) => l.nome.toLowerCase()));
-            for (const q of consultas) {
-                await new Promise((fim) => {
-                    svc.textSearch(
-                        { query: q, location: bias ? bias.center : undefined, radius: bias ? bias.radius : undefined },
-                        (res, status) => {
-                            if (status === 'OK' && res) {
-                                res.forEach((p) => {
-                                    if (!p.name || !p.geometry) return;
-                                    const k = p.name.toLowerCase();
-                                    if (jaTem.has(k)) return;
-                                    jaTem.add(k);
-                                    favDescobertos.push({
-                                        nome: p.name,
-                                        busca: p.name,
-                                        ref: { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() },
-                                        grupo: 'Encontrados agora no mapa',
-                                    });
-                                });
-                            }
-                            fim();
-                        }
-                    );
-                });
-            }
-            renderFavoritos();
-            msg(favDescobertos.length
-                ? `${favDescobertos.length} local(is) encontrados ao vivo no Google Maps.`
-                : 'Nenhum local novo além dos favoritos.');
-        } catch (_) {
-            msg('Não foi possível varrer o mapa agora.', 'error');
-        } finally {
-            botao.disabled = false;
-            botao.textContent = 'Buscar novos locais no mapa';
-        }
     }
 
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
@@ -784,6 +830,10 @@
         document.getElementById('perfilTelefone').value = user.telefone || '';
         document.getElementById('perfilSexo').value = user.sexo || '';
         document.getElementById('modalPerfil').style.display = 'flex';
+        try {
+            await carregarFavoritosPessoais();
+        } catch (_) { favPessoais = []; }
+        await renderPerfilFavoritos();
     }
     function fecharPerfil() {
         document.getElementById('modalPerfil').style.display = 'none';

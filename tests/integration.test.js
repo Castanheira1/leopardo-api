@@ -256,6 +256,24 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       eq(json.telefone, "11888887777", "telefone");
     });
+    await test("GET /api/perfil/favoritos → lista vazia", async () => {
+      const { status, json } = await api("GET", "/api/perfil/favoritos", { token: tokDriver });
+      eq(status, 200, "status");
+      assert(Array.isArray(json), "array");
+    });
+    await test("PUT /api/perfil/favoritos salva e devolve", async () => {
+      const body = {
+        favoritos: [
+          { nome: "Portaria S11D", busca: "Portaria S11D", grupo: "Acessos", ref: { lat: -6.4545, lng: -50.2081 } },
+          { nome: "Usina A", busca: "Usina A S11D" },
+        ],
+      };
+      const { status, json } = await api("PUT", "/api/perfil/favoritos", { token: tokDriver, body });
+      eq(status, 200, "status");
+      eq(json.length, 2, "qtd favoritos");
+      const r2 = await api("GET", "/api/perfil/favoritos", { token: tokDriver });
+      eq(r2.json.length, 2, "persistido");
+    });
 
     /* =================== HABILITAÇÃO =================== */
     grupo("Habilitação do motorista");
