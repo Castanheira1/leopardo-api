@@ -81,11 +81,11 @@
         const g = await carregarMaps();
         const pts = (v.pontos || []).map(p => ({ lat: +p.lat, lng: +p.lng }));
         const centro = pts[0] || (v.origem_lat ? { lat: +v.origem_lat, lng: +v.origem_lng } : { lat: -6.40, lng: -49.85 });
-        const map = new g.maps.Map(document.getElementById('mapDetalhe'), { center: centro, zoom: 14 });
+        const map = new g.maps.Map(document.getElementById('mapDetalhe'), opcoesMapa({ center: centro, zoom: 14 }));
         if (pts.length) {
             new g.maps.Polyline({ path: pts, strokeColor: '#00a9ce', strokeWeight: 5, map });
-            new g.maps.Marker({ position: pts[0], map, label: 'A' });
-            new g.maps.Marker({ position: pts[pts.length - 1], map, label: 'B' });
+            criarMarcador({ position: pts[0], map, label: 'A' });
+            criarMarcador({ position: pts[pts.length - 1], map, label: 'B' });
         }
 
         const fotos = [

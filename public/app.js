@@ -184,17 +184,200 @@ function carregarScript(src) {
     return _scriptsCarregados[src];
 }
 
-/* -------------------- Google Maps -------------------- */
+/* -------------------- Google Maps (APIs novas: marker, routes, places) -------------------- */
 let _mapsPromise = null;
+let _mapId = 'DEMO_MAP_ID';
+let _RouteClass = null;
+let _AdvancedMarkerElement = null;
+let _PinElement = null;
+
+function mapIdAtual() { return _mapId; }
+
+function opcoesMapa(opts = {}) {
+    return { mapId: _mapId, ...opts };
+}
+
+function normalizarLatLng(pos) {
+    if (!pos) return null;
+    if (typeof pos.lat === 'function') return { lat: pos.lat(), lng: pos.lng() };
+    return { lat: Number(pos.lat), lng: Number(pos.lng) };
+}
+
+function posicaoLegada(mk) {
+    const p = mk?.position ?? mk;
+    if (!p) return null;
+    const lat = typeof p.lat === 'function' ? p.lat() : p.lat;
+    const lng = typeof p.lng === 'function' ? p.lng() : p.lng;
+    return { lat: () => lat, lng: () => lng };
+}
+
+function formatarMetros(m) {
+    const n = Number(m);
+    if (!Number.isFinite(n)) return '';
+    return n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(n) + ' m';
+}
+
+function manobraLegada(m) {
+    if (!m) return '';
+    return String(m).toLowerCase().replace(/_/g, '-');
+}
+
+function respostaRotaLegada(route) {
+    const leg = route.legs?.[0] || route;
+    const distText = leg.localizedValues?.distance?.text
+        || route.localizedValues?.distance?.text
+        || formatarMetros(route.distanceMeters ?? leg.distanceMeters);
+    const durText = leg.localizedValues?.duration?.text
+        || route.localizedValues?.duration?.text
+        || '';
+    const steps = (leg.steps || []).map((s) => ({
+        distance: { text: s.localizedValues?.distance?.text || formatarMetros(s.distanceMeters) },
+        maneuver: manobraLegada(s.navigationInstruction?.maneuver),
+        instructions: s.navigationInstruction?.instructions || '',
+    }));
+    return {
+        routes: [{ legs: [{ distance: { text: distText }, duration: { text: durText }, steps }] }],
+        _route: route,
+    };
+}
+
 function carregarMaps() {
     if (_mapsPromise) return _mapsPromise;
     _mapsPromise = (async () => {
         const cfg = await (await fetch('/api/config')).json();
         if (!cfg.mapsApiKey) throw new Error('Google Maps API key não configurada (.env GOOGLE_MAPS_API_KEY)');
-        await carregarScript(`https://maps.googleapis.com/maps/api/js?key=${cfg.mapsApiKey}&libraries=places`);
+        _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
+        await carregarScript(`https://maps.googleapis.com/maps/api/js?key=${cfg.mapsApiKey}&loading=async`);
+        const [, markerLib, routesLib] = await Promise.all([
+            google.maps.importLibrary('maps'),
+            google.maps.importLibrary('marker'),
+            google.maps.importLibrary('routes'),
+            google.maps.importLibrary('places'),
+        ]);
+        _RouteClass = routesLib.Route;
+        _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+        _PinElement = markerLib.PinElement;
         return window.google;
     })();
     return _mapsPromise;
+}
+
+// Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
+function criarMarcador(opts = {}) {
+    const { map, position, title, icon, label, zIndex, cor, invisivel } = opts;
+    let content = null;
+    if (invisivel) {
+        const d = document.createElement('div');
+        d.style.cssText = 'width:36px;height:36px;opacity:0.001;';
+        content = d;
+    } else if (typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('data:'))) {
+        const img = document.createElement('img');
+        img.src = icon;
+        img.style.width = '44px';
+        img.style.height = '44px';
+        img.draggable = false;
+        content = img;
+    } else if (label || cor) {
+        const pin = new _PinElement({
+            glyph: label || '',
+            background: cor || '#EA4335',
+            borderColor: '#fff',
+            glyphColor: '#fff',
+            scale: label ? 1.1 : 0.85,
+        });
+        content = pin.element;
+    }
+    const mk = new _AdvancedMarkerElement({
+        map: map || null,
+        position: normalizarLatLng(position),
+        title: title || '',
+        content,
+        zIndex,
+    });
+    return {
+        setPosition(p) { mk.position = normalizarLatLng(p); },
+        getPosition() { return posicaoLegada(mk); },
+        setMap(m) { mk.map = m; },
+        addListener(ev, fn) { return mk.addListener(ev, fn); },
+    };
+}
+
+// Rotas modernas (Route.computeRoutes) — substitui DirectionsService + DirectionsRenderer.
+function criarRotaControle(map, polylineOptions = {}) {
+    const estilo = { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95, ...polylineOptions };
+    let polylines = [];
+
+    const ctrl = {
+        async calcular(origem, destino) {
+            ctrl.limpar();
+            const { routes } = await _RouteClass.computeRoutes({
+                origin: normalizarLatLng(origem),
+                destination: normalizarLatLng(destino),
+                travelMode: 'DRIVING',
+                fields: ['path', 'distance', 'duration', 'legs'],
+            });
+            if (!routes?.length) throw new Error('sem rota');
+            const route = routes[0];
+            if (map) {
+                polylines = route.createPolylines() || [];
+                polylines.forEach((pl) => {
+                    if (pl.setOptions) pl.setOptions(estilo);
+                    pl.setMap(map);
+                });
+            }
+            return respostaRotaLegada(route);
+        },
+        limpar() {
+            polylines.forEach((pl) => pl.setMap(null));
+            polylines = [];
+        },
+        setMap(m) {
+            if (!m) ctrl.limpar();
+        },
+        setDirections(resp) {
+            if (resp?._route && map) {
+                ctrl.limpar();
+                polylines = resp._route.createPolylines() || [];
+                polylines.forEach((pl) => {
+                    if (pl.setOptions) pl.setOptions(estilo);
+                    pl.setMap(map);
+                });
+            }
+        },
+    };
+    return ctrl;
+}
+
+// Autocomplete moderno (PlaceAutocompleteElement) no lugar do input legado.
+async function ligarPlaceAutocomplete(inputEl, { map, onPlace } = {}) {
+    const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
+    const pac = new PlaceAutocompleteElement({});
+    pac.placeholder = inputEl.placeholder || '';
+    if (inputEl.className) pac.className = inputEl.className;
+    inputEl.style.display = 'none';
+    inputEl.insertAdjacentElement('afterend', pac);
+    if (map) {
+        const atualizarBias = () => {
+            const b = map.getBounds();
+            if (b) pac.locationBias = b;
+        };
+        atualizarBias();
+        map.addListener('bounds_changed', atualizarBias);
+    }
+    pac.addEventListener('gmp-select', async ({ placePrediction }) => {
+        try {
+            const place = placePrediction.toPlace();
+            await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+            if (!place.location) return;
+            onPlace({
+                name: place.displayName,
+                formatted_address: place.formattedAddress,
+                geometry: { location: posicaoLegada({ position: place.location }) },
+            });
+            pac.value = '';
+        } catch (_) { /* seleção inválida */ }
+    });
+    return pac;
 }
 
 /* -------------------- Geolocalização -------------------- */

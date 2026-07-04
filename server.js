@@ -740,7 +740,11 @@ setTimeout(() => { aplicarRetencaoFotos().catch(() => {}); }, 60 * 1000);
 
 /* ============================ CONFIG ============================ */
 app.get("/api/config", (req, res) => {
-  res.json({ mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "", pushPublicKey: VAPID_PUBLIC });
+  res.json({
+    mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
+    mapsMapId: process.env.GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID",
+    pushPublicKey: VAPID_PUBLIC,
+  });
 });
 
 /* ============================ PUSH ============================ */

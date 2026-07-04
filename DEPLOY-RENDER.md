@@ -48,7 +48,7 @@ Supabase → **Project Settings → Database → Reset database password**.
 |---|---|
 | `SUPABASE_URL` | Settings → API → **Project URL** (`https://vsxnqtecnvhhvekmkshb.supabase.co`) |
 | `SUPABASE_KEY` | Settings → API → **`service_role`** (secreta — fica só no servidor, nunca no front) |
-| `GOOGLE_MAPS_API_KEY` | Google Cloud Console → APIs habilitadas: **Maps JavaScript API** + **Places API**. Restrinja por domínio depois do deploy. |
+| `GOOGLE_MAPS_API_KEY` | Google Cloud Console → APIs habilitadas: **Maps JavaScript API**, **Places API (New)** e **Routes API**. Restrinja por domínio depois do deploy. |
 
 ---
 
