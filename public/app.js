@@ -472,17 +472,19 @@ function capturarFoto(opts = {}) {
 
     return new Promise((resolve, reject) => {
         const overlay = document.createElement('div');
-        overlay.className = 'cam-overlay';
+        overlay.className = 'cam-overlay cam-live';
         overlay.innerHTML = `
             <div class="cam-box">
                 <h3>${titulo}</h3>
-                <video class="cam-video" autoplay playsinline muted></video>
-                <p class="cam-hint">${hintTexto} • só câmera ao vivo (galeria bloqueada)</p>
+                <div class="cam-video-wrap">
+                    <video class="cam-video ${facing === 'user' ? 'cam-video-espelho' : ''}" autoplay playsinline muted></video>
+                    <p class="cam-hint">${hintTexto} • só câmera ao vivo (galeria bloqueada)</p>
+                </div>
+                <div class="cam-status"></div>
                 <div class="cam-actions">
                     <button type="button" class="btn btn-secondary cam-cancel">Cancelar</button>
                     <button type="button" class="btn btn-primary cam-shot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Capturar</button>
                 </div>
-                <div class="cam-status"></div>
             </div>`;
         document.body.appendChild(overlay);
 
