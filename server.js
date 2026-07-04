@@ -39,7 +39,12 @@ if (!JWT_SECRET) {
 }
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(compression());
+app.use(compression({
+  filter: (req, res) => {
+    if (String(req.url || "").includes("/export")) return false;
+    return compression.filter(req, res);
+  },
+}));
 // 1200: o polling legítimo de um motorista em viagem chega perto de 600/15min
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1200 }));
 
@@ -2292,11 +2297,8 @@ function xlsEstiloCabecalho() {
 }
 
 function xlsEstiloCelula(alternar = false, alinhamento = "left") {
-  return {
+  const estilo = {
     font: { name: "Calibri", size: 11, color: { argb: "FF1E293B" } },
-    fill: alternar
-      ? { type: "pattern", pattern: "solid", fgColor: { argb: XLS_COR.zebra } }
-      : undefined,
     alignment: { vertical: "middle", horizontal: alinhamento, wrapText: true },
     border: {
       top: { style: "hair", color: { argb: XLS_COR.borda } },
@@ -2305,6 +2307,10 @@ function xlsEstiloCelula(alternar = false, alinhamento = "left") {
       right: { style: "hair", color: { argb: XLS_COR.borda } },
     },
   };
+  if (alternar) {
+    estilo.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XLS_COR.zebra } };
+  }
+  return estilo;
 }
 
 function xlsEstiloTotal() {
@@ -2584,6 +2590,17 @@ app.get("/api/admin/rateio", verificarAuth, carregarAdminEscopo, async (req, res
   }
 });
 
+function slugDataArquivo(val) {
+  const s = String(val || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return "data";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 app.get("/api/admin/rateio/export", verificarAuth, carregarAdminEscopo, async (req, res) => {
   const periodo = periodoFromQuery(req.query.de, req.query.ate);
   if (!periodo) return res.status(400).json({ error: "Período inválido" });
@@ -2595,13 +2612,15 @@ app.get("/api/admin/rateio/export", verificarAuth, carregarAdminEscopo, async (r
       projeto_nome: req.adminEscopo.projeto_nome,
       projeto_codigo: req.adminEscopo.projeto_codigo,
     });
-    const deSlug = fmtDataBr(periodo.de).replace(/\//g, "-");
-    const ateSlug = fmtDataBr(periodo.ate).replace(/\//g, "-");
+    const deSlug = slugDataArquivo(req.query.de || periodo.de);
+    const ateSlug = slugDataArquivo(req.query.ate || periodo.ate);
     const cod = (req.adminEscopo.projeto_codigo || "projeto").replace(/[^\w.-]+/g, "_");
-    const nomeArq = `rateio-${cod}-${deSlug}-a-${ateSlug}.xlsx`;
+    const nomeArq = `Medicao-Rateio-${cod}_${deSlug}_${ateSlug}.xlsx`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${nomeArq}"`);
-    res.send(buffer);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    res.end(buffer);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao exportar planilha" });

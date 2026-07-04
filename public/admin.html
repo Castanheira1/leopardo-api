@@ -432,7 +432,7 @@
                             <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                             <div>
                                 <h3>Medição para faturamento</h3>
-                                <p class="cap">Relatório completo em Excel: empresa, centro de custo, usuário, km e custo alocado do contrato.</p>
+                                <p class="cap">Relatório completo em Excel (.xlsx): empresa, centro de custo, usuário, km e custo alocado. Abra com Microsoft Excel, LibreOffice Calc ou Google Planilhas.</p>
                             </div>
                         </div>
                         <button class="btn-gold" id="btnExportRateio" onclick="exportarExcel()">Exportar Excel</button>
@@ -757,6 +757,7 @@ async function carregarRateio() {
 }
 
 async function exportarExcel() {
+    const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     const btns = [document.getElementById('btnExportSidebar'), document.getElementById('btnExportRateio')];
     btns.forEach(b => { if (b) { b.disabled = true; b.dataset.label = b.textContent; b.textContent = 'Gerando…'; } });
     try {
@@ -766,20 +767,32 @@ async function exportarExcel() {
             mostrarToast(d.error || 'Erro ao exportar planilha', 'error');
             return;
         }
-        const blob = await r.blob();
-        let nome = 'rateio-vap.xlsx';
+        const ct = (r.headers.get('Content-Type') || '').toLowerCase();
+        if (!ct.includes('spreadsheetml') && !ct.includes('octet-stream')) {
+            mostrarToast('Resposta inválida do servidor (não é Excel)', 'error');
+            return;
+        }
+        const buf = await r.arrayBuffer();
+        if (!buf || buf.byteLength < 1000) {
+            mostrarToast('Arquivo Excel vazio ou corrompido', 'error');
+            return;
+        }
+        let nome = 'Medicao-Rateio-VAP.xlsx';
         const disp = r.headers.get('Content-Disposition') || '';
         const m = disp.match(/filename="?([^";]+)"?/i);
         if (m) nome = m[1];
+        if (!nome.toLowerCase().endsWith('.xlsx')) nome += '.xlsx';
+        const blob = new Blob([buf], { type: MIME_XLSX });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = nome;
+        a.type = MIME_XLSX;
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        mostrarToast('Planilha exportada com sucesso', 'success');
+        mostrarToast('Excel baixado (.xlsx). Abra com Excel, LibreOffice ou Google Planilhas.', 'success');
     } catch (_) {
         mostrarToast('Falha ao gerar o Excel', 'error');
     } finally {
