@@ -83,7 +83,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -293,6 +293,27 @@ async function garantirTabelaPush() {
     await pool.query("CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions(usuario_id)");
   } catch (e) {
     console.warn("garantirTabelaPush:", e.message);
+  }
+}
+
+async function garantirTabelaFavoritos() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuarios_favoritos (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        nome VARCHAR(200) NOT NULL,
+        busca VARCHAR(300) NOT NULL,
+        ref_lat NUMERIC(10,6),
+        ref_lng NUMERIC(10,6),
+        grupo VARCHAR(100),
+        ordem INTEGER NOT NULL DEFAULT 0,
+        criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (usuario_id, nome)
+      )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_usuarios_favoritos_usuario ON usuarios_favoritos(usuario_id)");
+  } catch (e) {
+    console.warn("garantirTabelaFavoritos:", e.message);
   }
 }
 
@@ -1094,6 +1115,80 @@ app.patch("/api/perfil", verificarAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao atualizar perfil" });
+  }
+});
+
+function normalizarFavoritoItem(item) {
+  const nome = String(item?.nome || "").trim().slice(0, 200);
+  const busca = String(item?.busca || nome).trim().slice(0, 300);
+  if (!nome || !busca) return null;
+  const ref = item?.ref;
+  let ref_lat = null;
+  let ref_lng = null;
+  if (ref && Number.isFinite(Number(ref.lat)) && Number.isFinite(Number(ref.lng))) {
+    ref_lat = Number(ref.lat);
+    ref_lng = Number(ref.lng);
+  }
+  const grupo = String(item?.grupo || "").trim().slice(0, 100) || null;
+  return { nome, busca, ref_lat, ref_lng, grupo };
+}
+
+app.get("/api/perfil/favoritos", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT nome, busca, ref_lat, ref_lng, grupo, ordem
+       FROM usuarios_favoritos WHERE usuario_id = $1 ORDER BY ordem ASC, nome ASC`,
+      [req.user.id]
+    );
+    res.json(rows.map((r) => ({
+      nome: r.nome,
+      busca: r.busca,
+      grupo: r.grupo || undefined,
+      ref: r.ref_lat != null && r.ref_lng != null ? { lat: Number(r.ref_lat), lng: Number(r.ref_lng) } : undefined,
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar favoritos" });
+  }
+});
+
+app.put("/api/perfil/favoritos", verificarAuth, async (req, res) => {
+  const lista = Array.isArray(req.body?.favoritos) ? req.body.favoritos : null;
+  if (!lista) return res.status(400).json({ error: "Lista de favoritos inválida" });
+  if (lista.length > 40) return res.status(400).json({ error: "Máximo de 40 favoritos" });
+  const normalizados = [];
+  const vistos = new Set();
+  for (const item of lista) {
+    const f = normalizarFavoritoItem(item);
+    if (!f || vistos.has(f.nome)) continue;
+    vistos.add(f.nome);
+    normalizados.push(f);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM usuarios_favoritos WHERE usuario_id = $1", [req.user.id]);
+    for (let i = 0; i < normalizados.length; i++) {
+      const f = normalizados[i];
+      await client.query(
+        `INSERT INTO usuarios_favoritos (usuario_id, nome, busca, ref_lat, ref_lng, grupo, ordem)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [req.user.id, f.nome, f.busca, f.ref_lat, f.ref_lng, f.grupo, i]
+      );
+    }
+    await client.query("COMMIT");
+    res.json(normalizados.map((f) => ({
+      nome: f.nome,
+      busca: f.busca,
+      grupo: f.grupo || undefined,
+      ref: f.ref_lat != null ? { lat: f.ref_lat, lng: f.ref_lng } : undefined,
+    })));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: "Erro ao salvar favoritos" });
+  } finally {
+    client.release();
   }
 });
 
