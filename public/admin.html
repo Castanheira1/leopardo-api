@@ -50,11 +50,20 @@
 
         .adm-filtro { display: grid; gap: 8px; }
         .adm-filtro label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 3px; }
-        .adm-filtro input {
-            width: 100%; background: var(--card); border: 1px solid var(--line);
-            color: var(--ink); padding: 8px 10px; border-radius: 8px; font-size: .84rem;
+        .adm-filtro input,
+        .field input,
+        .field input[type="number"],
+        .field input[type="date"] {
+            width: 100%; background: #fff; border: 1px solid #d1d5db;
+            color: #111827; padding: 8px 10px; border-radius: 8px; font-size: .84rem;
         }
-        .adm-filtro input::-webkit-calendar-picker-indicator { filter: invert(.7); }
+        .adm-filtro input { padding: 8px 10px; }
+        .field input { padding: 10px 12px; border-radius: 10px; font-size: .9rem; }
+        .adm-filtro input::placeholder,
+        .field input::placeholder { color: #6b7280; }
+        .adm-filtro input:focus,
+        .field input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px rgba(212,168,67,.25); }
+        .adm-filtro input::-webkit-calendar-picker-indicator { filter: none; opacity: .65; }
 
         .adm-side-stats { display: grid; gap: 4px; }
         .adm-stat {
@@ -239,11 +248,6 @@
         .field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
         .field { flex: 1; min-width: 130px; }
         .field label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 4px; }
-        .field input {
-            width: 100%; background: var(--card-2); border: 1px solid var(--line);
-            color: var(--ink); padding: 10px 12px; border-radius: 10px; font-size: .9rem;
-        }
-        .field input:focus { outline: none; border-color: var(--gold); }
         .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
         .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
         .item strong { font-size: .92rem; color: #fff; }
