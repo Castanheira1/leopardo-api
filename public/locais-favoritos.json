@@ -1,6 +1,6 @@
 {
   "versao": 1,
-  "descricao": "Locais favoritos por projeto. O app resolve cada local AO VIVO na API do Google Places usando o campo 'busca' (com viés na região do projeto); 'ref' é só um fallback aproximado caso o Google não encontre. Para adicionar um projeto novo, copie o bloco do S11D e ajuste.",
+  "descricao": "Catálogo de locais por projeto. O app usa a coordenada 'ref' (curada) como base e só aceita resultado do Google Places se estiver perto dela (≤5 km) e com nome compatível; senão usa 'ref'. Campo 'busca' orienta a consulta ao Google.",
   "projetos": {
     "S11D": {
       "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
@@ -21,8 +21,8 @@
         {
           "titulo": "Usina",
           "locais": [
-            { "nome": "Usina A", "busca": "Usina A S11D", "ref": { "lat": -6.4478, "lng": -50.2478 } },
-            { "nome": "Usina B", "busca": "Usina B S11D", "ref": { "lat": -6.4472, "lng": -50.2492 } },
+            { "nome": "Usina A", "busca": "Usina A Usina Complexo Serra Sul S11D Canaã dos Carajás", "ref": { "lat": -6.4478, "lng": -50.2478 } },
+            { "nome": "Usina B", "busca": "Usina B Usina Complexo Serra Sul S11D Canaã dos Carajás", "ref": { "lat": -6.4472, "lng": -50.2492 } },
             { "nome": "Britagem Terciária B", "busca": "Britagem Terciária B S11D", "ref": { "lat": -6.4438, "lng": -50.2440 } },
             { "nome": "Britagem Terciária C", "busca": "Britagem Terciária C S11D", "ref": { "lat": -6.4430, "lng": -50.2452 } },
             { "nome": "Pátio do Produto", "busca": "Pátio do Produto S11D", "ref": { "lat": -6.4405, "lng": -50.2360 } },
