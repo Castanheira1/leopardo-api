@@ -4,154 +4,209 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#0F3D3E">
+    <meta name="theme-color" content="#0a0a0a">
     <script src="/pwa.js" defer></script>
     <title>VAP - Painel do Projeto</title>
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
         :root {
-            --bg: #f1f5f9; --card: #ffffff; --card-2: #f8fafc;
-            --ink: #1e293b; --muted: #64748b; --line: #e2e8f0;
-            --primary: #2563eb; --primary-700: #1d4ed8; --primary-050: #eff6ff;
-            --nav: #1e3a8a; --nav-2: #172554;
-            --side-w: 280px;
-            --blue: #2563eb; --aqua: #c2410c;
-            --good: #15803d; --warn: #b45309; --crit: #b91c1c;
-            --shadow: 0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.04);
+            --bg: #0e0e0e; --bg-main: #141414; --card: #1c1c1c; --card-2: #242424;
+            --ink: #f1f3f5; --muted: #9ca3af; --line: #2e2e2e;
+            --gold: #d4a843; --gold-bright: #ead298; --gold-dim: rgba(212,168,67,.15);
+            --side-w: 272px;
+            --good: #4ade80; --warn: #fbbf24; --crit: #f87171;
+            --shadow: 0 4px 24px rgba(0,0,0,.35);
         }
-        body { background: var(--bg); color: var(--ink); margin: 0; }
+        body { background: var(--bg) !important; color: var(--ink); margin: 0; }
 
-        .adm-app { display: flex; min-height: 100vh; }
+        .adm-app { display: flex; min-height: 100vh; background: var(--bg-main); }
 
         /* ---- Sidebar ---- */
         .adm-sidebar {
-            width: var(--side-w); flex-shrink: 0; background: var(--nav);
+            width: var(--side-w); flex-shrink: 0; background: #0a0a0a;
             color: #fff; display: flex; flex-direction: column;
-            position: sticky; top: 0; height: 100vh; overflow-y: auto;
-            z-index: 40;
+            position: sticky; top: 0; height: 100vh; overflow-y: auto; z-index: 40;
+            border-right: 1px solid var(--line);
         }
         .adm-side-brand {
             display: flex; align-items: center; gap: 10px;
-            padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.12);
+            padding: 20px 18px 16px;
         }
-        .adm-side-brand img { height: 30px; }
+        .adm-side-brand img { height: 32px; }
         .adm-tag {
-            font-size: .62rem; letter-spacing: .14em; font-weight: 700;
-            background: rgba(255,255,255,.16); padding: 3px 8px; border-radius: 6px;
+            font-size: .6rem; letter-spacing: .16em; font-weight: 800;
+            background: var(--gold); color: #0a0a0a; padding: 3px 8px; border-radius: 4px;
         }
-        .adm-side-block { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.1); }
+        .adm-side-block { padding: 12px 18px 14px; }
+        .adm-side-block + .adm-side-block { border-top: 1px solid var(--line); }
         .adm-side-block .blk-title {
-            font-size: .65rem; text-transform: uppercase; letter-spacing: .1em;
-            color: rgba(255,255,255,.5); margin-bottom: 10px; font-weight: 700;
+            font-size: .62rem; text-transform: uppercase; letter-spacing: .12em;
+            color: var(--gold); margin-bottom: 10px; font-weight: 800;
         }
-        .adm-proj-nome { font-size: 1rem; font-weight: 700; line-height: 1.25; }
-        .adm-proj-meta { font-size: .78rem; color: rgba(255,255,255,.72); margin-top: 4px; line-height: 1.45; }
-        .adm-proj-meta strong { color: #fff; font-weight: 600; }
+        .adm-proj-nome { font-size: 1.05rem; font-weight: 800; line-height: 1.25; color: #fff; }
+        .adm-proj-meta { font-size: .78rem; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+        .adm-proj-meta strong { color: var(--gold-bright); font-weight: 600; }
 
         .adm-filtro { display: grid; gap: 8px; }
-        .adm-filtro label { font-size: .7rem; color: rgba(255,255,255,.6); display: block; margin-bottom: 3px; }
+        .adm-filtro label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 3px; }
         .adm-filtro input {
-            width: 100%; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
-            color: #fff; padding: 7px 9px; border-radius: 8px; font-size: .85rem;
+            width: 100%; background: var(--card); border: 1px solid var(--line);
+            color: var(--ink); padding: 8px 10px; border-radius: 8px; font-size: .84rem;
         }
-        .adm-filtro input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .7; }
+        .adm-filtro input::-webkit-calendar-picker-indicator { filter: invert(.7); }
 
-        .adm-side-stats { display: grid; gap: 6px; }
+        .adm-side-stats { display: grid; gap: 4px; }
         .adm-stat {
             display: flex; justify-content: space-between; align-items: center;
-            background: rgba(255,255,255,.08); border-radius: 8px; padding: 8px 10px;
-            font-size: .82rem;
+            padding: 7px 2px; font-size: .8rem; color: var(--muted);
         }
-        .adm-stat .lbl { color: rgba(255,255,255,.75); }
-        .adm-stat .val { font-weight: 800; font-size: .95rem; }
+        .adm-stat .lbl { display: flex; align-items: center; gap: 8px; }
+        .adm-stat .ico { color: var(--gold); font-size: .75rem; width: 14px; text-align: center; }
+        .adm-stat .val { font-weight: 800; color: #fff; font-size: .88rem; }
 
-        .adm-nav { display: grid; gap: 2px; padding: 8px 10px; flex: 1; }
+        .adm-nav { display: grid; gap: 4px; padding: 10px 14px; flex: 1; }
         .adm-nav-item {
             display: flex; align-items: center; gap: 10px; width: 100%;
-            background: none; border: none; color: rgba(255,255,255,.82);
-            padding: 10px 12px; border-radius: 9px; cursor: pointer;
-            font-size: .88rem; font-weight: 600; text-align: left;
+            background: none; border: none; color: var(--muted);
+            padding: 11px 14px; border-radius: 10px; cursor: pointer;
+            font-size: .86rem; font-weight: 600; text-align: left;
+            transition: background .15s, color .15s;
         }
-        .adm-nav-item:hover { background: rgba(255,255,255,.1); color: #fff; }
-        .adm-nav-item.active { background: rgba(255,255,255,.18); color: #fff; }
-        .adm-nav-item .ico { width: 18px; text-align: center; opacity: .85; font-size: .95rem; }
+        .adm-nav-item:hover { background: var(--card); color: #fff; }
+        .adm-nav-item.active {
+            background: var(--gold); color: #0a0a0a;
+            box-shadow: 0 2px 12px rgba(212,168,67,.35);
+        }
+        .adm-nav-item.active .ico { color: #0a0a0a; }
+        .adm-nav-item .ico { width: 18px; text-align: center; color: var(--gold); font-size: .9rem; }
 
         .adm-side-foot {
-            padding: 12px 16px 18px; border-top: 1px solid rgba(255,255,255,.1);
-            display: grid; gap: 6px;
+            padding: 14px 18px 20px; border-top: 1px solid var(--line);
         }
-        .adm-side-foot .user { font-size: .78rem; color: rgba(255,255,255,.65); margin-bottom: 4px; }
-        .adm-side-link {
-            display: block; color: rgba(255,255,255,.8); text-decoration: none;
-            font-size: .82rem; padding: 7px 10px; border-radius: 8px;
-            border: 1px solid rgba(255,255,255,.2); background: transparent;
-            cursor: pointer; text-align: center;
+        .adm-side-foot .user { font-size: .82rem; color: var(--muted); margin-bottom: 10px; }
+        .adm-side-sair {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            background: none; border: none; color: var(--muted);
+            font-size: .84rem; cursor: pointer; padding: 6px 0;
         }
-        .adm-side-link:hover { background: rgba(255,255,255,.1); color: #fff; }
+        .adm-side-sair:hover { color: var(--gold-bright); }
+
+        .btn-side {
+            background: var(--gold); color: #0a0a0a; border: none;
+            padding: 10px 14px; border-radius: 10px; cursor: pointer;
+            font-size: .86rem; font-weight: 700; width: 100%;
+        }
+        .btn-side:hover { background: var(--gold-bright); }
 
         /* ---- Main ---- */
-        .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-main); }
         .adm-topbar {
-            background: var(--card); border-bottom: 1px solid var(--line);
-            padding: 14px 24px; display: flex; align-items: center;
-            justify-content: space-between; gap: 12px; flex-wrap: wrap;
-            position: sticky; top: 0; z-index: 30; box-shadow: var(--shadow);
+            background: var(--bg-main); border-bottom: 1px solid var(--line);
+            padding: 12px 28px; display: flex; align-items: center;
+            justify-content: space-between; gap: 16px;
+            position: sticky; top: 0; z-index: 30;
         }
-        .adm-topbar h1 { margin: 0; font-size: 1.25rem; font-weight: 700; }
-        .adm-topbar .sub { color: var(--muted); font-size: .85rem; margin-top: 2px; }
-        .adm-topbar-actions { display: flex; gap: 8px; align-items: center; }
+        .adm-topbar-left { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+        .adm-topbar h1 { margin: 0; font-size: 1.35rem; font-weight: 800; color: #fff; }
+        .adm-topbar .sub { color: var(--muted); font-size: .84rem; margin-top: 3px; }
+        .adm-topbar-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
         .adm-menu-btn {
-            display: none; background: var(--nav); color: #fff; border: none;
-            border-radius: 8px; padding: 8px 12px; font-size: 1.1rem; cursor: pointer;
+            display: none; background: var(--card); color: var(--gold);
+            border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 11px; font-size: 1.1rem; cursor: pointer; margin-top: 2px;
         }
+        .adm-bell {
+            position: relative; background: var(--card); border: 1px solid var(--line);
+            border-radius: 10px; width: 40px; height: 40px; display: flex;
+            align-items: center; justify-content: center; cursor: pointer; color: var(--muted);
+        }
+        .adm-bell:hover { color: var(--gold); border-color: var(--gold); }
+        .adm-bell .dot {
+            position: absolute; top: 8px; right: 8px; width: 7px; height: 7px;
+            background: var(--gold); border-radius: 50%;
+        }
+        .adm-user {
+            display: flex; align-items: center; gap: 10px; background: var(--card);
+            border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px 6px 6px;
+            cursor: default;
+        }
+        .adm-avatar {
+            width: 32px; height: 32px; border-radius: 50%; background: var(--gold-dim);
+            border: 2px solid var(--gold); display: flex; align-items: center;
+            justify-content: center; color: var(--gold); font-weight: 800; font-size: .85rem;
+        }
+        .adm-user-name { font-size: .84rem; font-weight: 600; color: #fff; }
+        .adm-user-role { font-size: .68rem; color: var(--muted); }
 
-        .adm-content { padding: 20px 24px 48px; flex: 1; }
+        .adm-content { padding: 22px 28px 0; flex: 1; }
         .adm-section { display: none; }
         .adm-section.active { display: block; }
+        .adm-foot {
+            padding: 20px 28px 28px; display: flex; justify-content: flex-end;
+            gap: 20px; font-size: .72rem; color: var(--muted);
+        }
 
         .btn-gold {
-            background: var(--primary); color: #fff; border: none; font-weight: 600;
-            padding: 9px 16px; border-radius: 8px; cursor: pointer; font-size: .88rem;
+            background: var(--gold); color: #0a0a0a; border: none; font-weight: 700;
+            padding: 10px 18px; border-radius: 10px; cursor: pointer; font-size: .88rem;
         }
-        .btn-gold:hover { background: var(--primary-700); }
+        .btn-gold:hover { background: var(--gold-bright); }
         .btn-ghost {
             background: var(--card); color: var(--ink); border: 1px solid var(--line);
-            padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: .85rem;
+            padding: 9px 14px; border-radius: 10px; cursor: pointer; font-size: .85rem;
         }
-        .btn-ghost:hover { background: var(--card-2); }
-        .btn-side {
-            background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.25);
-            padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: .85rem;
-            font-weight: 600; width: 100%;
-        }
-        .btn-side:hover { background: rgba(255,255,255,.22); }
+        .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
 
-        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        /* KPIs */
+        .kpis {
+            display: grid; grid-template-columns: repeat(6, 1fr);
+            gap: 12px; margin-bottom: 18px;
+        }
+        @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 640px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
         .kpi {
-            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            padding: 15px; min-width: 0; box-shadow: var(--shadow);
+            background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+            padding: 14px 14px 12px; min-width: 0; display: flex; gap: 12px; align-items: flex-start;
         }
-        .kpi .lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+        .kpi-ico {
+            width: 36px; height: 36px; border-radius: 10px; background: var(--gold-dim);
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            color: var(--gold);
+        }
+        .kpi-ico svg { width: 18px; height: 18px; }
+        .kpi-body { min-width: 0; flex: 1; }
+        .kpi .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
         .kpi .val {
-            font-size: clamp(1.02rem, 2.6vw, 1.3rem); font-weight: 800; margin-top: 6px;
-            line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            font-size: clamp(.95rem, 1.8vw, 1.15rem); font-weight: 800; margin-top: 4px;
+            color: var(--gold-bright); line-height: 1.15;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .kpi .hint { font-size: .74rem; color: var(--muted); margin-top: 4px; }
-        .kpi.destaque { background: var(--primary-050); border-color: #bfdbfe; }
-        .kpi.destaque .val { color: var(--primary-700); }
+        .kpi .hint { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+        .kpi.destaque { border-color: rgba(212,168,67,.35); background: linear-gradient(135deg, #1c1c1c, #222018); }
 
         .grid { display: grid; gap: 14px; }
         .cols-2 { grid-template-columns: 1fr 1fr; }
-        .cols-3 { grid-template-columns: 2fr 1fr; }
+        .cols-3 { grid-template-columns: 1.4fr 1fr; }
         @media (max-width: 900px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
 
         .panel {
-            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            padding: 18px; box-shadow: var(--shadow);
+            background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+            padding: 18px 20px; box-shadow: var(--shadow);
         }
-        .panel h3 { margin: 0 0 4px; font-size: 1rem; font-weight: 600; }
-        .panel .cap { color: var(--muted); font-size: .8rem; margin: 0 0 14px; }
+        .panel-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+        .panel-ico {
+            width: 36px; height: 36px; border-radius: 10px; background: var(--gold-dim);
+            display: flex; align-items: center; justify-content: center; color: var(--gold); flex-shrink: 0;
+        }
+        .panel-ico svg { width: 18px; height: 18px; }
+        .panel h3 { margin: 0; font-size: .95rem; font-weight: 700; color: #fff; }
+        .panel .cap { color: var(--muted); font-size: .78rem; margin: 3px 0 0; line-height: 1.4; }
+        .panel-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+        .panel-select {
+            background: var(--card-2); border: 1px solid var(--line); color: var(--muted);
+            padding: 6px 10px; border-radius: 8px; font-size: .78rem; cursor: pointer;
+        }
 
         .chart { width: 100%; }
         .bar-row {
@@ -159,56 +214,58 @@
             align-items: center; gap: 10px; margin: 9px 0;
         }
         .bar-row .k { font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bar-track { background: #eef2f7; border-radius: 6px; height: 16px; overflow: hidden; }
-        .bar-fill { height: 100%; border-radius: 6px; background: var(--blue); min-width: 3px; }
-        .bar-row .v { font-size: .82rem; font-weight: 700; white-space: nowrap; }
+        .bar-track { background: #2a2a2a; border-radius: 6px; height: 14px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 6px; background: var(--gold); min-width: 3px; }
+        .bar-row .v { font-size: .82rem; font-weight: 700; white-space: nowrap; color: var(--gold-bright); }
         .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: .82rem; color: var(--muted); }
         .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+        .legend strong { color: #fff; }
 
-        .spark { display: flex; align-items: flex-end; gap: 6px; height: 128px; margin-top: 6px; }
+        .spark { display: flex; align-items: flex-end; gap: 6px; height: 120px; margin-top: 6px; }
         .spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; }
-        .spark .bar { width: 100%; max-width: 30px; background: var(--blue); border-radius: 5px 5px 0 0; min-height: 4px; }
+        .spark .bar { width: 100%; max-width: 28px; background: var(--gold); border-radius: 5px 5px 0 0; min-height: 4px; }
         .spark .cl { font-size: .62rem; color: var(--muted); white-space: nowrap; }
-        .empty { color: var(--muted); font-size: .85rem; padding: 8px 0; }
+        .empty { color: var(--muted); font-size: .85rem; padding: 12px 0; }
 
         .tbl-wrap { overflow-x: auto; }
         table.adm { width: 100%; border-collapse: collapse; font-size: .86rem; }
-        table.adm th, table.adm td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-        table.adm th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; background: var(--card-2); }
+        table.adm th, table.adm td { padding: 10px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+        table.adm th { color: var(--muted); font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; background: var(--card-2); }
+        table.adm td { color: var(--ink); }
         table.adm td.num, table.adm th.num { text-align: right; }
-        table.adm tr:hover td { background: #f8fafc; }
+        table.adm tr:hover td { background: rgba(255,255,255,.03); }
 
         .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
         .field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
         .field { flex: 1; min-width: 130px; }
         .field label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 4px; }
         .field input {
-            width: 100%; background: var(--card); border: 1px solid var(--line);
-            color: var(--ink); padding: 9px 11px; border-radius: 8px; font-size: .9rem;
+            width: 100%; background: var(--card-2); border: 1px solid var(--line);
+            color: var(--ink); padding: 10px 12px; border-radius: 10px; font-size: .9rem;
         }
-        .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; margin-bottom: 10px; }
+        .field input:focus { outline: none; border-color: var(--gold); }
+        .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
         .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-        .item strong { font-size: .92rem; }
+        .item strong { font-size: .92rem; color: #fff; }
         .item small { color: var(--muted); font-size: .78rem; }
-        .badge { font-size: .68rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
-        .badge.ok { background: #dcfce7; color: var(--good); }
-        .badge.warn { background: #fef3c7; color: var(--warn); }
-        .badge.off { background: #fee2e2; color: var(--crit); }
+        .badge { font-size: .66rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+        .badge.ok { background: rgba(74,222,128,.15); color: var(--good); }
+        .badge.warn { background: rgba(251,191,36,.15); color: var(--warn); }
+        .badge.off { background: rgba(248,113,113,.15); color: var(--crit); }
 
-        .adm-overlay {
-            display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 35;
-        }
+        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 35; }
         .adm-overlay.open { display: block; }
 
         @media (max-width: 900px) {
             .adm-sidebar {
                 position: fixed; left: 0; top: 0; transform: translateX(-100%);
-                transition: transform .22s ease; box-shadow: 4px 0 24px rgba(0,0,0,.2);
+                transition: transform .22s ease; box-shadow: 4px 0 32px rgba(0,0,0,.5);
             }
             .adm-sidebar.open { transform: translateX(0); }
             .adm-menu-btn { display: inline-flex; }
-            .adm-content { padding: 16px 14px 40px; }
+            .adm-content { padding: 16px 14px 0; }
             .adm-topbar { padding: 12px 14px; }
+            .adm-foot { padding: 16px 14px 24px; }
         }
     </style>
 </head>
@@ -240,11 +297,11 @@
         <div class="adm-side-block">
             <div class="blk-title">Operação ao vivo</div>
             <div class="adm-side-stats" id="sideStats">
-                <div class="adm-stat"><span class="lbl">Usuários</span><span class="val" id="stUsuarios">—</span></div>
-                <div class="adm-stat"><span class="lbl">Caronas ativas</span><span class="val" id="stCaronas">—</span></div>
-                <div class="adm-stat"><span class="lbl">Pedidos abertos</span><span class="val" id="stPedidos">—</span></div>
-                <div class="adm-stat"><span class="lbl">Em andamento</span><span class="val" id="stAndamento">—</span></div>
-                <div class="adm-stat"><span class="lbl">Concluídas (GPS)</span><span class="val" id="stConcluidas">—</span></div>
+                <div class="adm-stat"><span class="lbl"><span class="ico">◎</span>Usuários</span><span class="val" id="stUsuarios">—</span></div>
+                <div class="adm-stat"><span class="lbl"><span class="ico">➤</span>Caronas ativas</span><span class="val" id="stCaronas">—</span></div>
+                <div class="adm-stat"><span class="lbl"><span class="ico">☰</span>Pedidos abertos</span><span class="val" id="stPedidos">—</span></div>
+                <div class="adm-stat"><span class="lbl"><span class="ico">◷</span>Em andamento</span><span class="val" id="stAndamento">—</span></div>
+                <div class="adm-stat"><span class="lbl"><span class="ico">✓</span>Concluídas (GPS)</span><span class="val" id="stConcluidas">—</span></div>
             </div>
         </div>
 
@@ -267,51 +324,86 @@
         </nav>
 
         <div class="adm-side-foot">
-            <div class="user" id="userName"></div>
-            <a href="seguranca.html" class="adm-side-link">Segurança</a>
-            <a href="dashboard.html" class="adm-side-link">Abrir app</a>
-            <button onclick="logout()" class="adm-side-link">Sair</button>
+            <div class="user" id="userName">Olá!</div>
+            <button class="adm-side-sair" onclick="logout()">↪ Sair</button>
         </div>
     </aside>
 
     <main class="adm-main">
         <header class="adm-topbar">
-            <div>
-                <button class="adm-menu-btn" id="admMenuBtn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
-                <h1 id="topTitulo">Resumo comercial</h1>
-                <div class="sub" id="topSub">Indicadores financeiros e operacionais do período</div>
+            <div class="adm-topbar-left">
+                <button class="adm-menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+                <div>
+                    <h1 id="topTitulo">Resumo comercial</h1>
+                    <div class="sub" id="topSub">Indicadores financeiros e operacionais do período</div>
+                </div>
+            </div>
+            <div class="adm-topbar-right">
+                <button class="adm-bell" onclick="irSecao('sec-usuarios')" title="Solicitações pendentes" aria-label="Notificações">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="dot" id="bellDot" style="display:none"></span>
+                </button>
+                <div class="adm-user">
+                    <div class="adm-avatar" id="admAvatar">A</div>
+                    <div>
+                        <div class="adm-user-name" id="admUserName">Administrador</div>
+                        <div class="adm-user-role">Painel do projeto</div>
+                    </div>
+                </div>
             </div>
         </header>
 
         <div class="adm-content">
-            <!-- RESUMO -->
             <section id="sec-resumo" class="adm-section active">
                 <div class="kpis" id="kpis"></div>
                 <div class="grid cols-3">
                     <div class="panel">
-                        <h3>Rateio por empresa</h3>
-                        <p class="cap">Participação de cada empresa no custo do contrato no período.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg></span>
+                            <div>
+                                <h3>Rateio por empresa</h3>
+                                <p class="cap">Participação de cada empresa no custo do contrato no período.</p>
+                            </div>
+                        </div>
                         <div id="chartEmpresas" class="chart"></div>
                     </div>
                     <div class="panel">
-                        <h3>Passageiros por gênero</h3>
-                        <p class="cap">Transportados no período (viagens com GPS válido).</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                            <div>
+                                <h3>Passageiros por gênero</h3>
+                                <p class="cap">Transportados no período (viagens com GPS válido).</p>
+                            </div>
+                        </div>
                         <div id="chartGenero" class="chart"></div>
                     </div>
                 </div>
                 <div class="panel" style="margin-top:14px;">
-                    <h3>Viagens por dia</h3>
-                    <p class="cap">Volume de viagens concluídas com deslocamento GPS nos últimos dias.</p>
+                    <div class="panel-head-row">
+                        <div class="panel-head" style="margin:0">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+                            <div>
+                                <h3>Viagens por dia</h3>
+                                <p class="cap">Volume de viagens concluídas com deslocamento GPS nos últimos dias.</p>
+                            </div>
+                        </div>
+                        <select class="panel-select" id="filtroDiasChart" onchange="atualizarChartViagens()">
+                            <option value="7">Últimos 7 dias</option>
+                            <option value="14" selected>Últimos 14 dias</option>
+                            <option value="30">Últimos 30 dias</option>
+                        </select>
+                    </div>
                     <div id="chartViagens" class="chart"></div>
                 </div>
             </section>
 
-            <!-- RATEIO -->
             <section id="sec-rateio" class="adm-section">
                 <div class="grid cols-2">
                     <div class="panel">
-                        <h3>Por empresa</h3>
-                        <p class="cap">Distribuição de viagens e custo alocado por empresa.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/></svg></span>
+                            <div><h3>Por empresa</h3><p class="cap">Distribuição de viagens e custo alocado por empresa.</p></div>
+                        </div>
                         <div class="tbl-wrap">
                             <table class="adm" id="tabEmpresas">
                                 <thead><tr><th>Empresa</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
@@ -320,8 +412,10 @@
                         </div>
                     </div>
                     <div class="panel">
-                        <h3>Por centro de custo</h3>
-                        <p class="cap">Detalhamento por centro de custo do passageiro.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
+                            <div><h3>Por centro de custo</h3><p class="cap">Detalhamento por centro de custo do passageiro.</p></div>
+                        </div>
                         <div class="tbl-wrap">
                             <table class="adm" id="tabCc">
                                 <thead><tr><th>Empresa</th><th>Centro de custo</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
@@ -332,11 +426,12 @@
                 </div>
             </section>
 
-            <!-- CONTRATO -->
             <section id="sec-contrato" class="adm-section">
                 <div class="panel">
-                    <h3>Valor do contrato mensal</h3>
-                    <p class="cap">Base fixa para o rateio automático entre empresas e centros de custo.</p>
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+                        <div><h3>Valor do contrato mensal</h3><p class="cap">Base fixa para o rateio automático entre empresas e centros de custo.</p></div>
+                    </div>
                     <div class="field-row">
                         <div class="field" style="max-width:240px;">
                             <label>Valor (R$)</label>
@@ -348,17 +443,20 @@
                 </div>
             </section>
 
-            <!-- USUÁRIOS -->
             <section id="sec-usuarios" class="adm-section">
                 <div class="tools">
                     <div class="panel">
-                        <h3>Solicitações de acesso admin</h3>
-                        <p class="cap">Aprovar cria o usuário admin (senha inicial <strong>123456</strong>).</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg></span>
+                            <div><h3>Solicitações de acesso admin</h3><p class="cap">Aprovar cria o usuário admin (senha inicial <strong style="color:var(--gold)">123456</strong>).</p></div>
+                        </div>
                         <div id="listaChamados"></div>
                     </div>
                     <div class="panel">
-                        <h3>Excluir / bloquear usuário</h3>
-                        <p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+                            <div><h3>Excluir / bloquear usuário</h3><p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p></div>
+                        </div>
                         <div class="field-row">
                             <div class="field"><label>Matrícula</label><input id="matExcluir" placeholder="Matrícula"></div>
                             <div class="field"><label>Motivo</label><input id="motivoExcluir" placeholder="Ex.: Desligamento"></div>
@@ -366,37 +464,60 @@
                         <button class="btn-ghost" style="margin-top:12px;" onclick="desativarUsuario()">Desativar e bloquear</button>
                     </div>
                     <div class="panel">
-                        <h3>Resetar senha</h3>
-                        <p class="cap">Redefine a senha do usuário para <strong>123456</strong>.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                            <div><h3>Resetar senha</h3><p class="cap">Redefine a senha do usuário para <strong style="color:var(--gold)">123456</strong>.</p></div>
+                        </div>
                         <div class="field-row">
                             <div class="field"><label>Matrícula</label><input id="matReset" placeholder="Matrícula do usuário"></div>
                         </div>
                         <button class="btn-ghost" style="margin-top:12px;" onclick="resetSenha()">Resetar senha</button>
                     </div>
                 </div>
+                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                    <a href="seguranca.html" class="btn-ghost">Painel de segurança</a>
+                    <a href="dashboard.html" class="btn-ghost">Abrir app</a>
+                </div>
             </section>
 
-            <!-- OPERAÇÃO -->
             <section id="sec-operacao" class="adm-section">
                 <div class="grid cols-2">
                     <div class="panel">
-                        <h3>Motoristas do dia</h3>
-                        <p class="cap">Habilitados nas últimas 12h e status de notificação push.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                            <div><h3>Motoristas do dia</h3><p class="cap">Habilitados nas últimas 12h e status de notificação push.</p></div>
+                        </div>
                         <div id="listaPush"></div>
                     </div>
                     <div class="panel">
-                        <h3>Viagens recentes</h3>
-                        <p class="cap">Últimas viagens do projeto com status e km GPS.</p>
+                        <div class="panel-head">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg></span>
+                            <div><h3>Viagens recentes</h3><p class="cap">Últimas viagens do projeto com status e km GPS.</p></div>
+                        </div>
                         <div id="listaViagens"></div>
                     </div>
                 </div>
             </section>
         </div>
+
+        <footer class="adm-foot">
+            <span>© 2026 VAP. Todos os direitos reservados.</span>
+            <span>Versão 1.0.0</span>
+        </footer>
     </main>
 </div>
 
 <script>
 checkAuth(true);
+
+const ICO = {
+    contrato: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    viagem: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M5 17l-2-5h18l-2 5M7 11l2-5h6l2 5"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>',
+    km: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18"/><circle cx="12" cy="12" r="9"/></svg>',
+    usuario: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>',
+    speed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>',
+};
 
 const SECOES = {
     'sec-resumo': { titulo: 'Resumo comercial', sub: 'Indicadores financeiros e operacionais do período' },
@@ -405,6 +526,20 @@ const SECOES = {
     'sec-usuarios': { titulo: 'Usuários', sub: 'Aprovações, bloqueios e reset de senha' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
 };
+
+let cacheViagens = [];
+
+(function iniUserTopbar() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!user) return;
+        const nome = user.nome || 'Administrador';
+        const el = document.getElementById('admUserName');
+        const av = document.getElementById('admAvatar');
+        if (el) el.textContent = nome.split(' ')[0];
+        if (av) av.textContent = (nome[0] || 'A').toUpperCase();
+    } catch (_) {}
+})();
 
 function irSecao(id) {
     document.querySelectorAll('.adm-section').forEach(s => s.classList.remove('active'));
@@ -444,11 +579,14 @@ function iniPeriodo() {
     document.getElementById('filtroDe').value = inicio.toISOString().slice(0, 10);
     document.getElementById('filtroAte').value = hoje.toISOString().slice(0, 10);
 }
-function kpi(lbl, val, hint, destaque) {
+function kpi(ico, lbl, val, hint, destaque) {
     return `<div class="kpi ${destaque ? 'destaque' : ''}">
-        <div class="lbl">${esc(lbl)}</div>
-        <div class="val">${esc(val)}</div>
-        ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}
+        <div class="kpi-ico">${ico}</div>
+        <div class="kpi-body">
+            <div class="lbl">${esc(lbl)}</div>
+            <div class="val">${esc(val)}</div>
+            ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}
+        </div>
     </div>`;
 }
 
@@ -459,7 +597,7 @@ function barrasH(el, rows, corFill) {
         const pct = Math.round((r.v / max) * 100);
         return `<div class="bar-row" title="${esc(r.k)}: ${esc(r.disp)}">
             <span class="k">${esc(r.k)}</span>
-            <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${corFill || 'var(--blue)'}"></span></span>
+            <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${corFill || 'var(--gold)'}"></span></span>
             <span class="v">${esc(r.disp)}</span>
         </div>`;
     }).join('');
@@ -472,16 +610,16 @@ function chartGenero(el, homens, mulheres) {
     const pm = 100 - ph;
     el.innerHTML = `
         <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;gap:2px;">
-            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--blue);min-width:2px;"></div>
-            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:var(--aqua);min-width:2px;"></div>
+            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--gold);min-width:2px;"></div>
+            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:#8b6914;min-width:2px;"></div>
         </div>
         <div class="legend">
-            <span><span class="dot" style="background:var(--blue)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
-            <span><span class="dot" style="background:var(--aqua)"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
+            <span><span class="dot" style="background:var(--gold)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
+            <span><span class="dot" style="background:#8b6914"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
         </div>`;
 }
 
-function chartViagensPorDia(el, viagens) {
+function chartViagensPorDia(el, viagens, diasLimite) {
     const dias = {};
     (viagens || []).forEach(v => {
         if (!v.deslocamento_valido) return;
@@ -490,18 +628,24 @@ function chartViagensPorDia(el, viagens) {
         const k = d.toISOString().slice(0, 10);
         dias[k] = (dias[k] || 0) + 1;
     });
-    const keys = Object.keys(dias).sort().slice(-14);
+    const lim = Number(diasLimite) || 14;
+    const keys = Object.keys(dias).sort().slice(-lim);
     if (!keys.length) { el.innerHTML = '<div class="empty">Sem viagens com GPS válido no período.</div>'; return; }
     const max = Math.max(...keys.map(k => dias[k]), 1);
     el.innerHTML = `<div class="spark">` + keys.map(k => {
         const h = 10 + Math.round((dias[k] / max) * 86);
         const dd = k.slice(8, 10) + '/' + k.slice(5, 7);
         return `<div class="col" title="${dd}: ${dias[k]} viagem(ns)">
-            <span class="cl" style="color:var(--ink);font-weight:700;">${dias[k]}</span>
+            <span class="cl" style="color:var(--gold-bright);font-weight:700;">${dias[k]}</span>
             <div class="bar" style="height:${h}px"></div>
             <span class="cl">${dd}</span>
         </div>`;
     }).join('') + `</div>`;
+}
+
+function atualizarChartViagens() {
+    const dias = document.getElementById('filtroDiasChart')?.value || 14;
+    chartViagensPorDia(document.getElementById('chartViagens'), cacheViagens, dias);
 }
 
 function atualizarSideStats(ov) {
@@ -533,16 +677,16 @@ async function carregarKpisEGraficos() {
     ]);
     const m = await rm.json(), rat = await rr.json(), ov = await ro.json();
     if (!rm.ok || !rr.ok) return;
-    if (ro.ok) atualizarSideStats(ov);
+    if (ro.ok) { atualizarSideStats(ov); cacheViagens = ov.viagens || []; }
 
     const t = rat.totais || {};
     document.getElementById('kpis').innerHTML = [
-        kpi('Contrato mensal', fmtMoeda(rat.valor_contrato_mensal), 'valor fixo', true),
-        kpi('Custo por viagem', fmtMoeda(t.custo_por_viagem), `${fmtNum(t.viagens)} viagens`),
-        kpi('Custo por km', fmtMoeda(t.custo_por_km), `${fmtNum(t.km)} km`),
-        kpi('Custo por usuário', fmtMoeda(t.custo_por_usuario), `${fmtNum(t.usuarios_ativos)} ativos`),
-        kpi('Viagens no período', fmtNum(m.viagens), 'com GPS válido'),
-        kpi('Km percorridos', fmtNum(m.total_km), 'no período'),
+        kpi(ICO.contrato, 'Contrato mensal', fmtMoeda(rat.valor_contrato_mensal), 'valor fixo', true),
+        kpi(ICO.viagem, 'Custo por viagem', fmtMoeda(t.custo_por_viagem), `${fmtNum(t.viagens)} viagens`),
+        kpi(ICO.km, 'Custo por km', fmtMoeda(t.custo_por_km), `${fmtNum(t.km)} km`),
+        kpi(ICO.usuario, 'Custo por usuário', fmtMoeda(t.custo_por_usuario), `${fmtNum(t.usuarios_ativos)} ativos`),
+        kpi(ICO.pin, 'Viagens no período', fmtNum(m.viagens), 'com GPS válido'),
+        kpi(ICO.speed, 'Km percorridos', fmtNum(m.total_km), 'no período'),
     ].join('');
 
     const rows = (rat.por_empresa || []).map(e => ({
@@ -552,7 +696,7 @@ async function carregarKpisEGraficos() {
     barrasH(document.getElementById('chartEmpresas'), rows);
     chartGenero(document.getElementById('chartGenero'),
         Number(m.homens_transportados) || 0, Number(m.mulheres_transportadas) || 0);
-    if (ro.ok) chartViagensPorDia(document.getElementById('chartViagens'), ov.viagens);
+    if (ro.ok) atualizarChartViagens();
 }
 
 async function carregarRateio() {
@@ -561,7 +705,7 @@ async function carregarRateio() {
     if (!r.ok) return;
     const t = d.totais || {};
     document.getElementById('derivadosContrato').innerHTML =
-        `Custo por km <strong>${fmtMoeda(t.custo_por_km)}</strong> · por usuário <strong>${fmtMoeda(t.custo_por_usuario)}</strong> · por viagem <strong>${fmtMoeda(t.custo_por_viagem)}</strong>`;
+        `Custo por km <strong style="color:var(--gold)">${fmtMoeda(t.custo_por_km)}</strong> · por usuário <strong style="color:var(--gold)">${fmtMoeda(t.custo_por_usuario)}</strong> · por viagem <strong style="color:var(--gold)">${fmtMoeda(t.custo_por_viagem)}</strong>`;
 
     document.querySelector('#tabEmpresas tbody').innerHTML = (d.por_empresa || []).map(e => `
         <tr><td>${esc(e.empresa_nome)}</td><td class="num">${e.viagens}</td><td class="num">${e.km}</td>
@@ -595,6 +739,7 @@ async function carregarViagens() {
     const d = await r.json();
     if (!r.ok) return;
     atualizarSideStats(d);
+    cacheViagens = d.viagens || [];
     document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => {
         const cls = v.status === 'concluida' ? 'ok' : v.status === 'em_andamento' ? 'warn' : 'off';
         return `<div class="item"><div class="top">
@@ -608,8 +753,10 @@ async function carregarChamados() {
     const r = await fetchWithAuth('/api/admin/chamados?status=pendente');
     const lista = await r.json();
     const el = document.getElementById('listaChamados');
+    const dot = document.getElementById('bellDot');
     if (!el) return;
     if (!r.ok) { el.innerHTML = `<div class="empty">${esc(lista.error || 'Erro ao carregar')}</div>`; return; }
+    if (dot) dot.style.display = lista.length ? 'block' : 'none';
     if (!lista.length) { el.innerHTML = '<div class="empty">Nenhuma solicitação pendente.</div>'; return; }
     el.innerHTML = lista.map(c => `
         <div class="item">
