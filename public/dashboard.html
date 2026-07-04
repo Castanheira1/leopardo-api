@@ -778,8 +778,8 @@
                 grupoAtual = l.grupo;
                 html += `<div class="fav-grupo">${esc(grupoAtual)}</div>`;
             }
-            const key = esc(l.nome).replace(/"/g, '&quot;');
-            html += `<button type="button" class="fav-item" data-nome="${key}" onclick="escolherFavorito(this)">
+            const enc = encodeURIComponent(l.nome);
+            html += `<button type="button" class="fav-item" data-nome-enc="${enc}" onclick="escolherFavorito(this)">
                 <span class="fav-pin">${FAV_PIN}</span>
                 <span class="fav-nome">${esc(l.nome)}</span>
             </button>`;
@@ -794,8 +794,8 @@
             return;
         }
         lista.innerHTML = favPessoais.map((l) => {
-            const key = esc(l.nome).replace(/"/g, '&quot;');
-            return `<button type="button" class="fav-item" data-nome="${key}" onclick="escolherFavorito(this)">
+            const enc = encodeURIComponent(l.nome);
+            return `<button type="button" class="fav-item" data-nome-enc="${enc}" onclick="escolherFavorito(this)">
                 <span class="fav-pin">${FAV_PIN}</span>
                 <span class="fav-nome">${esc(l.nome)}</span>
             </button>`;
@@ -824,95 +824,39 @@
         return 2 * R * Math.asin(Math.sqrt(h));
     }
 
-    function pontuarResultadoPlace(place, local) {
-        if (!place?.geometry?.location) return -1;
-        const lat = place.geometry.location.lat();
-        const lng = place.geometry.location.lng();
-        const nomeRes = (place.name || '').toLowerCase();
-        const nomeAlvo = (local.nome || '').toLowerCase();
-        let score = 0;
-        if (nomeRes === nomeAlvo) score += 80;
-        else if (nomeRes.includes(nomeAlvo) || nomeAlvo.includes(nomeRes)) score += 50;
-        else {
-            const hits = (local.nome || '').toLowerCase().split(/\s+/)
-                .filter((w) => w.length > 2 && nomeRes.includes(w)).length;
-            score += hits * 12;
-        }
-        if (local.ref) {
-            const dist = distKmCoord(local.ref, { lat, lng });
-            if (dist > 3) return -1;
-            score += Math.max(0, 35 - dist * 8);
-        }
-        return score;
+    async function garantirCatalogoProjeto() {
+        await carregarCatalogoFavoritos();
+        const cod = (user?.projeto_codigo || '').toUpperCase();
+        if (!favCatalogoLocais.length) montarCatalogoProjeto(cod);
     }
 
-    function melhorResultadoPlaces(resultados, local) {
-        let melhor = null;
-        let melhorScore = -1;
-        (resultados || []).forEach((r) => {
-            const s = pontuarResultadoPlace(r, local);
-            if (s > melhorScore) {
-                melhorScore = s;
-                melhor = {
-                    lat: r.geometry.location.lat(),
-                    lng: r.geometry.location.lng(),
-                    nome: r.name || local.nome,
-                };
-            }
-        });
-        return melhorScore >= 20 ? melhor : null;
+    function normNomeLoc(s) {
+        return String(s || '').normalize('NFD').replace(/\p{M}/gu, '')
+            .replace(/[—–-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     }
 
-    // Nomes internos da Vale (Usina A, Britagem, Canteiro...) NÃO existem no Google
-    // Places — buscar lá só trazia lugar errado (ex.: Usina A -> Espaço Tucano).
-    // Por padrão usa SÓ a coordenada curada (ref); só tenta o Google se o local
-    // marcar "vivo": true no catálogo (locais públicos reais: hospital, restaurante...).
+    function localDoCatalogo(local) {
+        if (!local?.nome) return null;
+        const alvo = normNomeLoc(local.nome);
+        return favCatalogoLocais.find((l) => normNomeLoc(l.nome) === alvo) || null;
+    }
+
+    // Sempre usa ref + nome do catálogo JSON (fonte única). Favoritos salvos no
+    // banco podem ter ref antiga/ausente; o nome é o vínculo com o catálogo.
+    function resolverLocalCatalogo(local) {
+        const cat = localDoCatalogo(local);
+        const ref = cat?.ref || local?.ref;
+        const nome = cat?.nome || local?.nome;
+        if (!ref || ref.lat == null || ref.lng == null || !nome) return null;
+        return { lat: Number(ref.lat), lng: Number(ref.lng), nome };
+    }
+
     function resolverLocalAoVivo(local) {
-        return new Promise(async (resolve) => {
-            const usarRef = () => {
-                if (local.ref) resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome });
-                else resolve(null);
-            };
-            if (!local.vivo) return usarRef();
-            try {
-                g = g || await carregarMaps();
-                if (!favCatalogo) await carregarCatalogoFavoritos();
-                const sel = seletorAtivo();
-                const svc = new g.maps.places.PlacesService(sel ? sel.map : document.createElement('div'));
-                const bias = favLocationBias();
-                const query = local.busca || local.nome;
-                const candidatos = [];
-
-                await new Promise((fim) => {
-                    svc.findPlaceFromQuery(
-                        { query, fields: ['name', 'geometry'], locationBias: bias ? new g.maps.Circle(bias) : undefined },
-                        (res, status) => {
-                            if (status === 'OK' && res) candidatos.push(...res);
-                            fim();
-                        }
-                    );
-                });
-                await new Promise((fim) => {
-                    svc.textSearch(
-                        { query, location: bias?.center, radius: bias?.radius },
-                        (res, status) => {
-                            if (status === 'OK' && res) candidatos.push(...res);
-                            fim();
-                        }
-                    );
-                });
-
-                const melhor = melhorResultadoPlaces(candidatos, local);
-                if (melhor) return resolve(melhor);
-                return usarRef();
-            } catch (_) {
-                return usarRef();
-            }
-        });
+        return garantirCatalogoProjeto().then(() => resolverLocalCatalogo(local));
     }
 
     async function escolherFavorito(btn) {
-        const nome = btn.dataset.nome;
+        const nome = decodeURIComponent(btn.dataset.nomeEnc || '');
         const local = favModoPainel === 'pessoais'
             ? favPessoais.find((l) => l.nome === nome)
             : favCatalogoLocais.find((l) => l.nome === nome);
@@ -1305,7 +1249,8 @@
             try {
                 const resp = await rotaCtrl.calcular(mkOrigem.getPosition(), { lat: destino.lat, lng: destino.lng });
                 const leg = resp.routes[0].legs[0];
-                rotaInfo.innerHTML = `${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
+                const titulo = destino.texto ? `<strong>${esc(destino.texto)}</strong><br>` : '';
+                rotaInfo.innerHTML = `${titulo}${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
                 rotaInfo.style.display = 'block';
                 const o = mkOrigem.getPosition();
                 const bounds = new g.maps.LatLngBounds();
@@ -1325,15 +1270,16 @@
 
         let geocoder = null;
         function setDestino(pos, texto) {
-            destino = { lat: pos.lat, lng: pos.lng, texto: texto || '' };
-            mkDestino.setMap(map);   // religa caso limparRota tenha tirado
+            const nomeDestino = (texto && String(texto).trim()) || '';
+            destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
+            mkDestino.setMap(map);
             mkDestino.setPosition(pos);
+            if (nomeDestino) mkDestino.setTitle(nomeDestino);
             map.panTo(pos);
             tracarRota();
-            if (onDestino) onDestino(destino);   // lista motoristas indo para este local
-            // Marcou no mapa (sem nome): descobre o endereço para o outro lado ver
-            // PARA ONDE vai, não só a rota. Só aplica se o destino não mudou nesse meio.
-            if (!texto) {
+            if (onDestino) onDestino(destino);
+            // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
+            if (!nomeDestino) {
                 try {
                     geocoder = geocoder || new g.maps.Geocoder();
                     geocoder.geocode({ location: pos }, (res, status) => {
