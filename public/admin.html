@@ -50,20 +50,37 @@
 
         .adm-filtro { display: grid; gap: 8px; }
         .adm-filtro label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 3px; }
+        /* Campos digitáveis: sempre branco + texto preto (evita cinza do color-scheme dark) */
         .adm-filtro input,
         .field input,
         .field input[type="number"],
-        .field input[type="date"] {
-            width: 100%; background: #fff; border: 1px solid #d1d5db;
-            color: #111827; padding: 8px 10px; border-radius: 8px; font-size: .84rem;
+        .field input[type="date"],
+        .panel-select,
+        .adm-app input[type="date"],
+        .adm-app input[type="number"],
+        .adm-app input[type="text"] {
+            width: 100%; background: #fff !important; border: 1px solid #d1d5db !important;
+            color: #111827 !important; color-scheme: light;
+            padding: 8px 10px; border-radius: 8px; font-size: .84rem;
+            -webkit-appearance: none; appearance: none;
         }
+        .panel-select {
+            width: auto; min-width: 130px; cursor: pointer; padding: 7px 10px;
+        }
+        .panel-select option { background: #fff; color: #111827; }
         .adm-filtro input { padding: 8px 10px; }
         .field input { padding: 10px 12px; border-radius: 10px; font-size: .9rem; }
         .adm-filtro input::placeholder,
-        .field input::placeholder { color: #6b7280; }
+        .field input::placeholder { color: #6b7280 !important; }
         .adm-filtro input:focus,
-        .field input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px rgba(212,168,67,.25); }
-        .adm-filtro input::-webkit-calendar-picker-indicator { filter: none; opacity: .65; }
+        .field input:focus,
+        .panel-select:focus {
+            outline: none; border-color: var(--gold) !important;
+            box-shadow: 0 0 0 2px rgba(212,168,67,.25);
+        }
+        .adm-filtro input::-webkit-calendar-picker-indicator {
+            filter: none; opacity: .75; cursor: pointer;
+        }
 
         .adm-side-stats { display: grid; gap: 4px; }
         .adm-stat {
@@ -210,10 +227,6 @@
         .panel h3 { margin: 0; font-size: .88rem; font-weight: 700; color: #fff; }
         .panel .cap { color: var(--muted); font-size: .74rem; margin: 2px 0 0; line-height: 1.35; }
         .panel-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
-        .panel-select {
-            background: var(--card-2); border: 1px solid var(--line); color: var(--muted);
-            padding: 5px 8px; border-radius: 8px; font-size: .74rem; cursor: pointer;
-        }
 
         .chart { width: 100%; }
         .bar-row {
