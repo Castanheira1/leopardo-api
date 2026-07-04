@@ -314,6 +314,21 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(json.some((c) => c.id === caronaId), "carona não veio em ?meus");
     });
+    await test("GET /api/caronas?dest lista motoristas indo para o local (empresa + km, só com vaga)", async () => {
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${DESTINO.lat}&dest_lng=${DESTINO.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status");
+      const c = json.find((x) => x.id === caronaId);
+      assert(c, "a carona indo para o destino não apareceu");
+      assert("motorista_empresa" in c, "faltou a empresa do motorista no retorno");
+      assert(c.dist_origem != null, "faltou a distância (km) da minha posição");
+    });
+    await test("GET /api/caronas?dest não casa destino distante", async () => {
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=-2.9&dest_lng=-49.9`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status");
+      assert(!json.some((x) => x.id === caronaId), "não deveria casar um destino distante");
+    });
 
     /* =================== PEDIDOS =================== */
     grupo("Pedidos");

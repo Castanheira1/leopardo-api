@@ -88,6 +88,10 @@
                                 <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
+                        <div id="motoristasDestino" style="display:none;max-height:36vh;overflow-y:auto;margin-bottom:10px;">
+                            <strong class="painel-tit">Motoristas indo para lá</strong>
+                            <div id="listaMotoristasDestino"></div>
+                        </div>
                         <button id="btnCtaPedir" class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona</button>
                     </div>
                 </div>
@@ -750,7 +754,7 @@
     }
 
     /* -------- seletor de rota (mapa) -------- */
-    async function criarSeletor(mapId, inputId, comoCarro) {
+    async function criarSeletor(mapId, inputId, comoCarro, onDestino) {
         g = await carregarMaps();
         // O mapa abre NA HORA na última posição conhecida (ou no polo S11D) e o
         // GPS ajusta quando responder — esperar o GPS aqui segurava o download
@@ -838,6 +842,7 @@
             mkDestino.setMap(null);
             dirRenderer.setMap(null);
             rotaInfo.style.display = 'none';
+            if (onDestino) onDestino(null);
         }
 
         let geocoder = null;
@@ -847,6 +852,7 @@
             mkDestino.setPosition(pos);
             map.panTo(pos);
             tracarRota();
+            if (onDestino) onDestino(destino);   // lista motoristas indo para este local
             // Marcou no mapa (sem nome): descobre o endereço para o outro lado ver
             // PARA ONDE vai, não só a rota. Só aplica se o destino não mudou nesse meio.
             if (!texto) {
@@ -929,7 +935,7 @@
         };
     }
     async function initMapPedir() {
-        selPed = await criarSeletor('mapPed', 'destPedInput');
+        selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
         iniciarFrotaAoVivo(selPed.map);
         tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
         selPed.dica();   // instrução ao abrir
@@ -1064,6 +1070,51 @@
             ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Solicitar</button>` : ''}
         </div>`;
     }
+
+    // Card estilo lista (sem preço): empresa do motorista + marca/modelo (TAG) + placa,
+    // com a distância em km da minha posição. Ordenado no servidor (perto -> longe).
+    function cardMotoristaDestino(c) {
+        const km = c.dist_origem != null ? `${Number(c.dist_origem).toFixed(1)} km` : '';
+        const carro = [c.tag, c.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
+        const empresa = esc(c.motorista_empresa || c.motorista_nome || 'Motorista');
+        return `<div class="ride-item">
+            ${c.foto_carro_url ? `<img src="${esc(c.foto_carro_url)}" class="ride-thumb">` : ''}
+            <div class="ride-info">
+                <strong>${empresa}</strong><br>
+                <small>${carro}</small><br>
+                <small>${ICN.pin} ${esc(c.destino_texto || 'mesmo destino')} • ${c.vagas} vaga(s)</small>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto;">
+                ${km ? `<div style="font-weight:700;white-space:nowrap;">${km}</div>` : ''}
+                <button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Solicitar</button>
+            </div>
+        </div>`;
+    }
+
+    // Ao escolher um local no mapa, mostra os motoristas que estão indo para lá (com vaga),
+    // do mais perto ao mais longe da minha localização. dest = null -> esconde a lista.
+    async function carregarCaronasDestino(dest) {
+        const cont = document.getElementById('motoristasDestino');
+        const lista = document.getElementById('listaMotoristasDestino');
+        if (!cont || !lista) return;
+        if (!dest) { cont.style.display = 'none'; lista.innerHTML = ''; return; }
+        const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
+        const params = new URLSearchParams();
+        if (o) { params.set('lat', o.lat); params.set('lng', o.lng); }
+        params.set('dest_lat', dest.lat); params.set('dest_lng', dest.lng);
+        cont.style.display = 'block';
+        lista.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
+        try {
+            const r = await fetchWithAuth('/api/caronas?' + params.toString());
+            const caronas = await r.json();
+            lista.innerHTML = (Array.isArray(caronas) && caronas.length)
+                ? caronas.map(cardMotoristaDestino).join('')
+                : '<p class="cam-hint">Nenhum motorista indo para esse local com vaga agora.</p>';
+        } catch (_) {
+            lista.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
+        }
+    }
+
     async function pedirVaga(caronaId) {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         try {
