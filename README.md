@@ -4,9 +4,6 @@ App interno de **carona** (estilo "mini Uber") para o ambiente de trabalho. O me
 usuário alterna entre **motorista** e **passageiro**, com verificação de segurança por
 **foto ao vivo** e **registro de toda viagem com a rota**.
 
-> Pivot do antigo *Leopardo* (sistema de reserva de veículos). A base de usuários,
-> a autenticação e o armazenamento de fotos (Supabase Storage) foram reaproveitados.
-
 ## Funcionalidades
 
 - **Modo motorista/passageiro** no mesmo app (alternância rápida).

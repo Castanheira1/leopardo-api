@@ -55,7 +55,7 @@ Supabase → **Project Settings → Database → Reset database password**.
 ## 4. Deploy no Render
 
 1. Render → **New +** → **Blueprint**.
-2. Conecte o repositório `Castanheira1/leopardo-api`.
+2. Conecte o repositório deste projeto no GitHub.
 3. O Render lê o `render.yaml` e cria o serviço **vagao**.
 4. Em **Environment**, preencha os segredos (`sync: false`):
 

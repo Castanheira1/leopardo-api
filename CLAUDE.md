@@ -8,11 +8,6 @@ Guidance for AI assistants (and humans) working in this repository.
 user switches between **motorista** (driver) and **passageiro** (passenger). Safety is
 enforced with **live camera selfies** and **full trip logging with the GPS route**.
 
-> This is a **pivot of the old "Leopardo"** vehicle-reservation system. The repo, the
-> Render service and some env vars still carry the old `leopardo` / `vagao` names —
-> don't be surprised by the mix. The user base, auth and Supabase Storage photo
-> handling were reused; the booking flow was replaced by the carona flow.
-
 The codebase and all domain vocabulary are in **Portuguese**. Keep identifiers and
 user-facing strings in Portuguese to match the existing style.
 
@@ -135,10 +130,10 @@ Tables: `usuarios`, `habilitacoes_motorista`, `caronas`, `pedidos`, `propostas`,
 
 ### Supabase project (MCP)
 
-The live DB for this app is the Supabase project **`leopardo`** (ref
-`vsxnqtecnvhhvekmkshb`). Note the MCP Supabase connection in a given session may be
+The live DB for this app is the Supabase project with ref
+`vsxnqtecnvhhvekmkshb`. Note the MCP Supabase connection in a given session may be
 scoped to a **different** project (e.g. `soberano` / `xigajcnuwnofbuqzohpg`) — verify
-with `list_projects` before running SQL, and don't assume MCP can reach `leopardo`.
+with `list_projects` before running SQL, and don't assume MCP can reach it.
 
 ## Backend conventions (`server.js`)
 
