@@ -1040,6 +1040,31 @@ body.theme-dark {
 }
 .painel-locais .fav-filtro-topo { margin-top: 4px; }
 .painel-locais .cam-hint { margin-top: 0; margin-bottom: 8px; }
+/* Lista de locais: altura fixa do painel — botão Fechar sempre embaixo */
+.cam-overlay-alto .cam-box.painel-locais {
+    display: flex;
+    flex-direction: column;
+    min-height: min(78vh, calc(var(--appvh, 1vh) * 78));
+    max-height: min(88vh, calc(var(--appvh, 1vh) * 88));
+    overflow: hidden;
+}
+.painel-locais #favTitulo,
+.painel-locais .fav-filtro-topo,
+.painel-locais #favSubtitulo,
+.painel-locais .sol-actions {
+    flex-shrink: 0;
+}
+.painel-locais .fav-lista {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.painel-locais .sol-actions {
+    margin-top: auto;
+    padding-top: 14px;
+}
 
 /* Histórico - fotos de segurança */
 .fotos-grid {
