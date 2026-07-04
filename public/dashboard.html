@@ -112,7 +112,7 @@
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
             <div id="tabPedir" class="tab-content active">
                 <div class="map-stage">
-                    <input id="destPedInput" class="map-search map-search-float" placeholder="Para onde vamos">
+                    <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
                         <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
@@ -138,7 +138,7 @@
             <!-- ============ OFERECER CARONA (motorista) ============ -->
             <div id="tabOferecer" class="tab-content">
                 <div class="map-stage">
-                    <input id="destOfeInput" class="map-search map-search-float" placeholder="Para onde vamos">
+                    <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div id="acaoSheetOfe" class="acao-sheet">
                         <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
@@ -423,7 +423,10 @@
         if (!vv) return 0;
         const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
         const foco = document.activeElement;
-        const emCampo = foco && foco.matches('input, select, textarea');
+        const emCampo = foco && (
+            foco.matches('input, select, textarea')
+            || foco.closest?.('gmp-place-autocomplete')
+        );
         // Evita falso positivo quando só a barra do navegador encolhe/expande.
         if (!emCampo && inset < 120) return 0;
         return inset;
@@ -444,6 +447,14 @@
         window.visualViewport.addEventListener('scroll', compensarTeclado);
     }
     document.addEventListener('focusin', (e) => {
+        const pac = e.target.closest?.('gmp-place-autocomplete');
+        if (pac) {
+            const stage = pac.closest('.map-stage');
+            const sheet = stage?.querySelector('.acao-sheet');
+            if (sheet) sheet.classList.add('collapsed');
+            compensarTeclado();
+            return;
+        }
         const sheet = e.target.closest?.('.acao-sheet, .viagem-sheet');
         if (!sheet || !e.target.matches('input, select, textarea')) return;
         sheet.classList.remove('collapsed');
@@ -526,7 +537,7 @@
     // A busca flutua com z-index acima do navbar (pra não sumir ao rolar); por isso
     // ela passava por cima do menu. Enquanto o menu está aberto, escondemos a busca.
     function _buscaVisivel(menuAberto) {
-        document.querySelectorAll('.map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
+        document.querySelectorAll('.map-search-wrap, .map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
     }
     function toggleMenu(e) {
         if (e) e.stopPropagation();
@@ -1149,6 +1160,11 @@
                 const leg = resp.routes[0].legs[0];
                 rotaInfo.innerHTML = `${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
                 rotaInfo.style.display = 'block';
+                const o = mkOrigem.getPosition();
+                const bounds = new g.maps.LatLngBounds();
+                bounds.extend({ lat: o.lat(), lng: o.lng() });
+                bounds.extend({ lat: destino.lat, lng: destino.lng });
+                map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
@@ -1212,8 +1228,13 @@
         map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
 
         const inputEl = document.getElementById(inputId);
+        const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
         await ligarPlaceAutocomplete(inputEl, {
             map,
+            onFocus: () => {
+                const sheet = document.getElementById(sheetId);
+                if (sheet) sheet.classList.add('collapsed');
+            },
             onPlace: (p) => {
                 if (p.geometry) {
                     setDestino(
@@ -1221,6 +1242,8 @@
                         p.name || p.formatted_address
                     );
                     inputEl.value = '';
+                    const sheet = document.getElementById(sheetId);
+                    if (sheet) sheet.classList.add('collapsed');
                 }
             },
         });
