@@ -308,14 +308,14 @@ function criarMarcador(opts = {}) {
         img.draggable = false;
         content = img;
     } else if (label || cor) {
-        const pin = new _PinElement({
-            glyph: label || '',
+        const pinOpts = {
             background: cor || '#EA4335',
             borderColor: '#fff',
             glyphColor: '#fff',
             scale: label ? 1.1 : 0.85,
-        });
-        content = pin.element;
+        };
+        if (label) pinOpts.glyphText = label;
+        content = new _PinElement(pinOpts);
     }
     const mk = new _AdvancedMarkerElement({
         map: map || null,
