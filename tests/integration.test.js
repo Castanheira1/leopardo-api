@@ -151,6 +151,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status, json } = await api("GET", "/api/config");
       eq(status, 200, "status");
       assert("mapsApiKey" in json && "pushPublicKey" in json, "faltam chaves de config");
+      assert("mapsMapId" in json, "falta mapsMapId em /api/config");
     });
     await test("GET / serve o HTML de login", async () => {
       const r = await fetch(`${BASE}/`);

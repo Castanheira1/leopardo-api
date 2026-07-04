@@ -529,6 +529,19 @@ a.btn { display: inline-block; text-align: center; }
 .map-search-float:focus {
     border-radius: 24px;
 }
+gmp-place-autocomplete.map-search-float {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    z-index: 40;
+    margin: 0;
+    --gmp-mat-color-surface: #fff;
+    --gmp-mat-color-on-surface: #111;
+    border-radius: 24px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
 
 /* Mapa em satélite ocupando a tela + sheet de ação por cima (pedir/oferecer) */
 #tabPedir.tab-content, #tabOferecer.tab-content { padding: 0; }

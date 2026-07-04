@@ -1014,10 +1014,10 @@
         map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_ESCURO : null });
     }
     function novoMapa(elId, opts) {
-        const map = new g.maps.Map(document.getElementById(elId), {
+        const map = new g.maps.Map(document.getElementById(elId), opcoesMapa({
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
             fullscreenControl: false, gestureHandling: 'greedy', ...opts,
-        });
+        }));
         if (tipoMapaSalvo() === 'roadmap') map.setOptions({ styles: ESTILO_MAPA_ESCURO });
         // Botão flutuante Satélite <-> Mapa leve (a escolha vale para os próximos mapas).
         const b = document.createElement('button');
@@ -1052,10 +1052,12 @@
         // pulso anda junto. Nunca deixa o ícone derrubar o mapa caso falhe.
         let iconeUser;
         try {
-            iconeUser = comoCarro ? CAR_ICON_URL
-                : { path: g.maps.SymbolPath.CIRCLE, scale: 18, fillColor: '#000', fillOpacity: 0.001, strokeWeight: 0 };
-        } catch (_) { iconeUser = undefined; }
-        const mkOrigem = new g.maps.Marker({ position: origem, map, icon: iconeUser, title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)' });
+            iconeUser = comoCarro ? CAR_ICON_URL : null;
+        } catch (_) { iconeUser = null; }
+        const mkOrigem = criarMarcador({
+            position: origem, map, icon: iconeUser, invisivel: !comoCarro,
+            title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
+        });
         let pulseOrigem = null;
         if (!comoCarro) {
             try {
@@ -1088,14 +1090,9 @@
             } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
         }, 10000);
         let destino = null;
-        const mkDestino = new g.maps.Marker({ map, label: 'B', title: 'Destino' });
+        const mkDestino = criarMarcador({ map, label: 'B', title: 'Destino' });
 
-        // Rota real (Google Directions) com distância e tempo estimado.
-        const dirService = new g.maps.DirectionsService();
-        const dirRenderer = new g.maps.DirectionsRenderer({
-            map, suppressMarkers: true, preserveViewport: true,
-            polylineOptions: { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 },
-        });
+        const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 });
         const rotaInfo = document.createElement('div');
         rotaInfo.className = 'rota-info';
         rotaInfo.style.display = 'none';
@@ -1104,25 +1101,17 @@
         async function tracarRota() {
             if (!destino) return;
             try {
-                dirRenderer.setMap(map);   // religa caso limparRota tenha desligado
-                const resp = await dirService.route({
-                    origin: mkOrigem.getPosition(),
-                    destination: { lat: destino.lat, lng: destino.lng },
-                    travelMode: g.maps.TravelMode.DRIVING,
-                });
-                dirRenderer.setDirections(resp);
+                const resp = await rotaCtrl.calcular(mkOrigem.getPosition(), { lat: destino.lat, lng: destino.lng });
                 const leg = resp.routes[0].legs[0];
                 rotaInfo.innerHTML = `${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
                 rotaInfo.style.display = 'block';
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
-        // Tira do mapa a rota/destino antigos (após concluir uma viagem ou encerrar
-        // a carona) — sem isso a linha ficava "presa" na tela até recarregar.
         function limparRota() {
             destino = null;
             mkDestino.setMap(null);
-            dirRenderer.setMap(null);
+            rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
             if (onDestino) onDestino(null);
         }
@@ -1179,16 +1168,17 @@
         map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
 
         const inputEl = document.getElementById(inputId);
-        const ac = new g.maps.places.Autocomplete(inputEl, { fields: ['geometry', 'name', 'formatted_address'] });
-        ac.bindTo('bounds', map);
-        ac.addListener('place_changed', () => {
-            const p = ac.getPlace();
-            if (p.geometry) {
-                // Prefere o NOME do lugar (ex.: "Portaria S11D", "Hospital 5 de Outubro")
-                // em vez do endereço de rua, que é difícil de achar.
-                setDestino({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.name || p.formatted_address);
-                inputEl.value = '';   // limpa a busca para o próximo endereço
-            }
+        await ligarPlaceAutocomplete(inputEl, {
+            map,
+            onPlace: (p) => {
+                if (p.geometry) {
+                    setDestino(
+                        { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() },
+                        p.name || p.formatted_address
+                    );
+                    inputEl.value = '';
+                }
+            },
         });
 
         // Atualiza a origem para a localização ATUAL (evita ficar travado num lugar antigo).
@@ -1519,11 +1509,9 @@
         const destino = c.destino_lat ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
         const map = novoMapa('mapViagem', { center: origem, zoom: 16 });
         if (destino) {
-            const ds = new g.maps.DirectionsService();
-            const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, polylineOptions: { strokeColor: '#000000', strokeWeight: 6 } });
+            const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 });
             try {
-                const resp = await ds.route({ origin: origem, destination: destino, travelMode: g.maps.TravelMode.DRIVING });
-                rend.setDirections(resp);
+                const resp = await rotaCtrl.calcular(origem, destino);
                 const leg = resp.routes[0].legs[0];
                 eta.style.display = 'inline'; eta.textContent = `${leg.distance.text} • ${leg.duration.text}`;
             } catch (_) { /* sem rota: segue só com a posição ao vivo */ }
@@ -1816,16 +1804,14 @@
         const map = novoMapa('mapViagem', { center: centro, zoom: 16 });
 
         // Pinos fixos: embarque (verde) e destino (dourado).
-        const pin = (cor) => ({ path: g.maps.SymbolPath.CIRCLE, scale: 7, fillColor: cor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 });
-        if (embarque) new g.maps.Marker({ position: embarque, map, icon: pin('#22c55e'), title: 'Embarque' });
-        if (destino) new g.maps.Marker({ position: destino, map, icon: pin('#EAD298'), title: 'Destino' });
+        if (embarque) criarMarcador({ position: embarque, map, cor: '#22c55e', title: 'Embarque' });
+        if (destino) criarMarcador({ position: destino, map, cor: '#EAD298', title: 'Destino' });
 
-        const ds = new g.maps.DirectionsService();
-        const rend = new g.maps.DirectionsRenderer({ map, suppressMarkers: true, preserveViewport: true, polylineOptions: { strokeColor: '#000000', strokeWeight: 6 } });
+        const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 });
 
         viagemView = {
             id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
-            embarque, destino, tel, map, ds, rend,
+            embarque, destino, tel, map, rotaCtrl,
             motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
             posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
@@ -1941,7 +1927,7 @@
         // Carro do motorista
         if (vv.posMotorista) {
             if (vv.carMarker) vv.carMarker.setPosition(vv.posMotorista);
-            else vv.carMarker = new g.maps.Marker({ position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
+            else vv.carMarker = criarMarcador({ position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
         }
         // Passageiro: círculo pulsante (o mesmo do modo chamada), só na fase de
         // encontro — depois que embarca ele está dentro do carro.
@@ -1961,8 +1947,7 @@
         if (vv.posMotorista && alvo && Date.now() - vv.ultimaRota > 5000) {   // próximo passo mais fresco
             vv.ultimaRota = Date.now();
             try {
-                const resp = await vv.ds.route({ origin: vv.posMotorista, destination: alvo, travelMode: g.maps.TravelMode.DRIVING });
-                vv.rend.setDirections(resp);
+                const resp = await vv.rotaCtrl.calcular(vv.posMotorista, alvo);
                 const leg = resp.routes[0].legs[0];
                 const eta = document.getElementById('viagemEta');
                 const prefixo = vv.fase === 'encontro'
@@ -1992,7 +1977,7 @@
     // sobrando o caminho antigo). Mantém só os pinos de embarque/destino.
     function limparRotaViagem() {
         const vv = viagemView; if (!vv) return;
-        if (vv.rend) { vv.rend.setMap(null); vv.rend = null; }
+        if (vv.rotaCtrl) { vv.rotaCtrl.setMap(null); vv.rotaCtrl = null; }
         if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
         if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
         const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
@@ -2196,7 +2181,7 @@
                         item.car.setPosition(pos);
                         if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
                     } else {
-                        const car = new g.maps.Marker({
+                        const car = criarMarcador({
                             position: pos, map, icon: CAR_ICON_URL,
                             title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ''),
                         });
@@ -2211,9 +2196,9 @@
                                 strokeOpacity: 0,
                                 icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: '#EAD298', strokeOpacity: 0.95, scale: 3 }, offset: '0', repeat: '12px' }],
                             });
-                            destinoMk = new g.maps.Marker({
-                                position: dest, map, title: 'Destino: ' + (m.destino_texto || ''),
-                                icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5.5, fillColor: '#EAD298', fillOpacity: 1, strokeColor: '#0F3D3E', strokeWeight: 1.5 },
+                            destinoMk = criarMarcador({
+                                position: dest, map, cor: '#EAD298',
+                                title: 'Destino: ' + (m.destino_texto || ''),
                             });
                             destinoMk.addListener('click', abrir);
                         }
@@ -2338,32 +2323,25 @@
         el.style.display = 'block';
         let mm = _miniMapas[elId];
         if (!mm) {
-            const map = new g.maps.Map(el, {
+            const map = new g.maps.Map(el, opcoesMapa({
                 zoom: 13, center: o, disableDefaultUI: true, gestureHandling: 'none',
                 keyboardShortcuts: false, clickableIcons: false, mapTypeId: 'roadmap',
-            });
-            const rend = new g.maps.DirectionsRenderer({
-                map, suppressMarkers: true, preserveViewport: false,
-                polylineOptions: { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.9 },
-            });
-            mm = _miniMapas[elId] = { map, rend, ds: new g.maps.DirectionsService(), mkO: null, mkD: null };
+            }));
+            const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.9 });
+            mm = _miniMapas[elId] = { map, rotaCtrl, mkO: null, mkD: null };
         }
-        const { map, rend, ds } = mm;
-        const dot = (cor) => ({ path: g.maps.SymbolPath.CIRCLE, scale: 6, fillColor: cor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 });
+        const { map, rotaCtrl } = mm;
         if (mm.mkO) mm.mkO.setMap(null);
         if (mm.mkD) mm.mkD.setMap(null);
-        mm.mkO = new g.maps.Marker({ position: o, map, icon: dot('#22c55e'), title: 'Embarque', zIndex: 2 });
-        mm.mkD = new g.maps.Marker({ position: d, map, icon: dot('#EAD298'), title: 'Destino', zIndex: 2 });
-        // O mapa foi criado num container que pode ter ficado escondido: força o recálculo.
+        mm.mkO = criarMarcador({ position: o, map, cor: '#22c55e', title: 'Embarque', zIndex: 2 });
+        mm.mkD = criarMarcador({ position: d, map, cor: '#EAD298', title: 'Destino', zIndex: 2 });
         setTimeout(() => {
             g.maps.event.trigger(map, 'resize');
-            ds.route({ origin: o, destination: d, travelMode: g.maps.TravelMode.DRIVING })
-              .then((resp) => { rend.setDirections(resp); })
-              .catch(() => {
-                  rend.set('directions', null);
-                  const b = new g.maps.LatLngBounds(); b.extend(o); b.extend(d);
-                  map.fitBounds(b, 40);
-              });
+            rotaCtrl.calcular(o, d).catch(() => {
+                rotaCtrl.limpar();
+                const b = new g.maps.LatLngBounds(); b.extend(o); b.extend(d);
+                map.fitBounds(b, 40);
+            });
         }, 60);
     }
 
@@ -2407,7 +2385,7 @@
                 const p = await obterLocalizacao();
                 const pos = { lat: p.lat, lng: p.lng };
                 if (selfCar.marker) selfCar.marker.setPosition(pos);
-                else selfCar.marker = new g.maps.Marker({ position: pos, map, icon: CAR_ICON_URL, title: 'Você', zIndex: 999 });
+                else selfCar.marker = criarMarcador({ position: pos, map, icon: CAR_ICON_URL, title: 'Você', zIndex: 999 });
             } catch (_) { /* sem GPS: ignora */ }
         }
         upd();
