@@ -81,24 +81,6 @@
           ]
         }
       ]
-    },
-    "SALOBO": {
-      "nome": "Salobo (Marabá/PA)",
-      "regiao": { "lat": -5.79, "lng": -50.53, "raio_km": 40 },
-      "descoberta": ["Salobo Vale", "Mina Salobo"],
-      "grupos": []
-    },
-    "CARAJAS": {
-      "nome": "Carajás (Parauapebas/PA)",
-      "regiao": { "lat": -6.06, "lng": -50.16, "raio_km": 40 },
-      "descoberta": ["Carajás Vale", "Mina de Carajás"],
-      "grupos": []
-    },
-    "SOSSEGO": {
-      "nome": "Sossego (Canaã dos Carajás/PA)",
-      "regiao": { "lat": -6.43, "lng": -50.06, "raio_km": 30 },
-      "descoberta": ["Mina do Sossego Vale"],
-      "grupos": []
     }
   }
 }
