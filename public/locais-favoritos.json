@@ -5,7 +5,6 @@
     "S11D": {
       "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
       "regiao": { "lat": -6.428, "lng": -50.285, "raio_km": 45 },
-      "descoberta": ["S11D", "Vale S11D", "Serra Sul S11D", "Canteiro S11D", "Usina S11D"],
       "grupos": [
         {
           "titulo": "Acessos e apoio",
