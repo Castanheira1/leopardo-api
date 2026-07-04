@@ -156,6 +156,7 @@
             padding: 9px 14px; border-radius: 10px; cursor: pointer; font-size: .85rem;
         }
         .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+        .btn-sm-link { padding: 7px 12px; font-size: .8rem; }
 
         /* KPIs — faixa compacta */
         .kpi-strip {
@@ -450,22 +451,20 @@
             </section>
 
             <section id="sec-usuarios" class="adm-section">
-                <div class="tools">
-                    <div class="panel">
-                        <div class="panel-head">
-                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
-                            <div><h3>Excluir / bloquear usuário</h3><p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p></div>
-                        </div>
-                        <div class="field-row">
-                            <div class="field"><label>Matrícula</label><input id="matExcluir" placeholder="Matrícula"></div>
-                            <div class="field"><label>Motivo</label><input id="motivoExcluir" placeholder="Ex.: Desligamento"></div>
-                        </div>
-                        <button class="btn-ghost" style="margin-top:12px;" onclick="desativarUsuario()">Desativar e bloquear</button>
+                <div class="panel panel-usuarios">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+                        <div><h3>Excluir / bloquear usuário</h3><p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p></div>
+                    </div>
+                    <div class="form-bloqueio">
+                        <div class="field field-mat"><label>Matrícula</label><input id="matExcluir" placeholder="000000" maxlength="12"></div>
+                        <div class="field field-motivo"><label>Motivo</label><input id="motivoExcluir" placeholder="Ex.: Desligamento"></div>
+                        <button class="btn-ghost" onclick="desativarUsuario()">Desativar e bloquear</button>
                     </div>
                 </div>
-                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
-                    <a href="seguranca.html" class="btn-ghost">Painel de segurança</a>
-                    <a href="dashboard.html" class="btn-ghost">Abrir app</a>
+                <div class="links-sec" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="seguranca.html" class="btn-ghost btn-sm-link">Segurança</a>
+                    <a href="dashboard.html" class="btn-ghost btn-sm-link">App</a>
                 </div>
             </section>
 
