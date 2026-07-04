@@ -10,137 +10,239 @@
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
-        .admin-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:16px 0; }
-        .admin-top h2 { margin:0; color:#0F3D3E; }
-        .admin-top small { color:#64748b; display:block; }
-        .filtro-periodo { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
-        .filtro-periodo label { font-size:0.8rem; color:#475569; display:block; margin-bottom:4px; }
-        .filtro-periodo input { padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; }
-        .admin-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
-        .admin-table th, .admin-table td { padding:10px 8px; border-bottom:1px solid #e2e8f0; text-align:left; }
-        .admin-table th { color:#0F3D3E; font-weight:700; background:#f8fafc; }
-        .admin-table tr:hover td { background:#f8fafc; }
-        .admin-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-        .metric-destaque { font-size:1.6rem; font-weight:800; color:#0F3D3E; }
-        .contrato-box { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
-        .contrato-box input { min-width:180px; padding:10px 12px; border:2px solid #e2e8f0; border-radius:10px; font-size:1rem; }
+        :root {
+            --bg: #0a211f; --card: #122a29; --card-2: #0e2321;
+            --gold: #EAD298; --gold-soft: rgba(234,210,152,.14);
+            --ink: #eaf1f0; --muted: #9fb3b2; --line: rgba(234,210,152,.14);
+            --blue: #3987e5; --aqua: #199e70;
+            --good: #0ca30c; --warn: #fab219; --crit: #e66767;
+        }
+        body { background: var(--bg); color: var(--ink); }
+        .adm-wrap { max-width: 1240px; margin: 0 auto; padding: 16px 16px 64px; }
+
+        /* Top bar */
+        .adm-nav { background: #0F3D3E; border-bottom: 1px solid var(--line); }
+        .adm-nav-in { max-width: 1240px; margin: 0 auto; display: flex; align-items: center;
+            justify-content: space-between; gap: 12px; padding: 10px 16px; flex-wrap: wrap; }
+        .adm-brand { display: flex; align-items: center; gap: 10px; }
+        .adm-brand img { height: 30px; }
+        .adm-tag { font-size: .68rem; letter-spacing: .12em; font-weight: 700; color: #0F3D3E;
+            background: var(--gold); padding: 3px 8px; border-radius: 6px; }
+        .adm-nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .adm-nav a, .adm-nav button { font-size: .82rem; }
+
+        /* Header + filtro */
+        .adm-head { display: flex; align-items: flex-end; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap; margin: 20px 0 8px; }
+        .adm-head h1 { margin: 0; font-size: 1.5rem; color: var(--gold); }
+        .adm-head .sub { color: var(--muted); font-size: .9rem; margin-top: 2px; }
+        .filtro { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+        .filtro label { font-size: .72rem; color: var(--muted); display: block; margin-bottom: 4px; }
+        .filtro input { background: var(--card); border: 1px solid var(--line); color: var(--ink);
+            padding: 8px 10px; border-radius: 8px; font-size: .9rem; }
+        .btn-gold { background: var(--gold); color: #0F3D3E; border: none; font-weight: 700;
+            padding: 9px 16px; border-radius: 8px; cursor: pointer; font-size: .88rem; }
+        .btn-gold:hover { filter: brightness(1.05); }
+        .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line);
+            padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: .85rem; }
+
+        /* KPIs */
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px; margin: 16px 0; }
+        .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 15px; min-width: 0; }
+        .kpi .lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+        .kpi .val { font-size: clamp(1.02rem, 2.6vw, 1.3rem); font-weight: 800; margin-top: 6px;
+            line-height: 1.15; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kpi .val.big { font-size: clamp(1.05rem, 2.8vw, 1.35rem); }
+        .kpi .hint { font-size: .74rem; color: var(--muted); margin-top: 4px; }
+        .kpi.destaque { background: linear-gradient(150deg, #16403c, #10302e);
+            border-color: rgba(234,210,152,.3); }
+        .kpi.destaque .val { color: var(--gold); }
+
+        /* Cards / grid */
+        .grid { display: grid; gap: 14px; }
+        .cols-2 { grid-template-columns: 1fr 1fr; }
+        .cols-3 { grid-template-columns: 2fr 1fr; }
+        @media (max-width: 860px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
+        .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+        .panel h3 { margin: 0 0 4px; font-size: 1rem; color: var(--ink); }
+        .panel .cap { color: var(--muted); font-size: .8rem; margin: 0 0 14px; }
+
+        /* Charts */
+        .chart { width: 100%; }
+        .bar-row { display: grid; grid-template-columns: minmax(80px,26%) 1fr auto; align-items: center;
+            gap: 10px; margin: 9px 0; }
+        .bar-row .k { font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-track { background: rgba(255,255,255,.06); border-radius: 6px; height: 16px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 6px; background: var(--blue); min-width: 3px; }
+        .bar-row .v { font-size: .82rem; font-weight: 700; white-space: nowrap; }
+        .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: .82rem; color: var(--muted); }
+        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; }
+
+        .spark { display: flex; align-items: flex-end; gap: 6px; height: 128px; margin-top: 6px; }
+        .spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
+            align-items: center; gap: 6px; min-width: 0; }
+        .spark .bar { width: 100%; max-width: 30px; background: var(--blue); border-radius: 5px 5px 0 0; min-height: 4px; }
+        .spark .cl { font-size: .62rem; color: var(--muted); white-space: nowrap; }
+        .empty { color: var(--muted); font-size: .85rem; padding: 8px 0; }
+
+        /* Tabelas */
+        .tbl-wrap { overflow-x: auto; }
+        table.adm { width: 100%; border-collapse: collapse; font-size: .86rem; }
+        table.adm th, table.adm td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+        table.adm th { color: var(--gold); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+        table.adm td.num, table.adm th.num { text-align: right; }
+        table.adm tr:hover td { background: rgba(255,255,255,.03); }
+
+        /* Ferramentas de gestão */
+        .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; margin-top: 14px; }
+        .field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+        .field { flex: 1; min-width: 130px; }
+        .field label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 4px; }
+        .field input { width: 100%; background: var(--card-2); border: 1px solid var(--line);
+            color: var(--ink); padding: 9px 11px; border-radius: 8px; font-size: .9rem; }
+        .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+            padding: 11px 13px; margin-bottom: 10px; }
+        .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .item strong { font-size: .92rem; }
+        .item small { color: var(--muted); font-size: .78rem; }
+        .badge { font-size: .68rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+        .badge.ok { background: rgba(12,163,12,.18); color: #7bd97b; }
+        .badge.warn { background: rgba(250,178,25,.16); color: #f4c150; }
+        .badge.off { background: rgba(230,103,103,.16); color: #f0a0a0; }
+        .sec-title { margin: 26px 0 4px; color: var(--gold); font-size: 1.05rem; }
     </style>
 </head>
 <body>
-<nav class="navbar">
-    <div class="nav-container">
-        <div class="nav-left">
-            <img src="/logo-vap.png" class="nav-logo" alt="VAP">
-            <span class="nav-tag">ADMIN</span>
+<nav class="adm-nav">
+    <div class="adm-nav-in">
+        <div class="adm-brand">
+            <img src="/logo-vap.png" alt="VAP">
+            <span class="adm-tag">ADMIN</span>
         </div>
-        <div class="nav-links">
-            <span id="userName">Admin</span>
-            <a href="seguranca.html" class="btn btn-secondary btn-sm">Segurança</a>
-            <a href="dashboard.html" class="btn btn-secondary btn-sm">App</a>
-            <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
+        <div class="adm-nav-links">
+            <span id="userName" style="color:var(--muted);font-size:.85rem;"></span>
+            <a href="seguranca.html" class="btn-ghost">Segurança</a>
+            <a href="dashboard.html" class="btn-ghost">App</a>
+            <button onclick="logout()" class="btn-ghost">Sair</button>
         </div>
     </div>
 </nav>
 
-<div class="container">
-    <div class="admin-top">
+<div class="adm-wrap">
+    <div class="adm-head">
         <div>
-            <h2 id="tituloProjeto">Painel do projeto</h2>
-            <small id="subProjeto">Carregando…</small>
+            <h1 id="tituloProjeto">Painel do projeto</h1>
+            <div class="sub" id="subProjeto">Carregando…</div>
         </div>
-        <div class="filtro-periodo">
-            <div>
-                <label>De</label>
-                <input type="date" id="filtroDe">
-            </div>
-            <div>
-                <label>Até</label>
-                <input type="date" id="filtroAte">
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="carregarTudo()">Atualizar</button>
+        <div class="filtro">
+            <div><label>De</label><input type="date" id="filtroDe"></div>
+            <div><label>Até</label><input type="date" id="filtroAte"></div>
+            <button class="btn-gold" onclick="carregarTudo()">Atualizar</button>
         </div>
     </div>
 
-    <div class="stats-grid" id="statsGrid"></div>
+    <!-- KPIs de negócio -->
+    <div class="kpis" id="kpis"></div>
 
-    <div class="card">
-        <h3>Métricas do período</h3>
-        <div class="stats-grid" id="metricasGrid"></div>
+    <!-- Gráficos -->
+    <div class="grid cols-3">
+        <div class="panel">
+            <h3>Rateio por empresa</h3>
+            <p class="cap">Participação de cada empresa no custo do contrato no período.</p>
+            <div id="chartEmpresas" class="chart"></div>
+        </div>
+        <div class="panel">
+            <h3>Passageiros por gênero</h3>
+            <p class="cap">Transportados no período.</p>
+            <div id="chartGenero" class="chart"></div>
+        </div>
     </div>
 
+<<<<<<< Updated upstream
     <div class="card">
         <h3>Valor do contrato mensal do projeto (fixo)</h3>
         <p class="cam-hint">Defina aqui o valor total do contrato do projeto (ex.: S11D). O rateio abaixo divide esse valor entre as <strong>empresas</strong> conforme o km rodado no período.</p>
         <div class="contrato-box">
             <div>
+=======
+    <div class="panel" style="margin-top:14px;">
+        <h3>Viagens por dia</h3>
+        <p class="cap">Viagens concluídas recentes (rastreamento do volume operacional).</p>
+        <div id="chartViagens" class="chart"></div>
+    </div>
+
+    <!-- Rateio detalhado -->
+    <h2 class="sec-title">Rateio detalhado</h2>
+    <div class="grid cols-2">
+        <div class="panel">
+            <h3>Por empresa</h3>
+            <div class="tbl-wrap">
+                <table class="adm" id="tabEmpresas">
+                    <thead><tr><th>Empresa</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="panel">
+            <h3>Por centro de custo</h3>
+            <div class="tbl-wrap">
+                <table class="adm" id="tabCc">
+                    <thead><tr><th>Empresa</th><th>Centro de custo</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gestão -->
+    <h2 class="sec-title">Gestão</h2>
+    <div class="panel">
+        <h3>Valor do contrato mensal</h3>
+        <p class="cap">Base para o rateio automático entre empresas e centros de custo.</p>
+        <div class="field-row">
+            <div class="field" style="max-width:220px;">
+>>>>>>> Stashed changes
                 <label>Valor (R$)</label>
                 <input type="number" id="valorContrato" min="0" step="0.01" placeholder="65000.00">
             </div>
-            <button class="btn btn-primary" onclick="salvarContrato()">Salvar contrato</button>
+            <button class="btn-gold" onclick="salvarContrato()">Salvar contrato</button>
         </div>
-        <div id="derivadosContrato" class="cam-hint" style="margin-top:10px;"></div>
+        <div id="derivadosContrato" class="cap" style="margin-top:12px;"></div>
     </div>
 
-    <div class="card">
-        <h3>Solicitações de acesso admin</h3>
-        <p class="cam-hint">Quem preenche no cadastro cai aqui. Aprove para criar o usuário admin no banco (senha inicial <strong>123456</strong>).</p>
-        <div id="listaChamados"></div>
-    </div>
-
-    <div class="card">
-        <h3>Rateio por empresa</h3>
-        <div style="overflow-x:auto;">
-            <table class="admin-table" id="tabEmpresas">
-                <thead><tr><th>Empresa</th><th>Viagens</th><th>Km</th><th>%</th><th>Custo (R$)</th></tr></thead>
-                <tbody></tbody>
-            </table>
+    <div class="tools">
+        <div class="panel">
+            <h3>Solicitações de acesso admin</h3>
+            <p class="cap">Aprovar cria o usuário admin (senha inicial <strong>123456</strong>).</p>
+            <div id="listaChamados"></div>
         </div>
-    </div>
-
-    <div class="card">
-        <h3>Rateio por centro de custo</h3>
-        <div style="overflow-x:auto;">
-            <table class="admin-table" id="tabCc">
-                <thead><tr><th>Empresa</th><th>Centro de custo</th><th>Viagens</th><th>Km</th><th>%</th><th>Custo (R$)</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>Excluir / bloquear usuário</h3>
-        <p class="cam-hint">Desativa a conta e impede novo cadastro com a mesma matrícula (ex.: demitido).</p>
-        <div class="form-row">
-            <div class="form-group">
-                <label>Matrícula</label>
-                <input id="matExcluir" placeholder="Matrícula">
+        <div class="panel">
+            <h3>Excluir / bloquear usuário</h3>
+            <p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p>
+            <div class="field-row">
+                <div class="field"><label>Matrícula</label><input id="matExcluir" placeholder="Matrícula"></div>
+                <div class="field"><label>Motivo</label><input id="motivoExcluir" placeholder="Ex.: Desligamento"></div>
             </div>
-            <div class="form-group">
-                <label>Motivo</label>
-                <input id="motivoExcluir" placeholder="Ex.: Desligamento">
-            </div>
+            <button class="btn-ghost" style="margin-top:12px;" onclick="desativarUsuario()">Desativar e bloquear</button>
         </div>
-        <button class="btn btn-secondary" onclick="desativarUsuario()">Desativar e bloquear matrícula</button>
-    </div>
-
-    <div class="card">
-        <h3>Resetar senha</h3>
-        <div class="form-row">
-            <div class="form-group">
-                <label>Matrícula</label>
-                <input id="matReset" placeholder="Matrícula do usuário">
+        <div class="panel">
+            <h3>Resetar senha</h3>
+            <p class="cap">Redefine a senha do usuário para <strong>123456</strong>.</p>
+            <div class="field-row">
+                <div class="field"><label>Matrícula</label><input id="matReset" placeholder="Matrícula do usuário"></div>
             </div>
+            <button class="btn-ghost" style="margin-top:12px;" onclick="resetSenha()">Resetar senha</button>
         </div>
-        <button class="btn btn-secondary" onclick="resetSenha()">Resetar para 123456</button>
+        <div class="panel">
+            <h3>Motoristas do dia</h3>
+            <p class="cap">Habilitados nas últimas 12h e status de notificação.</p>
+            <div id="listaPush"></div>
+        </div>
     </div>
 
-    <div class="card">
-        <h3>Notificações — motoristas do dia</h3>
-        <div id="listaPush"></div>
-    </div>
-
-    <div class="card">
-        <h3>Viagens recentes do projeto</h3>
+    <div class="panel" style="margin-top:14px;">
+        <h3>Viagens recentes</h3>
         <div id="listaViagens"></div>
     </div>
 </div>
@@ -148,6 +250,7 @@
 <script>
 checkAuth(true);
 
+/* ------------------------------ helpers ------------------------------ */
 function periodoQuery() {
     const de = document.getElementById('filtroDe').value;
     const ate = document.getElementById('filtroAte').value;
@@ -156,58 +259,120 @@ function periodoQuery() {
     if (ate) q.set('ate', ate);
     return q.toString() ? `?${q}` : '';
 }
-
-function fmtMoeda(v) {
-    return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
+function fmtMoeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function fmtNum(v) { return Number(v || 0).toLocaleString('pt-BR'); }
 function iniPeriodo() {
     const hoje = new Date();
     const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     document.getElementById('filtroDe').value = inicio.toISOString().slice(0, 10);
     document.getElementById('filtroAte').value = hoje.toISOString().slice(0, 10);
 }
+function kpi(lbl, val, hint, destaque) {
+    return `<div class="kpi ${destaque ? 'destaque' : ''}">
+        <div class="lbl">${esc(lbl)}</div>
+        <div class="val ${destaque ? 'big' : ''}">${esc(val)}</div>
+        ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}
+    </div>`;
+}
 
+/* ------------------------------ charts (SVG/HTML) ------------------------------ */
+// Barras horizontais de série única (azul). rows: [{k, v, fmt}]
+function barrasH(el, rows, corFill) {
+    if (!rows.length) { el.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
+    const max = Math.max(...rows.map(r => r.v), 1);
+    el.innerHTML = rows.map(r => {
+        const pct = Math.round((r.v / max) * 100);
+        return `<div class="bar-row" title="${esc(r.k)}: ${esc(r.disp)}">
+            <span class="k">${esc(r.k)}</span>
+            <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${corFill || 'var(--blue)'}"></span></span>
+            <span class="v">${esc(r.disp)}</span>
+        </div>`;
+    }).join('');
+}
+
+// Gênero: 2 categorias com legenda + rótulos diretos (encoding secundário).
+function chartGenero(el, homens, mulheres) {
+    const total = homens + mulheres;
+    if (!total) { el.innerHTML = '<div class="empty">Nenhum passageiro no período.</div>'; return; }
+    const ph = Math.round((homens / total) * 100);
+    const pm = 100 - ph;
+    el.innerHTML = `
+        <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;gap:2px;background:transparent;">
+            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--blue);min-width:2px;"></div>
+            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:var(--aqua);min-width:2px;"></div>
+        </div>
+        <div class="legend">
+            <span><span class="dot" style="background:var(--blue)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
+            <span><span class="dot" style="background:var(--aqua)"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
+        </div>`;
+}
+
+// Viagens por dia (barras verticais) a partir da lista de viagens do overview.
+function chartViagensPorDia(el, viagens) {
+    const dias = {};
+    (viagens || []).forEach(v => {
+        const d = v.iniciada_em ? new Date(v.iniciada_em) : null;
+        if (!d || isNaN(d)) return;
+        const k = d.toISOString().slice(0, 10);
+        dias[k] = (dias[k] || 0) + 1;
+    });
+    const keys = Object.keys(dias).sort().slice(-14);
+    if (!keys.length) { el.innerHTML = '<div class="empty">Sem viagens registradas.</div>'; return; }
+    const max = Math.max(...keys.map(k => dias[k]), 1);
+    el.innerHTML = `<div class="spark">` + keys.map(k => {
+        const h = 10 + Math.round((dias[k] / max) * 86); // altura em px (área útil ~96px)
+        const dd = k.slice(8, 10) + '/' + k.slice(5, 7);
+        return `<div class="col" title="${dd}: ${dias[k]} viagem(ns)">
+            <span class="cl" style="color:var(--ink);font-weight:700;">${dias[k]}</span>
+            <div class="bar" style="height:${h}px"></div>
+            <span class="cl">${dd}</span>
+        </div>`;
+    }).join('') + `</div>`;
+}
+
+/* ------------------------------ carga de dados ------------------------------ */
 async function carregarContexto() {
     const r = await fetchWithAuth('/api/admin/context');
     const d = await r.json();
     if (!r.ok) { mostrarToast(d.error || 'Sem acesso ao projeto', 'error'); return null; }
     document.getElementById('tituloProjeto').textContent = d.projeto_nome || d.projeto_codigo || 'Projeto';
-    document.getElementById('subProjeto').textContent = `Código: ${d.projeto_codigo || '—'} • Contrato: ${fmtMoeda(d.valor_contrato_mensal)}`;
+    document.getElementById('subProjeto').textContent =
+        `Código ${d.projeto_codigo || '—'} · Contrato mensal ${fmtMoeda(d.valor_contrato_mensal)}`;
     document.getElementById('valorContrato').value = d.valor_contrato_mensal || '';
     return d;
 }
 
-async function carregarOverview() {
-    const r = await fetchWithAuth('/api/admin/overview');
-    const d = await r.json();
-    if (!r.ok) return;
-    document.getElementById('statsGrid').innerHTML = `
-        ${statCard(ADM_ICN.users, d.totalUsuarios, 'Usuários ativos')}
-        ${statCard(ADM_ICN.car, d.caronasAtivas, 'Caronas ativas')}
-        ${statCard(ADM_ICN.person, d.pedidosAbertos, 'Pedidos abertos')}
-        ${statCard(ADM_ICN.nav, d.viagensEmAndamento, 'Em andamento')}
-        ${statCard(ADM_ICN.check, d.viagensConcluidas, 'Concluídas')}`;
-    document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => `
-        <div class="agendamento-item ${v.status === 'concluida' ? 'completed' : v.status === 'em_andamento' ? 'in-progress' : ''}">
-            <div class="agendamento-header">
-                <strong>${esc(v.motorista_nome)} → ${esc(v.passageiro_nome)}</strong>
-                <span class="badge ${v.status === 'concluida' ? 'badge-ativo' : 'badge-em-uso'}">${v.status}</span>
-            </div>
-            <small>${fmtData(v.iniciada_em)}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''}</small>
-        </div>`).join('') || '<p class="cam-hint">Nenhuma viagem ainda.</p>';
-}
+async function carregarKpisEGraficos() {
+    // métricas + rateio no mesmo período alimentam os KPIs e os gráficos
+    const [rm, rr, ro] = await Promise.all([
+        fetchWithAuth('/api/admin/metricas' + periodoQuery()),
+        fetchWithAuth('/api/admin/rateio' + periodoQuery()),
+        fetchWithAuth('/api/admin/overview'),
+    ]);
+    const m = await rm.json(), rat = await rr.json(), ov = await ro.json();
+    if (!rm.ok || !rr.ok) return;
 
-async function carregarMetricas() {
-    const r = await fetchWithAuth('/api/admin/metricas' + periodoQuery());
-    const d = await r.json();
-    if (!r.ok) return;
-    document.getElementById('metricasGrid').innerHTML = `
-        ${statCard(ADM_ICN.users, d.usuarios_ativos, 'Usuários no período')}
-        ${statCard(ADM_ICN.nav, d.viagens, 'Viagens')}
-        ${statCard(ADM_ICN.check, d.total_km, 'Km percorridos')}
-        ${statCard(ADM_ICN.person, d.mulheres_transportadas, 'Mulheres transportadas')}
-        ${statCard(ADM_ICN.users, d.homens_transportados, 'Homens transportados')}`;
+    const t = rat.totais || {};
+    document.getElementById('kpis').innerHTML = [
+        kpi('Contrato mensal', fmtMoeda(rat.valor_contrato_mensal), 'valor fixo', true),
+        kpi('Custo por viagem', fmtMoeda(t.custo_por_viagem), `${fmtNum(t.viagens)} viagens`),
+        kpi('Custo por km', fmtMoeda(t.custo_por_km), `${fmtNum(t.km)} km`),
+        kpi('Custo por usuário', fmtMoeda(t.custo_por_usuario), `${fmtNum(t.usuarios_ativos)} ativos`),
+        kpi('Viagens no período', fmtNum(m.viagens), 'concluídas'),
+        kpi('Km percorridos', fmtNum(m.total_km), 'no período'),
+    ].join('');
+
+    // Rateio por empresa (barras): mostra o % com o custo como rótulo
+    const rows = (rat.por_empresa || []).map(e => ({
+        k: e.empresa_nome || '—', v: Number(e.percentual) || 0,
+        disp: `${Number(e.percentual).toFixed(0)}% · ${fmtMoeda(e.custo_alocado)}`,
+    }));
+    barrasH(document.getElementById('chartEmpresas'), rows);
+
+    chartGenero(document.getElementById('chartGenero'),
+        Number(m.homens_transportados) || 0, Number(m.mulheres_transportadas) || 0);
+
+    if (ro.ok) chartViagensPorDia(document.getElementById('chartViagens'), ov.viagens);
 }
 
 async function carregarRateio() {
@@ -216,17 +381,17 @@ async function carregarRateio() {
     if (!r.ok) return;
     const t = d.totais || {};
     document.getElementById('derivadosContrato').innerHTML =
-        `Custo por km: <strong>${fmtMoeda(t.custo_por_km)}</strong> • ` +
-        `por usuário: <strong>${fmtMoeda(t.custo_por_usuario)}</strong> • ` +
-        `por viagem: <strong>${fmtMoeda(t.custo_por_viagem)}</strong>`;
+        `Custo por km <strong>${fmtMoeda(t.custo_por_km)}</strong> · por usuário <strong>${fmtMoeda(t.custo_por_usuario)}</strong> · por viagem <strong>${fmtMoeda(t.custo_por_viagem)}</strong>`;
 
     document.querySelector('#tabEmpresas tbody').innerHTML = (d.por_empresa || []).map(e => `
-        <tr><td>${esc(e.empresa_nome)}</td><td>${e.viagens}</td><td>${e.km}</td><td>${e.percentual}%</td><td>${fmtMoeda(e.custo_alocado)}</td></tr>`
-    ).join('') || '<tr><td colspan="5">Sem viagens no período.</td></tr>';
+        <tr><td>${esc(e.empresa_nome)}</td><td class="num">${e.viagens}</td><td class="num">${e.km}</td>
+        <td class="num">${e.percentual}%</td><td class="num">${fmtMoeda(e.custo_alocado)}</td></tr>`
+    ).join('') || '<tr><td colspan="5" class="empty">Sem viagens no período.</td></tr>';
 
     document.querySelector('#tabCc tbody').innerHTML = (d.por_centro_custo || []).map(c => `
-        <tr><td>${esc(c.empresa_nome)}</td><td>${esc(c.centro_custo)}</td><td>${c.viagens}</td><td>${c.km}</td><td>${c.percentual}%</td><td>${fmtMoeda(c.custo_alocado)}</td></tr>`
-    ).join('') || '<tr><td colspan="6">Sem viagens no período.</td></tr>';
+        <tr><td>${esc(c.empresa_nome)}</td><td>${esc(c.centro_custo)}</td><td class="num">${c.viagens}</td>
+        <td class="num">${c.km}</td><td class="num">${c.percentual}%</td><td class="num">${fmtMoeda(c.custo_alocado)}</td></tr>`
+    ).join('') || '<tr><td colspan="6" class="empty">Sem viagens no período.</td></tr>';
 }
 
 async function carregarPushStatus() {
@@ -236,44 +401,26 @@ async function carregarPushStatus() {
         const d = await r.json();
         if (!r.ok) return;
         div.innerHTML = (d.motoristas || []).map(m => {
-            const push = +m.inscricoes_push > 0 ? `push OK (${m.inscricoes_push})` : 'SEM push';
+            const ok = +m.inscricoes_push > 0;
+            const push = ok ? `<span class="badge ok">push ${m.inscricoes_push}</span>` : `<span class="badge off">sem push</span>`;
             const loc = m.localizacao_em ? `loc ${m.localizacao_min} min` : 'sem loc';
-            return `<div class="agendamento-item"><div class="agendamento-header"><strong>${esc(m.nome)}</strong><span class="badge badge-ativo">${esc(m.matricula)}</span></div><small>${push} • ${loc}</small></div>`;
-        }).join('') || '<p class="cam-hint">Nenhum motorista habilitado nas últimas 12h.</p>';
+            return `<div class="item"><div class="top"><strong>${esc(m.nome)}</strong>${push}</div>
+                <small>${esc(m.matricula)} · ${esc(loc)}</small></div>`;
+        }).join('') || '<div class="empty">Nenhum motorista habilitado nas últimas 12h.</div>';
     } catch (_) {}
 }
 
-async function salvarContrato() {
-    const valor = document.getElementById('valorContrato').value;
-    const r = await fetchWithAuth('/api/admin/projeto/contrato', {
-        method: 'PATCH',
-        body: JSON.stringify({ valor_contrato_mensal: Number(valor) }),
-    });
+async function carregarViagens() {
+    const r = await fetchWithAuth('/api/admin/overview');
     const d = await r.json();
-    mostrarToast(r.ok ? 'Contrato salvo' : (d.error || 'Erro'), r.ok ? 'success' : 'error');
-    if (r.ok) { await carregarContexto(); carregarRateio(); }
-}
-
-async function desativarUsuario() {
-    const matricula = document.getElementById('matExcluir').value.trim();
-    const motivo = document.getElementById('motivoExcluir').value.trim() || 'Desligamento';
-    if (!matricula) return;
-    if (!confirm(`Desativar e bloquear matrícula ${matricula}?`)) return;
-    const r = await fetchWithAuth(`/api/admin/usuarios/${encodeURIComponent(matricula)}/desativar`, {
-        method: 'POST',
-        body: JSON.stringify({ motivo }),
-    });
-    const d = await r.json();
-    mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
-    if (r.ok) carregarOverview();
-}
-
-async function resetSenha() {
-    const matricula = document.getElementById('matReset').value.trim();
-    if (!matricula) return;
-    const r = await fetchWithAuth('/api/admin/reset-senha', { method: 'POST', body: JSON.stringify({ matricula }) });
-    const d = await r.json();
-    mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
+    if (!r.ok) return;
+    document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => {
+        const cls = v.status === 'concluida' ? 'ok' : v.status === 'em_andamento' ? 'warn' : 'off';
+        return `<div class="item"><div class="top">
+            <strong>${esc(v.motorista_nome)} → ${esc(v.passageiro_nome)}</strong>
+            <span class="badge ${cls}">${esc(v.status)}</span></div>
+            <small>${fmtData(v.iniciada_em)}${v.distancia_km ? ' · ' + v.distancia_km + ' km' : ''}</small></div>`;
+    }).join('') || '<div class="empty">Nenhuma viagem ainda.</div>';
 }
 
 async function carregarChamados() {
@@ -281,38 +428,57 @@ async function carregarChamados() {
     const lista = await r.json();
     const el = document.getElementById('listaChamados');
     if (!el) return;
-    if (!r.ok) { el.innerHTML = `<p class="cam-hint">${lista.error || 'Erro ao carregar'}</p>`; return; }
-    if (!lista.length) {
-        el.innerHTML = '<p class="cam-hint">Nenhuma solicitação pendente.</p>';
-        return;
-    }
+    if (!r.ok) { el.innerHTML = `<div class="empty">${esc(lista.error || 'Erro ao carregar')}</div>`; return; }
+    if (!lista.length) { el.innerHTML = '<div class="empty">Nenhuma solicitação pendente.</div>'; return; }
     el.innerHTML = lista.map(c => `
-        <div class="agendamento-item" style="margin-bottom:12px;">
-            <div class="agendamento-header">
-                <strong>${esc(c.nome)}</strong>
-                <span class="badge badge-em-uso">pendente</span>
-            </div>
-            <small>
-                Matrícula ${esc(c.matricula)} • ${esc(c.empresa_nome || '—')} • ${esc(c.projeto_codigo || c.projeto_nome || '—')}<br>
-                ${esc(c.email || '')} • ${esc(c.telefone || '')}<br>
-                ${c.justificativa ? `<em>${esc(c.justificativa)}</em><br>` : ''}
-                ${fmtData(c.created_at)}
-            </small>
-            <div class="admin-actions">
-                <button class="btn btn-primary btn-sm" onclick="aprovarChamado(${c.id})">Aprovar admin</button>
-                <button class="btn btn-secondary btn-sm" onclick="recusarChamado(${c.id})">Recusar</button>
+        <div class="item">
+            <div class="top"><strong>${esc(c.nome)}</strong><span class="badge warn">pendente</span></div>
+            <small>Matrícula ${esc(c.matricula)} · ${esc(c.empresa_nome || '—')} · ${esc(c.projeto_codigo || c.projeto_nome || '—')}<br>
+            ${esc(c.email || '')} ${c.telefone ? '· ' + esc(c.telefone) : ''}<br>
+            ${c.justificativa ? `<em>${esc(c.justificativa)}</em><br>` : ''}${fmtData(c.created_at)}</small>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+                <button class="btn-gold" onclick="aprovarChamado(${c.id})">Aprovar</button>
+                <button class="btn-ghost" onclick="recusarChamado(${c.id})">Recusar</button>
             </div>
         </div>`).join('');
 }
 
+/* ------------------------------ ações ------------------------------ */
+async function salvarContrato() {
+    const valor = document.getElementById('valorContrato').value;
+    const r = await fetchWithAuth('/api/admin/projeto/contrato', {
+        method: 'PATCH', body: JSON.stringify({ valor_contrato_mensal: Number(valor) }),
+    });
+    const d = await r.json();
+    mostrarToast(r.ok ? 'Contrato salvo' : (d.error || 'Erro'), r.ok ? 'success' : 'error');
+    if (r.ok) { await carregarContexto(); carregarKpisEGraficos(); carregarRateio(); }
+}
+async function desativarUsuario() {
+    const matricula = document.getElementById('matExcluir').value.trim();
+    const motivo = document.getElementById('motivoExcluir').value.trim() || 'Desligamento';
+    if (!matricula) return;
+    if (!confirm(`Desativar e bloquear matrícula ${matricula}?`)) return;
+    const r = await fetchWithAuth(`/api/admin/usuarios/${encodeURIComponent(matricula)}/desativar`, {
+        method: 'POST', body: JSON.stringify({ motivo }),
+    });
+    const d = await r.json();
+    mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
+    if (r.ok) { carregarKpisEGraficos(); carregarViagens(); }
+}
+async function resetSenha() {
+    const matricula = document.getElementById('matReset').value.trim();
+    if (!matricula) return;
+    const r = await fetchWithAuth('/api/admin/reset-senha', { method: 'POST', body: JSON.stringify({ matricula }) });
+    const d = await r.json();
+    mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
+}
 async function aprovarChamado(id) {
     if (!confirm('Aprovar e criar usuário admin com senha inicial 123456?')) return;
     const r = await fetchWithAuth(`/api/admin/chamados/${id}/aprovar`, { method: 'POST' });
     const d = await r.json();
     mostrarToast(d.message || d.error, r.ok ? 'success' : 'error');
-    if (r.ok) { carregarChamados(); carregarOverview(); }
+    if (r.ok) { carregarChamados(); carregarKpisEGraficos(); }
 }
-
 async function recusarChamado(id) {
     if (!confirm('Recusar esta solicitação?')) return;
     const r = await fetchWithAuth(`/api/admin/chamados/${id}/recusar`, { method: 'POST' });
@@ -322,26 +488,16 @@ async function recusarChamado(id) {
 }
 
 async function carregarTudo() {
-    await carregarOverview();
-    await carregarMetricas();
+    await carregarContexto();
+    await carregarKpisEGraficos();
     await carregarRateio();
     await carregarPushStatus();
+    await carregarViagens();
     await carregarChamados();
 }
 
-const ADM_ICN = {
-    users: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0F3D3E" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/></svg>',
-    car: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0F3D3E" stroke-width="2"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/></svg>',
-    person: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0F3D3E" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>',
-    nav: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0F3D3E" stroke-width="2"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>',
-    check: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><circle cx="12" cy="12" r="9" stroke="#0F3D3E"/><path d="M8 12l3 3 5-6"/></svg>',
-};
-function statCard(icon, num, label) {
-    return `<div class="stat-card"><span class="stat-icon">${icon}</span><h3>${num}</h3><p>${label}</p></div>`;
-}
-
 iniPeriodo();
-carregarContexto().then(() => carregarTudo());
+carregarTudo();
 </script>
 </body>
 </html>
