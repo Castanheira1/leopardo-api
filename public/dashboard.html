@@ -330,7 +330,6 @@
             <input id="favFiltro" class="fav-filtro" placeholder="Filtrar locais…" oninput="filtrarFavoritos()">
             <div id="listaFavoritos" class="fav-lista"><div class="fav-vazio">Carregando…</div></div>
             <div class="sol-actions">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="descobrirLocaisAoVivo()" id="btnFavDescobrir">Buscar novos locais no mapa</button>
                 <button type="button" class="btn btn-secondary" onclick="fecharPainel('painelFavoritos')">Fechar</button>
             </div>
         </div>
@@ -513,7 +512,6 @@
     let favCatalogo = null;        // JSON completo
     let favProjeto = null;         // bloco do projeto do usuário
     let favLocais = [];            // lista achatada [{nome, busca, ref, grupo}]
-    let favDescobertos = [];       // achados ao vivo pela descoberta
 
     async function carregarCatalogoFavoritos() {
         if (favCatalogo) return favCatalogo;
@@ -558,8 +556,7 @@
     function renderFavoritos() {
         const lista = document.getElementById('listaFavoritos');
         const filtro = (document.getElementById('favFiltro').value || '').trim().toLowerCase();
-        const todos = favLocais.concat(favDescobertos);
-        const visiveis = filtro ? todos.filter((l) => l.nome.toLowerCase().includes(filtro)) : todos;
+        const visiveis = filtro ? favLocais.filter((l) => l.nome.toLowerCase().includes(filtro)) : favLocais;
         if (!visiveis.length) {
             lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
             return;
@@ -638,7 +635,7 @@
 
     async function escolherFavorito(btn) {
         const nome = btn.dataset.nome;
-        const local = favLocais.concat(favDescobertos).find((l) => l.nome === nome);
+        const local = favLocais.find((l) => l.nome === nome);
         if (!local) return;
         const sel = seletorAtivo();
         if (!sel) { msg('Abra o mapa primeiro para marcar o destino.', 'error'); return; }
