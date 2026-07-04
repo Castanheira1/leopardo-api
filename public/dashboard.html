@@ -650,6 +650,7 @@
                 busca: local.busca || local.nome,
                 grupo: local.grupo,
                 ref: local.ref,
+                vivo: !!local.vivo,
             });
         }
         renderPerfilFavoritos();
@@ -862,12 +863,17 @@
         return melhorScore >= 20 ? melhor : null;
     }
 
+    // Nomes internos da Vale (Usina A, Britagem, Canteiro...) NÃO existem no Google
+    // Places — buscar lá só trazia lugar errado (ex.: Usina A -> Espaço Tucano).
+    // Por padrão usa SÓ a coordenada curada (ref); só tenta o Google se o local
+    // marcar "vivo": true no catálogo (locais públicos reais: hospital, restaurante...).
     function resolverLocalAoVivo(local) {
         return new Promise(async (resolve) => {
             const usarRef = () => {
                 if (local.ref) resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome });
                 else resolve(null);
             };
+            if (!local.vivo) return usarRef();
             try {
                 g = g || await carregarMaps();
                 if (!favCatalogo) await carregarCatalogoFavoritos();
