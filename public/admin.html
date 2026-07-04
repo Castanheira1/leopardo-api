@@ -10,108 +10,183 @@
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
-        /* Tema claro corporativo */
         :root {
             --bg: #f1f5f9; --card: #ffffff; --card-2: #f8fafc;
             --ink: #1e293b; --muted: #64748b; --line: #e2e8f0;
             --primary: #2563eb; --primary-700: #1d4ed8; --primary-050: #eff6ff;
-            --nav: #1e3a8a;
-            --blue: #2563eb; --aqua: #c2410c;   /* séries dos gráficos (categóricas, validadas) */
+            --nav: #1e3a8a; --nav-2: #172554;
+            --side-w: 280px;
+            --blue: #2563eb; --aqua: #c2410c;
             --good: #15803d; --warn: #b45309; --crit: #b91c1c;
             --shadow: 0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.04);
         }
-        body { background: var(--bg); color: var(--ink); }
-        .adm-wrap { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; }
+        body { background: var(--bg); color: var(--ink); margin: 0; }
 
-        /* Top bar */
-        .adm-nav { background: var(--nav); }
-        .adm-nav-in { max-width: 1240px; margin: 0 auto; display: flex; align-items: center;
-            justify-content: space-between; gap: 12px; padding: 10px 16px; flex-wrap: wrap; }
-        .adm-brand { display: flex; align-items: center; gap: 10px; }
-        .adm-brand img { height: 28px; }
-        .adm-tag { font-size: .66rem; letter-spacing: .12em; font-weight: 700; color: #fff;
-            background: rgba(255,255,255,.18); padding: 3px 8px; border-radius: 6px; }
-        .adm-nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .adm-nav-links #userName { color: rgba(255,255,255,.85); }
-        .adm-nav .btn-ghost { color: #fff; border-color: rgba(255,255,255,.35); background: transparent; }
-        .adm-nav .btn-ghost:hover { background: rgba(255,255,255,.12); }
+        .adm-app { display: flex; min-height: 100vh; }
 
-        /* Header + filtro */
-        .adm-head { display: flex; align-items: flex-end; justify-content: space-between;
-            gap: 16px; flex-wrap: wrap; margin: 6px 0 12px; }
-        .adm-head h1 { margin: 0; font-size: 1.5rem; color: var(--ink); font-weight: 700; }
-        .adm-head .sub { color: var(--muted); font-size: .9rem; margin-top: 2px; }
-        .filtro { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
-        .filtro label { font-size: .72rem; color: var(--muted); display: block; margin-bottom: 4px; }
-        .filtro input { background: var(--card); border: 1px solid var(--line); color: var(--ink);
-            padding: 8px 10px; border-radius: 8px; font-size: .9rem; }
-        .btn-gold { background: var(--primary); color: #fff; border: none; font-weight: 600;
-            padding: 9px 16px; border-radius: 8px; cursor: pointer; font-size: .88rem; }
+        /* ---- Sidebar ---- */
+        .adm-sidebar {
+            width: var(--side-w); flex-shrink: 0; background: var(--nav);
+            color: #fff; display: flex; flex-direction: column;
+            position: sticky; top: 0; height: 100vh; overflow-y: auto;
+            z-index: 40;
+        }
+        .adm-side-brand {
+            display: flex; align-items: center; gap: 10px;
+            padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.12);
+        }
+        .adm-side-brand img { height: 30px; }
+        .adm-tag {
+            font-size: .62rem; letter-spacing: .14em; font-weight: 700;
+            background: rgba(255,255,255,.16); padding: 3px 8px; border-radius: 6px;
+        }
+        .adm-side-block { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.1); }
+        .adm-side-block .blk-title {
+            font-size: .65rem; text-transform: uppercase; letter-spacing: .1em;
+            color: rgba(255,255,255,.5); margin-bottom: 10px; font-weight: 700;
+        }
+        .adm-proj-nome { font-size: 1rem; font-weight: 700; line-height: 1.25; }
+        .adm-proj-meta { font-size: .78rem; color: rgba(255,255,255,.72); margin-top: 4px; line-height: 1.45; }
+        .adm-proj-meta strong { color: #fff; font-weight: 600; }
+
+        .adm-filtro { display: grid; gap: 8px; }
+        .adm-filtro label { font-size: .7rem; color: rgba(255,255,255,.6); display: block; margin-bottom: 3px; }
+        .adm-filtro input {
+            width: 100%; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+            color: #fff; padding: 7px 9px; border-radius: 8px; font-size: .85rem;
+        }
+        .adm-filtro input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .7; }
+
+        .adm-side-stats { display: grid; gap: 6px; }
+        .adm-stat {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255,255,255,.08); border-radius: 8px; padding: 8px 10px;
+            font-size: .82rem;
+        }
+        .adm-stat .lbl { color: rgba(255,255,255,.75); }
+        .adm-stat .val { font-weight: 800; font-size: .95rem; }
+
+        .adm-nav { display: grid; gap: 2px; padding: 8px 10px; flex: 1; }
+        .adm-nav-item {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            background: none; border: none; color: rgba(255,255,255,.82);
+            padding: 10px 12px; border-radius: 9px; cursor: pointer;
+            font-size: .88rem; font-weight: 600; text-align: left;
+        }
+        .adm-nav-item:hover { background: rgba(255,255,255,.1); color: #fff; }
+        .adm-nav-item.active { background: rgba(255,255,255,.18); color: #fff; }
+        .adm-nav-item .ico { width: 18px; text-align: center; opacity: .85; font-size: .95rem; }
+
+        .adm-side-foot {
+            padding: 12px 16px 18px; border-top: 1px solid rgba(255,255,255,.1);
+            display: grid; gap: 6px;
+        }
+        .adm-side-foot .user { font-size: .78rem; color: rgba(255,255,255,.65); margin-bottom: 4px; }
+        .adm-side-link {
+            display: block; color: rgba(255,255,255,.8); text-decoration: none;
+            font-size: .82rem; padding: 7px 10px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,.2); background: transparent;
+            cursor: pointer; text-align: center;
+        }
+        .adm-side-link:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+        /* ---- Main ---- */
+        .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .adm-topbar {
+            background: var(--card); border-bottom: 1px solid var(--line);
+            padding: 14px 24px; display: flex; align-items: center;
+            justify-content: space-between; gap: 12px; flex-wrap: wrap;
+            position: sticky; top: 0; z-index: 30; box-shadow: var(--shadow);
+        }
+        .adm-topbar h1 { margin: 0; font-size: 1.25rem; font-weight: 700; }
+        .adm-topbar .sub { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+        .adm-topbar-actions { display: flex; gap: 8px; align-items: center; }
+        .adm-menu-btn {
+            display: none; background: var(--nav); color: #fff; border: none;
+            border-radius: 8px; padding: 8px 12px; font-size: 1.1rem; cursor: pointer;
+        }
+
+        .adm-content { padding: 20px 24px 48px; flex: 1; }
+        .adm-section { display: none; }
+        .adm-section.active { display: block; }
+
+        .btn-gold {
+            background: var(--primary); color: #fff; border: none; font-weight: 600;
+            padding: 9px 16px; border-radius: 8px; cursor: pointer; font-size: .88rem;
+        }
         .btn-gold:hover { background: var(--primary-700); }
-        .btn-ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line);
-            padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: .85rem; }
+        .btn-ghost {
+            background: var(--card); color: var(--ink); border: 1px solid var(--line);
+            padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: .85rem;
+        }
         .btn-ghost:hover { background: var(--card-2); }
+        .btn-side {
+            background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.25);
+            padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: .85rem;
+            font-weight: 600; width: 100%;
+        }
+        .btn-side:hover { background: rgba(255,255,255,.22); }
 
-        /* KPIs */
-        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 12px; margin: 14px 0; }
-        .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            padding: 15px; min-width: 0; box-shadow: var(--shadow); }
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .kpi {
+            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 15px; min-width: 0; box-shadow: var(--shadow);
+        }
         .kpi .lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-        .kpi .val { font-size: clamp(1.02rem, 2.6vw, 1.3rem); font-weight: 800; margin-top: 6px;
-            line-height: 1.15; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .kpi .val.big { font-size: clamp(1.05rem, 2.8vw, 1.35rem); }
+        .kpi .val {
+            font-size: clamp(1.02rem, 2.6vw, 1.3rem); font-weight: 800; margin-top: 6px;
+            line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
         .kpi .hint { font-size: .74rem; color: var(--muted); margin-top: 4px; }
         .kpi.destaque { background: var(--primary-050); border-color: #bfdbfe; }
         .kpi.destaque .val { color: var(--primary-700); }
 
-        /* Cards / grid */
         .grid { display: grid; gap: 14px; }
         .cols-2 { grid-template-columns: 1fr 1fr; }
         .cols-3 { grid-template-columns: 2fr 1fr; }
-        @media (max-width: 860px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
-        .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            padding: 18px; box-shadow: var(--shadow); }
-        .panel h3 { margin: 0 0 4px; font-size: 1rem; color: var(--ink); font-weight: 600; }
+        @media (max-width: 900px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
+
+        .panel {
+            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 18px; box-shadow: var(--shadow);
+        }
+        .panel h3 { margin: 0 0 4px; font-size: 1rem; font-weight: 600; }
         .panel .cap { color: var(--muted); font-size: .8rem; margin: 0 0 14px; }
 
-        /* Charts */
         .chart { width: 100%; }
-        .bar-row { display: grid; grid-template-columns: minmax(80px,26%) 1fr auto; align-items: center;
-            gap: 10px; margin: 9px 0; }
+        .bar-row {
+            display: grid; grid-template-columns: minmax(80px,26%) 1fr auto;
+            align-items: center; gap: 10px; margin: 9px 0;
+        }
         .bar-row .k { font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .bar-track { background: #eef2f7; border-radius: 6px; height: 16px; overflow: hidden; }
         .bar-fill { height: 100%; border-radius: 6px; background: var(--blue); min-width: 3px; }
-        .bar-row .v { font-size: .82rem; font-weight: 700; white-space: nowrap; color: var(--ink); }
+        .bar-row .v { font-size: .82rem; font-weight: 700; white-space: nowrap; }
         .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: .82rem; color: var(--muted); }
-        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; }
+        .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 
         .spark { display: flex; align-items: flex-end; gap: 6px; height: 128px; margin-top: 6px; }
-        .spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
-            align-items: center; gap: 6px; min-width: 0; }
+        .spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; }
         .spark .bar { width: 100%; max-width: 30px; background: var(--blue); border-radius: 5px 5px 0 0; min-height: 4px; }
         .spark .cl { font-size: .62rem; color: var(--muted); white-space: nowrap; }
         .empty { color: var(--muted); font-size: .85rem; padding: 8px 0; }
 
-        /* Tabelas */
         .tbl-wrap { overflow-x: auto; }
         table.adm { width: 100%; border-collapse: collapse; font-size: .86rem; }
         table.adm th, table.adm td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-        table.adm th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase;
-            letter-spacing: .04em; background: var(--card-2); }
-        table.adm td { color: var(--ink); }
+        table.adm th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; background: var(--card-2); }
         table.adm td.num, table.adm th.num { text-align: right; }
         table.adm tr:hover td { background: #f8fafc; }
 
-        /* Ferramentas de gestão */
-        .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; margin-top: 14px; }
+        .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
         .field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
         .field { flex: 1; min-width: 130px; }
         .field label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 4px; }
-        .field input { width: 100%; background: var(--card); border: 1px solid var(--line);
-            color: var(--ink); padding: 9px 11px; border-radius: 8px; font-size: .9rem; }
-        .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
-            padding: 11px 13px; margin-bottom: 10px; }
+        .field input {
+            width: 100%; background: var(--card); border: 1px solid var(--line);
+            color: var(--ink); padding: 9px 11px; border-radius: 8px; font-size: .9rem;
+        }
+        .item { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; margin-bottom: 10px; }
         .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
         .item strong { font-size: .92rem; }
         .item small { color: var(--muted); font-size: .78rem; }
@@ -119,139 +194,240 @@
         .badge.ok { background: #dcfce7; color: var(--good); }
         .badge.warn { background: #fef3c7; color: var(--warn); }
         .badge.off { background: #fee2e2; color: var(--crit); }
-        .sec-title { margin: 26px 0 4px; color: var(--ink); font-size: 1.05rem; font-weight: 700; }
+
+        .adm-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 35;
+        }
+        .adm-overlay.open { display: block; }
+
+        @media (max-width: 900px) {
+            .adm-sidebar {
+                position: fixed; left: 0; top: 0; transform: translateX(-100%);
+                transition: transform .22s ease; box-shadow: 4px 0 24px rgba(0,0,0,.2);
+            }
+            .adm-sidebar.open { transform: translateX(0); }
+            .adm-menu-btn { display: inline-flex; }
+            .adm-content { padding: 16px 14px 40px; }
+            .adm-topbar { padding: 12px 14px; }
+        }
     </style>
 </head>
 <body>
-<nav class="adm-nav">
-    <div class="adm-nav-in">
-        <div class="adm-brand">
+<div class="adm-overlay" id="admOverlay" onclick="fecharSidebar()"></div>
+
+<div class="adm-app">
+    <aside class="adm-sidebar" id="admSidebar">
+        <div class="adm-side-brand">
             <img src="/logo-vap.png" alt="VAP">
             <span class="adm-tag">ADMIN</span>
         </div>
-        <div class="adm-nav-links">
-            <span id="userName" style="color:var(--muted);font-size:.85rem;"></span>
-            <a href="seguranca.html" class="btn-ghost">Segurança</a>
-            <a href="dashboard.html" class="btn-ghost">App</a>
-            <button onclick="logout()" class="btn-ghost">Sair</button>
-        </div>
-    </div>
-</nav>
 
-<div class="adm-wrap">
-    <div class="adm-head">
-        <div>
-            <h1 id="tituloProjeto">Painel do projeto</h1>
-            <div class="sub" id="subProjeto">Carregando…</div>
+        <div class="adm-side-block">
+            <div class="blk-title">Projeto</div>
+            <div class="adm-proj-nome" id="tituloProjeto">Painel do projeto</div>
+            <div class="adm-proj-meta" id="subProjeto">Carregando…</div>
         </div>
-        <div class="filtro">
-            <div><label>De</label><input type="date" id="filtroDe"></div>
-            <div><label>Até</label><input type="date" id="filtroAte"></div>
-            <button class="btn-gold" onclick="carregarTudo()">Atualizar</button>
-        </div>
-    </div>
 
-    <!-- KPIs de negócio -->
-    <div class="kpis" id="kpis"></div>
-
-    <!-- Gráficos -->
-    <div class="grid cols-3">
-        <div class="panel">
-            <h3>Rateio por empresa</h3>
-            <p class="cap">Participação de cada empresa no custo do contrato no período.</p>
-            <div id="chartEmpresas" class="chart"></div>
-        </div>
-        <div class="panel">
-            <h3>Passageiros por gênero</h3>
-            <p class="cap">Transportados no período.</p>
-            <div id="chartGenero" class="chart"></div>
-        </div>
-    </div>
-
-    <div class="panel" style="margin-top:14px;">
-        <h3>Viagens por dia</h3>
-        <p class="cap">Viagens concluídas recentes (rastreamento do volume operacional).</p>
-        <div id="chartViagens" class="chart"></div>
-    </div>
-
-    <!-- Rateio detalhado -->
-    <h2 class="sec-title">Rateio detalhado</h2>
-    <div class="grid cols-2">
-        <div class="panel">
-            <h3>Por empresa</h3>
-            <div class="tbl-wrap">
-                <table class="adm" id="tabEmpresas">
-                    <thead><tr><th>Empresa</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
-                    <tbody></tbody>
-                </table>
+        <div class="adm-side-block">
+            <div class="blk-title">Período</div>
+            <div class="adm-filtro">
+                <div><label>De</label><input type="date" id="filtroDe"></div>
+                <div><label>Até</label><input type="date" id="filtroAte"></div>
+                <button class="btn-side" onclick="carregarTudo()">Atualizar dados</button>
             </div>
         </div>
-        <div class="panel">
-            <h3>Por centro de custo</h3>
-            <div class="tbl-wrap">
-                <table class="adm" id="tabCc">
-                    <thead><tr><th>Empresa</th><th>Centro de custo</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 
-    <!-- Gestão -->
-    <h2 class="sec-title">Gestão</h2>
-    <div class="panel">
-        <h3>Valor do contrato mensal</h3>
-        <p class="cap">Base para o rateio automático entre empresas e centros de custo.</p>
-        <div class="field-row">
-            <div class="field" style="max-width:220px;">
-                <label>Valor (R$)</label>
-                <input type="number" id="valorContrato" min="0" step="0.01" placeholder="65000.00">
+        <div class="adm-side-block">
+            <div class="blk-title">Operação ao vivo</div>
+            <div class="adm-side-stats" id="sideStats">
+                <div class="adm-stat"><span class="lbl">Usuários</span><span class="val" id="stUsuarios">—</span></div>
+                <div class="adm-stat"><span class="lbl">Caronas ativas</span><span class="val" id="stCaronas">—</span></div>
+                <div class="adm-stat"><span class="lbl">Pedidos abertos</span><span class="val" id="stPedidos">—</span></div>
+                <div class="adm-stat"><span class="lbl">Em andamento</span><span class="val" id="stAndamento">—</span></div>
+                <div class="adm-stat"><span class="lbl">Concluídas (GPS)</span><span class="val" id="stConcluidas">—</span></div>
             </div>
-            <button class="btn-gold" onclick="salvarContrato()">Salvar contrato</button>
         </div>
-        <div id="derivadosContrato" class="cap" style="margin-top:12px;"></div>
-    </div>
 
-    <div class="tools">
-        <div class="panel">
-            <h3>Solicitações de acesso admin</h3>
-            <p class="cap">Aprovar cria o usuário admin (senha inicial <strong>123456</strong>).</p>
-            <div id="listaChamados"></div>
-        </div>
-        <div class="panel">
-            <h3>Excluir / bloquear usuário</h3>
-            <p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p>
-            <div class="field-row">
-                <div class="field"><label>Matrícula</label><input id="matExcluir" placeholder="Matrícula"></div>
-                <div class="field"><label>Motivo</label><input id="motivoExcluir" placeholder="Ex.: Desligamento"></div>
-            </div>
-            <button class="btn-ghost" style="margin-top:12px;" onclick="desativarUsuario()">Desativar e bloquear</button>
-        </div>
-        <div class="panel">
-            <h3>Resetar senha</h3>
-            <p class="cap">Redefine a senha do usuário para <strong>123456</strong>.</p>
-            <div class="field-row">
-                <div class="field"><label>Matrícula</label><input id="matReset" placeholder="Matrícula do usuário"></div>
-            </div>
-            <button class="btn-ghost" style="margin-top:12px;" onclick="resetSenha()">Resetar senha</button>
-        </div>
-        <div class="panel">
-            <h3>Motoristas do dia</h3>
-            <p class="cap">Habilitados nas últimas 12h e status de notificação.</p>
-            <div id="listaPush"></div>
-        </div>
-    </div>
+        <nav class="adm-nav" aria-label="Seções do painel">
+            <button class="adm-nav-item active" data-sec="sec-resumo" onclick="irSecao('sec-resumo')">
+                <span class="ico">▣</span> Resumo comercial
+            </button>
+            <button class="adm-nav-item" data-sec="sec-rateio" onclick="irSecao('sec-rateio')">
+                <span class="ico">◎</span> Rateio detalhado
+            </button>
+            <button class="adm-nav-item" data-sec="sec-contrato" onclick="irSecao('sec-contrato')">
+                <span class="ico">$</span> Contrato
+            </button>
+            <button class="adm-nav-item" data-sec="sec-usuarios" onclick="irSecao('sec-usuarios')">
+                <span class="ico">☺</span> Usuários
+            </button>
+            <button class="adm-nav-item" data-sec="sec-operacao" onclick="irSecao('sec-operacao')">
+                <span class="ico">➤</span> Operação
+            </button>
+        </nav>
 
-    <div class="panel" style="margin-top:14px;">
-        <h3>Viagens recentes</h3>
-        <div id="listaViagens"></div>
-    </div>
+        <div class="adm-side-foot">
+            <div class="user" id="userName"></div>
+            <a href="seguranca.html" class="adm-side-link">Segurança</a>
+            <a href="dashboard.html" class="adm-side-link">Abrir app</a>
+            <button onclick="logout()" class="adm-side-link">Sair</button>
+        </div>
+    </aside>
+
+    <main class="adm-main">
+        <header class="adm-topbar">
+            <div>
+                <button class="adm-menu-btn" id="admMenuBtn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+                <h1 id="topTitulo">Resumo comercial</h1>
+                <div class="sub" id="topSub">Indicadores financeiros e operacionais do período</div>
+            </div>
+        </header>
+
+        <div class="adm-content">
+            <!-- RESUMO -->
+            <section id="sec-resumo" class="adm-section active">
+                <div class="kpis" id="kpis"></div>
+                <div class="grid cols-3">
+                    <div class="panel">
+                        <h3>Rateio por empresa</h3>
+                        <p class="cap">Participação de cada empresa no custo do contrato no período.</p>
+                        <div id="chartEmpresas" class="chart"></div>
+                    </div>
+                    <div class="panel">
+                        <h3>Passageiros por gênero</h3>
+                        <p class="cap">Transportados no período (viagens com GPS válido).</p>
+                        <div id="chartGenero" class="chart"></div>
+                    </div>
+                </div>
+                <div class="panel" style="margin-top:14px;">
+                    <h3>Viagens por dia</h3>
+                    <p class="cap">Volume de viagens concluídas com deslocamento GPS nos últimos dias.</p>
+                    <div id="chartViagens" class="chart"></div>
+                </div>
+            </section>
+
+            <!-- RATEIO -->
+            <section id="sec-rateio" class="adm-section">
+                <div class="grid cols-2">
+                    <div class="panel">
+                        <h3>Por empresa</h3>
+                        <p class="cap">Distribuição de viagens e custo alocado por empresa.</p>
+                        <div class="tbl-wrap">
+                            <table class="adm" id="tabEmpresas">
+                                <thead><tr><th>Empresa</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Por centro de custo</h3>
+                        <p class="cap">Detalhamento por centro de custo do passageiro.</p>
+                        <div class="tbl-wrap">
+                            <table class="adm" id="tabCc">
+                                <thead><tr><th>Empresa</th><th>Centro de custo</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CONTRATO -->
+            <section id="sec-contrato" class="adm-section">
+                <div class="panel">
+                    <h3>Valor do contrato mensal</h3>
+                    <p class="cap">Base fixa para o rateio automático entre empresas e centros de custo.</p>
+                    <div class="field-row">
+                        <div class="field" style="max-width:240px;">
+                            <label>Valor (R$)</label>
+                            <input type="number" id="valorContrato" min="0" step="0.01" placeholder="65000.00">
+                        </div>
+                        <button class="btn-gold" onclick="salvarContrato()">Salvar contrato</button>
+                    </div>
+                    <div id="derivadosContrato" class="cap" style="margin-top:14px;"></div>
+                </div>
+            </section>
+
+            <!-- USUÁRIOS -->
+            <section id="sec-usuarios" class="adm-section">
+                <div class="tools">
+                    <div class="panel">
+                        <h3>Solicitações de acesso admin</h3>
+                        <p class="cap">Aprovar cria o usuário admin (senha inicial <strong>123456</strong>).</p>
+                        <div id="listaChamados"></div>
+                    </div>
+                    <div class="panel">
+                        <h3>Excluir / bloquear usuário</h3>
+                        <p class="cap">Desativa a conta e impede novo cadastro com a mesma matrícula.</p>
+                        <div class="field-row">
+                            <div class="field"><label>Matrícula</label><input id="matExcluir" placeholder="Matrícula"></div>
+                            <div class="field"><label>Motivo</label><input id="motivoExcluir" placeholder="Ex.: Desligamento"></div>
+                        </div>
+                        <button class="btn-ghost" style="margin-top:12px;" onclick="desativarUsuario()">Desativar e bloquear</button>
+                    </div>
+                    <div class="panel">
+                        <h3>Resetar senha</h3>
+                        <p class="cap">Redefine a senha do usuário para <strong>123456</strong>.</p>
+                        <div class="field-row">
+                            <div class="field"><label>Matrícula</label><input id="matReset" placeholder="Matrícula do usuário"></div>
+                        </div>
+                        <button class="btn-ghost" style="margin-top:12px;" onclick="resetSenha()">Resetar senha</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- OPERAÇÃO -->
+            <section id="sec-operacao" class="adm-section">
+                <div class="grid cols-2">
+                    <div class="panel">
+                        <h3>Motoristas do dia</h3>
+                        <p class="cap">Habilitados nas últimas 12h e status de notificação push.</p>
+                        <div id="listaPush"></div>
+                    </div>
+                    <div class="panel">
+                        <h3>Viagens recentes</h3>
+                        <p class="cap">Últimas viagens do projeto com status e km GPS.</p>
+                        <div id="listaViagens"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
 </div>
 
 <script>
 checkAuth(true);
 
-/* ------------------------------ helpers ------------------------------ */
+const SECOES = {
+    'sec-resumo': { titulo: 'Resumo comercial', sub: 'Indicadores financeiros e operacionais do período' },
+    'sec-rateio': { titulo: 'Rateio detalhado', sub: 'Distribuição de custo por empresa e centro de custo' },
+    'sec-contrato': { titulo: 'Contrato', sub: 'Valor mensal e derivados de custo' },
+    'sec-usuarios': { titulo: 'Usuários', sub: 'Aprovações, bloqueios e reset de senha' },
+    'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
+};
+
+function irSecao(id) {
+    document.querySelectorAll('.adm-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.adm-nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById(id)?.classList.add('active');
+    document.querySelector(`.adm-nav-item[data-sec="${id}"]`)?.classList.add('active');
+    const meta = SECOES[id];
+    if (meta) {
+        document.getElementById('topTitulo').textContent = meta.titulo;
+        document.getElementById('topSub').textContent = meta.sub;
+    }
+    fecharSidebar();
+}
+
+function toggleSidebar() {
+    document.getElementById('admSidebar').classList.toggle('open');
+    document.getElementById('admOverlay').classList.toggle('open');
+}
+function fecharSidebar() {
+    document.getElementById('admSidebar').classList.remove('open');
+    document.getElementById('admOverlay').classList.remove('open');
+}
+
 function periodoQuery() {
     const de = document.getElementById('filtroDe').value;
     const ate = document.getElementById('filtroAte').value;
@@ -271,13 +447,11 @@ function iniPeriodo() {
 function kpi(lbl, val, hint, destaque) {
     return `<div class="kpi ${destaque ? 'destaque' : ''}">
         <div class="lbl">${esc(lbl)}</div>
-        <div class="val ${destaque ? 'big' : ''}">${esc(val)}</div>
+        <div class="val">${esc(val)}</div>
         ${hint ? `<div class="hint">${esc(hint)}</div>` : ''}
     </div>`;
 }
 
-/* ------------------------------ charts (SVG/HTML) ------------------------------ */
-// Barras horizontais de série única (azul). rows: [{k, v, fmt}]
 function barrasH(el, rows, corFill) {
     if (!rows.length) { el.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
     const max = Math.max(...rows.map(r => r.v), 1);
@@ -291,14 +465,13 @@ function barrasH(el, rows, corFill) {
     }).join('');
 }
 
-// Gênero: 2 categorias com legenda + rótulos diretos (encoding secundário).
 function chartGenero(el, homens, mulheres) {
     const total = homens + mulheres;
     if (!total) { el.innerHTML = '<div class="empty">Nenhum passageiro no período.</div>'; return; }
     const ph = Math.round((homens / total) * 100);
     const pm = 100 - ph;
     el.innerHTML = `
-        <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;gap:2px;background:transparent;">
+        <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;gap:2px;">
             <div title="Homens: ${homens}" style="width:${ph}%;background:var(--blue);min-width:2px;"></div>
             <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:var(--aqua);min-width:2px;"></div>
         </div>
@@ -308,20 +481,20 @@ function chartGenero(el, homens, mulheres) {
         </div>`;
 }
 
-// Viagens por dia (barras verticais) a partir da lista de viagens do overview.
 function chartViagensPorDia(el, viagens) {
     const dias = {};
     (viagens || []).forEach(v => {
+        if (!v.deslocamento_valido) return;
         const d = v.iniciada_em ? new Date(v.iniciada_em) : null;
         if (!d || isNaN(d)) return;
         const k = d.toISOString().slice(0, 10);
         dias[k] = (dias[k] || 0) + 1;
     });
     const keys = Object.keys(dias).sort().slice(-14);
-    if (!keys.length) { el.innerHTML = '<div class="empty">Sem viagens registradas.</div>'; return; }
+    if (!keys.length) { el.innerHTML = '<div class="empty">Sem viagens com GPS válido no período.</div>'; return; }
     const max = Math.max(...keys.map(k => dias[k]), 1);
     el.innerHTML = `<div class="spark">` + keys.map(k => {
-        const h = 10 + Math.round((dias[k] / max) * 86); // altura em px (área útil ~96px)
+        const h = 10 + Math.round((dias[k] / max) * 86);
         const dd = k.slice(8, 10) + '/' + k.slice(5, 7);
         return `<div class="col" title="${dd}: ${dias[k]} viagem(ns)">
             <span class="cl" style="color:var(--ink);font-weight:700;">${dias[k]}</span>
@@ -331,20 +504,28 @@ function chartViagensPorDia(el, viagens) {
     }).join('') + `</div>`;
 }
 
-/* ------------------------------ carga de dados ------------------------------ */
+function atualizarSideStats(ov) {
+    if (!ov) return;
+    document.getElementById('stUsuarios').textContent = fmtNum(ov.totalUsuarios);
+    document.getElementById('stCaronas').textContent = fmtNum(ov.caronasAtivas);
+    document.getElementById('stPedidos').textContent = fmtNum(ov.pedidosAbertos);
+    document.getElementById('stAndamento').textContent = fmtNum(ov.viagensEmAndamento);
+    document.getElementById('stConcluidas').textContent = fmtNum(ov.viagensConcluidas);
+}
+
 async function carregarContexto() {
     const r = await fetchWithAuth('/api/admin/context');
     const d = await r.json();
     if (!r.ok) { mostrarToast(d.error || 'Sem acesso ao projeto', 'error'); return null; }
-    document.getElementById('tituloProjeto').textContent = d.projeto_nome || d.projeto_codigo || 'Projeto';
-    document.getElementById('subProjeto').textContent =
-        `Código ${d.projeto_codigo || '—'} · Contrato mensal ${fmtMoeda(d.valor_contrato_mensal)}`;
+    const nome = d.projeto_nome || d.projeto_codigo || 'Projeto';
+    document.getElementById('tituloProjeto').textContent = nome;
+    document.getElementById('subProjeto').innerHTML =
+        `Código <strong>${esc(d.projeto_codigo || '—')}</strong><br>Contrato <strong>${esc(fmtMoeda(d.valor_contrato_mensal))}</strong>`;
     document.getElementById('valorContrato').value = d.valor_contrato_mensal || '';
     return d;
 }
 
 async function carregarKpisEGraficos() {
-    // métricas + rateio no mesmo período alimentam os KPIs e os gráficos
     const [rm, rr, ro] = await Promise.all([
         fetchWithAuth('/api/admin/metricas' + periodoQuery()),
         fetchWithAuth('/api/admin/rateio' + periodoQuery()),
@@ -352,6 +533,7 @@ async function carregarKpisEGraficos() {
     ]);
     const m = await rm.json(), rat = await rr.json(), ov = await ro.json();
     if (!rm.ok || !rr.ok) return;
+    if (ro.ok) atualizarSideStats(ov);
 
     const t = rat.totais || {};
     document.getElementById('kpis').innerHTML = [
@@ -359,20 +541,17 @@ async function carregarKpisEGraficos() {
         kpi('Custo por viagem', fmtMoeda(t.custo_por_viagem), `${fmtNum(t.viagens)} viagens`),
         kpi('Custo por km', fmtMoeda(t.custo_por_km), `${fmtNum(t.km)} km`),
         kpi('Custo por usuário', fmtMoeda(t.custo_por_usuario), `${fmtNum(t.usuarios_ativos)} ativos`),
-        kpi('Viagens no período', fmtNum(m.viagens), 'concluídas'),
+        kpi('Viagens no período', fmtNum(m.viagens), 'com GPS válido'),
         kpi('Km percorridos', fmtNum(m.total_km), 'no período'),
     ].join('');
 
-    // Rateio por empresa (barras): mostra o % com o custo como rótulo
     const rows = (rat.por_empresa || []).map(e => ({
         k: e.empresa_nome || '—', v: Number(e.percentual) || 0,
         disp: `${Number(e.percentual).toFixed(0)}% · ${fmtMoeda(e.custo_alocado)}`,
     }));
     barrasH(document.getElementById('chartEmpresas'), rows);
-
     chartGenero(document.getElementById('chartGenero'),
         Number(m.homens_transportados) || 0, Number(m.mulheres_transportadas) || 0);
-
     if (ro.ok) chartViagensPorDia(document.getElementById('chartViagens'), ov.viagens);
 }
 
@@ -415,6 +594,7 @@ async function carregarViagens() {
     const r = await fetchWithAuth('/api/admin/overview');
     const d = await r.json();
     if (!r.ok) return;
+    atualizarSideStats(d);
     document.getElementById('listaViagens').innerHTML = (d.viagens || []).map(v => {
         const cls = v.status === 'concluida' ? 'ok' : v.status === 'em_andamento' ? 'warn' : 'off';
         return `<div class="item"><div class="top">
@@ -444,7 +624,6 @@ async function carregarChamados() {
         </div>`).join('');
 }
 
-/* ------------------------------ ações ------------------------------ */
 async function salvarContrato() {
     const valor = document.getElementById('valorContrato').value;
     const r = await fetchWithAuth('/api/admin/projeto/contrato', {
