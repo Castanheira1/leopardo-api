@@ -902,6 +902,41 @@ body.theme-dark {
 .perfil-box { text-align: left; }
 .perfil-secao { padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .perfil-secao:first-of-type { border-top: none; padding-top: 4px; }
+
+/* Hub do perfil: navegação para sub-telas */
+.perfil-nav-btn {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(234, 210, 152, 0.25);
+    border-radius: 12px;
+    color: #e8eef0;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+}
+.perfil-nav-btn:hover, .perfil-nav-btn:active {
+    background: rgba(234, 210, 152, 0.1);
+    border-color: rgba(234, 210, 152, 0.5);
+}
+.perfil-nav-tit { font-size: 1rem; font-weight: 700; color: #EAD298; }
+.perfil-nav-sub { font-size: 0.8rem; color: #9aa0a6; }
+.perfil-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.perfil-header h3 { margin: 0; }
+.perfil-voltar {
+    background: transparent;
+    border: none;
+    color: #EAD298;
+    font-size: 1.8rem;
+    line-height: 1;
+    padding: 0 6px;
+    cursor: pointer;
+}
 .perfil-secao label { display: block; font-size: 0.85rem; color: #cfd2d6; font-weight: 600; margin-bottom: 6px; }
 .perfil-secao .map-search { margin-bottom: 10px; }
 .perfil-box .hab-info { margin-bottom: 4px; }
