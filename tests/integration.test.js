@@ -488,6 +488,16 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status } = await api("GET", "/api/admin/rateio", { token: tokAdmin });
       eq(status, 200, "status");
     });
+    await test("GET /api/admin/rateio/export (admin) → 200 xlsx", async () => {
+      const r = await fetch(`${BASE}/api/admin/rateio/export`, {
+        headers: { Authorization: `Bearer ${tokAdmin}` },
+      });
+      eq(r.status, 200, "status");
+      const ct = r.headers.get("content-type") || "";
+      assert(ct.includes("spreadsheetml"), `content-type xlsx, veio ${ct}`);
+      const buf = await r.arrayBuffer();
+      assert(buf.byteLength > 2000, `arquivo muito pequeno (${buf.byteLength} bytes)`);
+    });
     await test("GET /api/admin/seguranca (admin) → 200", async () => {
       const { status } = await api("GET", "/api/admin/seguranca", { token: tokAdmin });
       eq(status, 200, "status");

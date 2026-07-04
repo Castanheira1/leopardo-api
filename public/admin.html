@@ -124,6 +124,13 @@
             font-size: .86rem; font-weight: 700; width: 100%;
         }
         .btn-side:hover { background: var(--gold-bright); }
+        .btn-side-outline {
+            background: transparent; color: var(--gold); border: 1px solid var(--gold-dim);
+            padding: 10px 14px; border-radius: 10px; cursor: pointer;
+            font-size: .84rem; font-weight: 600; width: 100%; margin-top: 8px;
+        }
+        .btn-side-outline:hover { border-color: var(--gold); color: var(--gold-bright); }
+        .btn-side-outline:disabled { opacity: .55; cursor: wait; }
 
         /* ---- Main ---- */
         .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-main); }
@@ -315,6 +322,7 @@
                 <div><label>De</label><input type="date" id="filtroDe"></div>
                 <div><label>Até</label><input type="date" id="filtroAte"></div>
                 <button class="btn-side" onclick="carregarTudo()">Atualizar dados</button>
+                <button class="btn-side-outline" id="btnExportSidebar" onclick="exportarExcel()">⬇ Exportar Excel</button>
             </div>
         </div>
 
@@ -418,6 +426,18 @@
             </section>
 
             <section id="sec-rateio" class="adm-section">
+                <div class="panel" style="margin-bottom:14px;">
+                    <div class="panel-head-row">
+                        <div class="panel-head" style="margin:0">
+                            <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+                            <div>
+                                <h3>Medição para faturamento</h3>
+                                <p class="cap">Relatório completo em Excel: empresa, centro de custo, usuário, km e custo alocado do contrato.</p>
+                            </div>
+                        </div>
+                        <button class="btn-gold" id="btnExportRateio" onclick="exportarExcel()">Exportar Excel</button>
+                    </div>
+                </div>
                 <div class="grid cols-2">
                     <div class="panel">
                         <div class="panel-head">
@@ -442,6 +462,18 @@
                                 <tbody></tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+                <div class="panel" style="margin-top:14px;">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                        <div><h3>Por usuário (passageiro)</h3><p class="cap">Custo alocado por matrícula — base para enxergar onde o valor está sendo empregado.</p></div>
+                    </div>
+                    <div class="tbl-wrap">
+                        <table class="adm" id="tabUsuarios">
+                            <thead><tr><th>Matrícula</th><th>Nome</th><th>Empresa</th><th>Centro de custo</th><th class="num">Viagens</th><th class="num">Km</th><th class="num">%</th><th class="num">Custo (R$)</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -522,7 +554,7 @@ const ICO = {
 
 const SECOES = {
     'sec-resumo': { titulo: 'Resumo comercial', sub: 'Indicadores financeiros e operacionais do período' },
-    'sec-rateio': { titulo: 'Rateio detalhado', sub: 'Distribuição de custo por empresa e centro de custo' },
+    'sec-rateio': { titulo: 'Rateio detalhado', sub: 'Distribuição de custo por empresa, centro de custo e usuário' },
     'sec-contrato': { titulo: 'Contrato', sub: 'Valor mensal e derivados de custo' },
     'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta (senha pelo Esqueci a senha no login)' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
@@ -717,6 +749,44 @@ async function carregarRateio() {
         <tr><td>${esc(c.empresa_nome)}</td><td>${esc(c.centro_custo)}</td><td class="num">${c.viagens}</td>
         <td class="num">${c.km}</td><td class="num">${c.percentual}%</td><td class="num">${fmtMoeda(c.custo_alocado)}</td></tr>`
     ).join('') || '<tr><td colspan="6" class="empty">Sem viagens no período.</td></tr>';
+
+    document.querySelector('#tabUsuarios tbody').innerHTML = (d.por_usuario || []).map(u => `
+        <tr><td>${esc(u.matricula)}</td><td>${esc(u.nome)}</td><td>${esc(u.empresa_nome)}</td><td>${esc(u.centro_custo)}</td>
+        <td class="num">${u.viagens}</td><td class="num">${u.km}</td><td class="num">${u.percentual}%</td><td class="num">${fmtMoeda(u.custo_alocado)}</td></tr>`
+    ).join('') || '<tr><td colspan="8" class="empty">Sem viagens no período.</td></tr>';
+}
+
+async function exportarExcel() {
+    const btns = [document.getElementById('btnExportSidebar'), document.getElementById('btnExportRateio')];
+    btns.forEach(b => { if (b) { b.disabled = true; b.dataset.label = b.textContent; b.textContent = 'Gerando…'; } });
+    try {
+        const r = await fetchWithAuth('/api/admin/rateio/export' + periodoQuery());
+        if (!r || !r.ok) {
+            const d = r ? await r.json().catch(() => ({})) : {};
+            mostrarToast(d.error || 'Erro ao exportar planilha', 'error');
+            return;
+        }
+        const blob = await r.blob();
+        let nome = 'rateio-vap.xlsx';
+        const disp = r.headers.get('Content-Disposition') || '';
+        const m = disp.match(/filename="?([^";]+)"?/i);
+        if (m) nome = m[1];
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nome;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        mostrarToast('Planilha exportada com sucesso', 'success');
+    } catch (_) {
+        mostrarToast('Falha ao gerar o Excel', 'error');
+    } finally {
+        btns.forEach(b => {
+            if (b) { b.disabled = false; b.textContent = b.dataset.label || 'Exportar Excel'; }
+        });
+    }
 }
 
 async function carregarPushStatus() {
