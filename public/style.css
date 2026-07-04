@@ -889,6 +889,21 @@ body.theme-dark {
     justify-content: center;
     z-index: 9999;
 }
+/* Perfil, locais e favoritos: painel mais alto (não colado na base do celular) */
+.cam-overlay.cam-overlay-alto {
+    align-items: flex-start;
+    justify-content: center;
+    padding: max(24px, calc(env(safe-area-inset-top) + 12px)) 10px max(12px, env(safe-area-inset-bottom));
+}
+.cam-overlay.cam-overlay-alto.teclado-aberto {
+    padding-bottom: calc(var(--sheet-kbd, 0px) + max(12px, env(safe-area-inset-bottom)));
+}
+.cam-overlay.cam-overlay-alto .cam-box {
+    border-radius: 18px;
+    max-height: min(88vh, calc(var(--appvh, 1vh) * 88));
+    animation: fadeSheet 0.2s ease-out;
+}
+@keyframes fadeSheet { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
 /* Bottom sheet escuro estilo Uber (Perfil + câmera) */
 .cam-box {
     background: #161719;
@@ -1003,6 +1018,28 @@ body.theme-dark {
 .perfil-secao .map-search { margin-bottom: 10px; }
 .perfil-box .hab-info { margin-bottom: 4px; }
 .perfil-box .hab-actions { margin-top: 10px; }
+
+/* Filtro de locais/favoritos: logo abaixo do título, visível com teclado aberto */
+.fav-filtro-topo {
+    margin: 0 0 10px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.perfil-fav-dica {
+    font-size: 0.78rem;
+    color: #9aa0a6;
+    margin: 0 0 8px;
+}
+.perfil-fav-corpo {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding-top: 0;
+    border-top: none;
+}
+.painel-locais .fav-filtro-topo { margin-top: 4px; }
+.painel-locais .cam-hint { margin-top: 0; margin-bottom: 8px; }
 
 /* Histórico - fotos de segurança */
 .fotos-grid {
