@@ -1,6 +1,6 @@
-# CLAUDE.md
+# VAP — Guia de arquitetura e desenvolvimento
 
-Guidance for AI assistants (and humans) working in this repository.
+Referência técnica do projeto (para quem for manter ou evoluir o código).
 
 ## What this is
 
@@ -25,7 +25,7 @@ user-facing strings in Portuguese to match the existing style.
 ## Tech stack
 
 - **Backend:** Node.js (**>= 22** — required, see below) + Express 4, single file
-  `server.js` (~1000 lines).
+  `server.js`.
 - **DB:** PostgreSQL (Supabase). Accessed directly via `pg` `Pool` using `DATABASE_URL`
   — **not** via the Supabase JS client / PostgREST. RLS is therefore not relied upon.
 - **Auth:** JWT (`jsonwebtoken`, 8h expiry) + `bcrypt` password hashes.
@@ -34,15 +34,15 @@ user-facing strings in Portuguese to match the existing style.
 - **Frontend:** vanilla HTML/CSS/JS in `public/` (no build step, no framework). Loads
   **Google Maps JS API + Places** and **Tesseract.js** (plate OCR) from CDNs at runtime.
 - **PWA:** `manifest.json` + `service-worker.js` (app-shell cache; API never cached).
-- **Security middleware:** `helmet` (CSP disabled), `express-rate-limit` (600 req / 15 min),
-  `cors` (currently `origin: "*"`).
+- **Security middleware:** `helmet` (CSP disabled), `express-rate-limit`,
+  `cors` (allowlist via `CORS_ORIGINS`).
 
 ## Repository layout
 
 ```
 server.js            # ENTIRE backend: Express app, all routes, DB pool, Supabase upload
 schema.sql           # Full DB schema (idempotent; safe to re-run). Apply manually.
-package.json         # scripts: start / dev (nodemon). engines: node >=22
+package.json         # scripts: start / dev (nodemon) / test. engines: node >=22
 .node-version        # pins Node 22 for Render (read by Render's build)
 .env.example         # All env vars (copy to .env for local dev)
 Dockerfile           # node:22-alpine (NOTE: Render uses render.yaml, not this Dockerfile)
@@ -50,6 +50,8 @@ render.yaml          # Render Blueprint — the real deploy config (node runtime
 DEPLOY-RENDER.md     # Step-by-step Render deploy guide (authoritative for deploy)
 MELHORIAS_FUTURAS.md # Planned features (admin approval flow, rateio, AI per project)
 README.md            # User-facing overview
+docs/juridico/       # Legal documents (privacy policy, terms of use, consent term)
+tests/               # End-to-end integration suite (tests/integration.test.js)
 public/
   index.html         # Login + password recovery
   registro.html      # Signup (with phone, project, company, cost center)
@@ -63,8 +65,8 @@ public/
   *.png              # Icons
 ```
 
-There is **no test suite**, no linter config, and no build step. `npm start` runs the
-server directly; `npm run dev` uses nodemon.
+`npm start` runs the server directly; `npm run dev` uses nodemon; `npm test` runs the
+integration suite.
 
 ## Local development
 
@@ -82,7 +84,7 @@ npm run dev              # nodemon, http://localhost:3000
   **`JWT_SECRET` aborts startup** (`process.exit(1)`).
 
 > **Node 22+ is mandatory (hard crash otherwise).** `createClient` from
-> `@supabase/supabase-js` (currently 2.108.x) initializes a `RealtimeClient` whose
+> `@supabase/supabase-js` initializes a `RealtimeClient` whose
 > `WebSocketFactory` **throws on boot** (`Node.js NN detected without native WebSocket
 > support`) on any Node **< 22**, because native `WebSocket` only exists from Node 22.
 > The app doesn't even use Realtime (only Storage), but `createClient` initializes it
@@ -100,6 +102,8 @@ npm run dev              # nodemon, http://localhost:3000
 | `SUPABASE_KEY` | for photos | use the **`service_role`** key (server-only) |
 | `SUPABASE_BUCKET` | no (default `veiculos`) | must be a **public** bucket |
 | `GOOGLE_MAPS_API_KEY` | for the map | exposed to the front via `GET /api/config`; restrict by domain in Google Cloud. Needs **Maps JavaScript API** + **Places API** |
+| `CORS_ORIGINS` | no | allowlist of external origins; empty = same-origin only |
+| `AUTH_RATE_MAX` | no (default `20`) | login/register/recovery attempts per IP / 15 min |
 | `RAIO_MATCH_KM` | no (default `3`) | match proximity radius in km |
 | `PORT` | no (default `3000`) | |
 | `NODE_ENV` | — | when `production`, Postgres SSL is enabled with `rejectUnauthorized: false` |
@@ -127,13 +131,6 @@ Tables: `usuarios`, `habilitacoes_motorista`, `caronas`, `pedidos`, `propostas`,
   allowed values when writing new code (e.g. carona: `ativa/concluida/cancelada`;
   pedido: `aberto/atendido/cancelado`; proposta: `pendente/aceito/recusado`;
   viagem: `em_andamento/concluida/cancelada`).
-
-### Supabase project (MCP)
-
-The live DB for this app is the Supabase project with ref
-`vsxnqtecnvhhvekmkshb`. Note the MCP Supabase connection in a given session may be
-scoped to a **different** project (e.g. `soberano` / `xigajcnuwnofbuqzohpg`) — verify
-with `list_projects` before running SQL, and don't assume MCP can reach it.
 
 ## Backend conventions (`server.js`)
 
@@ -182,6 +179,7 @@ Admin: `GET /api/admin/overview`, `POST /api/admin/reset-senha` (resets to `1234
   `<script>`s. Reuse them instead of re-implementing:
   - `checkAuth(adminOnly)`, `logout()`, `fetchWithAuth(url, opts)` (auto Bearer header,
     handles 401 → logout).
+  - `escapeHtml(v)` / `esc(v)` — escape user data before injecting into `innerHTML`.
   - `carregarMaps()` — lazy-loads Google Maps using the key from `/api/config`.
   - `capturarFoto({ tipo, facing, ocrPlaca, titulo })` — **live camera capture only**
     (no file attach by design, for safety); returns `{ url, lat, lng, em, placa? }`,
@@ -195,13 +193,13 @@ Admin: `GET /api/admin/overview`, `POST /api/admin/reset-senha` (resets to `1234
 
 ## Deployment (Render)
 
-`render.yaml` is a Blueprint that creates a **node** web service named `vagao`
+`render.yaml` is a Blueprint that creates a **node** web service
 (`buildCommand: npm install`, `startCommand: npm start`, healthcheck `/api/config`,
 `branch: main`). The **`Dockerfile` is not used by this path** — it exists for other
 container hosts.
 
 `render.yaml` auto-provides `NODE_ENV=production`, a generated `JWT_SECRET`,
-`SUPABASE_BUCKET=veiculos`, `RAIO_MATCH_KM=3`. The 4 secrets to fill in the Render
+`SUPABASE_BUCKET=veiculos`, `RAIO_MATCH_KM=3`. The secrets to fill in the Render
 dashboard (`sync: false`): `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_KEY`,
 `GOOGLE_MAPS_API_KEY`. See **`DEPLOY-RENDER.md`** for the full walkthrough (including the
 critical "use the Session pooler, not the direct IPv6 connection" note and creating the
@@ -218,5 +216,4 @@ public `veiculos` Storage bucket). The schema must be applied to the DB separate
 - **Known open items** (`MELHORIAS_FUTURAS.md`): admin approval workflow (the
   `admin_chamados` table + `POST /api/admin/chamados` exist; approval endpoint does not),
   automated per-company rateio/billing, per-project data isolation (today users from
-  different `projeto_id` can see each other), and a Claude-based admin assistant.
-```
+  different `projeto_id` can see each other), and an in-app admin assistant.

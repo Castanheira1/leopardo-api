@@ -54,7 +54,7 @@ Cada projeto (S11D, Salobo, etc.) terá um admin que pode conversar com uma IA p
 - "Qual o horário de pico de solicitações de carona?"
 
 ### O que falta implementar
-- Agente Claude conectado via MCP ao endpoint `/api/rateio` e outros endpoints de stats
+- Assistente de IA conectado ao endpoint `/api/rateio` e outros endpoints de stats
 - Interface de chat para o admin (web ou WhatsApp)
 - Memória de contexto por projeto (o admin do S11D só vê dados do S11D)
 
