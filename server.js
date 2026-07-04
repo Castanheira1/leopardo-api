@@ -1246,7 +1246,7 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
 
 // Lista caronas ativas; se ?lat&lng informados, calcula distância da origem
 app.get("/api/caronas", verificarAuth, async (req, res) => {
-  const { lat, lng, meus } = req.query;
+  const { lat, lng, dest_lat, dest_lng, meus } = req.query;
   try {
     // "meus": caronas ativas que o próprio motorista publicou (para retomar o
     // trajeto ao reabrir o app).
@@ -1263,24 +1263,46 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       return res.json(rows);
     }
 
-    // Com lat/lng, mostra só caronas dentro do raio de visibilidade.
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
-    const dist = lat && lng ? `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem` : "";
-    const raio = lat && lng ? `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $3` : "";
-    const params = lat && lng ? [lat, lng, RAIO_VISIVEL_KM] : [];
-    if (pid) { params.push(pid); }
-    const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
-    const orderBy = lat && lng ? "dist_origem ASC" : "c.created_at DESC";
+
+    const temPos = lat != null && lng != null;
+    const temDest = dest_lat != null && dest_lng != null;
+    const params = [];
+
+    // Distância da MINHA posição até a origem do motorista (ordenação perto->longe).
+    let distSel = "";
+    if (temPos) {
+      params.push(lat, lng);
+      distSel = `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem`;
+    }
+
+    // Modo "indo para este local": filtra caronas cujo DESTINO é ~o local escolhido
+    // e que ainda têm vaga. Sem destino, mantém o comportamento antigo (raio na origem).
+    let destFiltro = "", origemRaio = "";
+    if (temDest) {
+      params.push(dest_lat, dest_lng);
+      const dl = `$${params.length - 1}`, dg = `$${params.length}`;
+      destFiltro = `AND ${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_KM} AND c.vagas > 0`;
+    } else if (temPos) {
+      params.push(RAIO_VISIVEL_KM);
+      origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
+    }
+
+    params.push(pid);
+    const filtroProj = `AND u.projeto_id = $${params.length}`;
+    const orderBy = temPos ? "dist_origem ASC" : "c.created_at DESC";
 
     const { rows } = await pool.query(
-      `SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url ${dist}
+      `SELECT c.*, u.nome AS motorista_nome, u.empresa_nome AS motorista_empresa,
+              h.placa, h.tag, h.foto_carro_url ${distSel}
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
        ${filtroProj}
-       ${raio}
+       ${origemRaio}
+       ${destFiltro}
        ORDER BY ${orderBy}`,
       params
     );
