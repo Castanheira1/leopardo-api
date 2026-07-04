@@ -244,6 +244,13 @@
         table.adm tr:hover td { background: rgba(255,255,255,.03); }
 
         .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
+        .panel-usuarios { max-width: 480px; }
+        .form-bloqueio {
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+        }
+        .form-bloqueio .field-mat { flex: 0 0 130px; width: 130px; }
+        .form-bloqueio .field-motivo { flex: 1 1 180px; min-width: 160px; max-width: 240px; }
+        .form-bloqueio .btn-ghost { flex-shrink: 0; margin-top: 0 !important; }
         .field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
         .field { flex: 1; min-width: 130px; }
         .field label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 4px; }
@@ -505,7 +512,7 @@ const SECOES = {
     'sec-resumo': { titulo: 'Resumo comercial', sub: 'Indicadores financeiros e operacionais do período' },
     'sec-rateio': { titulo: 'Rateio detalhado', sub: 'Distribuição de custo por empresa e centro de custo' },
     'sec-contrato': { titulo: 'Contrato', sub: 'Valor mensal e derivados de custo' },
-    'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta e reset de senha' },
+    'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta (senha pelo Esqueci a senha no login)' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
 };
 
@@ -752,14 +759,6 @@ async function desativarUsuario() {
     mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
     if (r.ok) { carregarKpisEGraficos(); carregarViagens(); }
 }
-async function resetSenha() {
-    const matricula = document.getElementById('matReset').value.trim();
-    if (!matricula) return;
-    const r = await fetchWithAuth('/api/admin/reset-senha', { method: 'POST', body: JSON.stringify({ matricula }) });
-    const d = await r.json();
-    mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
-}
-
 async function carregarTudo() {
     await carregarContexto();
     await carregarKpisEGraficos();
