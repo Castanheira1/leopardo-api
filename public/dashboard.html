@@ -83,6 +83,7 @@
                     <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
                     <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
                     <a href="historico.html" class="nav-menu-item">Histórico</a>
+                    <button onclick="abrirLocais()" class="nav-menu-item">Locais</button>
                     <button onclick="abrirFavoritos()" class="nav-menu-item">Meus locais favoritos</button>
                     <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
                     <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
@@ -253,7 +254,7 @@
                     <h3>Meus locais favoritos</h3>
                 </div>
                 <div class="perfil-secao">
-                    <p style="font-size:0.78rem;color:#9aa0a6;margin-bottom:8px;">Marque os locais que você usa com mais frequência. Só você vê os seus favoritos — eles não afetam a lista de ninguém. No menu <strong style="color:#EAD298;">Favoritos</strong> aparece só esta lista.</p>
+                    <p style="font-size:0.78rem;color:#9aa0a6;margin-bottom:8px;">Marque os locais que você usa com mais frequência. Só você vê os seus favoritos. No menu <strong style="color:#EAD298;">Locais</strong> aparece o catálogo completo do projeto; em <strong style="color:#EAD298;">Meus locais favoritos</strong> só os que você marcou.</p>
                     <input id="perfilFavFiltro" class="fav-filtro" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
                     <div id="perfilFavCatalogo" class="fav-perfil-lista"><div class="fav-vazio">Abra o catálogo do seu projeto…</div></div>
                     <div id="perfilFavMsg" class="cam-status"></div>
@@ -372,11 +373,12 @@
         </div>
     </div>
 
-    <!-- Favoritos: só a lista pessoal (configurada no Perfil) -->
+    <!-- Locais do projeto + Meus locais favoritos (dois modos no mesmo painel) -->
     <div id="painelFavoritos" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelFavoritos')">
         <div class="cam-box perfil-box painel-box">
-            <h3>Favoritos</h3>
-            <p class="cam-hint" id="favSubtitulo">Seus locais frequentes — toque para marcar destino.</p>
+            <h3 id="favTitulo">Locais</h3>
+            <p class="cam-hint" id="favSubtitulo">Catálogo do projeto — toque para marcar destino.</p>
+            <input id="favFiltro" class="fav-filtro" placeholder="Filtrar locais…" oninput="renderPainelLocais()" style="display:none;">
             <div id="listaFavoritos" class="fav-lista"><div class="fav-vazio">Carregando…</div></div>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharPainel('painelFavoritos')">Fechar</button>
@@ -564,14 +566,15 @@
             || document.getElementById('painelMotorista').style.display === 'flex';
     }
 
-    /* -------- Favoritos pessoais (Perfil) + lista enxuta no menu --------
-       Catálogo do projeto: locais-favoritos.json. O usuário marca no Perfil;
-       no menu Favoritos aparece só o que ele salvou. Posição resolvida AO VIVO
-       no Google Places ao tocar. */
+    /* -------- Locais do projeto (catálogo) + favoritos pessoais (Perfil) --------
+       Catálogo: locais-favoritos.json — menu "Locais" mostra TODOS.
+       Favoritos: salvos pelo usuário — menu "Meus locais favoritos".
+       Posição: referência curada do projeto; Google só refina se bater perto. */
     let favCatalogo = null;
     let favProjeto = null;
     let favCatalogoLocais = [];   // todos do projeto [{nome, busca, ref, grupo}]
     let favPessoais = [];         // salvos pelo usuário (API)
+    let favModoPainel = 'catalogo'; // 'catalogo' | 'pessoais'
 
     async function carregarCatalogoFavoritos() {
         if (favCatalogo) return favCatalogo;
@@ -686,25 +689,89 @@
         el.innerHTML = html;
     }
 
+    async function abrirLocais() {
+        favModoPainel = 'catalogo';
+        await abrirPainelLocais();
+    }
+
     async function abrirFavoritos() {
+        favModoPainel = 'pessoais';
+        await abrirPainelLocais();
+    }
+
+    async function abrirPainelLocais() {
         fecharMenu();
-        document.getElementById('painelFavoritos').style.display = 'flex';
+        const titulo = document.getElementById('favTitulo');
+        const subtitulo = document.getElementById('favSubtitulo');
+        const filtro = document.getElementById('favFiltro');
         const lista = document.getElementById('listaFavoritos');
-        document.getElementById('favSubtitulo').textContent = 'Seus locais frequentes — toque para marcar destino.';
+        document.getElementById('painelFavoritos').style.display = 'flex';
+        lista.innerHTML = '<div class="fav-vazio">Carregando…</div>';
+
+        if (favModoPainel === 'pessoais') {
+            titulo.textContent = 'Meus locais favoritos';
+            subtitulo.textContent = 'Seus locais frequentes — toque para marcar destino.';
+            if (filtro) filtro.style.display = 'none';
+            try {
+                await carregarFavoritosPessoais();
+                renderPainelLocais();
+            } catch (_) {
+                lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar seus favoritos.</div>';
+            }
+            return;
+        }
+
+        titulo.textContent = 'Locais';
+        if (filtro) { filtro.style.display = ''; filtro.value = ''; }
         try {
-            await carregarFavoritosPessoais();
-            renderFavoritosMenu();
+            await carregarCatalogoFavoritos();
+            const cod = (user?.projeto_codigo || '').toUpperCase();
+            montarCatalogoProjeto(cod);
+            if (!favProjeto) {
+                subtitulo.textContent = 'Seu projeto ainda não tem locais cadastrados. Defina o projeto no Perfil.';
+                lista.innerHTML = '<div class="fav-vazio">Sem locais para este projeto.</div>';
+                return;
+            }
+            subtitulo.textContent = `${favProjeto.nome} — toque num local para marcar como destino.`;
+            renderPainelLocais();
         } catch (_) {
-            lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar seus favoritos.</div>';
+            lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar os locais. Verifique a internet.</div>';
         }
     }
 
     const FAV_PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>';
 
+    function renderPainelLocais() {
+        if (favModoPainel === 'pessoais') return renderFavoritosMenu();
+        const lista = document.getElementById('listaFavoritos');
+        const filtro = (document.getElementById('favFiltro')?.value || '').trim().toLowerCase();
+        const visiveis = filtro
+            ? favCatalogoLocais.filter((l) => l.nome.toLowerCase().includes(filtro) || (l.grupo || '').toLowerCase().includes(filtro))
+            : favCatalogoLocais;
+        if (!visiveis.length) {
+            lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
+            return;
+        }
+        let html = '';
+        let grupoAtual = null;
+        visiveis.forEach((l) => {
+            if (l.grupo !== grupoAtual) {
+                grupoAtual = l.grupo;
+                html += `<div class="fav-grupo">${esc(grupoAtual)}</div>`;
+            }
+            const key = esc(l.nome).replace(/"/g, '&quot;');
+            html += `<button type="button" class="fav-item" data-nome="${key}" onclick="escolherFavorito(this)">
+                <span class="fav-pin">${FAV_PIN}</span>
+                <span class="fav-nome">${esc(l.nome)}</span>
+            </button>`;
+        });
+        lista.innerHTML = html;
+    }
+
     function renderFavoritosMenu() {
         const lista = document.getElementById('listaFavoritos');
         if (!favPessoais.length) {
-            lista.innerHTML = '<div class="fav-vazio">Nenhum favorito ainda.<br><br>Abra o <strong>Perfil → Meus favoritos</strong> e marque os locais que você usa com frequência.</div>';
+            lista.innerHTML = '<div class="fav-vazio">Nenhum favorito ainda.<br><br>Use o menu <strong>Locais</strong> para ver o catálogo completo ou marque no <strong>Perfil → Meus locais favoritos</strong>.</div>';
             return;
         }
         lista.innerHTML = favPessoais.map((l) => {
@@ -728,60 +795,112 @@
         return { center: { lat: reg.lat, lng: reg.lng }, radius: (reg.raio_km || 40) * 1000 };
     }
 
+    function distKmCoord(a, b) {
+        const R = 6371;
+        const dLat = (b.lat - a.lat) * Math.PI / 180;
+        const dLng = (b.lng - a.lng) * Math.PI / 180;
+        const la1 = a.lat * Math.PI / 180;
+        const la2 = b.lat * Math.PI / 180;
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    function pontuarResultadoPlace(place, local) {
+        if (!place?.geometry?.location) return -1;
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        const nomeRes = (place.name || '').toLowerCase();
+        const nomeAlvo = (local.nome || '').toLowerCase();
+        let score = 0;
+        if (nomeRes === nomeAlvo) score += 80;
+        else if (nomeRes.includes(nomeAlvo) || nomeAlvo.includes(nomeRes)) score += 50;
+        else {
+            const hits = (local.nome || '').toLowerCase().split(/\s+/)
+                .filter((w) => w.length > 2 && nomeRes.includes(w)).length;
+            score += hits * 12;
+        }
+        if (local.ref) {
+            const dist = distKmCoord(local.ref, { lat, lng });
+            if (dist > 5) return -1;
+            score += Math.max(0, 35 - dist * 4);
+        }
+        return score;
+    }
+
+    function melhorResultadoPlaces(resultados, local) {
+        let melhor = null;
+        let melhorScore = -1;
+        (resultados || []).forEach((r) => {
+            const s = pontuarResultadoPlace(r, local);
+            if (s > melhorScore) {
+                melhorScore = s;
+                melhor = {
+                    lat: r.geometry.location.lat(),
+                    lng: r.geometry.location.lng(),
+                    nome: r.name || local.nome,
+                };
+            }
+        });
+        return melhorScore >= 20 ? melhor : null;
+    }
+
     function resolverLocalAoVivo(local) {
         return new Promise(async (resolve) => {
+            const usarRef = () => {
+                if (local.ref) resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome });
+                else resolve(null);
+            };
             try {
                 g = g || await carregarMaps();
                 if (!favCatalogo) await carregarCatalogoFavoritos();
                 const sel = seletorAtivo();
                 const svc = new g.maps.places.PlacesService(sel ? sel.map : document.createElement('div'));
                 const bias = favLocationBias();
-                svc.findPlaceFromQuery(
-                    { query: local.busca || local.nome, fields: ['name', 'geometry'], locationBias: bias ? new g.maps.Circle(bias) : undefined },
-                    (res, status) => {
-                        if (status === 'OK' && res && res[0]?.geometry) {
-                            return resolve({
-                                lat: res[0].geometry.location.lat(),
-                                lng: res[0].geometry.location.lng(),
-                                nome: res[0].name || local.nome,
-                            });
+                const query = local.busca || local.nome;
+                const candidatos = [];
+
+                await new Promise((fim) => {
+                    svc.findPlaceFromQuery(
+                        { query, fields: ['name', 'geometry'], locationBias: bias ? new g.maps.Circle(bias) : undefined },
+                        (res, status) => {
+                            if (status === 'OK' && res) candidatos.push(...res);
+                            fim();
                         }
-                        svc.textSearch(
-                            { query: local.busca || local.nome, location: bias ? bias.center : undefined, radius: bias ? bias.radius : undefined },
-                            (res2, status2) => {
-                                if (status2 === 'OK' && res2 && res2[0]?.geometry) {
-                                    return resolve({
-                                        lat: res2[0].geometry.location.lat(),
-                                        lng: res2[0].geometry.location.lng(),
-                                        nome: res2[0].name || local.nome,
-                                    });
-                                }
-                                if (local.ref) return resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome, aproximado: true });
-                                resolve(null);
-                            }
-                        );
-                    }
-                );
+                    );
+                });
+                await new Promise((fim) => {
+                    svc.textSearch(
+                        { query, location: bias?.center, radius: bias?.radius },
+                        (res, status) => {
+                            if (status === 'OK' && res) candidatos.push(...res);
+                            fim();
+                        }
+                    );
+                });
+
+                const melhor = melhorResultadoPlaces(candidatos, local);
+                if (melhor) return resolve(melhor);
+                return usarRef();
             } catch (_) {
-                if (local.ref) return resolve({ lat: local.ref.lat, lng: local.ref.lng, nome: local.nome, aproximado: true });
-                resolve(null);
+                return usarRef();
             }
         });
     }
 
     async function escolherFavorito(btn) {
         const nome = btn.dataset.nome;
-        const local = favPessoais.find((l) => l.nome === nome);
+        const local = favModoPainel === 'pessoais'
+            ? favPessoais.find((l) => l.nome === nome)
+            : favCatalogoLocais.find((l) => l.nome === nome);
         if (!local) return;
         const sel = seletorAtivo();
         if (!sel) { msg('Abra o mapa primeiro para marcar o destino.', 'error'); return; }
         btn.classList.add('fav-buscando');
         const achado = await resolverLocalAoVivo(local);
         btn.classList.remove('fav-buscando');
-        if (!achado) { msg('Local não encontrado no Google Maps agora. Tente a busca.', 'error'); return; }
+        if (!achado) { msg('Local não encontrado. Tente a busca no mapa.', 'error'); return; }
         fecharPainel('painelFavoritos');
         sel.irPara({ lat: achado.lat, lng: achado.lng }, achado.nome);
-        if (achado.aproximado) msg(`${achado.nome}: usando posição aproximada (não achei no Google agora).`);
     }
 
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
