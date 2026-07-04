@@ -241,13 +241,43 @@ function respostaRotaLegada(route) {
     };
 }
 
+function instalarMapsBootstrap(apiKey) {
+    if (window.google?.maps?.importLibrary) return Promise.resolve();
+    if (window.__vapMapsBootstrap) return window.__vapMapsBootstrap;
+    window.__vapMapsBootstrap = new Promise((resolve, reject) => {
+        try {
+            (g => {
+                var h, a, k, p = 'The Google Maps JavaScript API', c = 'google', l = 'importLibrary', q = '__ib__', m = document, b = window;
+                b = b[c] || (b[c] = {});
+                var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
+                    u = () => h || (h = new Promise(async (f, n) => {
+                        await (a = m.createElement('script'));
+                        e.set('libraries', [...r] + '');
+                        for (k in g) e.set(k.replace(/[A-Z]/g, t => '_' + t[0].toLowerCase()), g[k]);
+                        e.set('callback', c + '.maps.' + q);
+                        a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+                        d[q] = f;
+                        a.onerror = () => n(new Error(p + ' could not load.'));
+                        a.nonce = m.querySelector('script[nonce]')?.nonce || '';
+                        m.head.append(a);
+                    }));
+                d[l] ? null : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
+            })({ key: apiKey, v: 'weekly' });
+            google.maps.importLibrary('maps').then(resolve).catch(reject);
+        } catch (err) {
+            reject(err);
+        }
+    });
+    return window.__vapMapsBootstrap;
+}
+
 function carregarMaps() {
     if (_mapsPromise) return _mapsPromise;
     _mapsPromise = (async () => {
         const cfg = await (await fetch('/api/config')).json();
         if (!cfg.mapsApiKey) throw new Error('Google Maps API key não configurada (.env GOOGLE_MAPS_API_KEY)');
         _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
-        await carregarScript(`https://maps.googleapis.com/maps/api/js?key=${cfg.mapsApiKey}&loading=async`);
+        await instalarMapsBootstrap(cfg.mapsApiKey);
         const [, markerLib, routesLib] = await Promise.all([
             google.maps.importLibrary('maps'),
             google.maps.importLibrary('marker'),
@@ -258,7 +288,7 @@ function carregarMaps() {
         _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
         _PinElement = markerLib.PinElement;
         return window.google;
-    })();
+    })().catch((err) => { _mapsPromise = null; throw err; });
     return _mapsPromise;
 }
 
