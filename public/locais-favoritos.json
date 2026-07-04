@@ -36,8 +36,8 @@
         {
           "titulo": "Mina — Serra Sul",
           "locais": [
-            { "nome": "Mina de Ferro do Complexo Serra Sul", "busca": "Mina de Ferro do Complexo Serra Sul", "ref": { "lat": -6.4074, "lng": -50.3330 } },
-            { "nome": "Complexo Serra Sul (S11D)", "busca": "Complexo Serra Sul S11D", "ref": { "lat": -6.4160, "lng": -50.3180 } },
+            { "nome": "Mina de Ferro do Complexo Serra Sul", "busca": "Mina de Ferro do Complexo Serra Sul S11D", "ref": { "lat": -6.404849, "lng": -50.320433 } },
+            { "nome": "Complexo Serra Sul (S11D)", "busca": "Mina de Ferro do Complexo Serra Sul S11D", "ref": { "lat": -6.404849, "lng": -50.320433 } },
             { "nome": "Britagem de Compactos", "busca": "Britagem de Compactos Serra Sul Vale", "ref": { "lat": -6.4185, "lng": -50.3265 } },
             { "nome": "Mirante Britagem de Compactos", "busca": "Mirante Britagem de Compactos Serra Sul", "ref": { "lat": -6.4175, "lng": -50.3290 } },
             { "nome": "Mirante do BSM — Mina S11D", "busca": "Mirante do BSM Mina S11D", "ref": { "lat": -6.4090, "lng": -50.3390 } },
