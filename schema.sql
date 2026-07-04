@@ -1,6 +1,10 @@
 -- ============================================================
 -- VAP - Esquema do banco (app de carona interno)
 -- Pivot do antigo sistema de reserva de veículos.
+--
+-- ATENÇÃO: as linhas DROP abaixo apagam dados de carona. Use só em ambiente
+-- novo/local. Em produção (leopardo), use scripts/atualizar-banco.sql ou
+-- scripts/corrigir-banco-producao.sql (idempotentes, sem DROP).
 -- ============================================================
 
 -- Limpa estruturas do fluxo antigo (reserva de veículos)
@@ -210,14 +214,14 @@ CREATE TABLE IF NOT EXISTS empresas (
     ativo BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
-INSERT INTO empresas (nome) VALUES ('Vale S.A.')
-ON CONFLICT DO NOTHING;
+INSERT INTO empresas (nome)
+SELECT 'Vale S.A.'
+WHERE NOT EXISTS (SELECT 1 FROM empresas WHERE nome = 'Vale S.A.');
 
 -- ------------------------------------------------------------
--- FKs de usuarios -> projetos/empresas
--- (adicionadas aqui, após as tabelas referenciadas existirem)
+-- FKs de usuarios -> projetos
+-- Empresa no app é texto livre (empresa_nome), não FK para empresas.
 -- ------------------------------------------------------------
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
@@ -312,5 +316,15 @@ WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE matricula = '000000');
 
 UPDATE usuarios SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1)
 WHERE matricula = '000000' AND admin_projeto_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_tokens_recup_hash
+    ON tokens_recuperacao(token_hash) WHERE usado = FALSE;
+
+-- ------------------------------------------------------------
+-- Segurança Supabase: RLS (app usa pg pool no server.js, não PostgREST)
+-- ------------------------------------------------------------
+ALTER TABLE matriculas_bloqueadas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tokens_recuperacao ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE projetos ADD COLUMN IF NOT EXISTS valor_contrato_mensal NUMERIC(12,2) DEFAULT 0;
