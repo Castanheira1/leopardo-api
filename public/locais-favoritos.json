@@ -10,27 +10,27 @@
           "titulo": "Acessos e apoio",
           "locais": [
             { "nome": "Portaria S11D", "busca": "Portaria S11D", "ref": { "lat": -6.4545, "lng": -50.2081 } },
-            { "nome": "Central de Operações S11D", "busca": "Central de Operações S11D", "ref": { "lat": -6.4390, "lng": -50.2408 } },
-            { "nome": "Rodoviária Arara Azul — Usina", "busca": "Rodoviária Arara Azul Usina S11D", "ref": { "lat": -6.4469, "lng": -50.2417 } },
-            { "nome": "Restaurante Arara Azul — Usina", "busca": "Restaurante Arara Azul Usina S11D", "ref": { "lat": -6.4474, "lng": -50.2413 } },
+            { "nome": "Central de Operações S11D", "busca": "Central de Operações S11D", "ref": { "lat": -6.4425, "lng": -50.2365 } },
+            { "nome": "Rodoviária Arara Azul — Usina", "busca": "Rodoviária Arara Azul Usina S11D", "ref": { "lat": -6.4465, "lng": -50.2418 } },
+            { "nome": "Restaurante Arara Azul — Usina", "busca": "Restaurante Arara Azul Usina S11D", "ref": { "lat": -6.4468, "lng": -50.2415 } },
             { "nome": "Estação de Bombeiros", "busca": "Estação de Bombeiros S11D Canaã dos Carajás", "ref": { "lat": -6.4417, "lng": -50.2013 } },
-            { "nome": "Espaço Quali — Complexo Serra Sul", "busca": "Espaço Quali Complexo Serra Sul S11D", "ref": { "lat": -6.4520, "lng": -50.3146 } },
+            { "nome": "Espaço Quali — Complexo Serra Sul", "busca": "Espaço Quali Complexo Serra Sul S11D", "ref": { "lat": -6.4495, "lng": -50.2458 } },
             { "nome": "Área do Condomínio da Infraestrutura", "busca": "Área do Condomínio da Infraestrutura S11D", "ref": { "lat": -6.4392, "lng": -50.2419 } }
           ]
         },
         {
           "titulo": "Usina",
           "locais": [
-            { "nome": "Usina A", "busca": "Usina A Usina Complexo Serra Sul S11D Canaã dos Carajás", "ref": { "lat": -6.4478, "lng": -50.2478 } },
-            { "nome": "Usina B", "busca": "Usina B Usina Complexo Serra Sul S11D Canaã dos Carajás", "ref": { "lat": -6.4472, "lng": -50.2492 } },
-            { "nome": "Britagem Terciária B", "busca": "Britagem Terciária B S11D", "ref": { "lat": -6.4438, "lng": -50.2440 } },
-            { "nome": "Britagem Terciária C", "busca": "Britagem Terciária C S11D", "ref": { "lat": -6.4430, "lng": -50.2452 } },
-            { "nome": "Pátio do Produto", "busca": "Pátio do Produto S11D", "ref": { "lat": -6.4405, "lng": -50.2360 } },
-            { "nome": "Pátio de Regularização", "busca": "Pátio de Regularização S11D", "ref": { "lat": -6.4415, "lng": -50.2485 } },
-            { "nome": "Armazém Mina — Usina", "busca": "Armazém Mina S11D", "ref": { "lat": -6.4452, "lng": -50.2380 } },
-            { "nome": "Retorno Usina", "busca": "Retorno Usina S11D", "ref": { "lat": -6.4345, "lng": -50.2380 } },
-            { "nome": "Oficina de Subconjuntos — Usina", "busca": "Oficina de Subconjuntos Usina Serra Sul S11D", "ref": { "lat": -6.4480, "lng": -50.2408 } },
-            { "nome": "Gaveteiro Central Usina", "busca": "Gaveteiro Central Usina S11D", "ref": { "lat": -6.4482, "lng": -50.2470 } }
+            { "nome": "Usina A", "busca": "Usina A", "ref": { "lat": -6.4475, "lng": -50.2460 } },
+            { "nome": "Usina B", "busca": "Usina B", "ref": { "lat": -6.4489, "lng": -50.2432 } },
+            { "nome": "Britagem Terciária B", "busca": "Britagem Terciária B S11D", "ref": { "lat": -6.4478, "lng": -50.2448 } },
+            { "nome": "Britagem Terciária C", "busca": "Britagem Terciária C S11D", "ref": { "lat": -6.4472, "lng": -50.2455 } },
+            { "nome": "Pátio do Produto", "busca": "Pátio do Produto S11D", "ref": { "lat": -6.4492, "lng": -50.2425 } },
+            { "nome": "Pátio de Regularização", "busca": "Pátio de Regularização S11D", "ref": { "lat": -6.4485, "lng": -50.2470 } },
+            { "nome": "Armazém Mina — Usina", "busca": "Armazém Mina S11D", "ref": { "lat": -6.4468, "lng": -50.2440 } },
+            { "nome": "Retorno Usina", "busca": "Retorno Usina S11D", "ref": { "lat": -6.4455, "lng": -50.2395 } },
+            { "nome": "Oficina de Subconjuntos — Usina", "busca": "Oficina de Subconjuntos Usina Serra Sul S11D", "ref": { "lat": -6.4482, "lng": -50.2410 } },
+            { "nome": "Gaveteiro Central Usina", "busca": "Gaveteiro Central Usina S11D", "ref": { "lat": -6.4490, "lng": -50.2465 } }
           ]
         },
         {

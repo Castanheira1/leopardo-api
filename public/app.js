@@ -330,6 +330,7 @@ function criarMarcador(opts = {}) {
         setPosition(p) { mk.position = normalizarLatLng(p); },
         getPosition() { return posicaoLegada(mk); },
         setMap(m) { mk.map = m; },
+        setTitle(t) { mk.title = t || ''; },
         addListener(ev, fn) { return mk.addListener(ev, fn); },
     };
 }
