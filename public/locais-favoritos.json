@@ -99,6 +99,15 @@
               "google": true
             },
             {
+              "nome": "Usina C",
+              "busca": "Usina C",
+              "ref": {
+                "lat": -6.44626,
+                "lng": -50.250832
+              },
+              "google": true
+            },
+            {
               "nome": "Britagem Terciária B",
               "busca": "Britagem Terciária B S11D",
               "ref": {
@@ -148,7 +157,7 @@
               }
             },
             {
-              "nome": "Oficina de Subconjuntos — Usina",
+              "nome": "Oficina Usina",
               "busca": "Oficina de Subconjuntos Usina Serra Sul S11D",
               "ref": {
                 "lat": -6.448363,
@@ -162,6 +171,15 @@
               "ref": {
                 "lat": -6.448125,
                 "lng": -50.245434
+              },
+              "google": true
+            },
+            {
+              "nome": "Laboratório Físico e Químico",
+              "busca": "Laboratório Físico Químico Serra Sul S11D",
+              "ref": {
+                "lat": -6.448801,
+                "lng": -50.249021
               },
               "google": true
             }
@@ -287,6 +305,15 @@
               "ref": {
                 "lat": -6.417235,
                 "lng": -50.319592
+              },
+              "google": true
+            },
+            {
+              "nome": "Posto de Combustível Mina",
+              "busca": "Posto de combustível Mina S11D",
+              "ref": {
+                "lat": -6.413278,
+                "lng": -50.318928
               },
               "google": true
             }
