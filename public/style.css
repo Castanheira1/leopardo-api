@@ -524,8 +524,8 @@ a.btn { display: inline-block; text-align: center; }
     background: #fff;
     border-color: transparent;
     border-radius: 999px;
-    padding: 12px 18px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    padding: 11px 16px;
+    box-shadow: none;
 }
 .map-search-float:focus {
     border-radius: 999px;
@@ -533,12 +533,14 @@ a.btn { display: inline-block; text-align: center; }
 /* Wrapper do PlaceAutocompleteElement: pill centralizado, margem lateral */
 .map-search-wrap {
     position: absolute;
-    top: 12px;
+    top: 6px;
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 32px);
-    max-width: 340px;
+    width: calc(100% - 44px);
+    max-width: 292px;
     z-index: 40;
+    border-radius: 999px;
+    overflow: hidden;
 }
 gmp-place-autocomplete.map-search-float {
     display: block;
@@ -546,10 +548,12 @@ gmp-place-autocomplete.map-search-float {
     width: 100%;
     margin: 0;
     border-radius: 999px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
     --gmp-mat-color-surface: #fff;
     --gmp-mat-color-on-surface: #111;
     --gmp-mat-color-outline: #e2e8f0;
+    --gmp-mat-color-primary: #4285f4;
 }
 
 /* Mapa em satélite ocupando a tela + sheet de ação por cima (pedir/oferecer) */
