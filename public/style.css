@@ -42,11 +42,10 @@ body {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 14px;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
-    flex-wrap: nowrap;
 }
 
 .nav-left {
@@ -87,7 +86,6 @@ body {
 }
 /* nome do usuário centralizado entre o logo e o menu */
 .nav-user {
-    flex: 1;
     text-align: center;
     color: #EAD298;
     font-weight: 600;
@@ -96,9 +94,15 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Espaço invisível à direita: mantém o nome centralizado após mover o menu */
+.nav-spacer {
+    width: 44px;
+    height: 38px;
+    flex-shrink: 0;
+}
 
-/* Menu (hambúrguer) — junta Ativar / Histórico / Perfil / Trocar papel / Sair */
-.nav-menu-wrap { position: relative; }
+/* Menu (hambúrguer) — alinhado à barra Passageiro/Motorista */
+.nav-menu-wrap { position: relative; flex-shrink: 0; }
 .nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .nav-menu { position: absolute; right: 0; top: calc(100% + 8px); background: #161719; border: 1px solid #2a2b2f; border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); min-width: 210px; overflow: hidden; z-index: 60; }
 .nav-menu-item { display: block; width: 100%; text-align: left; padding: 14px 18px; background: none; border: none; color: #e8eaed; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
@@ -882,10 +886,11 @@ body.theme-dark {
 .sheet-acoes { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 .sheet-acoes .btn { flex: 1; padding: 13px; }
 
-/* Barra de modo (título + trocar papel) */
-.modo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 2px; flex-wrap: wrap; }
-.modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; }
-.modo-acoes { display: flex; gap: 8px; }
+/* Barra de modo (título + menu na mesma linha) */
+.modo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px 8px; flex-wrap: nowrap; }
+.modo-bar-direita { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
+.modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; line-height: 38px; }
+.modo-acoes { display: flex; gap: 8px; align-items: center; }
 
 /* Ações de motorista no modal de perfil */
 .hab-actions { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -74,22 +74,7 @@
         <div class="nav-container">
             <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
             <span id="userName" class="nav-user"></span>
-            <div class="nav-menu-wrap">
-                <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Menu">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-                </button>
-                <div id="navMenu" class="nav-menu" style="display:none;">
-                    <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
-                    <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
-                    <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
-                    <a href="historico.html" class="nav-menu-item">Histórico</a>
-                    <button onclick="abrirLocais()" class="nav-menu-item">Locais</button>
-                    <button onclick="abrirFavoritos()" class="nav-menu-item">Meus locais favoritos</button>
-                    <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
-                    <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
-                    <button onclick="logout()" class="nav-menu-item">Sair</button>
-                </div>
-            </div>
+            <span class="nav-spacer" aria-hidden="true"></span>
         </div>
     </nav>
 
@@ -105,8 +90,26 @@
         <div class="dashboard">
             <div class="modo-bar">
                 <span id="modoTitulo" class="modo-titulo">Carona</span>
-                <div class="modo-acoes">
-                    <button class="btn btn-secondary btn-sm" id="btnViagemAndamento" style="display:none;" onclick="showTab('tabViagem')">Em andamento</button>
+                <div class="modo-bar-direita">
+                    <div class="modo-acoes">
+                        <button class="btn btn-secondary btn-sm" id="btnViagemAndamento" style="display:none;" onclick="showTab('tabViagem')">Em andamento</button>
+                    </div>
+                    <div class="nav-menu-wrap">
+                        <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Menu">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+                        </button>
+                        <div id="navMenu" class="nav-menu" style="display:none;">
+                            <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
+                            <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
+                            <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
+                            <a href="historico.html" class="nav-menu-item">Histórico</a>
+                            <button onclick="abrirLocais()" class="nav-menu-item">Locais</button>
+                            <button onclick="abrirFavoritos()" class="nav-menu-item">Meus locais favoritos</button>
+                            <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
+                            <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
+                            <button onclick="logout()" class="nav-menu-item">Sair</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -575,7 +578,7 @@
     function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; _buscaVisivel(false); }
     document.addEventListener('click', (e) => {
         if (document.getElementById('navMenu').style.display === 'block'
-            && !e.target.closest('#btnMenu')) fecharMenu();
+            && !e.target.closest('.nav-menu-wrap')) fecharMenu();
     });
 
     /* -------- painéis (listas/solicitações) abertos pelo menu -------- */
