@@ -486,15 +486,23 @@ async function buscarLugarGoogle(textQuery, { map, locationBias, nomePreferido }
     if (!places?.length) return null;
 
     const norm = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '')
-        .replace(/[—–-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-    const alvo = nomePreferido ? norm(nomePreferido) : '';
+        .replace(/[—–()-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     let escolhido = places[0];
-    if (alvo) {
-        const hit = places.find((p) => {
-            const dn = norm(p.displayName);
-            return dn === alvo || dn.includes(alvo) || alvo.includes(dn);
-        });
-        if (hit) escolhido = hit;
+    if (nomePreferido) {
+        // Nome exigido: só aceita resultado cujo nome bata, senão devolve null
+        // (o chamador usa a coordenada curada). Evita cair no ponto genérico da mina.
+        const alvo = norm(nomePreferido);
+        const stop = new Set(['s11d', 'usina', 'mina', 'serra', 'sul', 'complexo', 'vale', 'de', 'do', 'da', 'e']);
+        const palavras = alvo.split(' ').filter((w) => w.length > 2 && !stop.has(w));
+        const combina = (dn) => {
+            if (!dn) return false;
+            if (dn === alvo || dn.includes(alvo) || alvo.includes(dn)) return true;
+            if (!palavras.length) return false;
+            const hits = palavras.filter((w) => dn.includes(w)).length;
+            return hits / palavras.length >= 0.6;
+        };
+        escolhido = places.find((p) => combina(norm(p.displayName))) || null;
+        if (!escolhido) return null;
     }
 
     // searchByText já traz os fields pedidos; só busca de novo se location faltar.
