@@ -110,6 +110,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// Aviso de conexão: toast temporário (some sozinho), sem tarja fixa na tela.
+(function avisoConexao() {
+    let avisouOffline = false;
+    function aoFicarOffline() {
+        if (avisouOffline) return;
+        avisouOffline = true;
+        mostrarToast('Sem conexão — mostrando a última versão carregada', 'error');
+    }
+    function aoVoltarOnline() {
+        if (!avisouOffline) return;
+        avisouOffline = false;
+        mostrarToast('Conexão restabelecida', 'success');
+    }
+    window.addEventListener('offline', aoFicarOffline);
+    window.addEventListener('online', aoVoltarOnline);
+    if (!navigator.onLine) aoFicarOffline();
+})();
+
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

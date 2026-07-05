@@ -25,26 +25,3 @@ if ("serviceWorker" in navigator) {
       .catch(() => {});
   });
 }
-
-// Aviso discreto de "sem conexão" — o app continua mostrando a última versão.
-(function indicadorOffline() {
-  function montar() {
-    if (document.getElementById("vagao-offline")) return;
-    const el = document.createElement("div");
-    el.id = "vagao-offline";
-    el.className = "vap-offline-bar";
-    el.textContent = "Sem conexão — mostrando a última versão carregada";
-    document.body.appendChild(el);
-    const sync = () => {
-      el.classList.toggle("visivel", !navigator.onLine);
-    };
-    window.addEventListener("online", sync);
-    window.addEventListener("offline", sync);
-    sync();
-  }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", montar);
-  } else {
-    montar();
-  }
-})();
