@@ -1161,45 +1161,95 @@ body.theme-dark {
     }
 }
 
+/* Barra de status offline (PWA) */
+.vap-offline-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99999;
+    background: #0F3D3E;
+    color: #EAD298;
+    font: 600 13px/1.4 system-ui, sans-serif;
+    text-align: center;
+    padding: 8px 12px;
+    transform: translateY(110%);
+    transition: transform .25s ease;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, .25);
+}
+.vap-offline-bar.visivel {
+    transform: translateY(0);
+}
+
 /* ============================================================
-   Desktop (>= 1024px): layout em tela cheia, sem moldura de celular.
-   O app operacional e as páginas de login/cadastro usam a viewport
-   inteira. O painel admin (admin.html) já era desktop cheio.
+   Moldura de iPhone no computador (só o app OPERACIONAL).
+   No celular, nada muda. No desktop (>= 1024px), as páginas com
+   a classe .app-mobile são renderizadas como um aparelho iPhone
+   centralizado — ótimo para apresentação. O admin (admin.html) NÃO
+   recebe a classe, então continua em desktop cheio.
+   O transform no body faz os overlays position:fixed ficarem
+   contidos dentro da moldura (senão escapariam pra tela toda).
    ============================================================ */
 @media (min-width: 1024px) {
-    /* Dashboard / mapa: ocupa toda a largura da janela */
-    body.theme-dark {
-        width: 100%;
-        max-width: none;
+    html:has(body.app-mobile) {
         min-height: 100vh;
-        min-height: 100dvh;
-        margin: 0;
-        border: none;
-        border-radius: 0;
-        box-shadow: none;
+        background:
+            radial-gradient(1200px 600px at 50% -10%, #23252b 0%, #15161a 55%, #0e0f12 100%);
     }
-    .theme-dark .container {
-        max-width: none;
-        padding: 0;
-        margin: 0;
+    body.app-mobile {
+        --phone-inner-r: 40px;   /* 54px externo − 14px de bezel */
+        width: 402px;
+        height: 858px;
+        max-height: calc(100vh - 40px);
+        margin: 20px auto;
+        position: relative;
+        overflow: hidden;
+        border: 14px solid #0a0a0c;
+        border-radius: 54px;
+        box-shadow:
+            0 0 0 2px #303036,
+            0 40px 90px rgba(0, 0, 0, 0.55),
+            0 8px 24px rgba(0, 0, 0, 0.4);
+        scrollbar-width: none;
     }
-    .theme-dark .map-stage {
-        margin: 0;
+    body.app-mobile::-webkit-scrollbar { width: 0; height: 0; display: none; }
+    body.app-mobile:not(.theme-dark) {
+        overflow-y: auto;
+        overflow-x: hidden;
     }
-    .theme-dark .nav-container {
-        max-width: none;
-        padding: 0 24px;
+    body.theme-dark.app-mobile,
+    body.app-mobile:not(.theme-dark) {
+        transform: translateZ(0);
     }
-    /* Modais e overlays: largura confortável em telas largas */
-    .cam-box {
-        max-width: min(560px, calc(100% - 32px));
+    /* Elementos colados na base/topo: curvas alinhadas à moldura interna */
+    body.app-mobile .navbar {
+        border-radius: var(--phone-inner-r) var(--phone-inner-r) 0 0;
     }
-    .papel-box {
-        max-width: min(480px, calc(100% - 32px));
+    body.app-mobile .map-stage,
+    body.app-mobile .viagem-wrap {
+        border-bottom-left-radius: var(--phone-inner-r);
+        border-bottom-right-radius: var(--phone-inner-r);
+        overflow: hidden;
     }
-    /* Páginas claras (histórico etc.): conteúdo centralizado */
-    .container {
-        max-width: 1200px;
-        padding: 0 24px 40px;
+    body.app-mobile .acao-sheet,
+    body.app-mobile .viagem-sheet {
+        border-bottom-left-radius: var(--phone-inner-r);
+        border-bottom-right-radius: var(--phone-inner-r);
+    }
+    body.app-mobile .cam-overlay .cam-box {
+        border-bottom-left-radius: var(--phone-inner-r);
+        border-bottom-right-radius: var(--phone-inner-r);
+    }
+    body.app-mobile .vap-offline-bar {
+        border-radius: 0 0 var(--phone-inner-r) var(--phone-inner-r);
+    }
+    body.app-mobile .papel-overlay,
+    body.app-mobile .cam-overlay.cam-live {
+        border-radius: var(--phone-inner-r);
+        overflow: hidden;
+    }
+    body.app-mobile .message {
+        margin-left: 12px;
+        margin-right: 12px;
     }
 }
