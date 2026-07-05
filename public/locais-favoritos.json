@@ -1,6 +1,6 @@
 {
   "versao": 1,
-  "descricao": "Catálogo de locais por projeto. Por padrão o app usa SÓ a coordenada 'ref' (curada) — nomes internos da empresa não existem no Google Places e a busca lá trazia lugar errado. Só busca no Google se o local tiver 'vivo': true (locais públicos reais). Campo 'busca' só é usado quando 'vivo' está ativo.",
+  "descricao": "Catálogo de locais por projeto. Ao tocar num local, o app busca no Google Places (mesmo motor do buscador do mapa) usando 'busca' ou 'nome'. A coordenada 'ref' é só fallback se o Google não achar.",
   "projetos": {
     "S11D": {
       "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
