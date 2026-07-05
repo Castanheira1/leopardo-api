@@ -409,21 +409,6 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(json.some((p) => p.id === pedidoId), "pedido não veio em ?meus");
     });
-    await test("motorista online vê pedido dentro de 600 m", async () => {
-      await api("POST", "/api/motorista/online", {
-        token: tokDriver,
-        body: { lat: ORIGEM.lat, lng: ORIGEM.lng },
-      });
-      const { status, json } = await api("GET", `/api/pedidos?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokDriver });
-      eq(status, 200, "status");
-      assert(json.some((p) => p.id === pedidoId), "pedido perto não listado");
-    });
-    await test("motorista online NÃO vê pedido fora de 600 m", async () => {
-      const longe = { lat: ORIGEM.lat + 0.01, lng: ORIGEM.lng };
-      const { status, json } = await api("GET", `/api/pedidos?lat=${longe.lat}&lng=${longe.lng}`, { token: tokDriver });
-      eq(status, 200, "status");
-      assert(!json.some((p) => p.id === pedidoId), "pedido longe não deveria aparecer");
-    });
 
     /* =================== MATCH (Haversine) =================== */
     grupo("Match por proximidade");
@@ -496,6 +481,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
         body: { pontos: [
           { lat: -1.4500, lng: -48.4800 },
           { lat: -1.4450, lng: -48.4600 },
+          { lat: -1.4200, lng: -48.4500 },
           { lat: -1.4000, lng: -48.4400 },
         ] },
       });
@@ -522,6 +508,26 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status, json } = await api("GET", "/api/viagens", { token: tokPax });
       eq(status, 200, "status");
       assert(json.some((v) => v.id === viagemId), "viagem não listada");
+    });
+
+    /* =================== MOTORISTA ONLINE: VISIBILIDADE DE PEDIDOS ===================
+       Fica por último: entrar no modo online (sem destino) CANCELA a carona ativa
+       do motorista, então roda depois dos testes que dependem da carona-fixture. */
+    grupo("Motorista online: pedidos por perto (600 m)");
+    await test("motorista online vê pedido dentro de 600 m", async () => {
+      await api("POST", "/api/motorista/online", {
+        token: tokDriver,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng },
+      });
+      const { status, json } = await api("GET", `/api/pedidos?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokDriver });
+      eq(status, 200, "status");
+      assert(json.some((p) => p.id === pedidoId), "pedido perto não listado");
+    });
+    await test("motorista online NÃO vê pedido fora de 600 m", async () => {
+      const longe = { lat: ORIGEM.lat + 0.01, lng: ORIGEM.lng };
+      const { status, json } = await api("GET", `/api/pedidos?lat=${longe.lat}&lng=${longe.lng}`, { token: tokDriver });
+      eq(status, 200, "status");
+      assert(!json.some((p) => p.id === pedidoId), "pedido longe não deveria aparecer");
     });
 
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
