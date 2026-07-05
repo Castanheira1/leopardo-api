@@ -1216,10 +1216,22 @@ body.theme-dark {
     body.app-mobile:not(.theme-dark) {
         overflow-y: auto;
         overflow-x: hidden;
+        background: #000;
     }
     body.theme-dark.app-mobile,
     body.app-mobile:not(.theme-dark) {
         transform: translateZ(0);
+    }
+    /* Login / cadastro: preto de ponta a ponta, curvas = moldura interna */
+    body.app-mobile.login-screen .login-card,
+    body.app-mobile.signup-screen .signup-card {
+        border-radius: var(--phone-inner-r);
+        min-height: 100%;
+    }
+    /* Apresentação no PC: esconde aviso offline (distrai no login) */
+    body.app-mobile.login-screen .vap-offline-bar,
+    body.app-mobile.signup-screen .vap-offline-bar {
+        display: none;
     }
     /* Elementos colados na base/topo: curvas alinhadas à moldura interna */
     body.app-mobile .navbar {
