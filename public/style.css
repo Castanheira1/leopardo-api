@@ -362,6 +362,14 @@ body {
     margin: 0 0 10px;
     line-height: 1.35;
 }
+.online-dica {
+    display: block;
+    margin: -6px 0 10px;
+    font-size: 0.78rem;
+    color: #64748b;
+    line-height: 1.35;
+}
+.theme-dark .online-dica { color: #9aa0a6; }
 .acao-sheet .form-group input,
 .acao-sheet .form-group select,
 .acao-sheet .form-group textarea,

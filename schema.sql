@@ -289,6 +289,8 @@ CREATE TABLE IF NOT EXISTS localizacoes_online (
     lat NUMERIC(10,6) NOT NULL,
     lng NUMERIC(10,6) NOT NULL,
     disponivel BOOLEAN DEFAULT TRUE,
+    vagas INTEGER DEFAULT 1,
+    online_desde TIMESTAMP,
     atualizado_em TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_loc_online_atualizado ON localizacoes_online (atualizado_em);
