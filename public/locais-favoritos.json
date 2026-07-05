@@ -59,8 +59,8 @@
               "google": true
             },
             {
-              "nome": "Espaço Quali — Complexo Serra Sul",
-              "busca": "Espaço Quati Complexo Serra Sul S11D",
+              "nome": "Espaço Quatí — Complexo Serra Sul",
+              "busca": "Espaço Quatí Complexo Serra Sul S11D",
               "google": true,
               "ref": {
                 "lat": -6.447106,
@@ -68,12 +68,13 @@
               }
             },
             {
-              "nome": "Área do Condomínio da Infraestrutura",
-              "busca": "Área do Condomínio da Infraestrutura S11D",
+              "nome": "Área do Condomínio da Integridade Estrutural",
+              "busca": "Área do Condomínio da Integridade Estrutural S11D",
               "ref": {
-                "lat": -6.4392,
-                "lng": -50.2419
-              }
+                "lat": -6.440711,
+                "lng": -50.235436
+              },
+              "google": true
             },
             {
               "nome": "Rodoviária Castanheira — Mina",
@@ -156,8 +157,8 @@
               }
             },
             {
-              "nome": "Armazém Mina — Usina",
-              "busca": "Armazém Mina S11D",
+              "nome": "Armazém MRO — Usina",
+              "busca": "Armazém MRO Usina S11D",
               "ref": {
                 "lat": -6.447087,
                 "lng": -50.238609
