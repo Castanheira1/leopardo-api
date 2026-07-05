@@ -356,8 +356,6 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
 }
-.map-stage-motorista .map-search-wrap,
-.map-stage-motorista .map-search-float { display: none !important; }
 .online-status {
     color: #9aa0a6;
     font-size: 0.88rem;

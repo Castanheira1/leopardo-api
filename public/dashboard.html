@@ -141,11 +141,17 @@
 
             <!-- ============ OFERECER CARONA (motorista) ============ -->
             <div id="tabOferecer" class="tab-content">
-                <div class="map-stage map-stage-motorista">
-                    <input id="destOfeInput" class="map-search-hidden" type="hidden" tabindex="-1" aria-hidden="true">
+                <div class="map-stage">
+                    <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div id="acaoSheetOfe" class="acao-sheet">
                         <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Vagas disponíveis</label>
+                                <input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric">
+                            </div>
+                        </div>
                         <p id="statusMotoristaOnline" class="online-status" style="display:none;">Você está online — vendo pedidos em 600 m</p>
                         <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block" onclick="toggleModoMotoristaOnline()">Oferecer carona</button>
                     </div>
@@ -556,7 +562,7 @@
             if (!selOfe) initMapOferecer();
             else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
-                else { selOfe.recentrar(); }
+                else { selOfe.recentrar(); selOfe.dica(); }
             }
         }
     }
@@ -1410,6 +1416,8 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map);
             iniciarPedidosAoVivo(selOfe.map);
+        } else {
+            selOfe.dica();
         }
     }
 
@@ -1802,6 +1810,8 @@
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
         if (!selOfe) await initMapOferecer();
+        const dest = selOfe.getDestino();
+        if (dest) return oferecerCarona();
         if (!selOfe.origemConfiavel()) {
             selOfe.recentrar();
             return msg('Ative sua localização (GPS) para oferecer carona.', 'error');
@@ -1875,7 +1885,7 @@
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-                horario: null, vagas: 1,
+                horario: null, vagas: Math.min(6, Math.max(1, +document.getElementById('vagasOfe').value || 1)),
             };
             const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
