@@ -85,7 +85,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -228,6 +228,43 @@ async function garantirTabelaAnuncios() {
       ON anuncios(projeto_id, inicio, fim) WHERE ativo = TRUE`);
   } catch (e) {
     console.warn("garantirTabelaAnuncios:", e.message);
+  }
+}
+
+async function garantirTabelaEventosUso() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eventos_uso (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+        evento VARCHAR(64) NOT NULL,
+        detalhes JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS contatos_motorista (
+        id SERIAL PRIMARY KEY,
+        motorista_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        passageiro_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        mensagem TEXT,
+        lido BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_contatos_motorista_pend ON contatos_motorista (motorista_id, lido, created_at DESC)");
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_eventos_uso_usuario ON eventos_uso (usuario_id, created_at DESC)");
+  } catch (e) {
+    console.warn("garantirTabelaEventosUso:", e.message);
+  }
+}
+
+async function registrarEventoUso(usuarioId, evento, detalhes) {
+  try {
+    await pool.query(
+      "INSERT INTO eventos_uso (usuario_id, evento, detalhes) VALUES ($1, $2, $3)",
+      [usuarioId, evento, detalhes ? JSON.stringify(detalhes) : null]
+    );
+  } catch (e) {
+    console.warn("registrarEventoUso:", e.message);
   }
 }
 
@@ -1380,6 +1417,9 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
        DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, online_desde = NULL, atualizado_em = NOW(), vagas = $4`,
       [req.user.id, origem_lat, origem_lng, nvagas]
     );
+    await registrarEventoUso(req.user.id, "motorista_modo_destino", {
+      vagas: nvagas, destino: destino_texto || null, carona_id: rows[0].id,
+    });
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -2037,6 +2077,7 @@ app.post("/api/motorista/online", verificarAuth, async (req, res) => {
        DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, online_desde = NOW(), atualizado_em = NOW(), vagas = $4`,
       [req.user.id, nlat, nlng, nvagas]
     );
+    await registrarEventoUso(req.user.id, "motorista_modo_geral", { vagas: nvagas, lat: nlat, lng: nlng });
     res.json({ online: true, lat: nlat, lng: nlng, vagas: nvagas });
   } catch (err) {
     console.error(err);
@@ -2101,6 +2142,101 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar motoristas" });
+  }
+});
+
+// Passageiro toca no motorista em modo geral (sem destino): registra uso, avisa o motorista
+// e libera o WhatsApp com mensagem padrão.
+app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) => {
+  const motoristaId = parseInt(req.params.id, 10);
+  if (!motoristaId) return res.status(400).json({ error: "Motorista inválido" });
+  try {
+    if (!(await validarMesmoProjeto(req.user.id, motoristaId, res))) return;
+
+    const hab = await habilitacaoAtiva(motoristaId);
+    if (!hab) return res.status(404).json({ error: "Motorista indisponível" });
+
+    const loc = (await pool.query(
+      `SELECT l.disponivel, l.lat, l.lng, l.online_desde,
+              (SELECT id FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1) AS carona_id
+       FROM localizacoes_online l WHERE l.usuario_id = $1`,
+      [motoristaId]
+    )).rows[0];
+    if (!loc?.disponivel || loc.carona_id) {
+      return res.status(404).json({ error: "Motorista não está em modo geral agora" });
+    }
+
+    const mot = (await pool.query(
+      "SELECT nome, telefone FROM usuarios WHERE id = $1",
+      [motoristaId]
+    )).rows[0];
+    if (!mot?.telefone) return res.status(400).json({ error: "Motorista sem WhatsApp cadastrado" });
+
+    const mensagem = "Olá, qual é o seu destino agora?";
+    const { rows } = await pool.query(
+      `INSERT INTO contatos_motorista (motorista_id, passageiro_id, mensagem)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [motoristaId, req.user.id, mensagem]
+    );
+
+    const pax = (await pool.query("SELECT nome, telefone FROM usuarios WHERE id = $1", [req.user.id])).rows[0];
+    await registrarEventoUso(req.user.id, "contato_motorista_geral", { motorista_id: motoristaId });
+    await registrarEventoUso(motoristaId, "contato_recebido_geral", { passageiro_id: req.user.id });
+
+    enviarPush(motoristaId, {
+      title: "Alguém quer falar com você",
+      body: `${pax?.nome || "Um passageiro"} quer combinar destino no WhatsApp.`,
+      url: "/dashboard.html",
+      action: "contato_whatsapp",
+      contato_id: rows[0].id,
+    });
+
+    res.json({ telefone: mot.telefone, mensagem, contato_id: rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao solicitar contato" });
+  }
+});
+
+app.get("/api/motorista/contatos/novos", verificarAuth, async (req, res) => {
+  const desde = parseInt(req.query.desde, 10) || 0;
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.mensagem, c.created_at, u.nome AS passageiro_nome, u.telefone AS passageiro_telefone
+       FROM contatos_motorista c
+       JOIN usuarios u ON u.id = c.passageiro_id
+       WHERE c.motorista_id = $1 AND c.lido = FALSE AND c.id > $2
+       ORDER BY c.id ASC
+       LIMIT 20`,
+      [req.user.id, desde]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar contatos" });
+  }
+});
+
+app.post("/api/motorista/contatos/:id/lido", verificarAuth, async (req, res) => {
+  try {
+    await pool.query(
+      "UPDATE contatos_motorista SET lido = TRUE WHERE id = $1 AND motorista_id = $2",
+      [req.params.id, req.user.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro" });
+  }
+});
+
+app.post("/api/eventos-uso", verificarAuth, async (req, res) => {
+  const { evento, detalhes } = req.body;
+  if (!evento) return res.status(400).json({ error: "evento obrigatório" });
+  try {
+    await registrarEventoUso(req.user.id, String(evento).slice(0, 64), detalhes || null);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao registrar evento" });
   }
 });
 
