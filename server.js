@@ -1234,7 +1234,12 @@ app.post("/api/fotos", verificarAuth, upload.single("foto"), async (req, res) =>
     return res.status(400).json({ error: "Carimbo de captura inválido." });
   }
   const diffMs = Date.now() - capturado.getTime();
-  if (diffMs < -5000 || diffMs > 120000) {
+  // iOS/Safari pode demorar para gerar o JPEG/abrir GPS e alguns aparelhos ficam
+  // com o relógio levemente adiantado. Mantém a exigência de captura ao vivo,
+  // mas evita falso "expirada" por lentidão ou pequeno desvio de relógio.
+  const FOTO_MAX_IDADE_MS = 10 * 60 * 1000;
+  const FOTO_MAX_RELOGIO_ADIANTADO_MS = 5 * 60 * 1000;
+  if (diffMs < -FOTO_MAX_RELOGIO_ADIANTADO_MS || diffMs > FOTO_MAX_IDADE_MS) {
     return res.status(400).json({ error: "Foto expirada ou inválida. Tire uma nova foto com a câmera." });
   }
   const pasta = ["selfies", "carros"].includes(req.body.tipo) ? req.body.tipo : "outros";
