@@ -79,6 +79,7 @@ function bootServer() {
       NODE_ENV: "test",           // SSL off; produção usaria rejectUnauthorized:false
       RAIO_MATCH_KM: "3",
       RAIO_VISIVEL_KM: "10",
+      RAIO_ONLINE_KM: "0.6",
       AUTH_RATE_MAX: "30",        // teto conhecido p/ validar o anti-força-bruta no fim
       CORS_ORIGINS: "",           // sem CORS externo (comportamento padrão seguro)
     },
@@ -302,6 +303,34 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(json && json.status === "ativa", "sem habilitação ativa");
     });
 
+    /* =================== MOTORISTA ONLINE =================== */
+    grupo("Motorista online (sem destino)");
+    await test("POST /api/motorista/online (habilitado) fica online", async () => {
+      const { status, json } = await api("POST", "/api/motorista/online", {
+        token: tokDriver,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng },
+      });
+      eq(status, 200, "status");
+      assert(json.online, "deveria estar online");
+    });
+    await test("GET /api/motorista/online confirma status online", async () => {
+      const { status, json } = await api("GET", "/api/motorista/online", { token: tokDriver });
+      eq(status, 200, "status");
+      assert(json.online, "online");
+    });
+    await test("passageiro vê motorista online no mapa (600 m)", async () => {
+      const { status, json } = await api("GET", `/api/motoristas-online?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokPax });
+      eq(status, 200, "status");
+      assert(json.some((m) => m.id === idDriver), "motorista online não apareceu");
+    });
+    await test("passageiro sem hab NÃO fica online (403)", async () => {
+      const { status } = await api("POST", "/api/motorista/online", {
+        token: tokPax,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng },
+      });
+      eq(status, 403, "status");
+    });
+
     /* =================== CARONAS =================== */
     grupo("Caronas");
     let caronaId;
@@ -379,6 +408,21 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status, json } = await api("GET", "/api/pedidos?meus=1", { token: tokPax });
       eq(status, 200, "status");
       assert(json.some((p) => p.id === pedidoId), "pedido não veio em ?meus");
+    });
+    await test("motorista online vê pedido dentro de 600 m", async () => {
+      await api("POST", "/api/motorista/online", {
+        token: tokDriver,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng },
+      });
+      const { status, json } = await api("GET", `/api/pedidos?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokDriver });
+      eq(status, 200, "status");
+      assert(json.some((p) => p.id === pedidoId), "pedido perto não listado");
+    });
+    await test("motorista online NÃO vê pedido fora de 600 m", async () => {
+      const longe = { lat: ORIGEM.lat + 0.01, lng: ORIGEM.lng };
+      const { status, json } = await api("GET", `/api/pedidos?lat=${longe.lat}&lng=${longe.lng}`, { token: tokDriver });
+      eq(status, 200, "status");
+      assert(!json.some((p) => p.id === pedidoId), "pedido longe não deveria aparecer");
     });
 
     /* =================== MATCH (Haversine) =================== */

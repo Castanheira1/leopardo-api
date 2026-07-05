@@ -28,6 +28,8 @@ const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
 // perto (última posição do dia) é avisado por push mesmo sem app aberto e
 // sem carona publicada — "estou na sala e alguém pediu aqui do lado".
 const RAIO_PUSH_PERTO_KM = Number(process.env.RAIO_PUSH_PERTO_KM || 1);
+// Raio (km) do modo motorista online: pedidos no mapa, visibilidade e push (600 m).
+const RAIO_ONLINE_KM = Number(process.env.RAIO_ONLINE_KM || 0.6);
 // Viagem só conta no rateio/admin se o GPS registrar deslocamento real (não simulação parado).
 const KM_MINIMO_VIAGEM = Number(process.env.KM_MINIMO_VIAGEM || 0.5);
 const KM_SEGMENTO_MIN = Number(process.env.KM_SEGMENTO_MIN || 0.03);
@@ -83,7 +85,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -288,6 +290,14 @@ async function garantirColunasPedidos() {
     await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notificado BOOLEAN DEFAULT FALSE");
   } catch (e) {
     console.warn("garantirColunasPedidos:", e.message);
+  }
+}
+
+async function garantirColunasLocalizacao() {
+  try {
+    await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP");
+  } catch (e) {
+    console.warn("garantirColunasLocalizacao:", e.message);
   }
 }
 
@@ -668,11 +678,7 @@ function numSeguro(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Notifica os motoristas MAIS PERTO do embarque de um pedido em duas faixas:
-// - posição FRESCA (app aberto há <=10 min): até RAIO_VISIVEL_KM;
-// - posição do DIA (app pode estar fechado): até RAIO_PUSH_PERTO_KM — o
-//   motorista habilitado que está "na sala" a 1 km é avisado por push mesmo
-//   sem app aberto e sem carona publicada.
+// Notifica motoristas ONLINE (disponivel) dentro de RAIO_ONLINE_KM (600 m).
 // Marca o pedido como notificado. Usado no POST (pedido "para agora") e pelo
 // agendador (pedido com horário marcado).
 async function notificarMotoristasProximos(ped) {
@@ -686,22 +692,21 @@ async function notificarMotoristasProximos(ped) {
     const nome = passInfo.nome || "Um colega";
     const motoristas = (await pool.query(
       `SELECT motorista_id FROM (
-         SELECT DISTINCT ON (h.motorista_id) h.motorista_id, l.atualizado_em,
+         SELECT DISTINCT ON (h.motorista_id) h.motorista_id,
                 ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
          FROM habilitacoes_motorista h
-         JOIN localizacoes_online l ON l.usuario_id = h.motorista_id
+         JOIN localizacoes_online l ON l.usuario_id = h.motorista_id AND l.disponivel = TRUE
          JOIN usuarios um ON um.id = h.motorista_id
          WHERE h.status = 'ativa' AND ${sqlSelfieValida("h")}
            AND h.motorista_id <> $3
-           AND um.projeto_id = $6
+           AND um.projeto_id = $5
            AND COALESCE(um.ativo, TRUE) = TRUE
          ORDER BY h.motorista_id, h.created_at DESC
        ) s
-       WHERE (s.atualizado_em > NOW() - INTERVAL '10 minutes' AND s.dist <= $4)
-          OR s.dist <= $5
+       WHERE s.dist <= $4
        ORDER BY s.dist ASC
        LIMIT 8`,
-      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_VISIVEL_KM, RAIO_PUSH_PERTO_KM, passInfo.projeto_id]
+      [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_ONLINE_KM, passInfo.projeto_id]
     )).rows;
     const destino = ped.destino_texto ? ` para ${ped.destino_texto}` : " aqui perto";
     motoristas.forEach((m) => enviarPush(m.motorista_id, {
@@ -1529,7 +1534,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       const pid = await projetoDoUsuario(req.user.id);
       if (!pid) return res.json([]);
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
-      const params = [lat, lng, RAIO_VISIVEL_KM];
+      const params = [lat, lng, RAIO_ONLINE_KM];
       if (pid) params.push(pid);
       const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
       const { rows } = await pool.query(
@@ -1964,26 +1969,90 @@ app.post("/api/localizacao", verificarAuth, async (req, res) => {
 // Para o app deixar de transmitir (ficar offline no mapa).
 app.delete("/api/localizacao", verificarAuth, async (req, res) => {
   try {
-    await pool.query("UPDATE localizacoes_online SET disponivel = FALSE WHERE usuario_id = $1", [req.user.id]);
+    await pool.query(
+      "UPDATE localizacoes_online SET disponivel = FALSE, online_desde = NULL WHERE usuario_id = $1",
+      [req.user.id]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Erro" });
   }
 });
 
-// Motoristas com carona publicada e online nos últimos 3 min (vistos pelo passageiro).
+/* ===================== MOTORISTA ONLINE (sem destino) ===================== */
+app.get("/api/motorista/online", verificarAuth, async (req, res) => {
+  try {
+    const hab = await habilitacaoAtiva(req.user.id);
+    const row = (await pool.query(
+      `SELECT l.disponivel, l.lat, l.lng, l.atualizado_em, l.online_desde
+       FROM localizacoes_online l WHERE l.usuario_id = $1`,
+      [req.user.id]
+    )).rows[0];
+    const online = !!(hab && row?.disponivel);
+    res.json({
+      online,
+      lat: row?.lat != null ? +row.lat : null,
+      lng: row?.lng != null ? +row.lng : null,
+      online_desde: row?.online_desde || null,
+      atualizado_em: row?.atualizado_em || null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao consultar status online" });
+  }
+});
+
+app.post("/api/motorista/online", verificarAuth, async (req, res) => {
+  const nlat = Number(req.body.lat);
+  const nlng = Number(req.body.lng);
+  if (!Number.isFinite(nlat) || !Number.isFinite(nlng) ||
+      nlat < -90 || nlat > 90 || nlng < -180 || nlng > 180) {
+    return res.status(400).json({ error: "Coordenadas inválidas" });
+  }
+  try {
+    const hab = await habilitacaoAtiva(req.user.id);
+    if (!hab) return res.status(403).json({ error: "Ative o modo motorista (foto do carro + selfie) antes de oferecer carona" });
+    // Modo online substitui carona publicada com rota fixa.
+    await pool.query(
+      "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
+      [req.user.id]
+    );
+    await pool.query(
+      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, online_desde, atualizado_em)
+       VALUES ($1, $2, $3, TRUE, NOW(), NOW())
+       ON CONFLICT (usuario_id)
+       DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, online_desde = NOW(), atualizado_em = NOW()`,
+      [req.user.id, nlat, nlng]
+    );
+    res.json({ online: true, lat: nlat, lng: nlng });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao ficar online" });
+  }
+});
+
+app.delete("/api/motorista/online", verificarAuth, async (req, res) => {
+  try {
+    await pool.query(
+      "UPDATE localizacoes_online SET disponivel = FALSE, online_desde = NULL WHERE usuario_id = $1",
+      [req.user.id]
+    );
+    res.json({ online: false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao sair do modo online" });
+  }
+});
+
+// Motoristas habilitados e online nos últimos 3 min (vistos pelo passageiro).
 app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   const { lat, lng } = req.query;
   try {
-    // Só motoristas com uma carona publicada (rota): o passageiro clica no
-    // carro no mapa e pede vaga naquela carona. Com lat/lng, corta pelo raio
-    // de visibilidade (carona é entre gente próxima).
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
-    const params = lat && lng ? [req.user.id, lat, lng, RAIO_VISIVEL_KM] : [req.user.id];
-    params.push(pid);
+    const params = lat && lng ? [req.user.id, lat, lng, RAIO_ONLINE_KM, pid] : [req.user.id, pid];
     const raio = lat && lng ? `AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4` : "";
-    const filtroProj = `AND u.projeto_id = $${params.length}`;
+    const filtroProj = lat && lng ? `AND u.projeto_id = $5` : `AND u.projeto_id = $2`;
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
               u.id, u.nome, u.sexo, l.lat, l.lng,
@@ -1995,14 +2064,20 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
        JOIN habilitacoes_motorista h
          ON h.motorista_id = u.id AND h.status = 'ativa'
             AND ${sqlSelfieValida("h")}
-       JOIN caronas ca ON ca.motorista_id = u.id AND ca.status = 'ativa'
+       LEFT JOIN LATERAL (
+         SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng
+         FROM caronas
+         WHERE motorista_id = u.id AND status = 'ativa'
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) ca ON TRUE
        WHERE l.disponivel = TRUE
          AND COALESCE(u.ativo, TRUE) = TRUE
          AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
          AND u.id <> $1
          ${filtroProj}
          ${raio}
-       ORDER BY u.id, ca.created_at DESC, h.created_at DESC
+       ORDER BY u.id, h.created_at DESC
        LIMIT 100`,
       params
     );
