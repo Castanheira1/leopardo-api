@@ -307,6 +307,15 @@
                 "lng": -50.319592
               },
               "google": true
+            },
+            {
+              "nome": "Posto de Combustível Mina",
+              "busca": "Posto de combustível Mina S11D",
+              "ref": {
+                "lat": -6.413278,
+                "lng": -50.318928
+              },
+              "google": true
             }
           ]
         },
