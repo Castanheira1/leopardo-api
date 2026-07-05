@@ -672,7 +672,6 @@ function capturarFoto(opts = {}) {
             canvas.height = Math.round(h * escala);
             canvas.getContext('2d').drawImage(fonte, 0, 0, canvas.width, canvas.height);
 
-            const em = new Date().toISOString();
             status.textContent = ocrPlaca ? 'Enviando e lendo placa...' : 'Enviando foto...';
 
             const locPromise = obterLocalizacaoRapida();
@@ -680,21 +679,22 @@ function capturarFoto(opts = {}) {
             const ocrPromise = ocrPlaca ? lerPlaca(canvas) : Promise.resolve(null);
 
             const uploadPromise = blobPromise.then(async (blob) => {
+                const emUpload = new Date().toISOString();
                 const fd = new FormData();
                 fd.append('foto', blob, `${tipo}.jpg`);
                 fd.append('tipo', tipo);
-                fd.append('capturado_em', em);
+                fd.append('capturado_em', emUpload);
                 fd.append('origem', 'camera');
                 const resp = await fetchWithAuth('/api/fotos', { method: 'POST', body: fd });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Falha no upload');
-                return data.url;
+                return { url: data.url, em: emUpload };
             });
 
-            const [url, placa, loc] = await Promise.all([uploadPromise, ocrPromise, locPromise]);
+            const [upload, placa, loc] = await Promise.all([uploadPromise, ocrPromise, locPromise]);
 
             encerrar();
-            resolve({ url, lat: loc.lat, lng: loc.lng, em, placa });
+            resolve({ url: upload.url, lat: loc.lat, lng: loc.lng, em: upload.em, placa });
         }
 
         const falhaCamera = (motivo) => {

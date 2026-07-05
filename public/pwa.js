@@ -1,6 +1,5 @@
-// Registra o Service Worker, recarrega o app quando uma nova versão é publicada
-// (após deploy no Render) e mostra um aviso leve quando o usuário fica sem
-// internet — sem quebrar a tela.
+// Registra o Service Worker e recarrega o app quando uma nova versão é publicada
+// (após deploy no Render). Avisos de conexão ficam no app.js (toast temporário).
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     // Se a página já era controlada por um SW, qualquer troca de controller é uma
