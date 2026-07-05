@@ -74,6 +74,22 @@
                 "lat": -6.4392,
                 "lng": -50.2419
               }
+            },
+            {
+              "nome": "Rodoviária Castanheira — Mina",
+              "busca": "Rodoviária Castanheira Mina S11D",
+              "ref": {
+                "lat": -6.4150501,
+                "lng": -50.3207222
+              }
+            },
+            {
+              "nome": "Refeitório Castanheira — Mina",
+              "busca": "Refeitório Castanheira Mina S11D",
+              "ref": {
+                "lat": -6.4144833,
+                "lng": -50.3206306
+              }
             }
           ]
         },
