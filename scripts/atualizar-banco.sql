@@ -64,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_tokens_recup_hash
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notificado BOOLEAN DEFAULT FALSE;
 ALTER TABLE viagens ADD COLUMN IF NOT EXISTS fase TEXT DEFAULT 'encontro';
+ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP;
 
 -- Admin padrão com escopo S11D
 UPDATE usuarios

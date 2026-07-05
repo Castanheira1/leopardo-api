@@ -370,6 +370,14 @@ body {
 }
 .theme-dark .quando-dica { color: #9aa0a6; }
 .quando-group { margin-bottom: 12px; }
+.map-stage-motorista .map-search-wrap,
+.map-stage-motorista .map-search-float { display: none !important; }
+.online-status {
+    color: #9aa0a6;
+    font-size: 0.88rem;
+    margin: 0 0 10px;
+    line-height: 1.35;
+}
 .acao-sheet .form-group input,
 .acao-sheet .form-group select,
 .acao-sheet .form-group textarea,
