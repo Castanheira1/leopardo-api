@@ -147,7 +147,7 @@
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div id="acaoSheetOfe" class="acao-sheet">
                         <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
-                        <div class="form-row">
+                        <div class="form-row" id="vagasOfeWrap">
                             <div class="form-group">
                                 <label>Vagas disponíveis</label>
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric">
@@ -1848,12 +1848,15 @@
     function atualizarUiMotoristaOnline() {
         const btn = document.getElementById('btnCtaOferecer');
         const st = document.getElementById('statusMotoristaOnline');
+        const vagasWrap = document.getElementById('vagasOfeWrap');
         const vagasEl = document.getElementById('vagasOfe');
         if (btn) {
             btn.textContent = motoristaOnlineModo ? 'Encerrar' : 'Oferecer carona';
             btn.classList.toggle('btn-danger', motoristaOnlineModo);
             btn.classList.toggle('btn-primary', !motoristaOnlineModo);
+            btn.disabled = false;
         }
+        if (vagasWrap) vagasWrap.style.display = motoristaOnlineModo ? 'none' : '';
         if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
         if (st) {
             if (!motoristaOnlineModo) {
@@ -1934,6 +1937,7 @@
             msg('Erro de conexão. Tente novamente.', 'error');
         } finally {
             soltar();
+            atualizarUiMotoristaOnline();
         }
     }
 
@@ -1999,7 +2003,10 @@
             msg('Publicado! Visível em 10 km para quem pede carona nessa direção.');
             document.getElementById('acaoSheetOfe').classList.add('collapsed');
         } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
-        finally { soltar(); }
+        finally {
+            soltar();
+            atualizarUiMotoristaOnline();
+        }
     }
     async function verificarRetomarMotorista() {
         try {
