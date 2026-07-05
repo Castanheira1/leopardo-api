@@ -1161,6 +1161,26 @@ body.theme-dark {
     }
 }
 
+/* Barra de status offline (PWA) */
+.vap-offline-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99999;
+    background: #0F3D3E;
+    color: #EAD298;
+    font: 600 13px/1.4 system-ui, sans-serif;
+    text-align: center;
+    padding: 8px 12px;
+    transform: translateY(110%);
+    transition: transform .25s ease;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, .25);
+}
+.vap-offline-bar.visivel {
+    transform: translateY(0);
+}
+
 /* ============================================================
    Moldura de iPhone no computador (só o app OPERACIONAL).
    No celular, nada muda. No desktop (>= 1024px), as páginas com
@@ -1177,12 +1197,13 @@ body.theme-dark {
             radial-gradient(1200px 600px at 50% -10%, #23252b 0%, #15161a 55%, #0e0f12 100%);
     }
     body.app-mobile {
+        --phone-inner-r: 40px;   /* 54px externo − 14px de bezel */
         width: 402px;
         height: 858px;
         max-height: calc(100vh - 40px);
         margin: 20px auto;
         position: relative;
-        overflow: hidden;                 /* o "aparelho" recorta; áreas internas rolam */
+        overflow: hidden;
         border: 14px solid #0a0a0c;
         border-radius: 54px;
         box-shadow:
@@ -1192,18 +1213,43 @@ body.theme-dark {
         scrollbar-width: none;
     }
     body.app-mobile::-webkit-scrollbar { width: 0; height: 0; display: none; }
-    /* Páginas de conteúdo (login, cadastro, histórico…) rolam dentro da moldura.
-       O dashboard (theme-dark) é tela fixa e mantém overflow:hidden. */
     body.app-mobile:not(.theme-dark) {
         overflow-y: auto;
         overflow-x: hidden;
     }
-    /* theme-dark já é flex-column de altura cheia: ao limitar o body,
-       o mapa e as folhas se ajustam sozinhos. Só reforçamos o conter. */
-    body.theme-dark.app-mobile {
-        transform: translateZ(0);
-    }
+    body.theme-dark.app-mobile,
     body.app-mobile:not(.theme-dark) {
         transform: translateZ(0);
+    }
+    /* Elementos colados na base/topo: curvas alinhadas à moldura interna */
+    body.app-mobile .navbar {
+        border-radius: var(--phone-inner-r) var(--phone-inner-r) 0 0;
+    }
+    body.app-mobile .map-stage,
+    body.app-mobile .viagem-wrap {
+        border-bottom-left-radius: var(--phone-inner-r);
+        border-bottom-right-radius: var(--phone-inner-r);
+        overflow: hidden;
+    }
+    body.app-mobile .acao-sheet,
+    body.app-mobile .viagem-sheet {
+        border-bottom-left-radius: var(--phone-inner-r);
+        border-bottom-right-radius: var(--phone-inner-r);
+    }
+    body.app-mobile .cam-overlay .cam-box {
+        border-bottom-left-radius: var(--phone-inner-r);
+        border-bottom-right-radius: var(--phone-inner-r);
+    }
+    body.app-mobile .vap-offline-bar {
+        border-radius: 0 0 var(--phone-inner-r) var(--phone-inner-r);
+    }
+    body.app-mobile .papel-overlay,
+    body.app-mobile .cam-overlay.cam-live {
+        border-radius: var(--phone-inner-r);
+        overflow: hidden;
+    }
+    body.app-mobile .message {
+        margin-left: 12px;
+        margin-right: 12px;
     }
 }

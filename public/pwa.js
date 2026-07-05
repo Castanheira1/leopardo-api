@@ -32,15 +32,11 @@ if ("serviceWorker" in navigator) {
     if (document.getElementById("vagao-offline")) return;
     const el = document.createElement("div");
     el.id = "vagao-offline";
+    el.className = "vap-offline-bar";
     el.textContent = "Sem conexão — mostrando a última versão carregada";
-    el.style.cssText =
-      "position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#0F3D3E;" +
-      "color:#EAD298;font:600 13px/1.4 system-ui,sans-serif;text-align:center;" +
-      "padding:8px 12px;transform:translateY(110%);transition:transform .25s ease;" +
-      "box-shadow:0 -2px 8px rgba(0,0,0,.25)";
     document.body.appendChild(el);
     const sync = () => {
-      el.style.transform = navigator.onLine ? "translateY(110%)" : "translateY(0)";
+      el.classList.toggle("visivel", !navigator.onLine);
     };
     window.addEventListener("online", sync);
     window.addEventListener("offline", sync);
