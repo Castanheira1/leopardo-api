@@ -452,6 +452,41 @@ async function ligarPlaceAutocomplete(inputEl, { map, onPlace, onFocus } = {}) {
     inputEl.style.display = 'none';
     wrap.appendChild(pac);
 
+    function compactarVisualAutocomplete(tentativas = 0) {
+        const root = pac.shadowRoot;
+        if (root && !root.getElementById('vap-compact-place-style')) {
+            const style = document.createElement('style');
+            style.id = 'vap-compact-place-style';
+            style.textContent = `
+                :host {
+                    height: 36px !important;
+                    min-height: 0 !important;
+                }
+                * {
+                    box-sizing: border-box !important;
+                }
+                input,
+                [role="combobox"] {
+                    height: 34px !important;
+                    min-height: 0 !important;
+                    line-height: 34px !important;
+                    padding-top: 0 !important;
+                    padding-bottom: 0 !important;
+                }
+                div,
+                label {
+                    min-height: 0 !important;
+                }
+            `;
+            root.appendChild(style);
+            return;
+        }
+        if (!root && tentativas < 20) {
+            requestAnimationFrame(() => compactarVisualAutocomplete(tentativas + 1));
+        }
+    }
+    requestAnimationFrame(() => compactarVisualAutocomplete());
+
     const fecharTeclado = () => {
         try { pac.blur(); } catch (_) {}
         const interno = pac.shadowRoot?.querySelector('input, [role="combobox"]');
