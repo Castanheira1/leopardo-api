@@ -279,9 +279,10 @@
               "nome": "Overland",
               "busca": "Overland S11D",
               "ref": {
-                "lat": -6.4602,
-                "lng": -50.3232
-              }
+                "lat": -6.461444,
+                "lng": -50.320724
+              },
+              "google": true
             },
             {
               "nome": "Pilha de Estéril de S11D",
