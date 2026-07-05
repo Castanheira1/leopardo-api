@@ -514,28 +514,30 @@ a.btn { display: inline-block; text-align: center; }
     box-shadow: 0 0 0 3px rgba(234, 210, 152, 0.3);
 }
 .map-search-float {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    width: auto;
-    z-index: 40;   /* abaixo da navbar (50): a busca nunca cobre o menu superior */
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    width: 100%;
+    z-index: 40;
     margin: 0;
     background: #fff;
     border-color: transparent;
-    border-radius: 24px;
-    padding: 12px 16px;
+    border-radius: 999px;
+    padding: 12px 18px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 .map-search-float:focus {
-    border-radius: 24px;
+    border-radius: 999px;
 }
-/* Wrapper do PlaceAutocompleteElement: altura fixa, sem sobra branca abaixo da borda */
+/* Wrapper do PlaceAutocompleteElement: pill centralizado, margem lateral */
 .map-search-wrap {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 340px;
     z-index: 40;
 }
 gmp-place-autocomplete.map-search-float {
@@ -543,7 +545,7 @@ gmp-place-autocomplete.map-search-float {
     position: static;
     width: 100%;
     margin: 0;
-    border-radius: 24px;
+    border-radius: 999px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
     --gmp-mat-color-surface: #fff;
     --gmp-mat-color-on-surface: #111;
@@ -1161,26 +1163,6 @@ body.theme-dark {
     }
 }
 
-/* Barra de status offline (PWA) */
-.vap-offline-bar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 99999;
-    background: #0F3D3E;
-    color: #EAD298;
-    font: 600 13px/1.4 system-ui, sans-serif;
-    text-align: center;
-    padding: 8px 12px;
-    transform: translateY(110%);
-    transition: transform .25s ease;
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, .25);
-}
-.vap-offline-bar.visivel {
-    transform: translateY(0);
-}
-
 /* ============================================================
    Moldura de iPhone no computador (só o app OPERACIONAL).
    No celular, nada muda. No desktop (>= 1024px), as páginas com
@@ -1222,16 +1204,18 @@ body.theme-dark {
     body.app-mobile:not(.theme-dark) {
         transform: translateZ(0);
     }
-    /* Login / cadastro: preto de ponta a ponta, curvas = moldura interna */
+    /* Apresentação no PC: curvas = moldura interna */
     body.app-mobile.login-screen .login-card,
     body.app-mobile.signup-screen .signup-card {
         border-radius: var(--phone-inner-r);
         min-height: 100%;
     }
-    /* Apresentação no PC: esconde aviso offline (distrai no login) */
-    body.app-mobile.login-screen .vap-offline-bar,
-    body.app-mobile.signup-screen .vap-offline-bar {
-        display: none;
+    body.app-mobile.theme-dark {
+        background: #0b0b0d;
+    }
+    body.app-mobile.theme-dark .container {
+        border-radius: 0 0 var(--phone-inner-r) var(--phone-inner-r);
+        overflow: hidden;
     }
     /* Elementos colados na base/topo: curvas alinhadas à moldura interna */
     body.app-mobile .navbar {
@@ -1251,9 +1235,6 @@ body.theme-dark {
     body.app-mobile .cam-overlay .cam-box {
         border-bottom-left-radius: var(--phone-inner-r);
         border-bottom-right-radius: var(--phone-inner-r);
-    }
-    body.app-mobile .vap-offline-bar {
-        border-radius: 0 0 var(--phone-inner-r) var(--phone-inner-r);
     }
     body.app-mobile .papel-overlay,
     body.app-mobile .cam-overlay.cam-live {
