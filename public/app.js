@@ -497,10 +497,15 @@ async function buscarLugarGoogle(textQuery, { map, locationBias, nomePreferido }
         if (hit) escolhido = hit;
     }
 
-    await escolhido.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+    // searchByText já traz os fields pedidos; só busca de novo se location faltar.
+    if (!escolhido.location) {
+        try { await escolhido.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] }); }
+        catch (_) { /* mantém o que veio */ }
+    }
     if (!escolhido.location) return null;
-    const lat = typeof escolhido.location.lat === 'function' ? escolhido.location.lat() : escolhido.location.lat;
-    const lng = typeof escolhido.location.lng === 'function' ? escolhido.location.lng() : escolhido.location.lng;
+    const loc = escolhido.location;
+    const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+    const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
     return {
         lat: Number(lat),
         lng: Number(lng),
