@@ -121,13 +121,9 @@
                     <div id="acaoSheetPed" class="acao-sheet">
                         <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
                         <div class="form-row form-row-2col">
-                            <div class="form-group quando-group">
+                            <div class="form-group">
                                 <label>Quando?</label>
-                                <div class="quando-campos">
-                                    <input type="date" id="horaPedData" aria-label="Data da carona">
-                                    <input type="time" id="horaPedHora" step="300" aria-label="Horário da carona">
-                                </div>
-                                <small class="quando-dica">Em branco = pedir agora · preencha os dois para agendar</small>
+                                <input type="datetime-local" id="horaPed" step="300" aria-label="Data e hora da carona">
                             </div>
                             <div class="form-group">
                                 <label>Quantas pessoas?</label>
@@ -1417,36 +1413,32 @@
         }
     }
 
-    function inicializarQuandoPed() {
-        const data = document.getElementById('horaPedData');
-        const hora = document.getElementById('horaPedHora');
-        if (!data) return;
-        const hoje = new Date();
+    function formatDatetimeLocal(d) {
         const pad = (n) => String(n).padStart(2, '0');
-        data.min = `${hoje.getFullYear()}-${pad(hoje.getMonth() + 1)}-${pad(hoje.getDate())}`;
-        data.value = '';
-        if (hora) hora.value = '';
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
-    // Lê data + hora como horário LOCAL (evita bug de fuso no datetime-local do iPhone).
+    function inicializarQuandoPed() {
+        const el = document.getElementById('horaPed');
+        if (!el) return;
+        const agora = new Date();
+        el.min = formatDatetimeLocal(agora);
+        el.value = formatDatetimeLocal(agora);
+    }
+
+    // Lê datetime-local como horário LOCAL (evita bug de fuso no iPhone com new Date(string)).
     function lerHorarioPedido() {
-        const dataVal = document.getElementById('horaPedData')?.value?.trim() || '';
-        const horaVal = document.getElementById('horaPedHora')?.value?.trim() || '';
-        if (!dataVal && !horaVal) return { iso: null, local: null };
-        if (!dataVal || !horaVal) return { iso: null, local: null, incompleto: true };
-        const dm = dataVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        const tm = horaVal.match(/^(\d{2}):(\d{2})/);
-        if (!dm || !tm) return { iso: null, local: null, incompleto: true };
-        const local = new Date(+dm[1], +dm[2] - 1, +dm[3], +tm[1], +tm[2], 0, 0);
-        if (isNaN(local.getTime())) return { iso: null, local: null, incompleto: true };
+        const v = document.getElementById('horaPed')?.value?.trim() || '';
+        if (!v) return { iso: null, local: null };
+        const m = v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        if (!m) return { iso: null, local: null, invalido: true };
+        const local = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+        if (isNaN(local.getTime())) return { iso: null, local: null, invalido: true };
         return { iso: local.toISOString(), local };
     }
 
     function limparQuandoPed() {
-        const d = document.getElementById('horaPedData');
-        const h = document.getElementById('horaPedHora');
-        if (d) d.value = '';
-        if (h) h.value = '';
+        inicializarQuandoPed();
     }
 
     /* -------- pedir carona -------- */
@@ -1504,11 +1496,11 @@
         }
         const origem = selPed.getOrigem();
         const hor = lerHorarioPedido();
-        if (hor.incompleto) {
-            return msg('Para agendar, preencha data e horário. Deixe os dois em branco para pedir agora.', 'error');
-        }
-        if (hor.local && hor.local.getTime() <= Date.now() + 60000) {
-            return msg('Escolha um horário futuro para agendar, ou deixe em branco para pedir agora.', 'error');
+        if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
+        const margemAgenda = 60000;
+        const ehAgendado = hor.local && hor.local.getTime() > Date.now() + margemAgenda;
+        if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
+            return msg('Escolha um horário futuro para agendar.', 'error');
         }
         const soltar = travarBotao('btnCtaPedir', 'Abrindo a câmera…');
         if (!soltar) return;   // já tem um pedido em andamento
@@ -1518,7 +1510,7 @@
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-                horario: hor.iso, pessoas: +document.getElementById('pessoasPed').value || 1,
+                horario: ehAgendado ? hor.iso : null, pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
             };
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
@@ -1526,7 +1518,7 @@
             if (!r.ok) return msg(d.error || 'Erro', 'error');
             // Limpa o horário escolhido: evita AGENDAR o próximo pedido sem querer
             // (um horário futuro deixado no campo esconde o pedido dos motoristas).
-            const eraAgendado = hor.local && hor.local.getTime() > Date.now() + 60000;
+            const eraAgendado = ehAgendado;
             limparQuandoPed();
             document.getElementById('acaoSheetPed').classList.add('collapsed');
             if (eraAgendado) {

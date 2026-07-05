@@ -356,20 +356,6 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
 }
-.quando-campos {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-.quando-dica {
-    display: block;
-    margin-top: 6px;
-    font-size: 0.78rem;
-    color: #64748b;
-    line-height: 1.35;
-}
-.theme-dark .quando-dica { color: #9aa0a6; }
-.quando-group { margin-bottom: 12px; }
 .map-stage-motorista .map-search-wrap,
 .map-stage-motorista .map-search-float { display: none !important; }
 .online-status {
