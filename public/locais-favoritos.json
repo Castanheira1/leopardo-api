@@ -99,6 +99,15 @@
               "google": true
             },
             {
+              "nome": "Usina C",
+              "busca": "Usina C",
+              "ref": {
+                "lat": -6.44626,
+                "lng": -50.250832
+              },
+              "google": true
+            },
+            {
               "nome": "Britagem Terciária B",
               "busca": "Britagem Terciária B S11D",
               "ref": {
