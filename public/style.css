@@ -530,14 +530,14 @@ a.btn { display: inline-block; text-align: center; }
 .map-search-float:focus {
     border-radius: 999px;
 }
-/* Wrapper do PlaceAutocompleteElement: pill centralizado, margem lateral */
+/* Wrapper do PlaceAutocompleteElement: pill quase de ponta a ponta */
 .map-search-wrap {
     position: absolute;
-    top: 6px;
+    top: 4px;
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 44px);
-    max-width: 292px;
+    width: calc(100% - 12px);
+    max-width: none;
     z-index: 40;
     border-radius: 999px;
     overflow: hidden;
@@ -548,7 +548,7 @@ gmp-place-autocomplete.map-search-float {
     width: 100%;
     margin: 0;
     border-radius: 999px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    box-shadow: none;
     overflow: hidden;
     --gmp-mat-color-surface: #fff;
     --gmp-mat-color-on-surface: #111;
