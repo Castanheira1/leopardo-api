@@ -335,11 +335,11 @@
     </div>
 
     <!-- "Chamando…" — modo chamada estilo Uber (espera aceite / procura motorista) -->
-    <div id="modalChamando" class="cam-overlay" style="display:none;">
-        <!-- Vitrine de anúncios da empresa: ocupa a área do mapa (topo) enquanto
-             procura motorista. Foto parada; troca sozinha se houver mais de uma. -->
+    <div id="modalChamando" class="cam-overlay chamando-overlay" style="display:none;">
+        <!-- Vitrine de anúncios: ocupa o espaço livre acima do painel de busca.
+             Posters verticais aparecem inteiros (contain); troca sozinha se houver mais de uma. -->
         <div id="chamandoAds" class="chamando-ads" style="display:none;">
-            <img id="chamandoAdImg" class="chamando-ad-img" alt="">
+            <img id="chamandoAdImg" class="chamando-ad-img" alt="" decoding="async" fetchpriority="low">
             <div id="chamandoAdTitulo" class="chamando-ad-titulo"></div>
         </div>
         <div class="cam-box chamando-box">
@@ -1630,18 +1630,28 @@
         return anunciosEsperaCache;
     }
 
-    function pintarAnuncio(a) {
+    function preCarregarAnuncio(url) {
+        if (!url) return;
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+    }
+
+    function pintarAnuncio(a, proximoUrl) {
         const img = document.getElementById('chamandoAdImg');
         const tit = document.getElementById('chamandoAdTitulo');
-        img.classList.remove('trocando');
-        // pequeno fade: some, troca a fonte, reaparece
-        img.classList.add('trocando');
-        setTimeout(() => {
-            img.src = a.imagem_url;
+        if (!img) return;
+        const mostrar = () => {
             tit.textContent = a.titulo || '';
             tit.style.display = a.titulo ? '' : 'none';
             img.classList.remove('trocando');
-        }, 180);
+            if (proximoUrl) preCarregarAnuncio(proximoUrl);
+        };
+        img.classList.add('trocando');
+        img.onload = () => { img.onload = null; img.onerror = null; mostrar(); };
+        img.onerror = () => { img.onload = null; img.onerror = null; mostrar(); };
+        img.src = a.imagem_url;
+        if (img.complete) { img.onload = null; img.onerror = null; mostrar(); }
     }
 
     async function iniciarAnunciosEspera() {
@@ -1653,14 +1663,13 @@
         anuncioIdx = 0;
         const img = document.getElementById('chamandoAdImg');
         const tit = document.getElementById('chamandoAdTitulo');
-        img.src = ads[0].imagem_url;
-        tit.textContent = ads[0].titulo || '';
-        tit.style.display = ads[0].titulo ? '' : 'none';
-        box.style.display = 'block';
+        box.style.display = 'flex';
+        pintarAnuncio(ads[0], ads[1] && ads[1].imagem_url);
         if (ads.length > 1) {
             anuncioTimer = setInterval(() => {
                 anuncioIdx = (anuncioIdx + 1) % ads.length;
-                pintarAnuncio(ads[anuncioIdx]);
+                const prox = ads[(anuncioIdx + 1) % ads.length].imagem_url;
+                pintarAnuncio(ads[anuncioIdx], prox);
             }, INTERVALO_ANUNCIO_MS);
         }
     }
@@ -1668,6 +1677,13 @@
     function pararAnunciosEspera() {
         if (anuncioTimer) { clearInterval(anuncioTimer); anuncioTimer = null; }
         const box = document.getElementById('chamandoAds');
+        const img = document.getElementById('chamandoAdImg');
+        if (img) {
+            img.onload = null;
+            img.onerror = null;
+            img.removeAttribute('src');
+            img.classList.remove('trocando');
+        }
         if (box) box.style.display = 'none';
     }
     async function cancelarChamando() {
