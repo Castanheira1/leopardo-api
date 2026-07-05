@@ -1162,48 +1162,44 @@ body.theme-dark {
 }
 
 /* ============================================================
-   Moldura de iPhone no computador (só o app OPERACIONAL).
-   No celular, nada muda. No desktop (>= 1024px), as páginas com
-   a classe .app-mobile são renderizadas como um aparelho iPhone
-   centralizado — ótimo para apresentação. O admin (admin.html) NÃO
-   recebe a classe, então continua em desktop cheio.
-   O transform no body faz os overlays position:fixed ficarem
-   contidos dentro da moldura (senão escapariam pra tela toda).
+   Desktop (>= 1024px): layout em tela cheia, sem moldura de celular.
+   O app operacional e as páginas de login/cadastro usam a viewport
+   inteira. O painel admin (admin.html) já era desktop cheio.
    ============================================================ */
 @media (min-width: 1024px) {
-    html:has(body.app-mobile) {
+    /* Dashboard / mapa: ocupa toda a largura da janela */
+    body.theme-dark {
+        width: 100%;
+        max-width: none;
         min-height: 100vh;
-        background:
-            radial-gradient(1200px 600px at 50% -10%, #23252b 0%, #15161a 55%, #0e0f12 100%);
+        min-height: 100dvh;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
     }
-    body.app-mobile {
-        width: 402px;
-        height: 858px;
-        max-height: calc(100vh - 40px);
-        margin: 20px auto;
-        position: relative;
-        overflow: hidden;                 /* o "aparelho" recorta; áreas internas rolam */
-        border: 14px solid #0a0a0c;
-        border-radius: 54px;
-        box-shadow:
-            0 0 0 2px #303036,
-            0 40px 90px rgba(0, 0, 0, 0.55),
-            0 8px 24px rgba(0, 0, 0, 0.4);
-        scrollbar-width: none;
+    .theme-dark .container {
+        max-width: none;
+        padding: 0;
+        margin: 0;
     }
-    body.app-mobile::-webkit-scrollbar { width: 0; height: 0; display: none; }
-    /* Páginas de conteúdo (login, cadastro, histórico…) rolam dentro da moldura.
-       O dashboard (theme-dark) é tela fixa e mantém overflow:hidden. */
-    body.app-mobile:not(.theme-dark) {
-        overflow-y: auto;
-        overflow-x: hidden;
+    .theme-dark .map-stage {
+        margin: 0;
     }
-    /* theme-dark já é flex-column de altura cheia: ao limitar o body,
-       o mapa e as folhas se ajustam sozinhos. Só reforçamos o conter. */
-    body.theme-dark.app-mobile {
-        transform: translateZ(0);
+    .theme-dark .nav-container {
+        max-width: none;
+        padding: 0 24px;
     }
-    body.app-mobile:not(.theme-dark) {
-        transform: translateZ(0);
+    /* Modais e overlays: largura confortável em telas largas */
+    .cam-box {
+        max-width: min(560px, calc(100% - 32px));
+    }
+    .papel-box {
+        max-width: min(480px, calc(100% - 32px));
+    }
+    /* Páginas claras (histórico etc.): conteúdo centralizado */
+    .container {
+        max-width: 1200px;
+        padding: 0 24px 40px;
     }
 }
