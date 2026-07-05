@@ -1242,6 +1242,8 @@
         }, 10000);
         let destino = null;
         const mkDestino = criarMarcador({ map, label: 'B', title: 'Destino' });
+        let previewTimer = null;
+        let previewSeq = 0;
 
         const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 });
         const rotaInfo = document.createElement('div');
@@ -1265,8 +1267,27 @@
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
+        function preVisualizarDestino(pos) {
+            const seq = ++previewSeq;
+            if (previewTimer) clearTimeout(previewTimer);
+            const zoomVolta = Math.max(16, map.getZoom() || 16);
+
+            map.panTo(pos);
+            map.setZoom(Math.max(18, zoomVolta));
+
+            previewTimer = setTimeout(() => {
+                if (seq !== previewSeq) return;
+                const origem = mkOrigem.getPosition();
+                if (!origem) return;
+                map.panTo({ lat: origem.lat(), lng: origem.lng() });
+                map.setZoom(zoomVolta);
+            }, 4000);
+        }
+
         function limparRota() {
             destino = null;
+            previewSeq++;
+            if (previewTimer) clearTimeout(previewTimer);
             mkDestino.setMap(null);
             rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
@@ -1281,7 +1302,7 @@
             mkDestino.setPosition(pos);
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
             map.panTo(pos);
-            tracarRota();
+            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos));
             if (onDestino) onDestino(destino);
             // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
             if (!nomeDestino) {
