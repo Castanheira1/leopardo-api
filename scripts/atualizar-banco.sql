@@ -67,6 +67,24 @@ ALTER TABLE viagens ADD COLUMN IF NOT EXISTS fase TEXT DEFAULT 'encontro';
 ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP;
 ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS vagas INTEGER DEFAULT 1;
 
+CREATE TABLE IF NOT EXISTS eventos_uso (
+    id SERIAL PRIMARY KEY,
+    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    evento VARCHAR(64) NOT NULL,
+    detalhes JSONB,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS contatos_motorista (
+    id SERIAL PRIMARY KEY,
+    motorista_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    passageiro_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    mensagem TEXT,
+    lido BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_contatos_motorista_pend ON contatos_motorista (motorista_id, lido, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_eventos_uso_usuario ON eventos_uso (usuario_id, created_at DESC);
+
 -- Admin padrão com escopo S11D
 UPDATE usuarios
 SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1),

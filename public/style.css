@@ -362,14 +362,6 @@ body {
     margin: 0 0 10px;
     line-height: 1.35;
 }
-.online-dica {
-    display: block;
-    margin: -6px 0 10px;
-    font-size: 0.78rem;
-    color: #64748b;
-    line-height: 1.35;
-}
-.theme-dark .online-dica { color: #9aa0a6; }
 .acao-sheet .form-group input,
 .acao-sheet .form-group select,
 .acao-sheet .form-group textarea,
@@ -907,9 +899,34 @@ body.theme-dark {
 .sheet-acoes .btn { flex: 1; padding: 13px; }
 
 /* Barra de modo (título + menu na mesma linha) */
-.modo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px 8px; flex-wrap: nowrap; }
+.modo-bar { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 10px 14px 8px; flex-wrap: nowrap; }
 .modo-bar-direita { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
-.modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; line-height: 38px; }
+.modo-titulo { color: #EAD298; font-weight: 700; font-size: 1.05rem; line-height: 38px; flex-shrink: 0; }
+.modo-indicador {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: 2px;
+    border: 1px solid rgba(255,255,255,0.18);
+}
+.modo-indicador--geral {
+    background: #facc15;
+    animation: pulso-modo-geral 1.35s ease-in-out infinite;
+}
+.modo-indicador--destino {
+    background: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+    animation: pulso-modo-destino 2s ease-in-out infinite;
+}
+@keyframes pulso-modo-geral {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.55); transform: scale(1); }
+    50% { box-shadow: 0 0 0 7px rgba(250, 204, 21, 0); transform: scale(1.06); }
+}
+@keyframes pulso-modo-destino {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35); }
+    50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
 .modo-acoes { display: flex; gap: 8px; align-items: center; }
 
 /* Ações de motorista no modal de perfil */

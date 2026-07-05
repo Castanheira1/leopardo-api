@@ -90,6 +90,7 @@
         <div class="dashboard">
             <div class="modo-bar">
                 <span id="modoTitulo" class="modo-titulo">Carona</span>
+                <span id="indicadorModoMotorista" class="modo-indicador modo-indicador--geral" style="display:none;" aria-hidden="true"></span>
                 <div class="modo-bar-direita">
                     <div class="modo-acoes">
                         <button class="btn btn-secondary btn-sm" id="btnViagemAndamento" style="display:none;" onclick="showTab('tabViagem')">Em andamento</button>
@@ -152,7 +153,6 @@
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
-                        <small id="dicaOferecer" class="online-dica">Sem destino = online em 600 m · com destino = visível em 10 km</small>
                         <p id="statusMotoristaOnline" class="online-status" style="display:none;"></p>
                         <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block" onclick="toggleModoMotoristaOnline()">Oferecer carona</button>
                     </div>
@@ -320,6 +320,7 @@
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharCarro()">Fechar</button>
                 <button type="button" class="btn btn-primary" id="btnPedirCarroMapa" onclick="pedirCaronaDoCarro()">Pedir esta carona</button>
+                <button type="button" class="btn btn-primary" id="btnWhatsMotoristaMapa" onclick="solicitarContatoMotorista()" style="display:none;">Falar no WhatsApp</button>
             </div>
         </div>
     </div>
@@ -898,6 +899,7 @@
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
         document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+        atualizarIndicadorModoOperante();
         if (papel === 'motorista') {
             carregarHabilitacao().then(() => verificarRetomarMotorista());
         } else {
@@ -1430,7 +1432,7 @@
         if (selOfe) return selOfe;
         if (initOfePromise) return initOfePromise;
         initOfePromise = (async () => {
-            selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarDicaOferecer);
+            selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
             tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
@@ -1769,20 +1771,43 @@
         document.getElementById('carroRota').innerHTML = temRota
             ? `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(m.origem_texto || 'Local do motorista')}</div>`
               + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(m.destino_texto || 'Destino no mapa')}</div>`
-            : `<div style="color:#cfd2d6;">Motorista online e disponível na sua região. Use <b>Pedir carona</b> no mapa para solicitar.</div>`;
+            : `<div style="color:#cfd2d6;">Motorista disponível na sua região. Toque abaixo para combinar destino no WhatsApp.</div>`;
         const placa = document.getElementById('carroPlaca');
         placa.textContent = m.placa || '';
         placa.style.display = m.placa ? 'inline-block' : 'none';
         const foto = document.getElementById('carroFoto');
         if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
+        const btnWa = document.getElementById('btnWhatsMotoristaMapa');
         if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
+        if (btnWa) btnWa.style.display = temRota ? 'none' : '';
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
         const d = m.destino_lat != null ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
         desenharRotaMini('carroMapa', o, d);
     }
     function fecharCarro() { document.getElementById('modalCarro').style.display = 'none'; }
+    async function solicitarContatoMotorista() {
+        const m = carroSel;
+        if (!m || m.carona_id) return msg('Esse motorista não está mais disponível.', 'error');
+        if (!user.telefone) return msg('Adicione seu WhatsApp no Perfil para continuar', 'error');
+        const btn = document.getElementById('btnWhatsMotoristaMapa');
+        if (btn) { btn.disabled = true; btn.textContent = 'Abrindo…'; }
+        try {
+            const r = await fetchWithAuth('/api/motoristas-online/' + m.id + '/contato', { method: 'POST', body: '{}' });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            const texto = encodeURIComponent(d.mensagem || 'Olá, qual é o seu destino agora?');
+            const url = linkWhatsApp(d.telefone) + '?text=' + texto;
+            window.open(url, '_blank');
+            fecharCarro();
+            msg('WhatsApp aberto — combine o destino com o motorista.');
+        } catch (_) {
+            msg('Erro de conexão. Tente novamente.', 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Falar no WhatsApp'; }
+        }
+    }
     async function pedirCaronaDoCarro() {
         const m = carroSel;
         fecharCarro();
@@ -1800,26 +1825,36 @@
         return Math.min(6, Math.max(1, +document.getElementById('vagasOfe')?.value || 1));
     }
 
-    function atualizarDicaOferecer(dest) {
-        const dica = document.getElementById('dicaOferecer');
-        if (!dica || motoristaOnlineModo) return;
-        dica.textContent = dest
-            ? 'Com destino — visível em 10 km para quem pede carona nessa direção'
-            : 'Sem destino = online em 600 m · com destino = visível em 10 km';
+    function registrarEventoUso(evento, detalhes) {
+        fetchWithAuth('/api/eventos-uso', {
+            method: 'POST',
+            body: JSON.stringify({ evento, detalhes: detalhes || null }),
+        }).catch(() => {});
+    }
+
+    function atualizarIndicadorModoOperante() {
+        const el = document.getElementById('indicadorModoMotorista');
+        if (!el) return;
+        const ehMotorista = document.getElementById('modoTitulo')?.textContent === 'Motorista';
+        if (!ehMotorista) { el.style.display = 'none'; return; }
+        el.style.display = 'inline-block';
+        el.removeAttribute('aria-hidden');
+        const dest = selOfe && selOfe.getDestino ? selOfe.getDestino() : null;
+        const modoDestino = motoristaModoDestino || !!(dest && dest.lat != null);
+        el.classList.toggle('modo-indicador--geral', !modoDestino);
+        el.classList.toggle('modo-indicador--destino', modoDestino);
     }
 
     function atualizarUiMotoristaOnline() {
         const btn = document.getElementById('btnCtaOferecer');
         const st = document.getElementById('statusMotoristaOnline');
         const vagasEl = document.getElementById('vagasOfe');
-        const dica = document.getElementById('dicaOferecer');
         if (btn) {
             btn.textContent = motoristaOnlineModo ? 'Encerrar' : 'Oferecer carona';
             btn.classList.toggle('btn-danger', motoristaOnlineModo);
             btn.classList.toggle('btn-primary', !motoristaOnlineModo);
         }
         if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
-        if (dica) dica.style.display = motoristaOnlineModo ? 'none' : 'block';
         if (st) {
             if (!motoristaOnlineModo) {
                 st.style.display = 'none';
@@ -1835,6 +1870,7 @@
                 }
             }
         }
+        atualizarIndicadorModoOperante();
     }
 
     async function ativarWakeLock() {
@@ -1889,8 +1925,10 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map);
             iniciarPedidosAoVivo(selOfe.map);
+            iniciarPollContatosMotorista();
             await ativarWakeLock();
             registrarPush();
+            registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
             msg('Você está online — pedidos em 600 m.');
         } catch (_) {
             msg('Erro de conexão. Tente novamente.', 'error');
@@ -1907,12 +1945,13 @@
         motoristaModoDestino = false;
         motoristaOnlineModo = false;
         atualizarUiMotoristaOnline();
+        pararPollContatosMotorista();
         await fetchWithAuth('/api/motorista/online', { method: 'DELETE' }).catch(() => {});
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         Object.values(pedidoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
         pedidoFleet.markers = {};
         if (selOfe && selOfe.limparRota) selOfe.limparRota();
-        atualizarDicaOferecer(null);
+        atualizarIndicadorModoOperante();
         await liberarWakeLock();
         if (!silencioso) msg('Modo online encerrado.');
     }
@@ -1953,8 +1992,10 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map);
             iniciarPedidosAoVivo(selOfe.map);
+            iniciarPollContatosMotorista();
             await ativarWakeLock();
             registrarPush();
+            registrarEventoUso('motorista_modo_destino', { vagas, destino: dest.texto || null });
             msg('Publicado! Visível em 10 km para quem pede carona nessa direção.');
             document.getElementById('acaoSheetOfe').classList.add('collapsed');
         } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
@@ -1984,6 +2025,7 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map);
             iniciarPedidosAoVivo(selOfe.map);
+            if (!motoristaModoDestino) iniciarPollContatosMotorista();
             await ativarWakeLock();
         } catch (_) {}
     }
@@ -2705,6 +2747,16 @@
         '<path d="M22.5 54.5 Q26 56.5 32 56.5 T41.5 54.5 L41 56.8 Q32 59 23 56.8 Z" fill="#e0524d"/>' +
         '</svg>'
     );
+    const CAR_ICON_GOLD_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 64 64">' +
+        '<defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.5" stop-color="#EAD298"/><stop offset="1" stop-color="#c9a227"/></linearGradient></defs>' +
+        '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.18"/>' +
+        '<path d="M32 4 C23 4 17 10 16 21 C15 33 16 46 19 54 C21 59 43 59 45 54 C48 46 49 33 48 21 C47 10 41 4 32 4 Z" fill="url(#cg)" stroke="#fff8dc" stroke-width="1.6"/>' +
+        '<path d="M24 7 Q32 5 40 7 L39 10 Q32 8 25 10 Z" fill="#fff8dc"/>' +
+        '<rect x="24" y="28" width="16" height="14" rx="5" fill="#8a6d1f" opacity="0.35"/>' +
+        '<path d="M23 52 Q32 56 41 52 L41 55 Q32 58 23 55 Z" fill="#e0524d"/>' +
+        '</svg>'
+    );
 
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {
@@ -2738,9 +2790,10 @@
                         item.car.setPosition(pos);
                         if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
                     } else {
+                        const icon = m.carona_id ? CAR_ICON_URL : CAR_ICON_GOLD_URL;
                         const car = criarMarcador({
-                            position: pos, map, icon: CAR_ICON_URL,
-                            title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ''),
+                            position: pos, map, icon,
+                            title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
                         const abrir = () => mostrarCaronaDoCarro(fleet.markers[m.id].m);
                         car.addListener('click', abrir);
@@ -2949,6 +3002,41 @@
         selfCar.timer = setInterval(upd, 5000);
     }
 
+    let contatoPollTimer = null;
+    let ultimoContatoId = 0;
+
+    async function pollContatosMotoristaOnce() {
+        if (!motoristaOnlineModo || motoristaModoDestino) return;
+        try {
+            const r = await fetchWithAuth('/api/motorista/contatos/novos?desde=' + ultimoContatoId);
+            if (!r.ok) return;
+            const lista = await r.json();
+            for (const c of lista) {
+                ultimoContatoId = Math.max(ultimoContatoId, c.id);
+                buzinar();
+                abrirWhatsAppPassageiro(c);
+            }
+        } catch (_) {}
+    }
+
+    function iniciarPollContatosMotorista() {
+        if (motoristaModoDestino) return;
+        if (contatoPollTimer) return;
+        pollContatosMotoristaOnce();
+        contatoPollTimer = setInterval(pollContatosMotoristaOnce, 6000);
+    }
+
+    function pararPollContatosMotorista() {
+        if (contatoPollTimer) { clearInterval(contatoPollTimer); contatoPollTimer = null; }
+    }
+
+    function abrirWhatsAppPassageiro(c) {
+        if (!c.passageiro_telefone) return;
+        msg((c.passageiro_nome || 'Passageiro') + ' quer falar no WhatsApp — abrindo chat…');
+        window.open(linkWhatsApp(c.passageiro_telefone), '_blank');
+        fetchWithAuth('/api/motorista/contatos/' + c.id + '/lido', { method: 'POST' }).catch(() => {});
+    }
+
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
     let broadcastTimer = null;
     let broadcastModoOnline = false;
@@ -3016,9 +3104,20 @@
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 pollPropostas();
-                if (motoristaOnlineModo) refreshModoMotoristaOnline();
+                if (motoristaOnlineModo) {
+                    refreshModoMotoristaOnline();
+                    pollContatosMotoristaOnce();
+                }
             }
         });
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (ev) => {
+                if (ev.data && ev.data.action === 'contato_whatsapp') {
+                    buzinar();
+                    pollContatosMotoristaOnce();
+                }
+            });
+        }
     })();
     </script>
 </body>
