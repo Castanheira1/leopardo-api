@@ -1892,10 +1892,13 @@
         const r = await fetchWithAuth('/api/propostas/' + id + '/aceitar', { method: 'POST' });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg('Aceito! Contato liberado.');
         loadPropostas();
-        // Já entra no rastreamento: a viagem foi criada no aceite.
-        if (d.viagem_id) { viagensAbertas.add(d.viagem_id); abrirViagem(d.viagem_id); }
+        if (d.viagem_id) {
+            const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
+            if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+        } else {
+            msg('Erro ao iniciar a viagem. Tente novamente.', 'error');
+        }
     }
     async function recusarProposta(id) {
         const r = await fetchWithAuth('/api/propostas/' + id + '/recusar', { method: 'POST' });
@@ -1906,6 +1909,26 @@
     let solicitacaoAtual = null;
     const propostasTratadas = new Set();
     const viagensAbertas = new Set(); // viagens já abertas no rastreamento (não reabre sozinha)
+    function viagemKey(id) { return String(id); }
+    function viagemJaAberta(id) { return viagensAbertas.has(viagemKey(id)); }
+    function marcarViagemAberta(id) { viagensAbertas.add(viagemKey(id)); }
+    function propostaAceitaComViagem(p) {
+        return p && p.status === 'aceito' && p.viagem_id && p.viagem_status === 'em_andamento';
+    }
+    async function entrarNaViagem(viagemId, mensagem) {
+        if (viagemJaAberta(viagemId) && viagemView && viagemKey(viagemView.id) === viagemKey(viagemId)) return true;
+        fecharChamando();
+        solicitacaoAtual = null;
+        document.getElementById('modalSolicitacao').style.display = 'none';
+        document.getElementById('modalChamando').style.display = 'none';
+        const ok = await abrirViagem(viagemId);
+        if (ok) {
+            if (mensagem) msg(mensagem);
+            return true;
+        }
+        viagensAbertas.delete(viagemKey(viagemId));
+        return false;
+    }
     function mostrarSolicitacao(p) {
         buzinar();   // chegou gente pedindo: toca e vibra
         solicitacaoAtual = p;
@@ -1934,10 +1957,15 @@
         const r = await fetchWithAuth('/api/propostas/' + p.id + '/' + (aceito ? 'aceitar' : 'recusar'), { method: 'POST' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        msg(aceito ? 'Aceito! Contato liberado.' : 'Solicitação recusada.');
         loadPropostas();
-        // Aceitou pelo card estilo Uber → já abre o rastreamento ao vivo.
-        if (aceito && d.viagem_id) { viagensAbertas.add(d.viagem_id); abrirViagem(d.viagem_id); }
+        if (aceito && d.viagem_id) {
+            const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
+            if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+        } else if (aceito) {
+            msg('Erro ao iniciar a viagem. Tente novamente.', 'error');
+        } else {
+            msg('Solicitação recusada.');
+        }
     }
     async function pollPropostas() {
         if (document.hidden) return;   // app em segundo plano: não consome rede
@@ -1946,35 +1974,42 @@
             if (!r || !r.ok) return;
             const props = await r.json();
 
-            // Chamando…: fecha se a proposta foi recusada (some também quando aceita,
-            // pois o bloco "viva" abaixo abre a viagem).
+            // Chamando…: trata aceite (entra na viagem) ou recusa (fecha a espera).
             if (chamandoId) {
-                const cp = props.find(p => p.id === chamandoId);
-                if (!cp || cp.status === 'recusado') { fecharChamando(); if (cp) msg('Não foi aceito desta vez.', 'error'); }
+                const cp = props.find(p => String(p.id) === String(chamandoId));
+                if (cp && propostaAceitaComViagem(cp) && !viagemJaAberta(cp.viagem_id)) {
+                    propostasTratadas.add(cp.id);
+                    const ok = await entrarNaViagem(cp.viagem_id, 'Carona aceita! Acompanhe ao vivo.');
+                    if (ok) return;
+                }
+                if (!cp || cp.status === 'recusado') {
+                    if (cp && cp.status === 'recusado') {
+                        fecharChamando();
+                        msg('Não foi aceito desta vez.', 'error');
+                    }
+                }
             }
-            // Procurando motorista (pedido): se um motorista ofereceu, fecha a chamada
-            // para a oferta aparecer (modalSolicitacao abre logo abaixo).
+            // Procurando motorista (pedido): oferta pendente OU viagem já confirmada.
             if (chamandoPedidoId) {
-                const oferta = props.find(p => p.pedido_id === chamandoPedidoId && p.sou_destinatario && p.status === 'pendente');
+                const aceita = props.find(p => String(p.pedido_id) === String(chamandoPedidoId)
+                    && propostaAceitaComViagem(p));
+                if (aceita && !viagemJaAberta(aceita.viagem_id)) {
+                    propostasTratadas.add(aceita.id);
+                    const ok = await entrarNaViagem(aceita.viagem_id, 'Carona confirmada! Acompanhe ao vivo.');
+                    if (ok) return;
+                }
+                const oferta = props.find(p => String(p.pedido_id) === String(chamandoPedidoId)
+                    && p.sou_destinatario && p.status === 'pendente');
                 if (oferta) { fecharChamando(); msg('Um motorista ofereceu carona!'); }
             }
 
             // Carona aceita com viagem EM ANDAMENTO → entra na tela de viagem ao vivo
-            // SOZINHO, com PRIORIDADE sobre qualquer painel/aba/card aberto: o passageiro
-            // não precisa fazer nada quando o motorista inicia. Só não interrompe uma
-            // captura de selfie em andamento. (Só viagens em andamento — não conta
-            // proposta antiga cuja viagem já concluiu, o que causava "aceite falso".)
-            const viva = props.find(p => p.status === 'aceito' && p.viagem_id
-                && p.viagem_status === 'em_andamento' && !viagensAbertas.has(p.viagem_id));
+            // SOZINHO, com PRIORIDADE sobre qualquer painel/aba/card aberto.
+            const viva = props.find(p => propostaAceitaComViagem(p) && !viagemJaAberta(p.viagem_id));
             if (viva && !document.querySelector('.cam-video')) {
-                viagensAbertas.add(viva.viagem_id);
                 propostasTratadas.add(viva.id);
-                solicitacaoAtual = null;
-                document.getElementById('modalSolicitacao').style.display = 'none';
-                fecharChamando();
-                msg('Carona aceita! Acompanhe ao vivo.');
-                abrirViagem(viva.viagem_id);
-                return;
+                const ok = await entrarNaViagem(viva.viagem_id, 'Carona aceita! Acompanhe ao vivo.');
+                if (ok) return;
             }
 
             // não atropela: escolha de papel, câmera, perfil ou um card já aberto
@@ -2019,14 +2054,23 @@
     }
 
     async function abrirViagem(viagemId) {
-        const r = await fetchWithAuth('/api/viagens/' + viagemId);
-        const v = await r.json();
-        // Viagem encerrada não abre tela nenhuma: fica SÓ no histórico do menu.
-        if (!v || v.status !== 'em_andamento') { viagensAbertas.add(viagemId); return; }
+        const id = viagemKey(viagemId);
+        if (viagemJaAberta(id) && viagemView && viagemKey(viagemView.id) === id) return true;
+        let v;
+        try {
+            const r = await fetchWithAuth('/api/viagens/' + viagemId);
+            v = await r.json().catch(() => null);
+            if (!r.ok || !v || v.status !== 'em_andamento') return false;
+        } catch (_) {
+            return false;
+        }
+        marcarViagemAberta(id);
+        fecharChamando();
 
         // Mostra a aba da viagem e encerra loops de outras telas (sem marcadores órfãos).
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
+        document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         if (selfCar.timer) { clearInterval(selfCar.timer); selfCar.timer = null; }
@@ -2075,9 +2119,10 @@
         if (v.status === 'em_andamento') { if (btnRec) btnRec.style.display = 'flex'; }
         else { if (btnRec) btnRec.style.display = 'none'; if (navBar) navBar.style.display = 'none'; }
 
-        if (v.status !== 'em_andamento') { /* concluída: só mostra os pinos */ }
-        else { iniciarViagemLoop(); if (viagemView.ehMotorista) navegarApp(); }   // motorista já entra navegando
+        iniciarViagemLoop();
+        if (viagemView.ehMotorista) navegarApp();   // motorista já entra navegando
         initSheetDrag();
+        return true;
     }
 
     // Alvo atual da rota: na fase "encontro" o carro vai até o passageiro (posição
@@ -2672,7 +2717,6 @@
                 const ativa = (await r.json()).find(v => v.status === 'em_andamento');
                 if (ativa) {
                     escolherPapel(ativa.motorista_id === user.id ? 'motorista' : 'passageiro');
-                    viagensAbertas.add(ativa.id);
                     await abrirViagem(ativa.id);
                     return true;
                 }

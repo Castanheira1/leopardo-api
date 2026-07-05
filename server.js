@@ -1819,7 +1819,11 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: "Proposta não encontrada" });
     // Cria a viagem na hora do aceite: já liga os dois, habilita rastreamento e contato.
     const viagem = await criarViagemDaProposta(req.params.id);
-    res.json({ ...rows[0], viagem_id: viagem ? viagem.id : null });
+    if (!viagem) {
+      console.error("[aceitar proposta] viagem não criada para proposta", req.params.id);
+      return res.status(500).json({ error: "Não foi possível iniciar a viagem. Tente novamente." });
+    }
+    res.json({ ...rows[0], viagem_id: viagem.id });
 
     // Notifica quem fez a solicitação de que foi aceita (app pode estar fechado).
     enviarPush(rows[0].de_usuario_id, {
