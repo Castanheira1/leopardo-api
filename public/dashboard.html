@@ -1402,23 +1402,42 @@
             origemConfiavel: () => estado.gpsOk,
         };
     }
+    // Guarda contra inicialização concorrente: showTab e outros fluxos podem
+    // chamar initMap ao mesmo tempo (selOfe/selPed ainda não resolveu),
+    // criando dois seletores — e dois buscadores. O promise compartilhado dedupe.
+    let initPedirPromise = null;
+    let initOfePromise = null;
     async function initMapPedir() {
-        selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
-        iniciarFrotaAoVivo(selPed.map);
-        inicializarQuandoPed();
-        tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
-        selPed.dica();   // instrução ao abrir
+        if (selPed) return selPed;
+        if (initPedirPromise) return initPedirPromise;
+        initPedirPromise = (async () => {
+            selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
+            iniciarFrotaAoVivo(selPed.map);
+            inicializarQuandoPed();
+            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+            selPed.dica();   // instrução ao abrir
+            return selPed;
+        })();
+        try { return await initPedirPromise; }
+        finally { initPedirPromise = null; }
     }
     async function initMapOferecer() {
-        selOfe = await criarSeletor('mapOfe', 'destOfeInput', true);   // motorista = carrinho
-        tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
-        if (motoristaOnlineModo) {
-            iniciarBroadcastLocalizacao(true);
-            acompanharProprioCarro(selOfe.map);
-            iniciarPedidosAoVivo(selOfe.map);
-        } else {
-            selOfe.dica();
-        }
+        if (selOfe) return selOfe;
+        if (initOfePromise) return initOfePromise;
+        initOfePromise = (async () => {
+            selOfe = await criarSeletor('mapOfe', 'destOfeInput', true);   // motorista = carrinho
+            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+            if (motoristaOnlineModo) {
+                iniciarBroadcastLocalizacao(true);
+                acompanharProprioCarro(selOfe.map);
+                iniciarPedidosAoVivo(selOfe.map);
+            } else {
+                selOfe.dica();
+            }
+            return selOfe;
+        })();
+        try { return await initOfePromise; }
+        finally { initOfePromise = null; }
     }
 
     function formatDatetimeLocal(d) {
@@ -1855,16 +1874,6 @@
     async function toggleModoMotoristaOnline() {
         if (motoristaOnlineModo) await sairModoMotoristaOnline(false);
         else await entrarModoMotoristaOnline();
-    }
-
-    async function retomarModoMotoristaOnline() {
-        if (!selOfe) await initMapOferecer();
-        motoristaOnlineModo = true;
-        atualizarUiMotoristaOnline();
-        iniciarBroadcastLocalizacao(true);
-        acompanharProprioCarro(selOfe.map);
-        iniciarPedidosAoVivo(selOfe.map);
-        await ativarWakeLock();
     }
 
     /* -------- oferecer carona (legado: rota publicada com destino) -------- */
@@ -2887,17 +2896,6 @@
                 if (ativa) {
                     escolherPapel(ativa.motorista_id === user.id ? 'motorista' : 'passageiro');
                     await abrirViagem(ativa.id);
-                    return true;
-                }
-            }
-        } catch (_) { /* offline: cai para a escolha de papel */ }
-        try {
-            const r = await fetchWithAuth('/api/motorista/online');
-            if (r && r.ok) {
-                const st = await r.json();
-                if (st.online) {
-                    escolherPapel('motorista');
-                    await retomarModoMotoristaOnline();
                     return true;
                 }
             }
