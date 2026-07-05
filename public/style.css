@@ -751,6 +751,43 @@ body.theme-dark {
 }
 .chamando-box h3 { font-size: 1.3rem; }
 .chamando-sub { color: #cfd2d6; margin: 2px 0 20px; }
+/* Vitrine de anúncios: card na "área do mapa" (topo do overlay de busca).
+   A caixa do radar continua ancorada embaixo, intacta. */
+.chamando-ads {
+    position: absolute;
+    top: max(14px, env(safe-area-inset-top));
+    left: 12px;
+    right: 12px;
+    height: 42vh;
+    height: 42dvh;
+    max-height: 460px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #0d0d0e;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+    z-index: 2;
+}
+.chamando-ad-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: opacity 0.18s ease;
+}
+.chamando-ad-img.trocando { opacity: 0; }
+.chamando-ad-titulo {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 22px 14px 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #fff;
+    text-align: left;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0));
+}
 @keyframes radarExpand {
     0%   { width: 40px; height: 40px; margin: -20px 0 0 -20px; opacity: 0.9; }
     100% { width: 150px; height: 150px; margin: -75px 0 0 -75px; opacity: 0; }
@@ -1121,5 +1158,52 @@ body.theme-dark {
 
     .stat-card h3 {
         font-size: 2rem;
+    }
+}
+
+/* ============================================================
+   Moldura de iPhone no computador (só o app OPERACIONAL).
+   No celular, nada muda. No desktop (>= 1024px), as páginas com
+   a classe .app-mobile são renderizadas como um aparelho iPhone
+   centralizado — ótimo para apresentação. O admin (admin.html) NÃO
+   recebe a classe, então continua em desktop cheio.
+   O transform no body faz os overlays position:fixed ficarem
+   contidos dentro da moldura (senão escapariam pra tela toda).
+   ============================================================ */
+@media (min-width: 1024px) {
+    html:has(body.app-mobile) {
+        min-height: 100vh;
+        background:
+            radial-gradient(1200px 600px at 50% -10%, #23252b 0%, #15161a 55%, #0e0f12 100%);
+    }
+    body.app-mobile {
+        width: 402px;
+        height: 858px;
+        max-height: calc(100vh - 40px);
+        margin: 20px auto;
+        position: relative;
+        overflow: hidden;                 /* o "aparelho" recorta; áreas internas rolam */
+        border: 14px solid #0a0a0c;
+        border-radius: 54px;
+        box-shadow:
+            0 0 0 2px #303036,
+            0 40px 90px rgba(0, 0, 0, 0.55),
+            0 8px 24px rgba(0, 0, 0, 0.4);
+        scrollbar-width: none;
+    }
+    body.app-mobile::-webkit-scrollbar { width: 0; height: 0; display: none; }
+    /* Páginas de conteúdo (login, cadastro, histórico…) rolam dentro da moldura.
+       O dashboard (theme-dark) é tela fixa e mantém overflow:hidden. */
+    body.app-mobile:not(.theme-dark) {
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    /* theme-dark já é flex-column de altura cheia: ao limitar o body,
+       o mapa e as folhas se ajustam sozinhos. Só reforçamos o conter. */
+    body.theme-dark.app-mobile {
+        transform: translateZ(0);
+    }
+    body.app-mobile:not(.theme-dark) {
+        transform: translateZ(0);
     }
 }

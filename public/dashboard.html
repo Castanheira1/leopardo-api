@@ -69,7 +69,7 @@
         .fav-star:disabled { opacity: .5; cursor: wait; }
     </style>
 </head>
-<body class="theme-dark">
+<body class="theme-dark app-mobile">
     <nav class="navbar">
         <div class="nav-container">
             <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
@@ -336,6 +336,12 @@
 
     <!-- "Chamando…" — modo chamada estilo Uber (espera aceite / procura motorista) -->
     <div id="modalChamando" class="cam-overlay" style="display:none;">
+        <!-- Vitrine de anúncios da empresa: ocupa a área do mapa (topo) enquanto
+             procura motorista. Foto parada; troca sozinha se houver mais de uma. -->
+        <div id="chamandoAds" class="chamando-ads" style="display:none;">
+            <img id="chamandoAdImg" class="chamando-ad-img" alt="">
+            <div id="chamandoAdTitulo" class="chamando-ad-titulo"></div>
+        </div>
         <div class="cam-box chamando-box">
             <div class="chamando-radar"><span class="chamando-ring"></span><span class="chamando-ring"></span><span class="chamando-dot"></span></div>
             <h3 id="chamandoTitulo">Chamando…</h3>
@@ -1574,11 +1580,74 @@
             ? 'Avisamos os motoristas perto de você'
             : `Aguardando <strong>${esc(nome || 'o motorista')}</strong> aceitar`;
         document.getElementById('modalChamando').style.display = 'flex';
+        iniciarAnunciosEspera();
     }
     function fecharChamando() {
         chamandoId = null;
         chamandoPedidoId = null;
+        pararAnunciosEspera();
         document.getElementById('modalChamando').style.display = 'none';
+    }
+
+    /* -------- vitrine de anúncios na tela de espera (área do mapa) -------- */
+    // A foto fica parada; se houver mais de uma, troca em loop com fade num
+    // ritmo de leitura confortável (não pisca rápido).
+    const INTERVALO_ANUNCIO_MS = 7000;
+    let anunciosEsperaCache = null;   // cache em memória (evita refazer a busca)
+    let anuncioTimer = null;
+    let anuncioIdx = 0;
+
+    async function carregarAnunciosEspera() {
+        if (anunciosEsperaCache) return anunciosEsperaCache;
+        try {
+            const r = await fetchWithAuth('/api/anuncios');
+            const lista = await r.json();
+            anunciosEsperaCache = Array.isArray(lista) ? lista : [];
+        } catch (_) {
+            anunciosEsperaCache = [];
+        }
+        return anunciosEsperaCache;
+    }
+
+    function pintarAnuncio(a) {
+        const img = document.getElementById('chamandoAdImg');
+        const tit = document.getElementById('chamandoAdTitulo');
+        img.classList.remove('trocando');
+        // pequeno fade: some, troca a fonte, reaparece
+        img.classList.add('trocando');
+        setTimeout(() => {
+            img.src = a.imagem_url;
+            tit.textContent = a.titulo || '';
+            tit.style.display = a.titulo ? '' : 'none';
+            img.classList.remove('trocando');
+        }, 180);
+    }
+
+    async function iniciarAnunciosEspera() {
+        pararAnunciosEspera();
+        const ads = await carregarAnunciosEspera();
+        const box = document.getElementById('chamandoAds');
+        // Só na busca por motorista (pedido aberto) e se ainda estiver procurando.
+        if (!chamandoPedidoId || !ads.length) { box.style.display = 'none'; return; }
+        anuncioIdx = 0;
+        const img = document.getElementById('chamandoAdImg');
+        const tit = document.getElementById('chamandoAdTitulo');
+        img.src = ads[0].imagem_url;
+        tit.textContent = ads[0].titulo || '';
+        tit.style.display = ads[0].titulo ? '' : 'none';
+        box.style.display = 'block';
+        if (ads.length > 1) {
+            anuncioTimer = setInterval(() => {
+                anuncioIdx = (anuncioIdx + 1) % ads.length;
+                pintarAnuncio(ads[anuncioIdx]);
+            }, INTERVALO_ANUNCIO_MS);
+        }
+    }
+
+    function pararAnunciosEspera() {
+        if (anuncioTimer) { clearInterval(anuncioTimer); anuncioTimer = null; }
+        const box = document.getElementById('chamandoAds');
+        if (box) box.style.display = 'none';
     }
     async function cancelarChamando() {
         const prop = chamandoId, ped = chamandoPedidoId;

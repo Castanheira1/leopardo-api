@@ -284,6 +284,29 @@
         .badge.warn { background: rgba(251,191,36,.15); color: var(--warn); }
         .badge.off { background: rgba(248,113,113,.15); color: var(--crit); }
 
+        .anuncio-form { display: flex; flex-direction: column; gap: 12px; }
+        .anuncio-drop {
+            display: flex; align-items: center; justify-content: center; text-align: center;
+            min-height: 150px; padding: 14px; cursor: pointer;
+            border: 1.5px dashed var(--line); border-radius: 12px; background: var(--card-2);
+            color: var(--muted); font-size: .82rem; overflow: hidden;
+        }
+        .anuncio-drop:hover { border-color: var(--gold); color: var(--gold); }
+        .anuncio-drop img { max-width: 100%; max-height: 300px; border-radius: 8px; object-fit: contain; }
+        .anuncio-item .an-thumb {
+            width: 64px; height: 64px; border-radius: 8px; object-fit: cover;
+            flex-shrink: 0; border: 1px solid var(--line);
+        }
+        .anuncio-item { display: flex; gap: 12px; align-items: center; }
+        .anuncio-item .an-body { flex: 1; min-width: 0; }
+        .anuncio-item .an-acoes { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+        .btn-mini {
+            font-size: .72rem; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+            background: transparent; border: 1px solid var(--line); color: var(--muted);
+        }
+        .btn-mini:hover { border-color: var(--gold); color: var(--gold); }
+        .btn-mini.danger:hover { border-color: var(--crit); color: var(--crit); }
+
         .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 35; }
         .adm-overlay.open { display: block; }
 
@@ -352,6 +375,9 @@
             </button>
             <button class="adm-nav-item" data-sec="sec-operacao" onclick="irSecao('sec-operacao')">
                 <span class="ico">➤</span> Operação
+            </button>
+            <button class="adm-nav-item" data-sec="sec-anuncios" onclick="irSecao('sec-anuncios')">
+                <span class="ico">▤</span> Anúncios
             </button>
         </nav>
 
@@ -531,6 +557,49 @@
                     </div>
                 </div>
             </section>
+
+            <section id="sec-anuncios" class="adm-section">
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
+                        <div><h3>Novo anúncio</h3><p class="cap">Sobe uma foto (aviso, segurança, reconhecimento, campanha) que aparece na tela de espera dos passageiros do projeto, dentro da janela agendada.</p></div>
+                    </div>
+                    <div class="anuncio-form">
+                        <label class="anuncio-drop" id="anuncioDrop">
+                            <input type="file" id="anuncioArquivo" accept="image/png,image/jpeg,image/webp" hidden>
+                            <img id="anuncioPreview" alt="" style="display:none;">
+                            <span id="anuncioDropTxt">Toque para escolher a imagem (PNG, JPG ou WebP · até 6 MB)</span>
+                        </label>
+                        <div class="field-row" style="flex-wrap:wrap;gap:12px;">
+                            <div class="field" style="flex:1;min-width:200px;">
+                                <label>Título (opcional)</label>
+                                <input id="anuncioTitulo" maxlength="160" placeholder="Ex.: Uso obrigatório de EPI">
+                            </div>
+                            <div class="field" style="max-width:170px;">
+                                <label>Início</label>
+                                <input type="date" id="anuncioInicio">
+                            </div>
+                            <div class="field" style="max-width:170px;">
+                                <label>Fim</label>
+                                <input type="date" id="anuncioFim">
+                            </div>
+                            <div class="field" style="max-width:110px;">
+                                <label>Ordem</label>
+                                <input type="number" id="anuncioOrdem" value="0" step="1">
+                            </div>
+                        </div>
+                        <button class="btn-gold" id="btnCriarAnuncio" onclick="criarAnuncio()">Publicar anúncio</button>
+                        <div id="anuncioMsg" class="cap" style="margin-top:6px;"></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
+                        <div><h3>Anúncios do projeto</h3><p class="cap">No ar aparecem para os passageiros agora; agendados começam na data de início; expirados já passaram.</p></div>
+                    </div>
+                    <div id="listaAnuncios"><div class="empty">Carregando…</div></div>
+                </div>
+            </section>
         </div>
 
         <footer class="adm-foot">
@@ -558,6 +627,7 @@ const SECOES = {
     'sec-contrato': { titulo: 'Contrato', sub: 'Valor mensal e derivados de custo' },
     'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta (senha pelo Esqueci a senha no login)' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
+    'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
 };
 
 let cacheViagens = [];
@@ -854,12 +924,137 @@ async function desativarUsuario() {
     mostrarToast(d.message || d.error || 'Concluído', r.ok ? 'success' : 'error');
     if (r.ok) { carregarKpisEGraficos(); carregarViagens(); }
 }
+/* ---------------- Anúncios (vitrine na tela de espera) ---------------- */
+function anuncioStatus(a) {
+    const agora = Date.now();
+    const ini = new Date(a.inicio).getTime();
+    const fim = new Date(a.fim).getTime();
+    if (!a.ativo) return { cls: 'off', txt: 'Desativado' };
+    if (agora < ini) return { cls: 'warn', txt: 'Agendado' };
+    if (agora > fim) return { cls: 'off', txt: 'Expirado' };
+    return { cls: 'ok', txt: 'No ar' };
+}
+function fmtDiaBr(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function ymdInput(iso) {
+    // Converte um TIMESTAMPTZ para AAAA-MM-DD no fuso local (para preencher input date).
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function carregarAnuncios() {
+    const box = document.getElementById('listaAnuncios');
+    try {
+        const r = await fetchWithAuth('/api/admin/anuncios');
+        const lista = await r.json();
+        if (!Array.isArray(lista) || !lista.length) {
+            box.innerHTML = '<div class="empty">Nenhum anúncio ainda. Publique o primeiro acima.</div>';
+            return;
+        }
+        box.innerHTML = lista.map(a => {
+            const st = anuncioStatus(a);
+            return `<div class="item anuncio-item">
+                <img class="an-thumb" src="${esc(a.imagem_url)}" alt="">
+                <div class="an-body">
+                    <div class="top"><strong>${esc(a.titulo || 'Sem título')}</strong>
+                        <span class="badge ${st.cls}">${st.txt}</span></div>
+                    <small>${fmtDiaBr(a.inicio)} → ${fmtDiaBr(a.fim)} · ordem ${a.ordem}</small>
+                </div>
+                <div class="an-acoes">
+                    <button class="btn-mini" onclick="alternarAnuncio(${a.id}, ${a.ativo ? 'false' : 'true'})">${a.ativo ? 'Desativar' : 'Ativar'}</button>
+                    <button class="btn-mini danger" onclick="excluirAnuncio(${a.id})">Excluir</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (_) {
+        box.innerHTML = '<div class="empty">Erro ao carregar anúncios.</div>';
+    }
+}
+
+async function criarAnuncio() {
+    const msgEl = document.getElementById('anuncioMsg');
+    const arquivo = document.getElementById('anuncioArquivo').files[0];
+    const inicio = document.getElementById('anuncioInicio').value;
+    const fim = document.getElementById('anuncioFim').value;
+    msgEl.style.color = 'var(--crit)';
+    if (!arquivo) { msgEl.textContent = 'Escolha uma imagem.'; return; }
+    if (!inicio || !fim) { msgEl.textContent = 'Informe as datas de início e fim.'; return; }
+    if (fim < inicio) { msgEl.textContent = 'A data fim não pode ser anterior ao início.'; return; }
+    const fd = new FormData();
+    fd.append('imagem', arquivo);
+    fd.append('titulo', document.getElementById('anuncioTitulo').value || '');
+    fd.append('inicio', inicio);
+    fd.append('fim', fim);
+    fd.append('ordem', document.getElementById('anuncioOrdem').value || '0');
+    const btn = document.getElementById('btnCriarAnuncio');
+    btn.disabled = true; btn.textContent = 'Publicando…';
+    try {
+        const r = await fetchWithAuth('/api/admin/anuncios', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Falha ao publicar');
+        msgEl.style.color = 'var(--good)';
+        msgEl.textContent = 'Anúncio publicado!';
+        document.getElementById('anuncioArquivo').value = '';
+        document.getElementById('anuncioTitulo').value = '';
+        const prev = document.getElementById('anuncioPreview');
+        prev.style.display = 'none'; prev.src = '';
+        document.getElementById('anuncioDropTxt').style.display = '';
+        await carregarAnuncios();
+    } catch (e) {
+        msgEl.style.color = 'var(--crit)';
+        msgEl.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Publicar anúncio';
+    }
+}
+
+async function alternarAnuncio(id, ativo) {
+    try {
+        await fetchWithAuth('/api/admin/anuncios/' + id, {
+            method: 'PATCH', body: JSON.stringify({ ativo }),
+        });
+        await carregarAnuncios();
+    } catch (_) {}
+}
+
+async function excluirAnuncio(id) {
+    if (!confirm('Excluir este anúncio? A imagem também será removida.')) return;
+    try {
+        await fetchWithAuth('/api/admin/anuncios/' + id, { method: 'DELETE' });
+        await carregarAnuncios();
+    } catch (_) {}
+}
+
+(function iniAnuncioUpload() {
+    const inp = document.getElementById('anuncioArquivo');
+    if (!inp) return;
+    inp.addEventListener('change', () => {
+        const f = inp.files[0];
+        const prev = document.getElementById('anuncioPreview');
+        const txt = document.getElementById('anuncioDropTxt');
+        if (!f) { prev.style.display = 'none'; txt.style.display = ''; return; }
+        prev.src = URL.createObjectURL(f);
+        prev.style.display = '';
+        txt.style.display = 'none';
+    });
+    // Início = hoje, fim = daqui a 7 dias, como padrão amigável.
+    const hoje = new Date();
+    const mais7 = new Date(hoje.getTime() + 7 * 864e5);
+    const iniEl = document.getElementById('anuncioInicio');
+    const fimEl = document.getElementById('anuncioFim');
+    if (iniEl && !iniEl.value) iniEl.value = ymdInput(hoje);
+    if (fimEl && !fimEl.value) fimEl.value = ymdInput(mais7);
+})();
+
 async function carregarTudo() {
     await carregarContexto();
     await carregarKpisEGraficos();
     await carregarRateio();
     await carregarPushStatus();
     await carregarViagens();
+    await carregarAnuncios();
 }
 
 iniPeriodo();

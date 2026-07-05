@@ -83,7 +83,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -201,6 +201,31 @@ async function garantirSchemaComercial() {
       ON tokens_recuperacao(token_hash) WHERE usado = FALSE`);
   } catch (e) {
     console.warn("garantirSchemaComercial:", e.message);
+  }
+}
+
+// Cards de propaganda/avisos exibidos ao passageiro na tela de espera.
+// O admin do projeto sobe a foto e agenda a janela (inicio/fim).
+async function garantirTabelaAnuncios() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS anuncios (
+        id SERIAL PRIMARY KEY,
+        projeto_id INTEGER REFERENCES projetos(id) ON DELETE CASCADE,
+        titulo VARCHAR(160),
+        imagem_url TEXT NOT NULL,
+        inicio TIMESTAMPTZ NOT NULL,
+        fim TIMESTAMPTZ NOT NULL,
+        ativo BOOLEAN DEFAULT TRUE,
+        ordem INTEGER DEFAULT 0,
+        criado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_anuncios_projeto_janela
+      ON anuncios(projeto_id, inicio, fim) WHERE ativo = TRUE`);
+  } catch (e) {
+    console.warn("garantirTabelaAnuncios:", e.message);
   }
 }
 
@@ -2250,6 +2275,130 @@ app.patch("/api/admin/projeto/contrato", verificarAuth, carregarAdminEscopo, asy
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao salvar contrato" });
+  }
+});
+
+/* ====================== ANÚNCIOS (vitrine na tela de espera) ====================== */
+// Converte "YYYY-MM-DD" (input date do admin) em TIMESTAMPTZ no fuso de São Paulo.
+// inicio = 00:00 do dia; fim = 23:59:59.999 do dia (inclusivo).
+function anuncioLimiteDia(ymd, fimDoDia) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return null;
+  return `${ymd}T${fimDoDia ? "23:59:59.999" : "00:00:00.000"}-03:00`;
+}
+
+// Admin: lista todos os anúncios do seu projeto (inclui agendados e expirados).
+app.get("/api/admin/anuncios", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, titulo, imagem_url, inicio, fim, ativo, ordem, created_at
+       FROM anuncios WHERE projeto_id = $1
+       ORDER BY ordem ASC, inicio DESC, id DESC`,
+      [req.adminEscopo.admin_projeto_id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar anúncios" });
+  }
+});
+
+// Admin: cria um anúncio (imagem + janela de exibição).
+app.post("/api/admin/anuncios", verificarAuth, carregarAdminEscopo, upload.single("imagem"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Imagem é obrigatória" });
+  if (!supabaseConfigurado) return res.status(503).json({ error: "Storage não configurado" });
+  const inicio = anuncioLimiteDia(req.body.inicio, false);
+  const fim = anuncioLimiteDia(req.body.fim, true);
+  if (!inicio || !fim) return res.status(400).json({ error: "Datas de início e fim são obrigatórias (AAAA-MM-DD)" });
+  if (new Date(fim) < new Date(inicio)) return res.status(400).json({ error: "A data fim não pode ser anterior ao início" });
+  const titulo = (req.body.titulo || "").trim().slice(0, 160) || null;
+  const ordem = Number.isFinite(Number(req.body.ordem)) ? parseInt(req.body.ordem, 10) : 0;
+  try {
+    const url = await uploadToSupabase(req.file, "anuncios");
+    if (!url) return res.status(500).json({ error: "Falha ao salvar a imagem" });
+    const { rows } = await pool.query(
+      `INSERT INTO anuncios (projeto_id, titulo, imagem_url, inicio, fim, ordem, criado_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, titulo, imagem_url, inicio, fim, ativo, ordem, created_at`,
+      [req.adminEscopo.admin_projeto_id, titulo, url, inicio, fim, ordem, req.user.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao criar anúncio" });
+  }
+});
+
+// Admin: edita janela/ativo/ordem/título de um anúncio do seu projeto.
+app.patch("/api/admin/anuncios/:id", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID inválido" });
+  const campos = [];
+  const vals = [];
+  const add = (col, val) => { vals.push(val); campos.push(`${col} = $${vals.length}`); };
+  if (req.body.inicio !== undefined) {
+    const inicio = anuncioLimiteDia(req.body.inicio, false);
+    if (!inicio) return res.status(400).json({ error: "Data de início inválida" });
+    add("inicio", inicio);
+  }
+  if (req.body.fim !== undefined) {
+    const fim = anuncioLimiteDia(req.body.fim, true);
+    if (!fim) return res.status(400).json({ error: "Data de fim inválida" });
+    add("fim", fim);
+  }
+  if (req.body.ativo !== undefined) add("ativo", Boolean(req.body.ativo));
+  if (req.body.ordem !== undefined && Number.isFinite(Number(req.body.ordem))) add("ordem", parseInt(req.body.ordem, 10));
+  if (req.body.titulo !== undefined) add("titulo", (req.body.titulo || "").trim().slice(0, 160) || null);
+  if (!campos.length) return res.status(400).json({ error: "Nada para atualizar" });
+  vals.push(id, req.adminEscopo.admin_projeto_id);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE anuncios SET ${campos.join(", ")}
+       WHERE id = $${vals.length - 1} AND projeto_id = $${vals.length}
+       RETURNING id, titulo, imagem_url, inicio, fim, ativo, ordem, created_at`,
+      vals
+    );
+    if (!rows.length) return res.status(404).json({ error: "Anúncio não encontrado" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao atualizar anúncio" });
+  }
+});
+
+// Admin: remove o anúncio e apaga a imagem do Storage.
+app.delete("/api/admin/anuncios/:id", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "ID inválido" });
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM anuncios WHERE id = $1 AND projeto_id = $2 RETURNING imagem_url`,
+      [id, req.adminEscopo.admin_projeto_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Anúncio não encontrado" });
+    await apagarFotoStorage(rows[0].imagem_url);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao remover anúncio" });
+  }
+});
+
+// Passageiro: anúncios do SEU projeto que estão no ar agora (janela ativa).
+app.get("/api/anuncios", verificarAuth, async (req, res) => {
+  try {
+    const projetoId = await projetoDoUsuario(req.user.id);
+    if (!projetoId) return res.json([]);
+    const { rows } = await pool.query(
+      `SELECT id, titulo, imagem_url
+       FROM anuncios
+       WHERE projeto_id = $1 AND ativo = TRUE AND inicio <= NOW() AND fim >= NOW()
+       ORDER BY ordem ASC, inicio DESC, id DESC`,
+      [projetoId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao carregar anúncios" });
   }
 });
 
