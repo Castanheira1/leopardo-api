@@ -524,7 +524,7 @@ a.btn { display: inline-block; text-align: center; }
     background: #fff;
     border-color: transparent;
     border-radius: 999px;
-    padding: 11px 16px;
+    padding: 8px 12px;
     box-shadow: none;
 }
 .map-search-float:focus {
