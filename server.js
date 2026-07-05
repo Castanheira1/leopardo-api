@@ -296,6 +296,7 @@ async function garantirColunasPedidos() {
 async function garantirColunasLocalizacao() {
   try {
     await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP");
+    await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS vagas INTEGER DEFAULT 1");
   } catch (e) {
     console.warn("garantirColunasLocalizacao:", e.message);
   }
@@ -1371,6 +1372,14 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
         horarioValido(horario), vagas || 1, observacao || null,
       ]
     );
+    const nvagas = Math.min(6, Math.max(parseInt(vagas, 10) || 1, 1));
+    await pool.query(
+      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, online_desde, atualizado_em, vagas)
+       VALUES ($1, $2, $3, TRUE, NULL, NOW(), $4)
+       ON CONFLICT (usuario_id)
+       DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, online_desde = NULL, atualizado_em = NOW(), vagas = $4`,
+      [req.user.id, origem_lat, origem_lng, nvagas]
+    );
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -1417,7 +1426,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     if (temDest) {
       params.push(dest_lat, dest_lng);
       const dl = `$${params.length - 1}`, dg = `$${params.length}`;
-      destFiltro = `AND ${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_KM} AND c.vagas > 0`;
+      destFiltro = `AND ${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_VISIVEL_KM} AND c.vagas > 0`;
     } else if (temPos) {
       params.push(RAIO_VISIVEL_KM);
       origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
@@ -1626,7 +1635,7 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
            AND (c.horario IS NULL OR $7::timestamp IS NULL
                 OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
        ) s
-       WHERE s.dist_origem <= $6 AND s.dist_destino <= $6
+       WHERE s.dist_origem <= $6 AND s.dist_destino <= ${RAIO_VISIVEL_KM}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
       [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario, pid]
@@ -1662,7 +1671,7 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
            AND (p.horario IS NULL OR $7::timestamp IS NULL
                 OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
        ) s
-       WHERE s.dist_origem <= $6 AND s.dist_destino <= $6
+       WHERE s.dist_origem <= $6 AND s.dist_destino <= ${RAIO_VISIVEL_KM}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
       [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario, pid]
@@ -1984,7 +1993,8 @@ app.get("/api/motorista/online", verificarAuth, async (req, res) => {
   try {
     const hab = await habilitacaoAtiva(req.user.id);
     const row = (await pool.query(
-      `SELECT l.disponivel, l.lat, l.lng, l.atualizado_em, l.online_desde
+      `SELECT l.disponivel, l.lat, l.lng, l.atualizado_em, l.online_desde, l.vagas,
+              (SELECT id FROM caronas WHERE motorista_id = $1 AND status = 'ativa' ORDER BY created_at DESC LIMIT 1) AS carona_id
        FROM localizacoes_online l WHERE l.usuario_id = $1`,
       [req.user.id]
     )).rows[0];
@@ -1995,6 +2005,8 @@ app.get("/api/motorista/online", verificarAuth, async (req, res) => {
       lng: row?.lng != null ? +row.lng : null,
       online_desde: row?.online_desde || null,
       atualizado_em: row?.atualizado_em || null,
+      vagas: row?.vagas != null ? +row.vagas : 1,
+      carona_id: row?.carona_id || null,
     });
   } catch (err) {
     console.error(err);
@@ -2005,6 +2017,7 @@ app.get("/api/motorista/online", verificarAuth, async (req, res) => {
 app.post("/api/motorista/online", verificarAuth, async (req, res) => {
   const nlat = Number(req.body.lat);
   const nlng = Number(req.body.lng);
+  const nvagas = Math.min(6, Math.max(parseInt(req.body.vagas, 10) || 1, 1));
   if (!Number.isFinite(nlat) || !Number.isFinite(nlng) ||
       nlat < -90 || nlat > 90 || nlng < -180 || nlng > 180) {
     return res.status(400).json({ error: "Coordenadas inválidas" });
@@ -2012,19 +2025,19 @@ app.post("/api/motorista/online", verificarAuth, async (req, res) => {
   try {
     const hab = await habilitacaoAtiva(req.user.id);
     if (!hab) return res.status(403).json({ error: "Ative o modo motorista (foto do carro + selfie) antes de oferecer carona" });
-    // Modo online substitui carona publicada com rota fixa.
+    // Modo online sem destino substitui carona publicada com rota fixa.
     await pool.query(
       "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
       [req.user.id]
     );
     await pool.query(
-      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, online_desde, atualizado_em)
-       VALUES ($1, $2, $3, TRUE, NOW(), NOW())
+      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, online_desde, atualizado_em, vagas)
+       VALUES ($1, $2, $3, TRUE, NOW(), NOW(), $4)
        ON CONFLICT (usuario_id)
-       DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, online_desde = NOW(), atualizado_em = NOW()`,
-      [req.user.id, nlat, nlng]
+       DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, online_desde = NOW(), atualizado_em = NOW(), vagas = $4`,
+      [req.user.id, nlat, nlng, nvagas]
     );
-    res.json({ online: true, lat: nlat, lng: nlng });
+    res.json({ online: true, lat: nlat, lng: nlng, vagas: nvagas });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao ficar online" });
@@ -2050,22 +2063,25 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   try {
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
-    const params = lat && lng ? [req.user.id, lat, lng, RAIO_ONLINE_KM, pid] : [req.user.id, pid];
-    const raio = lat && lng ? `AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4` : "";
-    const filtroProj = lat && lng ? `AND u.projeto_id = $5` : `AND u.projeto_id = $2`;
+    const params = lat && lng ? [req.user.id, lat, lng, RAIO_ONLINE_KM, RAIO_VISIVEL_KM, pid] : [req.user.id, pid];
+    const raio = lat && lng ? `AND (
+      (ca.id IS NULL AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4)
+      OR (ca.id IS NOT NULL AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $5)
+    )` : "";
+    const filtroProj = lat && lng ? `AND u.projeto_id = $6` : `AND u.projeto_id = $2`;
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (u.id)
-              u.id, u.nome, u.sexo, l.lat, l.lng,
+              u.id, u.nome, u.sexo, l.lat, l.lng, l.vagas,
               h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
               ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
-              ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng
+              ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas
        FROM localizacoes_online l
        JOIN usuarios u ON u.id = l.usuario_id
        JOIN habilitacoes_motorista h
          ON h.motorista_id = u.id AND h.status = 'ativa'
             AND ${sqlSelfieValida("h")}
        LEFT JOIN LATERAL (
-         SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng
+         SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng, vagas
          FROM caronas
          WHERE motorista_id = u.id AND status = 'ativa'
          ORDER BY created_at DESC
@@ -2073,7 +2089,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
        ) ca ON TRUE
        WHERE l.disponivel = TRUE
          AND COALESCE(u.ativo, TRUE) = TRUE
-         AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
+         AND (l.atualizado_em > NOW() - INTERVAL '3 minutes' OR l.online_desde IS NOT NULL OR ca.id IS NOT NULL)
          AND u.id <> $1
          ${filtroProj}
          ${raio}
