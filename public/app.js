@@ -459,7 +459,7 @@ async function ligarPlaceAutocomplete(inputEl, { map, onPlace, onFocus } = {}) {
             style.id = 'vap-compact-place-style';
             style.textContent = `
                 :host {
-                    height: 42px !important;
+                    height: 46px !important;
                     min-height: 0 !important;
                 }
                 * {
@@ -467,9 +467,9 @@ async function ligarPlaceAutocomplete(inputEl, { map, onPlace, onFocus } = {}) {
                 }
                 input,
                 [role="combobox"] {
-                    height: 40px !important;
+                    height: 44px !important;
                     min-height: 0 !important;
-                    line-height: 40px !important;
+                    line-height: 44px !important;
                     padding-top: 0 !important;
                     padding-bottom: 0 !important;
                 }
