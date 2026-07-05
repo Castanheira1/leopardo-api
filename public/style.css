@@ -595,42 +595,26 @@ gmp-place-autocomplete.map-search-float {
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
 }
-/* colapsado: a "meia bola" dourada fica sempre visível e convidativa sobre o mapa */
+/* colapsado: mantém uma faixa discreta para indicar que o painel pode ser puxado */
 .acao-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .acao-grip {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 30px 0 12px;     /* espaço para a meia bola que projeta acima da barra */
+    gap: 8px;
+    padding: 12px 0 10px;
     cursor: grab;
     touch-action: none;   /* só a alça bloqueia gestos — o resto do sheet pode rolar */
 }
-/* Alça em meia bola (semicírculo) que se projeta acima da barra — fácil de ver e pegar */
+/* Alça discreta estilo bottom sheet (sem a meia-bola dourada). */
 .acao-handle {
-    position: absolute;
-    top: -19px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 66px;
-    height: 33px;
-    border-radius: 66px 66px 0 0;
-    background: linear-gradient(180deg, #EAD298 0%, #c9a96a 100%);
-    box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.45);
-    display: block;
-}
-/* tracinho de "puxe" dentro da meia bola */
-.acao-handle::before {
-    content: "";
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 28px;
+    width: 42px;
     height: 4px;
-    border-radius: 3px;
-    background: rgba(15, 61, 62, 0.7);
+    border-radius: 999px;
+    background: rgba(234, 210, 152, 0.55);
+    box-shadow: none;
+    display: block;
 }
 .acao-titulo { color: #fff; font-weight: 700; font-size: 1rem; letter-spacing: 0.3px; }
 
