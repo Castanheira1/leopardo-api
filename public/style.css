@@ -834,31 +834,42 @@ body.theme-dark {
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
     border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
-.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #161719; border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; }
+.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #121316; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.55); padding: 2px 16px calc(18px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; touch-action: none; }
 .sheet-grip span { width: 44px; height: 5px; border-radius: 3px; background: #44464b; display: block; }
-.sheet-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.sheet-top strong { color: #fff; font-size: 1.05rem; }
-.viagem-eta { color: #EAD298; font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
+.sheet-top { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; padding-top: 2px; }
+.sheet-fase { color: #fff; font-size: 1.12rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
+.sheet-eta { color: #EAD298; font-weight: 600; font-size: 0.92rem; line-height: 1.3; margin: 0; }
+.sheet-hint { color: #9aa0a6; font-size: 0.92rem; text-align: center; padding: 8px 0; margin: 0; }
 
-/* Faixa de navegação no topo do mapa: seta da manobra + distância + instrução. */
-.viagem-nav { position: absolute; top: 10px; left: 10px; right: 64px; z-index: 5;
-    background: rgba(15, 61, 62, 0.95); color: #fff; border: 1px solid rgba(234, 210, 152, 0.4);
-    border-radius: 12px; padding: 10px 14px; font-size: 0.95rem; line-height: 1.3;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-    align-items: center; gap: 12px; }
-.viagem-nav .nav-dist { display: block; color: #EAD298; font-weight: 700; font-size: 1.05rem; }
-.viagem-nav .nav-seta { flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-    width: 42px; height: 42px; border-radius: 10px; background: rgba(234, 210, 152, 0.16); color: #EAD298; }
-.viagem-nav .nav-seta svg { width: 28px; height: 28px; }
-.viagem-nav .nav-txt { min-width: 0; }
-/* Modo navegação (Navegar): faixa maior, lida de relance enquanto dirige. */
-.viagem-nav.nav-grande { padding: 14px 16px; font-size: 1.1rem; }
-.viagem-nav.nav-grande .nav-dist { font-size: 1.35rem; }
-.viagem-nav.nav-grande .nav-seta { width: 54px; height: 54px; }
-.viagem-nav.nav-grande .nav-seta svg { width: 40px; height: 40px; }
+.sheet-driver { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.sheet-selfie { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(234, 210, 152, 0.55); flex-shrink: 0; }
+.sheet-driver-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.sheet-driver-info strong { color: #fff; display: block; font-size: 1.08rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-driver-info small { color: #9aa0a6; font-size: 0.82rem; line-height: 1.2; }
+.sheet-placa { background: #fff; color: #111; font-weight: 800; letter-spacing: 1px; padding: 7px 10px; border-radius: 8px; font-size: 0.88rem; flex-shrink: 0; align-self: center; }
+
+.sheet-acoes-col { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding-bottom: 4px; }
+.viagem-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; min-height: 52px; padding: 14px 18px;
+    border: none; border-radius: 14px;
+    font-family: inherit; font-size: 1rem; font-weight: 700; letter-spacing: -0.01em;
+    text-decoration: none; cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.viagem-btn:active { transform: scale(0.98); opacity: 0.92; }
+.viagem-btn--primary { background: #EAD298; color: #0F3D3E; box-shadow: 0 4px 16px rgba(234, 210, 152, 0.22); }
+.viagem-btn--danger { background: #c0392b; color: #fff; box-shadow: 0 4px 16px rgba(192, 57, 43, 0.25); }
+.viagem-btn--outline { background: #1e2024; color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.12); font-weight: 600; font-size: 0.95rem; min-height: 48px; }
+.viagem-btn svg { flex-shrink: 0; }
+
+/* legado — faixa de navegação removida da UI */
+.viagem-nav { display: none !important; }
 /* Alvo de toque confortável nos botões das barras de baixo (48px = dedo). */
 .acao-sheet .btn,
 .sheet-acoes .btn,
@@ -889,14 +900,9 @@ body.theme-dark {
     background: #fff; color: #0F3D3E; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
     display: flex; align-items: center; justify-content: center; }
 .viagem-recenter svg { width: 24px; height: 24px; }
-.sheet-driver { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
-.sheet-selfie { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 2px solid #EAD298; }
-.sheet-driver-info { flex: 1; min-width: 0; }
-.sheet-driver-info strong { color: #fff; display: block; }
-.sheet-driver-info small { color: #9aa0a6; }
-.sheet-placa { background: #fff; color: #111; font-weight: 800; letter-spacing: 1px; padding: 6px 10px; border-radius: 8px; font-size: 0.95rem; }
 .sheet-acoes { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 .sheet-acoes .btn { flex: 1; padding: 13px; }
+.sheet-acoes-col .btn { flex: unset; width: 100%; }
 
 /* Barra de modo (título + menu na mesma linha) */
 .modo-bar { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 10px 14px 8px; flex-wrap: nowrap; }

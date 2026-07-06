@@ -163,15 +163,14 @@
             <div id="tabViagem" class="tab-content">
                 <div class="viagem-wrap">
                     <div id="mapViagem" class="viagem-map"></div>
-                    <div id="viagemNav" class="viagem-nav" style="display:none;"></div>
                     <button type="button" id="btnRecentrar" class="viagem-recenter" style="display:none;" title="Recentralizar" onclick="recentrarViagem()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path></svg>
                     </button>
                     <div id="viagemSheet" class="viagem-sheet">
                         <div class="sheet-grip" id="sheetGrip"><span></span></div>
                         <div class="sheet-top">
-                            <strong id="viagemTitulo">Motorista a caminho</strong>
-                            <span id="viagemEta" class="viagem-eta" style="display:none;"></span>
+                            <p id="viagemFase" class="sheet-fase">Motorista a caminho</p>
+                            <p id="viagemEta" class="sheet-eta" style="display:none;"></p>
                         </div>
                         <div class="sheet-driver">
                             <img id="viagemSelfie" class="sheet-selfie" alt="" style="display:none;">
@@ -181,7 +180,7 @@
                             </div>
                             <span id="viagemPlaca" class="sheet-placa"></span>
                         </div>
-                        <div id="viagemControles" class="sheet-acoes"></div>
+                        <div id="viagemControles" class="sheet-acoes sheet-acoes-col"></div>
                     </div>
                 </div>
             </div>
@@ -2099,15 +2098,13 @@
         document.getElementById('tabViagem').classList.add('active');
 
         document.getElementById('viagemSelfie').style.display = 'none';
-        document.getElementById('viagemTitulo').textContent = 'Você está em rota';
+        document.getElementById('viagemFase').textContent = 'Carona em rota';
         document.getElementById('viagemNome').textContent = 'Sua carona publicada';
-        document.getElementById('viagemCarro').textContent = c.destino_texto ? ('Indo para ' + c.destino_texto) : 'A caminho do destino';
+        document.getElementById('viagemCarro').textContent = c.destino_texto ? ('Destino: ' + c.destino_texto) : 'Sem destino definido';
         const pl = document.getElementById('viagemPlaca');
         pl.textContent = (habHoje && habHoje.placa) ? habHoje.placa : '';
         pl.style.display = (habHoje && habHoje.placa) ? 'inline-block' : 'none';
         const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
-        // Esta tela não tem navegação por passo: esconde a faixa/recentralizar da viagem.
-        const nav0 = document.getElementById('viagemNav'); if (nav0) nav0.style.display = 'none';
         const rec0 = document.getElementById('btnRecentrar'); if (rec0) rec0.style.display = 'none';
 
         g = await carregarMaps();
@@ -2440,7 +2437,7 @@
         const selfie = ehMotorista ? v.passageiro_selfie : v.motorista_selfie;
         const sel = document.getElementById('viagemSelfie');
         if (selfie) { sel.src = selfie; sel.style.display = 'block'; } else { sel.style.display = 'none'; }
-        document.getElementById('viagemNome').textContent = nome || '—';
+        document.getElementById('viagemNome').textContent = (nome || '—').trim();
         document.getElementById('viagemCarro').textContent = ehMotorista ? 'Passageiro' : (v.tag || 'Veículo');
         const plEl = document.getElementById('viagemPlaca');
         plEl.textContent = (!ehMotorista && v.placa) ? v.placa : '';
@@ -2472,70 +2469,75 @@
         // Arrastar o mapa pausa o "seguir" (deixa olhar em volta); o botão recentraliza.
         map.addListener('dragstart', () => { if (viagemView) viagemView.seguir = false; });
         const btnRec = document.getElementById('btnRecentrar');
-        const navBar = document.getElementById('viagemNav');
         if (v.status === 'em_andamento') { if (btnRec) btnRec.style.display = 'flex'; }
-        else { if (btnRec) btnRec.style.display = 'none'; if (navBar) navBar.style.display = 'none'; }
+        else if (btnRec) btnRec.style.display = 'none';
 
         iniciarViagemLoop();
-        if (viagemView.ehMotorista) navegarApp();   // motorista já entra navegando
         initSheetDrag();
         return true;
     }
 
+    function rotuloFaseViagem(vv) {
+        if (vv.status !== 'em_andamento') return 'Viagem finalizada';
+        if (vv.ehMotorista) return vv.fase === 'encontro' ? 'Buscando passageiro' : 'Indo ao destino';
+        return vv.fase === 'encontro' ? 'Motorista a caminho' : 'Viagem em andamento';
+    }
+
+    function btnViagem(tipo, rotulo, acao) {
+        const cls = `viagem-btn viagem-btn--${tipo}`;
+        if (acao.startsWith('href:')) {
+            return `<a class="${cls}" href="${acao.slice(5)}" target="_blank" rel="noopener">${rotulo}</a>`;
+        }
+        return `<button type="button" class="${cls}" onclick="${acao}">${rotulo}</button>`;
+    }
+
+    // Título + botões conforme papel e fase.
+    function atualizarCabecalhoViagem() {
+        const vv = viagemView; if (!vv) return;
+        const fase = document.getElementById('viagemFase');
+        const ctrl = document.getElementById('viagemControles');
+        const eta = document.getElementById('viagemEta');
+        if (fase) fase.textContent = rotuloFaseViagem(vv);
+        const wppUrl = vv.tel ? linkWhatsApp(vv.tel) : '';
+        const wppBtn = wppUrl
+            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `href:${wppUrl}`)
+            : '';
+        const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
+        const btnAnd = document.getElementById('btnViagemAndamento');
+        if (vv.status !== 'em_andamento') {
+            if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+            ctrl.innerHTML = btnViagem('primary', 'Voltar ao início', 'sairDaViagem()');
+            if (btnAnd) btnAnd.style.display = 'none';
+            return;
+        }
+        if (btnAnd) btnAnd.style.display = 'inline-block';
+        if (vv.ehMotorista) {
+            if (vv.fase === 'encontro') {
+                ctrl.innerHTML = btnViagem('primary', 'Passageiro embarcou', `cheguei(${vv.id})`)
+                    + mapsBtn + wppBtn;
+            } else {
+                ctrl.innerHTML = btnViagem('danger', 'Finalizar viagem', `finalizarViagem(${vv.id})`)
+                    + mapsBtn + wppBtn;
+            }
+        } else {
+            ctrl.innerHTML = wppBtn || '<p class="sheet-hint">Aguardando motorista…</p>';
+        }
+    }
+    // Centraliza o mapa na posição atual (modo condução).
+    function navegarApp() {
+        const vv = viagemView; if (!vv || !vv.map) return;
+        vv.seguir = true;
+        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
+        if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(18); }
+        vv.ultimaRota = 0;
+        renderViagem();
+    }
     // Alvo atual da rota: na fase "encontro" o carro vai até o passageiro (posição
     // ao vivo, ou o ponto de embarque); na fase "destino" vai até o destino.
     function alvoViagem() {
         const vv = viagemView; if (!vv) return null;
         if (vv.fase === 'destino') return vv.destino || vv.embarque;
         return vv.posPassageiro || vv.embarque || vv.destino;
-    }
-
-    // Título + botões conforme papel e fase.
-    function atualizarCabecalhoViagem() {
-        const vv = viagemView; if (!vv) return;
-        const titulo = document.getElementById('viagemTitulo');
-        const ctrl = document.getElementById('viagemControles');
-        // Número no botão: transparência de para quem a conversa vai abrir.
-        const wpp = vv.tel ? `<a class="btn btn-success" href="${linkWhatsApp(vv.tel)}" target="_blank" title="${vv.tel}">${ICN.phone} WhatsApp (${vv.tel})</a>` : '';
-        const btnAnd = document.getElementById('btnViagemAndamento');
-        if (vv.status !== 'em_andamento') {
-            // Concluída: esconde o atalho "Em andamento" e oferece a saída.
-            titulo.textContent = 'Viagem concluída';
-            ctrl.innerHTML = '<span class="badge badge-ativo">Concluída</span> '
-                + '<button class="btn btn-primary" onclick="sairDaViagem()">Voltar ao início</button>';
-            if (btnAnd) btnAnd.style.display = 'none';
-            return;
-        }
-        if (btnAnd) btnAnd.style.display = 'inline-block';
-        // Navegação DENTRO do app (sem voz): mapa seguindo + faixa com o próximo
-        // passo. Quem quiser voz pode abrir a rota no Google Maps — o registro da
-        // viagem continua rodando aqui no VAP.
-        const navBtn = `<button class="btn btn-primary" onclick="navegarApp()">${ICN.route} Navegar</button>`;
-        const mapsBtn = `<button class="btn btn-secondary" onclick="abrirGoogleMaps()">${ICN.pin} Maps</button>`;
-        if (vv.ehMotorista) {
-            if (vv.fase === 'encontro') {
-                titulo.textContent = 'A caminho do passageiro';
-                ctrl.innerHTML = navBtn + `<button class="btn btn-secondary" onclick="cheguei(${vv.id})">Embarcou — iniciar</button>` + mapsBtn + wpp;
-            } else {
-                titulo.textContent = 'Em viagem ao destino';
-                ctrl.innerHTML = navBtn + `<button class="btn btn-danger" onclick="finalizarViagem(${vv.id})">Encerrar viagem</button>` + mapsBtn + wpp;
-            }
-        } else {
-            // Passageiro não dirige: nada de "Navegar" — só acompanhar e falar.
-            titulo.textContent = vv.fase === 'encontro' ? 'Motorista a caminho de você' : 'Em viagem ao destino';
-            ctrl.innerHTML = wpp;
-        }
-    }
-    // Modo navegação DENTRO do app: o mapa segue a sua posição em zoom de rua e a
-    // faixa do topo cresce mostrando a manobra (seta + distância + instrução).
-    function navegarApp() {
-        const vv = viagemView; if (!vv || !vv.map) return;
-        vv.seguir = true;                 // o mapa volta a acompanhar a sua posição
-        vv.navegando = true;              // faixa de manobra em modo grande
-        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
-        if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(18); }   // zoom de navegação
-        vv.ultimaRota = 0;                // recalcula a rota/próximo passo já
-        renderViagem();
     }
     // Fallback com voz: abre a rota da fase atual no Google Maps (o rastreamento
     // e o registro da viagem continuam no VAP em segundo plano).
@@ -2550,27 +2552,6 @@
         const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
         if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(17); }
     }
-    // Tira as tags HTML que o Google manda nas instruções ("Vire à <b>direita</b>").
-    function _limparInstrucao(html) {
-        const d = document.createElement('div');
-        d.innerHTML = html || '';
-        return (d.textContent || '').trim();
-    }
-    // Seta da manobra na faixa de navegação (cobre as manobras comuns do
-    // Directions; o que não conhecer cai na seta reta).
-    function setaManobra(m) {
-        m = String(m || '');
-        let d = 'M12 20V6M7 10l5-5 5 5';                                    // reta
-        if (m.includes('uturn')) d = 'M16 20v-9a4 4 0 0 0-8 0v4m-3-3 3 3 3-3';
-        else if (m.includes('roundabout')) d = 'M12 20v-4a5 5 0 1 1 4-8m0 0V4m0 4h-4';
-        else if (/slight-left|ramp-left|fork-left|keep-left/.test(m)) d = 'M14 20v-7L8 7m0 5V7h5';
-        else if (/slight-right|ramp-right|fork-right|keep-right/.test(m)) d = 'M10 20v-7l6-6m0 5V7h-5';
-        else if (m.includes('left')) d = 'M17 20v-5a4 4 0 0 0-4-4H6m4-5-5 5 5 5';
-        else if (m.includes('right')) d = 'M7 20v-5a4 4 0 0 1 4-4h7m-4-5 5 5-5 5';
-        else if (m.includes('merge')) d = 'M12 20v-6L8 9m8 5V9m-4-5-3 4m3-4 3 4';
-        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
-    }
-
     // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
     // rota do carro até o alvo da fase. Cada lado vê o outro.
     async function renderViagem() {
@@ -2601,24 +2582,9 @@
                 const resp = await vv.rotaCtrl.calcular(vv.posMotorista, alvo);
                 const leg = resp.routes[0].legs[0];
                 const eta = document.getElementById('viagemEta');
-                const prefixo = vv.fase === 'encontro'
-                    ? (vv.ehMotorista ? 'chega ao passageiro em' : 'motorista chega em')
-                    : 'destino em';
-                if (eta) { eta.style.display = 'inline'; eta.textContent = `${prefixo} ~${leg.duration.text} • ${leg.distance.text}`; }
-                // Faixa de navegação (próximo passo): só para quem dirige (o motorista).
-                // O passo[0] é sempre a próxima manobra a partir da posição atual, pois a
-                // rota é recalculada da posição ao vivo a cada 10s.
-                const nav = document.getElementById('viagemNav');
-                if (nav) {
-                    const passo = leg.steps && leg.steps[0];
-                    if (vv.ehMotorista && passo) {
-                        nav.innerHTML = `<span class="nav-seta">${setaManobra(passo.maneuver)}</span>`
-                            + `<span class="nav-txt"><span class="nav-dist">${passo.distance ? passo.distance.text : ''}</span>${_limparInstrucao(passo.instructions)}</span>`;
-                        nav.classList.toggle('nav-grande', !!vv.navegando);
-                        nav.style.display = 'flex';
-                    } else {
-                        nav.style.display = 'none';
-                    }
+                if (eta) {
+                    eta.style.display = 'block';
+                    eta.textContent = `~${leg.duration.text} · ${leg.distance.text}`;
                 }
             } catch (_) { /* sem rota: segue só com os marcadores */ }
         }
@@ -2632,7 +2598,6 @@
         if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
         if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
         const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
-        const nav = document.getElementById('viagemNav'); if (nav) nav.style.display = 'none';
         const btnRec = document.getElementById('btnRecentrar'); if (btnRec) btnRec.style.display = 'none';
     }
 
@@ -2716,7 +2681,6 @@
                 }
                 if (d.fase && d.fase !== vv.fase) {
                     vv.fase = d.fase; vv.ultimaRota = 0; atualizarCabecalhoViagem();
-                    if (vv.ehMotorista) navegarApp();   // nova fase = nova rota: já entra navegando
                 }
                 // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
                 if (!vv.ehMotorista && d.motorista) vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
@@ -2733,7 +2697,7 @@
         const r = await fetchWithAuth('/api/viagens/' + viagemId + '/iniciar', { method: 'POST' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        if (viagemView) { viagemView.fase = 'destino'; viagemView.ultimaRota = 0; atualizarCabecalhoViagem(); navegarApp(); }
+        if (viagemView) { viagemView.fase = 'destino'; viagemView.ultimaRota = 0; atualizarCabecalhoViagem(); }
         msg('Passageiro embarcado — seguindo para o destino.');
     }
     async function enviarPontos() {
@@ -2780,22 +2744,21 @@
     const CAR_ICON_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 64 64">' +
         '<defs>' +
-        '<linearGradient id="cb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#25272c"/><stop offset="0.5" stop-color="#0e0f12"/><stop offset="1" stop-color="#25272c"/></linearGradient>' +
-        '<linearGradient id="cv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8d8e8"/><stop offset="1" stop-color="#3d6b7d"/></linearGradient>' +
+        '<linearGradient id="cb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3a3d44"/><stop offset="0.5" stop-color="#1a1c20"/><stop offset="1" stop-color="#3a3d44"/></linearGradient>' +
         '</defs>' +
-        '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.25"/>' +
+        '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.22"/>' +
         '<rect x="12.5" y="15" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
         '<rect x="45.5" y="15" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
         '<rect x="12.5" y="38" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
         '<rect x="45.5" y="38" width="6" height="11" rx="3" fill="#0a0a0a"/>' +
         '<path d="M16 21 L11.5 23.5 L11.5 26.5 L16.3 25.5 Z" fill="#101216"/>' +
         '<path d="M48 21 L52.5 23.5 L52.5 26.5 L47.7 25.5 Z" fill="#101216"/>' +
-        '<path d="M32 3.5 C23.5 3.5 18 9.5 17 20 C16 32 16.2 45.5 18.8 53.5 C20.6 59 43.4 59 45.2 53.5 C47.8 45.5 48 32 47 20 C46 9.5 40.5 3.5 32 3.5 Z" fill="url(#cb)" stroke="#EAD298" stroke-width="1.4"/>' +
+        '<path d="M32 3.5 C23.5 3.5 18 9.5 17 20 C16 32 16.2 45.5 18.8 53.5 C20.6 59 43.4 59 45.2 53.5 C47.8 45.5 48 32 47 20 C46 9.5 40.5 3.5 32 3.5 Z" fill="url(#cb)" stroke="#EAD298" stroke-width="1.2"/>' +
         '<path d="M24.5 6.5 Q32 4.8 39.5 6.5 L38.5 9 Q32 7.6 25.5 9 Z" fill="#ffe9a8"/>' +
-        '<path d="M22 16 Q32 12.5 42 16 L40.3 25.5 Q32 22.5 23.7 25.5 Z" fill="url(#cv)"/>' +
-        '<rect x="23" y="27.5" width="18" height="15" rx="6" fill="#17181c" stroke="#2c2e34" stroke-width="1"/>' +
-        '<rect x="30.4" y="27.5" width="3.2" height="15" fill="#1e2025"/>' +
-        '<path d="M23.8 45.5 Q32 42.5 40.2 45.5 L41 51.5 Q32 55.5 23 51.5 Z" fill="url(#cv)" opacity="0.85"/>' +
+        '<path d="M22 16 Q32 12.5 42 16 L40.3 25.5 Q32 22.5 23.7 25.5 Z" fill="#080808"/>' +
+        '<rect x="23" y="27.5" width="18" height="15" rx="6" fill="#050505" stroke="#1a1a1a" stroke-width="1"/>' +
+        '<rect x="30.4" y="27.5" width="3.2" height="15" fill="#111"/>' +
+        '<path d="M23.8 45.5 Q32 42.5 40.2 45.5 L41 51.5 Q32 55.5 23 51.5 Z" fill="#080808"/>' +
         '<path d="M22.5 54.5 Q26 56.5 32 56.5 T41.5 54.5 L41 56.8 Q32 59 23 56.8 Z" fill="#e0524d"/>' +
         '</svg>'
     );
@@ -2803,9 +2766,11 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 64 64">' +
         '<defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.5" stop-color="#EAD298"/><stop offset="1" stop-color="#c9a227"/></linearGradient></defs>' +
         '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.18"/>' +
-        '<path d="M32 4 C23 4 17 10 16 21 C15 33 16 46 19 54 C21 59 43 59 45 54 C48 46 49 33 48 21 C47 10 41 4 32 4 Z" fill="url(#cg)" stroke="#fff8dc" stroke-width="1.6"/>' +
+        '<path d="M32 4 C23 4 17 10 16 21 C15 33 16 46 19 54 C21 59 43 59 45 54 C48 46 49 33 48 21 C47 10 41 4 32 4 Z" fill="url(#cg)" stroke="#fff8dc" stroke-width="1.4"/>' +
         '<path d="M24 7 Q32 5 40 7 L39 10 Q32 8 25 10 Z" fill="#fff8dc"/>' +
-        '<rect x="24" y="28" width="16" height="14" rx="5" fill="#8a6d1f" opacity="0.35"/>' +
+        '<path d="M22 16 Q32 12.5 42 16 L40.3 25.5 Q32 22.5 23.7 25.5 Z" fill="#080808"/>' +
+        '<rect x="23" y="27.5" width="18" height="15" rx="6" fill="#050505" stroke="#1a1a1a" stroke-width="1"/>' +
+        '<rect x="30.4" y="27.5" width="3.2" height="15" fill="#111"/>' +
         '<path d="M23 52 Q32 56 41 52 L41 55 Q32 58 23 55 Z" fill="#e0524d"/>' +
         '</svg>'
     );
