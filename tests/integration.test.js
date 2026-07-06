@@ -80,6 +80,9 @@ function bootServer() {
       RAIO_MATCH_KM: "3",
       RAIO_VISIVEL_KM: "10",
       RAIO_ONLINE_KM: "0.6",
+      RAIO_ROTA_KM: "2",
+      FILA_OFERTA_TIMEOUT_S: "2", // curto de propósito, só pra testar o avanço por timeout
+      FILA_TICK_MS: "500",
       AUTH_RATE_MAX: "30",        // teto conhecido p/ validar o anti-força-bruta no fim
       CORS_ORIGINS: "",           // sem CORS externo (comportamento padrão seguro)
     },
@@ -528,6 +531,124 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status, json } = await api("GET", `/api/pedidos?lat=${longe.lat}&lng=${longe.lng}`, { token: tokDriver });
       eq(status, 200, "status");
       assert(!json.some((p) => p.id === pedidoId), "pedido longe não deveria aparecer");
+    });
+
+    /* =================== FILA DE MOTORISTAS NA ROTA (chamada sequencial) =================== */
+    grupo("Fila de motoristas na rota (mais perto primeiro, trava no 1º aceite)");
+    const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Rota isolada (bem longe de ORIGEM/DESTINO usados no resto do arquivo): evita
+    // pegar carona/motorista online de outro teste que por acaso caia no raio da rota.
+    const ORIGEM_FILA = { lat: -1.550000, lng: -48.600000 };
+    const DESTINO_FILA = { lat: -1.500000, lng: -48.550000 };
+    const naRota = (frac) => ({
+      lat: ORIGEM_FILA.lat + (DESTINO_FILA.lat - ORIGEM_FILA.lat) * frac,
+      lng: ORIGEM_FILA.lng + (DESTINO_FILA.lng - ORIGEM_FILA.lng) * frac,
+    });
+    const uFilaA = novoUsuario(20, "S11D");
+    const uFilaB = novoUsuario(21, "S11D");
+    const uFilaC = novoUsuario(22, "S11D");
+    const uFilaPax = novoUsuario(23, "S11D");
+    let tokFilaA, tokFilaB, tokFilaC, tokFilaPax, pedidoFilaId, ofertaAId, ofertaBId;
+
+    await test("prepara 3 motoristas na rota (perto -> longe) + 1 passageiro", async () => {
+      for (const [u, setTok] of [
+        [uFilaA, (t) => (tokFilaA = t)], [uFilaB, (t) => (tokFilaB = t)],
+        [uFilaC, (t) => (tokFilaC = t)], [uFilaPax, (t) => (tokFilaPax = t)],
+      ]) {
+        const { status, json } = await api("POST", "/api/register", { body: u });
+        eq(status, 200, "registro");
+        setTok(json.token);
+      }
+      for (const tok of [tokFilaA, tokFilaB, tokFilaC]) {
+        const { status } = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "FIL" + Math.floor(Math.random() * 9000 + 1000), tag: "Fila",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(status, 200, "habilitação");
+      }
+      const posA = naRota(0.1), posB = naRota(0.5), posC = naRota(0.9);
+      for (const [tok, pos] of [[tokFilaA, posA], [tokFilaB, posB], [tokFilaC, posC]]) {
+        const { status } = await api("POST", "/api/motorista/online", { token: tok, body: { lat: pos.lat, lng: pos.lng } });
+        eq(status, 200, "ficar online");
+      }
+    });
+
+    await test("POST /api/pedidos com usar_fila cria o pedido e inicia a fila", async () => {
+      const { status, json } = await api("POST", "/api/pedidos", {
+        token: tokFilaPax,
+        body: {
+          origem_texto: "Portaria", origem_lat: ORIGEM_FILA.lat, origem_lng: ORIGEM_FILA.lng,
+          destino_texto: "Usina", destino_lat: DESTINO_FILA.lat, destino_lng: DESTINO_FILA.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1, usar_fila: true,
+        },
+      });
+      eq(status, 200, "status");
+      pedidoFilaId = json.id;
+    });
+
+    await test("GET /api/motoristas-rota lista os 3 motoristas ordenados do mais perto pro mais longe", async () => {
+      const q = `?origem_lat=${ORIGEM_FILA.lat}&origem_lng=${ORIGEM_FILA.lng}&destino_lat=${DESTINO_FILA.lat}&destino_lng=${DESTINO_FILA.lng}`;
+      const { status, json } = await api("GET", "/api/motoristas-rota" + q, { token: tokFilaPax });
+      eq(status, 200, "status");
+      const ids = json.map((m) => m.id);
+      assert(ids.length >= 3, `esperava >= 3 motoristas na rota, veio ${ids.length}`);
+      // Ordenado por distância crescente (ordem 0 = mais perto)
+      const ordens = json.map((m) => m.ordem);
+      eq(JSON.stringify(ordens.slice(0, ordens.length)), JSON.stringify([...ordens].sort((a, b) => a - b)), "ordem crescente");
+    });
+
+    await test("motorista mais perto (A) recebe a oferta; o do meio (B) ainda não", async () => {
+      await dormir(300);
+      const rA = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaA });
+      eq(rA.status, 200, "status A");
+      assert(rA.json && rA.json.pedido_id === pedidoFilaId, "A deveria ter a oferta ativa");
+      ofertaAId = rA.json.id;
+
+      const rB = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaB });
+      eq(rB.status, 200, "status B");
+      eq(rB.json, null, "B não deveria ter oferta ainda");
+    });
+
+    await test("motorista da vez (pedido_id) via /api/propostas é bloqueado — fila ativa", async () => {
+      const { status, json } = await api("POST", "/api/propostas", { token: tokFilaB, body: { pedido_id: pedidoFilaId } });
+      eq(status, 400, "status");
+      assert(/busca automática/.test(json.error || ""), "mensagem deveria citar a busca automática");
+    });
+
+    await test("A recusa -> B (próximo mais perto) recebe a oferta na hora", async () => {
+      const { status } = await api("POST", `/api/pedido-fila/${ofertaAId}/recusar`, { token: tokFilaA });
+      eq(status, 200, "status recusar");
+      await dormir(300);
+      const rB = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaB });
+      assert(rB.json && rB.json.pedido_id === pedidoFilaId, "B deveria ter a oferta agora");
+      ofertaBId = rB.json.id;
+    });
+
+    let viagemFilaId, propostaFilaId;
+    await test("B aceita -> cria a viagem e trava a fila (C não recebe oferta)", async () => {
+      const { status, json } = await api("POST", `/api/pedido-fila/${ofertaBId}/aceitar`, { token: tokFilaB });
+      eq(status, 200, "status aceitar");
+      assert(json.viagem_id, "deveria retornar viagem_id");
+      viagemFilaId = json.viagem_id;
+      propostaFilaId = json.proposta_id;
+
+      const rC = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaC });
+      eq(rC.json, null, "C não deveria ter oferta — fila travada pelo aceite de B");
+    });
+
+    await test("cancelar a proposta aceita libera o passageiro: C é ofertado em seguida", async () => {
+      const { status } = await api("POST", `/api/propostas/${propostaFilaId}/cancelar`, { token: tokFilaPax });
+      eq(status, 200, "status cancelar");
+      await dormir(300);
+      const rC = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaC });
+      assert(rC.json && rC.json.pedido_id === pedidoFilaId, "C deveria ter a oferta depois do cancelamento");
+    });
+
+    await test("C não responde -> oferta expira sozinha e não sobra candidato (fila esgotada)", async () => {
+      await dormir(3000); // FILA_OFERTA_TIMEOUT_S=2 + FILA_TICK_MS=0.5 no boot deste teste
+      const rC = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaC });
+      eq(rC.json, null, "oferta de C deveria ter expirado");
     });
 
     /* =================== LOCALIZAÇÃO AO VIVO =================== */

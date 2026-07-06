@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS agendamentos CASCADE;
 DROP TABLE IF EXISTS viagem_pontos CASCADE;
 DROP TABLE IF EXISTS viagens CASCADE;
 DROP TABLE IF EXISTS propostas CASCADE;
+DROP TABLE IF EXISTS pedido_fila CASCADE;
 DROP TABLE IF EXISTS pedidos CASCADE;
 DROP TABLE IF EXISTS caronas CASCADE;
 DROP TABLE IF EXISTS habilitacoes_motorista CASCADE;
@@ -141,6 +142,27 @@ CREATE INDEX IF NOT EXISTS idx_propostas_de ON propostas (de_usuario_id);
 CREATE INDEX IF NOT EXISTS idx_propostas_para ON propostas (para_usuario_id);
 CREATE INDEX IF NOT EXISTS idx_propostas_carona ON propostas (carona_id);
 CREATE INDEX IF NOT EXISTS idx_propostas_pedido ON propostas (pedido_id);
+
+-- ------------------------------------------------------------
+-- Fila de chamada sequencial de um pedido: motoristas "na rota" (linha reta
+-- origem->destino) ordenados do mais perto pro mais longe, ofertados um de
+-- cada vez. Quem aceitar primeiro trava; os demais são cancelados.
+-- ------------------------------------------------------------
+CREATE TABLE pedido_fila (
+    id SERIAL PRIMARY KEY,
+    pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+    motorista_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    ordem INTEGER NOT NULL,
+    dist_km NUMERIC(10,2),
+    status VARCHAR(20) NOT NULL DEFAULT 'aguardando'
+      CHECK (status IN ('aguardando', 'ofertada', 'aceita', 'recusada', 'expirada', 'cancelada')),
+    ofertada_em TIMESTAMP,
+    expira_em TIMESTAMP,
+    respondida_em TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pedido_fila_pedido ON pedido_fila (pedido_id, ordem);
+CREATE INDEX IF NOT EXISTS idx_pedido_fila_motorista_ativa ON pedido_fila (motorista_id, status);
 
 -- ------------------------------------------------------------
 -- Viagens efetivadas (a partir de uma proposta aceita)
