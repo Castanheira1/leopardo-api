@@ -313,26 +313,25 @@ function carregarMaps() {
 // Carro visto de cima (SVG) para marcadores no mapa. variant: 'white' | 'gold'.
 function svgCarroTopoUrl(heading = 0, variant = 'white') {
     const body = variant === 'gold' ? '#EAD298' : '#ffffff';
-    const stroke = variant === 'gold' ? '#c9a227' : '#777777';
-    const bumper = variant === 'gold' ? '#fff3c4' : '#dddddd';
+    const stroke = variant === 'gold' ? '#8c6f16' : '#30343a';
+    const hood = variant === 'gold' ? '#fff3c4' : '#f3f4f6';
     const h = Number(heading) || 0;
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="40" height="60">'
         + `<g transform="rotate(${h} 40 60)">`
-        + '<ellipse cx="42" cy="63" rx="18" ry="45" fill="rgba(0,0,0,0.28)"/>'
-        + `<path d="M40 8 C29 8 22 18 20 32 L17 88 C17 103 27 112 40 113 C53 112 63 103 63 88 L60 32 C58 18 51 8 40 8Z" fill="${body}" stroke="${stroke}" stroke-width="2"/>`
-        + '<path d="M40 22 C30 22 25 31 25 45 L25 75 C25 88 31 95 40 95 C49 95 55 88 55 75 L55 45 C55 31 50 22 40 22Z" fill="#1c1c1c"/>'
-        + '<path d="M30 32 C34 26 46 26 50 32 L52 48 L28 48Z" fill="#455a64"/>'
-        + '<path d="M28 68 L52 68 L50 82 C44 88 36 88 30 82Z" fill="#455a64"/>'
-        + '<rect x="38" y="48" width="4" height="22" fill="#111111"/>'
-        + '<rect x="15" y="35" width="6" height="15" rx="3" fill="#111111"/>'
-        + '<rect x="59" y="35" width="6" height="15" rx="3" fill="#111111"/>'
-        + '<rect x="15" y="75" width="6" height="15" rx="3" fill="#111111"/>'
-        + '<rect x="59" y="75" width="6" height="15" rx="3" fill="#111111"/>'
-        + '<rect x="32" y="10" width="7" height="4" rx="2" fill="#fff3b0"/>'
-        + '<rect x="41" y="10" width="7" height="4" rx="2" fill="#fff3b0"/>'
-        + '<rect x="32" y="104" width="7" height="4" rx="2" fill="#d90000"/>'
-        + '<rect x="41" y="104" width="7" height="4" rx="2" fill="#d90000"/>'
-        + `<rect x="34" y="6" width="12" height="3" rx="1.5" fill="${bumper}"/>`
+        + '<rect x="23" y="25" width="5" height="18" rx="2.5" fill="#101010"/>'
+        + '<rect x="52" y="25" width="5" height="18" rx="2.5" fill="#101010"/>'
+        + '<rect x="22" y="76" width="5" height="18" rx="2.5" fill="#101010"/>'
+        + '<rect x="53" y="76" width="5" height="18" rx="2.5" fill="#101010"/>'
+        + `<path d="M40 7 C28 8 20 18 19 35 L17 84 C16 101 26 111 40 113 C54 111 64 101 63 84 L61 35 C60 18 52 8 40 7Z" fill="${body}" stroke="${stroke}" stroke-width="2.2"/>`
+        + `<path d="M28 19 C32 13 48 13 52 19 L54 31 C48 27 32 27 26 31Z" fill="${hood}" stroke="${stroke}" stroke-width="0.8" opacity="0.95"/>`
+        + '<path d="M27 37 C31 30 49 30 53 37 L51 54 L29 54Z" fill="#263238"/>'
+        + '<rect x="28" y="57" width="24" height="24" rx="6" fill="#171717"/>'
+        + '<rect x="38.2" y="55" width="3.6" height="29" rx="1.8" fill="#070707"/>'
+        + '<path d="M29 84 L51 84 L49 97 C43 102 37 102 31 97Z" fill="#263238"/>'
+        + '<rect x="30" y="10" width="8" height="4" rx="2" fill="#fff3b0"/>'
+        + '<rect x="42" y="10" width="8" height="4" rx="2" fill="#fff3b0"/>'
+        + '<rect x="30" y="104" width="8" height="4" rx="2" fill="#d90000"/>'
+        + '<rect x="42" y="104" width="8" height="4" rx="2" fill="#d90000"/>'
         + '</g></svg>';
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -362,7 +361,7 @@ function atualizarPosicaoCarro(mk, pos, posAnterior) {
 
 // Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
 function criarMarcador(opts = {}) {
-    const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading } = opts;
+    const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading, iconVariant } = opts;
     let pinEl = null;
     let content = null;
     let imgEl = null;
@@ -379,7 +378,7 @@ function criarMarcador(opts = {}) {
         img.style.height = ih + 'px';
         img.draggable = false;
         imgEl = img;
-        if (heading != null) {
+        if (heading != null && !iconVariant) {
             img.style.transform = `rotate(${heading}deg)`;
             img.style.transformOrigin = 'center center';
         }
@@ -422,7 +421,10 @@ function criarMarcador(opts = {}) {
         setMap(m) { mk.map = m; },
         setTitle(t) { mk.title = t || ''; },
         setHeading(h) {
-            if (imgEl) imgEl.style.transform = `rotate(${Number(h) || 0}deg)`;
+            if (!imgEl) return;
+            const headingAtual = Number(h) || 0;
+            if (iconVariant) imgEl.src = svgCarroTopoUrl(headingAtual, iconVariant);
+            else imgEl.style.transform = `rotate(${headingAtual}deg)`;
         },
         addListener(ev, fn) { return mk.addListener(ev, fn); },
     };
