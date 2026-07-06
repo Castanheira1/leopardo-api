@@ -1237,6 +1237,7 @@
         const mkOrigem = criarMarcador({
             position: origem, map, icon: iconeUser, invisivel: !comoCarro,
             iconW: comoCarro ? 40 : undefined, iconH: comoCarro ? 60 : undefined,
+            iconVariant: comoCarro ? 'white' : undefined,
             title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
         });
         let pulseOrigem = null;
@@ -2700,7 +2701,7 @@
             } else {
                 vv.carMarker = criarMarcador({
                     position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL,
-                    iconW: 40, iconH: 60, title: 'Motorista', zIndex: 999,
+                    iconW: 40, iconH: 60, iconVariant: 'white', title: 'Motorista', zIndex: 999,
                 });
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
@@ -2937,9 +2938,10 @@
                         if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
                     } else {
                         const icon = m.carona_id ? CAR_ICON_URL : CAR_ICON_GOLD_URL;
+                        const iconVariant = m.carona_id ? 'white' : 'gold';
                         const car = criarMarcador({
                             position: pos, map, icon,
-                            iconW: 40, iconH: 60,
+                            iconW: 40, iconH: 60, iconVariant,
                             badge: m.ordem != null ? m.ordem + 1 : undefined,
                             title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
@@ -3148,7 +3150,7 @@
                 } else {
                     selfCar.marker = criarMarcador({
                         position: pos, map, icon: CAR_ICON_URL,
-                        iconW: 40, iconH: 60, title: 'Você', zIndex: 999,
+                        iconW: 40, iconH: 60, iconVariant: 'white', title: 'Você', zIndex: 999,
                     });
                 }
                 selfCar.lastPos = pos;
