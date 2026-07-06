@@ -507,7 +507,7 @@
     });
 
     /* -------- buzina (aviso de novo pedido de carona) -------- */
-    // Duas buzinadas curtas + duas vibradas no celular do motorista. O AudioContext
+    // Três buzinadas curtas + três vibradas no celular do motorista. O AudioContext
     // só toca depois de um gesto do usuário (política de autoplay dos navegadores):
     // destrava no primeiro toque em qualquer lugar da página.
     let _audioCtx = null;
@@ -518,7 +518,7 @@
         } catch (_) {}
     });
     function buzinar() {
-        try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (_) {}
+        try { if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]); } catch (_) {}
         const ctx = _audioCtx;
         if (!ctx || ctx.state !== 'running') return;   // sem gesto ainda: só vibra
         const toque = (t) => {
@@ -535,7 +535,7 @@
             });
         };
         const t0 = ctx.currentTime + 0.01;
-        toque(t0); toque(t0 + 0.34);   // bi-bi
+        toque(t0); toque(t0 + 0.34); toque(t0 + 0.68);   // bi-bi-bi (3x)
     }
 
     /* -------- util -------- */
@@ -3098,6 +3098,25 @@
                 }
             }
         } catch (_) { /* offline: cai para a escolha de papel */ }
+        // Motorista que ficou no modo amarelo (online): fechar/reabrir NÃO derruba —
+        // volta direto ao modo online, sem repassar pela escolha de papel.
+        // (escolherPapel('motorista') dispara verificarRetomarMotorista, que reativa
+        //  broadcast, wake lock e o poll de pedidos.)
+        try {
+            const r = await fetchWithAuth('/api/motorista/online');
+            if (r && r.ok) {
+                const st = await r.json();
+                if (st && st.online) { escolherPapel('motorista'); return true; }
+            }
+        } catch (_) { /* offline: cai para a escolha de papel */ }
+        // Passageiro com pedido ainda aberto: retoma a tela "Procurando motorista…".
+        try {
+            const r = await fetchWithAuth('/api/pedidos?meus=1');
+            if (r && r.ok) {
+                const aberto = (await r.json())[0];
+                if (aberto) { escolherPapel('passageiro'); return true; }
+            }
+        } catch (_) { /* offline: cai para a escolha de papel */ }
         return false;
     }
 
@@ -3123,6 +3142,7 @@
                 pollPropostas();
                 if (document.getElementById('tabPedir')?.classList.contains('active')) sincronizarQuandoPed();
                 if (motoristaOnlineModo) {
+                    ativarWakeLock();   // o navegador solta o lock ao ocultar a aba: re-adquire ao voltar
                     refreshModoMotoristaOnline();
                     pollContatosMotoristaOnce();
                 }
