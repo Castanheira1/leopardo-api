@@ -1841,9 +1841,7 @@
             const r = await fetchWithAuth('/api/motoristas-online/' + m.id + '/contato', { method: 'POST', body: '{}' });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            const texto = encodeURIComponent(d.mensagem || 'Olá, qual é o seu destino agora?');
-            const url = linkWhatsApp(d.telefone) + '?text=' + texto;
-            window.open(url, '_blank');
+            abrirWhatsApp(d.telefone, d.mensagem || 'Olá, qual é o seu destino agora?');
             fecharCarro();
             msg('WhatsApp aberto — combine o destino com o motorista.');
         } catch (_) {
@@ -2196,11 +2194,10 @@
             acoes = `<button class="btn btn-success btn-sm" onclick="aceitarProposta(${p.id})">Aceitar</button>
                      <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
         } else if (aceito) {
-            const wpp = linkWhatsApp(tel);
             // Número visível: dá para conferir DE QUEM é o WhatsApp que vai abrir
             // (se abrir o seu próprio chat, o cadastro do outro está com o seu número).
             acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<a class="btn btn-success btn-sm" href="${wpp}" target="_blank" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</a>` : ''}`;
+                     ${tel ? `<button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${JSON.stringify(tel)})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
@@ -2498,9 +2495,8 @@
         const ctrl = document.getElementById('viagemControles');
         const eta = document.getElementById('viagemEta');
         if (fase) fase.textContent = rotuloFaseViagem(vv);
-        const wppUrl = vv.tel ? linkWhatsApp(vv.tel) : '';
-        const wppBtn = wppUrl
-            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `href:${wppUrl}`)
+        const wppBtn = vv.tel
+            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `abrirWhatsApp(${JSON.stringify(vv.tel)})`)
             : '';
         const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
         const btnAnd = document.getElementById('btnViagemAndamento');
@@ -3050,7 +3046,7 @@
     function abrirWhatsAppPassageiro(c) {
         if (!c.passageiro_telefone) return;
         msg((c.passageiro_nome || 'Passageiro') + ' quer falar no WhatsApp — abrindo chat…');
-        window.open(linkWhatsApp(c.passageiro_telefone), '_blank');
+        abrirWhatsApp(c.passageiro_telefone);
         fetchWithAuth('/api/motorista/contatos/' + c.id + '/lido', { method: 'POST' }).catch(() => {});
     }
 

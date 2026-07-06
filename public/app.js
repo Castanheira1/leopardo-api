@@ -827,11 +827,34 @@ function escapeHtml(v) {
 // Alias curto para deixar as templates legíveis.
 const esc = escapeHtml;
 
-function linkWhatsApp(telefone) {
+function normalizarTelefoneWhatsApp(telefone) {
     if (!telefone) return null;
     let n = String(telefone).replace(/\D/g, '');
-    if (n.length <= 11) n = '55' + n; // assume Brasil
-    return `https://wa.me/${n}`;
+    if (n.length <= 11) n = '55' + n;
+    return n;
+}
+
+function linkWhatsApp(telefone) {
+    const n = normalizarTelefoneWhatsApp(telefone);
+    return n ? `https://wa.me/${n}` : null;
+}
+
+// Abre o WhatsApp direto no app (evita a página intermediária api.whatsapp.com no celular).
+function abrirWhatsApp(telefone, texto) {
+    const n = normalizarTelefoneWhatsApp(telefone);
+    if (!n) return false;
+    const msg = texto != null ? String(texto) : '';
+    const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    if (mobile) {
+        let url = `whatsapp://send?phone=${n}`;
+        if (msg) url += `&text=${encodeURIComponent(msg)}`;
+        window.location.href = url;
+    } else {
+        let url = `https://wa.me/${n}`;
+        if (msg) url += `?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank', 'noopener');
+    }
+    return true;
 }
 
 function fmtData(d) {
