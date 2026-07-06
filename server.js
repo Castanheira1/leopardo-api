@@ -30,6 +30,15 @@ const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
 const RAIO_PUSH_PERTO_KM = Number(process.env.RAIO_PUSH_PERTO_KM || 1);
 // Raio (km) do modo motorista online: pedidos no mapa, visibilidade e push (600 m).
 const RAIO_ONLINE_KM = Number(process.env.RAIO_ONLINE_KM || 0.6);
+// Raio (km) da faixa ao redor da ROTA (linha reta origem->destino) escolhida
+// pelo passageiro: motorista "na pista" entra na fila se estiver a até esta
+// distância do trajeto (não só perto da origem).
+const RAIO_ROTA_KM = Number(process.env.RAIO_ROTA_KM || 1.5);
+// Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
+// motorista tem pra responder antes de passar pro próximo da fila.
+const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
+// Intervalo do "avançador" da fila (verifica ofertas vencidas).
+const FILA_TICK_MS = Number(process.env.FILA_TICK_MS || 10 * 1000);
 // Viagem só conta no rateio/admin se o GPS registrar deslocamento real (não simulação parado).
 const KM_MINIMO_VIAGEM = Number(process.env.KM_MINIMO_VIAGEM || 0.5);
 const KM_SEGMENTO_MIN = Number(process.env.KM_SEGMENTO_MIN || 0.03);
@@ -86,7 +95,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -370,6 +379,29 @@ async function garantirTabelaPush() {
   }
 }
 
+async function garantirTabelaPedidoFila() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pedido_fila (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+        motorista_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        ordem INTEGER NOT NULL,
+        dist_km NUMERIC(10,2),
+        status VARCHAR(20) NOT NULL DEFAULT 'aguardando'
+          CHECK (status IN ('aguardando','ofertada','aceita','recusada','expirada','cancelada')),
+        ofertada_em TIMESTAMP,
+        expira_em TIMESTAMP,
+        respondida_em TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_pedido_fila_pedido ON pedido_fila(pedido_id, ordem)");
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_pedido_fila_motorista_ativa ON pedido_fila(motorista_id, status)");
+  } catch (e) {
+    console.warn("garantirTabelaPedidoFila:", e.message);
+  }
+}
+
 async function garantirTabelaFavoritos() {
   try {
     await pool.query(`
@@ -602,6 +634,21 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
     + sin(radians(${pLat})) * sin(radians(${latCol}))
   ))))`;
 
+// Distância (km) de um ponto (latCol/lngCol) até o SEGMENTO de reta entre
+// A (aLat/aLng) e B (bLat/bLng) — não até uma reta infinita nem só até os
+// dois extremos. Projeção equirretangular local (plano, em km, com A como
+// referência de latitude): ótima para segmentos curtos como os do S11D.
+// Usada para decidir quem está "na pista" da rota escolhida pelo passageiro.
+function distanciaSegmentoKm(latCol, lngCol, aLat, aLng, bLat, bLng) {
+  const px = `((${lngCol}) - (${aLng})) * 111.320 * cos(radians(${aLat}))`;
+  const py = `((${latCol}) - (${aLat})) * 110.574`;
+  const bx = `((${bLng}) - (${aLng})) * 111.320 * cos(radians(${aLat}))`;
+  const by = `((${bLat}) - (${aLat})) * 110.574`;
+  const denom = `NULLIF((${bx})*(${bx}) + (${by})*(${by}), 0)`;
+  const t = `LEAST(1, GREATEST(0, COALESCE((( ${px} )*(${bx}) + ( ${py} )*(${by})) / ${denom}, 0)))`;
+  return `sqrt(POWER((${px}) - (${t})*(${bx}), 2) + POWER((${py}) - (${t})*(${by}), 2))`;
+}
+
 function haversineKmCoord(lat1, lng1, lat2, lng2) {
   const p1 = Number(lat1);
   const p2 = Number(lat2);
@@ -802,6 +849,12 @@ setInterval(async () => {
     console.error("Erro ao expirar pedidos:", err.message);
   }
 }, 5 * 60 * 1000);
+
+// Fila de chamada sequencial (pedido por rota): avança pro próximo motorista
+// quando o da vez estoura o prazo sem responder (ver FILA_OFERTA_TIMEOUT_S).
+setInterval(() => {
+  expirarFilasVencidas().catch((err) => console.error("Erro ao expirar filas:", err.message));
+}, FILA_TICK_MS);
 
 // Retenção de fotos de segurança: apaga do Storage após 30 dias.
 setInterval(() => { aplicarRetencaoFotos().catch((e) => console.warn("retencao:", e.message)); }, 24 * 60 * 60 * 1000);
@@ -1518,6 +1571,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     destino_texto, destino_lat, destino_lng,
     horario, observacao, pessoas,
     selfie_url, selfie_lat, selfie_lng, selfie_em,
+    usar_fila,
   } = req.body;
   const nPessoas = Math.min(Math.max(parseInt(pessoas, 10) || 1, 1), 6);
 
@@ -1553,7 +1607,12 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     // dispara a notificação na hora marcada (notificado continua FALSE até lá).
     const ped = rows[0];
     const agendadoFuturo = ped.horario && new Date(ped.horario).getTime() > Date.now();
-    if (!agendadoFuturo) await notificarMotoristasProximos(ped);
+    if (!agendadoFuturo) {
+      // usar_fila: chama os motoristas da rota um de cada vez (mais perto
+      // primeiro), em vez do broadcast pra todo mundo dentro de 600 m.
+      if (usar_fila) await iniciarFilaPedido(ped.id);
+      else await notificarMotoristasProximos(ped);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar pedido" });
@@ -1749,6 +1808,11 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       if (!ped) return res.status(404).json({ error: "Pedido indisponível" });
       if (ped.passageiro_id === req.user.id) return res.status(400).json({ error: "Este pedido é seu" });
       if (!(await validarMesmoProjeto(req.user.id, ped.passageiro_id, res))) return;
+      // Pedido com fila ativa (chamada sequencial por rota): só quem está na
+      // vez pode responder, e é pelos endpoints /api/pedido-fila/:id — evita
+      // dois motoristas aceitando o mesmo pedido ao mesmo tempo.
+      const temFila = (await pool.query("SELECT 1 FROM pedido_fila WHERE pedido_id = $1 LIMIT 1", [pedido_id])).rows[0];
+      if (temFila) return res.status(400).json({ error: "Este pedido está usando busca automática por proximidade" });
       para_usuario_id = ped.passageiro_id;
     }
 
@@ -1874,6 +1938,183 @@ async function criarViagemDaProposta(propostaId) {
   return rows[0];
 }
 
+/* ==================== FILA DE CHAMADA SEQUENCIAL (pedido por rota) ====================
+ * Passageiro escolhe uma rota (origem->destino); todo motorista habilitado e
+ * disponível "na pista" (dentro de RAIO_ROTA_KM da linha reta) entra numa fila
+ * ordenada do mais perto pro mais longe. Só o motorista da vez recebe a oferta
+ * (buzina); se recusar ou estourar o tempo (FILA_OFERTA_TIMEOUT_S), passa pro
+ * próximo. Quem aceitar primeiro trava a vaga — os demais somem da fila.
+ */
+
+// Motoristas habilitados e disponíveis dentro de RAIO_ROTA_KM da rota
+// origem->destino, ordenados do mais perto da ORIGEM pro mais longe.
+async function motoristasNaRota(origem, destino, projetoId, excluirUsuarioId) {
+  const distRota = distanciaSegmentoKm("l.lat", "l.lng", "$1", "$2", "$3", "$4");
+  const distOrigem = haversine("l.lat", "l.lng", "$1", "$2");
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (u.id) u.id AS motorista_id, ${distOrigem} AS dist_km
+     FROM localizacoes_online l
+     JOIN usuarios u ON u.id = l.usuario_id
+     JOIN habilitacoes_motorista h
+       ON h.motorista_id = u.id AND h.status = 'ativa' AND ${sqlSelfieValida("h")}
+     LEFT JOIN LATERAL (
+       SELECT vagas FROM caronas WHERE motorista_id = u.id AND status = 'ativa'
+       ORDER BY created_at DESC LIMIT 1
+     ) ca ON TRUE
+     WHERE l.disponivel = TRUE
+       AND COALESCE(u.ativo, TRUE) = TRUE
+       AND u.id <> $5
+       AND u.projeto_id = $6
+       AND (ca.vagas IS NULL OR ca.vagas > 0)
+       AND ${distRota} <= $7
+     ORDER BY u.id, h.created_at DESC`,
+    [origem.lat, origem.lng, destino.lat, destino.lng, excluirUsuarioId, projetoId, RAIO_ROTA_KM]
+  );
+  rows.sort((a, b) => Number(a.dist_km) - Number(b.dist_km));
+  return rows;
+}
+
+// Cria a fila do pedido (uma vez) e oferta ao primeiro (mais perto).
+async function iniciarFilaPedido(pedidoId) {
+  const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedidoId])).rows[0];
+  if (!ped) return;
+  const pid = await projetoDoUsuario(ped.passageiro_id);
+  if (!pid) return;
+  const candidatos = await motoristasNaRota(
+    { lat: ped.origem_lat, lng: ped.origem_lng },
+    { lat: ped.destino_lat, lng: ped.destino_lng },
+    pid, ped.passageiro_id
+  );
+  if (!candidatos.length) return;
+  const values = candidatos.map((c, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
+  const params = [pedidoId];
+  candidatos.forEach((c, i) => params.push(c.motorista_id, i, c.dist_km));
+  await pool.query(
+    `INSERT INTO pedido_fila (pedido_id, motorista_id, ordem, dist_km) VALUES ${values}`,
+    params
+  );
+  await ofertarProximo(pedidoId);
+}
+
+// Pega o próximo candidato "aguardando" (menor ordem) e oferta só pra ele.
+async function ofertarProximo(pedidoId) {
+  const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedidoId])).rows[0];
+  if (!ped || ped.status !== "aberto") return;
+  const proximo = (await pool.query(
+    `SELECT * FROM pedido_fila WHERE pedido_id = $1 AND status = 'aguardando' ORDER BY ordem ASC LIMIT 1`,
+    [pedidoId]
+  )).rows[0];
+  if (!proximo) return;
+  await pool.query(
+    `UPDATE pedido_fila SET status = 'ofertada', ofertada_em = NOW(),
+            expira_em = NOW() + ($2 || ' seconds')::interval
+     WHERE id = $1`,
+    [proximo.id, String(FILA_OFERTA_TIMEOUT_S)]
+  );
+  enviarPush(proximo.motorista_id, {
+    title: "Carona pedida perto de você",
+    body: `Passageiro pedindo carona${ped.destino_texto ? ` para ${ped.destino_texto}` : ""}. Você é o mais perto — responda rápido.`,
+    url: "/dashboard.html",
+    action: "nova_oferta_fila",
+  });
+}
+
+// Avançador de fundo: ofertas vencidas (motorista não respondeu a tempo) expiram
+// e a fila passa pro próximo automaticamente.
+async function expirarFilasVencidas() {
+  const { rows } = await pool.query(
+    `UPDATE pedido_fila SET status = 'expirada'
+     WHERE status = 'ofertada' AND expira_em < NOW()
+     RETURNING pedido_id`
+  );
+  const pedidoIds = [...new Set(rows.map((r) => r.pedido_id))];
+  await Promise.all(pedidoIds.map((id) => ofertarProximo(id).catch((e) => console.warn("expirarFilasVencidas:", e.message))));
+}
+
+// Motorista consulta a oferta ativa dele na fila (se houver), com dados do
+// pedido e o prazo pra responder — alimenta o cronômetro no app.
+app.get("/api/motorista/oferta-atual", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT f.id, f.ordem, f.dist_km, f.ofertada_em, f.expira_em,
+              p.id AS pedido_id, p.origem_texto, p.origem_lat, p.origem_lng,
+              p.destino_texto, p.destino_lat, p.destino_lng, p.pessoas, p.observacao,
+              u.nome AS passageiro_nome
+       FROM pedido_fila f
+       JOIN pedidos p ON p.id = f.pedido_id
+       JOIN usuarios u ON u.id = p.passageiro_id
+       WHERE f.motorista_id = $1 AND f.status = 'ofertada' AND p.status = 'aberto'
+       ORDER BY f.ofertada_em DESC LIMIT 1`,
+      [req.user.id]
+    );
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao consultar oferta" });
+  }
+});
+
+// Motorista aceita a oferta da fila: cria a proposta (já aceita) + a viagem
+// reaproveitando o mesmo caminho de sempre, e trava as demais posições da fila.
+app.post("/api/pedido-fila/:id/aceitar", verificarAuth, async (req, res) => {
+  try {
+    const oferta = (await pool.query(
+      `UPDATE pedido_fila SET status = 'aceita', respondida_em = NOW()
+       WHERE id = $1 AND motorista_id = $2 AND status = 'ofertada' AND expira_em > NOW()
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    )).rows[0];
+    if (!oferta) return res.status(404).json({ error: "Oferta não encontrada, expirada ou já respondida" });
+
+    const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1 AND status = 'aberto'", [oferta.pedido_id])).rows[0];
+    if (!ped) return res.status(404).json({ error: "Pedido não está mais disponível" });
+
+    const proposta = (await pool.query(
+      `INSERT INTO propostas (de_usuario_id, para_usuario_id, pedido_id, status)
+       VALUES ($1, $2, $3, 'aceito') RETURNING *`,
+      [req.user.id, ped.passageiro_id, ped.id]
+    )).rows[0];
+    const viagem = await criarViagemDaProposta(proposta.id);
+    if (!viagem) return res.status(500).json({ error: "Não foi possível iniciar a viagem. Tente novamente." });
+
+    // Trava: ninguém mais da fila pode aceitar este pedido.
+    await pool.query(
+      `UPDATE pedido_fila SET status = 'cancelada'
+       WHERE pedido_id = $1 AND id <> $2 AND status IN ('aguardando', 'ofertada')`,
+      [oferta.pedido_id, oferta.id]
+    );
+
+    res.json({ proposta_id: proposta.id, viagem_id: viagem.id });
+
+    enviarPush(ped.passageiro_id, {
+      title: "Carona confirmada!",
+      body: "Um motorista aceitou sua solicitação. Toque para acompanhar ao vivo.",
+      url: "/dashboard.html",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao aceitar oferta" });
+  }
+});
+
+// Motorista recusa: some da fila dele e a oferta passa pro próximo mais perto na hora.
+app.post("/api/pedido-fila/:id/recusar", verificarAuth, async (req, res) => {
+  try {
+    const oferta = (await pool.query(
+      `UPDATE pedido_fila SET status = 'recusada', respondida_em = NOW()
+       WHERE id = $1 AND motorista_id = $2 AND status = 'ofertada'
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    )).rows[0];
+    if (!oferta) return res.status(404).json({ error: "Oferta não encontrada ou já respondida" });
+    await ofertarProximo(oferta.pedido_id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao recusar oferta" });
+  }
+});
+
 app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -1922,16 +2163,20 @@ app.post("/api/propostas/:id/recusar", verificarAuth, async (req, res) => {
 // começar. Reabre a oferta/pedido para novos matches.
 app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
   try {
-    // Permite cancelar uma proposta PENDENTE (chamada em espera) ou ACEITA (antes da
-    // viagem iniciar). Vale para quem enviou ou recebeu. Guarda o status ANTERIOR
-    // (numa CTE, atômico com o UPDATE) para saber se uma vaga precisa voltar.
+    // Permite cancelar uma proposta PENDENTE (chamada em espera) ou ACEITA — mas,
+    // nesse caso, só ANTES do embarque (viagem ainda na fase 'encontro', motorista
+    // a caminho de buscar). Depois que o motorista confirma o embarque (fase
+    // 'destino', POST /api/viagens/:id/iniciar) não dá mais pra cancelar por aqui.
+    // Vale para quem enviou ou recebeu. Guarda o status ANTERIOR (numa CTE,
+    // atômico com o UPDATE) para saber se uma vaga/viagem precisa ser desfeita.
     const pr = (await pool.query(
       `WITH alvo AS (
          SELECT * FROM propostas
          WHERE id = $1 AND (de_usuario_id = $2 OR para_usuario_id = $2)
            AND status IN ('pendente', 'aceito')
            AND NOT EXISTS (
-             SELECT 1 FROM viagens v WHERE v.proposta_id = propostas.id AND v.status = 'em_andamento'
+             SELECT 1 FROM viagens v
+             WHERE v.proposta_id = propostas.id AND v.status = 'em_andamento' AND v.fase = 'destino'
            )
          FOR UPDATE
        ),
@@ -1946,6 +2191,15 @@ app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
     )).rows[0];
     if (!pr) return res.status(400).json({ error: "Não é possível cancelar (viagem já iniciada ou proposta inválida)" });
 
+    // Proposta já tinha virado viagem (fase 'encontro', motorista ainda a
+    // caminho): desfaz a viagem também, senão fica um "em_andamento" órfão.
+    if (pr.status_anterior === "aceito") {
+      await pool.query(
+        "UPDATE viagens SET status = 'cancelada' WHERE proposta_id = $1 AND status = 'em_andamento'",
+        [pr.id]
+      );
+    }
+
     // Reabre a carona/pedido para que possam ser oferecidos de novo. Se a
     // proposta JÁ estava aceita, ela tinha ocupado 1 vaga (ver
     // criarViagemDaProposta) — devolve essa vaga agora.
@@ -1959,7 +2213,20 @@ app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
         await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);
       }
     }
-    if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'", [pr.pedido_id]);
+    if (pr.pedido_id) {
+      await pool.query("UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'", [pr.pedido_id]);
+      // Pedido com fila ativa: quem cancelou libera a vaga. O aceite tinha
+      // travado (cancelado) o resto da fila — reabre essas posições e chama
+      // o próximo mais perto na hora, sem esperar o passageiro agir de novo.
+      const temFila = (await pool.query("SELECT 1 FROM pedido_fila WHERE pedido_id = $1 LIMIT 1", [pr.pedido_id])).rows[0];
+      if (temFila) {
+        await pool.query(
+          "UPDATE pedido_fila SET status = 'aguardando' WHERE pedido_id = $1 AND status = 'cancelada'",
+          [pr.pedido_id]
+        );
+        await ofertarProximo(pr.pedido_id);
+      }
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -2189,8 +2456,60 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   }
 });
 
+// Prévia (somente leitura) dos motoristas "na pista" da rota escolhida —
+// mostra no mapa/lista ANTES mesmo de o passageiro publicar o pedido, do
+// mais perto pro mais longe (mesma ordem em que a fila os chamaria).
+app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
+  const { origem_lat, origem_lng, destino_lat, destino_lng } = req.query;
+  if (origem_lat == null || origem_lng == null || destino_lat == null || destino_lng == null) {
+    return res.status(400).json({ error: "Origem e destino são obrigatórios" });
+  }
+  try {
+    const pid = await projetoDoUsuario(req.user.id);
+    if (!pid) return res.json([]);
+    const distRota = distanciaSegmentoKm("l.lat", "l.lng", "$2", "$3", "$4", "$5");
+    const distOrigem = haversine("l.lat", "l.lng", "$2", "$3");
+    const { rows } = await pool.query(
+      `SELECT * FROM (
+         SELECT DISTINCT ON (u.id)
+                u.id, u.nome, u.sexo, l.lat, l.lng,
+                h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
+                ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
+                ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas,
+                ${distOrigem} AS dist_km
+         FROM localizacoes_online l
+         JOIN usuarios u ON u.id = l.usuario_id
+         JOIN habilitacoes_motorista h
+           ON h.motorista_id = u.id AND h.status = 'ativa' AND ${sqlSelfieValida("h")}
+         LEFT JOIN LATERAL (
+           SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng, vagas
+           FROM caronas WHERE motorista_id = u.id AND status = 'ativa'
+           ORDER BY created_at DESC LIMIT 1
+         ) ca ON TRUE
+         WHERE l.disponivel = TRUE
+           AND COALESCE(u.ativo, TRUE) = TRUE
+           AND u.id <> $1
+           AND u.projeto_id = $6
+           AND (ca.vagas IS NULL OR ca.vagas > 0)
+           AND ${distRota} <= $7
+         ORDER BY u.id, h.created_at DESC
+       ) s
+       ORDER BY dist_km ASC
+       LIMIT 100`,
+      [req.user.id, origem_lat, origem_lng, destino_lat, destino_lng, pid, RAIO_ROTA_KM]
+    );
+    res.json(rows.map((r, i) => ({ ...r, ordem: i })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar motoristas na rota" });
+  }
+});
+
 // Passageiro toca no motorista em modo geral (sem destino): registra uso, avisa o motorista
-// e libera o WhatsApp com mensagem padrão.
+// e libera o WhatsApp/telefone com mensagem padrão. Vale tanto pro motorista em
+// modo geral (combina destino) quanto pro que já publicou carona (buzina/liga
+// pra ele direto, sem precisar esperar aceite de proposta) — é o "buzina" da
+// fila de motoristas na rota.
 app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) => {
   const motoristaId = parseInt(req.params.id, 10);
   if (!motoristaId) return res.status(400).json({ error: "Motorista inválido" });
@@ -2202,12 +2521,12 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
 
     const loc = (await pool.query(
       `SELECT l.disponivel, l.lat, l.lng, l.online_desde,
-              (SELECT id FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1) AS carona_id
+              (SELECT destino_texto FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1) AS destino_texto
        FROM localizacoes_online l WHERE l.usuario_id = $1`,
       [motoristaId]
     )).rows[0];
-    if (!loc?.disponivel || loc.carona_id) {
-      return res.status(404).json({ error: "Motorista não está em modo geral agora" });
+    if (!loc?.disponivel) {
+      return res.status(404).json({ error: "Motorista não está disponível agora" });
     }
 
     const mot = (await pool.query(
@@ -2216,7 +2535,9 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
     )).rows[0];
     if (!mot?.telefone) return res.status(400).json({ error: "Motorista sem WhatsApp cadastrado" });
 
-    const mensagem = "Olá, qual é o seu destino agora?";
+    const mensagem = loc.destino_texto
+      ? `Olá! Vi que você está indo para ${loc.destino_texto}. Posso ir com você?`
+      : "Olá, qual é o seu destino agora?";
     const { rows } = await pool.query(
       `INSERT INTO contatos_motorista (motorista_id, passageiro_id, mensagem)
        VALUES ($1, $2, $3) RETURNING id`,

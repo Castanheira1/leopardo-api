@@ -312,7 +312,7 @@ function carregarMaps() {
 
 // Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
 function criarMarcador(opts = {}) {
-    const { map, position, title, icon, label, zIndex, cor, invisivel } = opts;
+    const { map, position, title, icon, label, zIndex, cor, invisivel, badge } = opts;
     let pinEl = null;
     let content = null;
     if (invisivel) {
@@ -325,7 +325,21 @@ function criarMarcador(opts = {}) {
         img.style.width = '44px';
         img.style.height = '44px';
         img.draggable = false;
-        content = img;
+        if (badge != null) {
+            // Selo numerado (posição na fila) por cima do ícone do carro.
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'position:relative;width:44px;height:44px;';
+            const sel = document.createElement('span');
+            sel.textContent = String(badge);
+            sel.style.cssText = 'position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;'
+                + 'padding:0 3px;border-radius:50%;background:#EAD298;color:#0F3D3E;'
+                + 'font:700 11px/16px system-ui,sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+            wrap.appendChild(img);
+            wrap.appendChild(sel);
+            content = wrap;
+        } else {
+            content = img;
+        }
     } else if (label || cor) {
         const pinOpts = {
             background: cor || '#EA4335',

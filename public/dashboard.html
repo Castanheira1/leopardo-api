@@ -307,6 +307,21 @@
         </div>
     </div>
 
+    <!-- Fila de motoristas na rota: sua vez de responder (mais perto primeiro) -->
+    <div id="modalOfertaFila" class="cam-overlay" style="display:none;">
+        <div class="cam-box sol-box">
+            <div class="sol-badge">Você é o mais perto!</div>
+            <h3 id="filaOfNome">Passageiro pedindo carona</h3>
+            <div id="filaOfRota" class="sol-rota"></div>
+            <p class="cam-hint">Responda rápido — se não der tempo, a vaga passa pro próximo motorista da rota.</p>
+            <div id="filaOfCronometro" class="fila-cronometro">25s</div>
+            <div class="sol-actions">
+                <button class="btn btn-danger" onclick="responderOfertaFila(false)">Recusar</button>
+                <button class="btn btn-primary" onclick="responderOfertaFila(true)">Aceitar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Carona de um carro clicado no mapa (passageiro pede direto) -->
     <div id="modalCarro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharCarro()">
         <div class="cam-box sol-box">
@@ -316,10 +331,10 @@
             <div id="carroRota" class="sol-rota"></div>
             <div id="carroMapa" class="mini-mapa" style="display:none;"></div>
             <span id="carroPlaca" class="sheet-placa"></span>
+            <div id="carroContatos"></div>
             <div class="sol-actions">
                 <button type="button" class="btn btn-secondary" onclick="fecharCarro()">Fechar</button>
                 <button type="button" class="btn btn-primary" id="btnPedirCarroMapa" onclick="pedirCaronaDoCarro()">Pedir esta carona</button>
-                <button type="button" class="btn btn-primary" id="btnWhatsMotoristaMapa" onclick="solicitarContatoMotorista()" style="display:none;">Falar no WhatsApp</button>
             </div>
         </div>
     </div>
@@ -1590,6 +1605,7 @@
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
                 horario: ehAgendado ? hor.iso : null, pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+                usar_fila: true,   // chama os motoristas da rota um de cada vez, mais perto primeiro
             };
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
@@ -1640,41 +1656,66 @@
         </div>`;
     }
 
-    // Chama um motorista em modo online (modo amarelo, sem destino publicado) direto
-    // pela lista: avisa o motorista (ele buzina) e abre o WhatsApp para combinar.
-    async function chamarMotoristaOnlineId(id) {
-        if (!user.telefone) return msg('Adicione seu WhatsApp no Perfil para continuar', 'error');
+    // Três jeitos de falar com um motorista disponível na rota (buzina, ligação,
+    // WhatsApp) — vale tanto pro modo amarelo quanto pra carona publicada. Cada
+    // toque avisa o motorista (push) e revela o telefone pra essa ação.
+    async function contatoMotorista(id) {
+        if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
         try {
             const r = await fetchWithAuth('/api/motoristas-online/' + id + '/contato', { method: 'POST', body: '{}' });
             const d = await r.json();
-            if (!r.ok) return msg(d.error || 'Erro', 'error');
-            abrirWhatsApp(d.telefone, d.mensagem || 'Olá, qual é o seu destino agora?');
-            msg('WhatsApp aberto — combine o destino com o motorista.');
+            if (!r.ok) { msg(d.error || 'Erro', 'error'); return null; }
+            return d;
         } catch (_) {
             msg('Erro de conexão. Tente novamente.', 'error');
+            return null;
         }
+    }
+    async function buzinarMotorista(id) {
+        const d = await contatoMotorista(id);
+        if (d) msg('Motorista avisado! Ele deve responder em instantes.');
+    }
+    async function ligarMotorista(id) {
+        const d = await contatoMotorista(id);
+        if (d && d.telefone) window.location.href = 'tel:' + d.telefone.replace(/\D/g, '');
+    }
+    async function whatsappMotorista(id) {
+        const d = await contatoMotorista(id);
+        if (d && d.telefone) {
+            abrirWhatsApp(d.telefone, d.mensagem);
+            msg('WhatsApp aberto — combine com o motorista.');
+        }
+    }
+    function botoesContato(id) {
+        return `<div class="ride-contatos">
+            <button type="button" class="btn btn-secondary btn-sm" title="Buzinar (avisar o motorista)" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+        </div>`;
     }
 
     // Card estilo lista (sem preço): empresa/nome do motorista + marca/modelo (TAG) +
-    // placa, com a distância em km da minha posição. Dois tipos:
+    // placa, com a distância em km da minha posição e a posição na fila (quando a
+    // busca é por rota). Dois tipos:
     //   - carona (caronaId): motorista indo para o meu destino -> "Solicitar" (pedirVaga).
-    //   - online geral (sem carona): motorista disponível por perto -> "Chamar" (WhatsApp).
+    //   - online geral (sem carona): motorista disponível por perto.
+    // Em ambos, sempre dá pra buzinar/ligar/chamar no WhatsApp direto da lista.
     function cardMotoristaDisponivel(it) {
         const km = it.dist != null && isFinite(it.dist) ? `${Number(it.dist).toFixed(1)} km` : '';
         const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
         const empresa = esc(it.nome || 'Motorista');
+        const posicao = it.ordem != null ? `<span class="ride-posicao">Nº ${it.ordem + 1} na fila</span>` : '';
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} • ${it.vagas || 1} vaga(s)`
             : `${ICN.car} Disponível agora — combine o destino`;
-        const botao = it.caronaId
-            ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${it.caronaId})">Solicitar</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="chamarMotoristaOnlineId(${it.id})">Chamar</button>`;
+        const botao = it.caronaId ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${it.caronaId})">Solicitar</button>` : '';
         return `<div class="ride-item">
             ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb">` : ''}
             <div class="ride-info">
-                <strong>${empresa}</strong><br>
+                <strong>${empresa}</strong> ${posicao}<br>
                 <small>${carro}</small><br>
                 <small>${linha}</small>
+                ${botoesContato(it.id)}
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto;">
                 ${km ? `<div style="font-weight:700;white-space:nowrap;">${km}</div>` : ''}
@@ -1701,10 +1742,17 @@
             if (o) { qCaronas.set('lat', o.lat); qCaronas.set('lng', o.lng); }
             qCaronas.set('dest_lat', dest.lat); qCaronas.set('dest_lng', dest.lng);
             const qOnline = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
-            const [caronas, online] = await Promise.all([
+            const qRota = o ? '?' + new URLSearchParams({
+                origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
+            }).toString() : '';
+            const [caronas, online, naRota] = await Promise.all([
                 fetchWithAuth('/api/caronas?' + qCaronas.toString()).then(r => r.ok ? r.json() : []).catch(() => []),
                 o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
+                o ? fetchWithAuth('/api/motoristas-rota' + qRota).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
             ]);
+            // Posição na fila (mais perto->mais longe ao longo da rota escolhida) — só
+            // decoração da lista/mapa; quem decide a ordem de chamada é o backend.
+            const ordemPorId = new Map((Array.isArray(naRota) ? naRota : []).map((m) => [m.id, m.ordem]));
             // Chave por motorista: a carona (indo ao destino) tem prioridade sobre o modo geral.
             const porMotorista = new Map();
             (Array.isArray(caronas) ? caronas : []).forEach((c) => {
@@ -1713,6 +1761,7 @@
                     nome: c.motorista_empresa || c.motorista_nome, placa: c.placa, tag: c.tag,
                     foto: c.foto_carro_url, vagas: c.vagas, destino: c.destino_texto,
                     dist: c.dist_origem != null ? Number(c.dist_origem) : Infinity,
+                    ordem: ordemPorId.has(c.motorista_id) ? ordemPorId.get(c.motorista_id) : null,
                 });
             });
             (Array.isArray(online) ? online : []).forEach((m) => {
@@ -1723,6 +1772,7 @@
                     id: m.id, caronaId: null,
                     nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
                     vagas: m.vagas || 1, destino: null, dist,
+                    ordem: ordemPorId.has(m.id) ? ordemPorId.get(m.id) : null,
                 });
             });
             const itens = [...porMotorista.values()].sort((a, b) => a.dist - b.dist);
@@ -1872,34 +1922,15 @@
         const foto = document.getElementById('carroFoto');
         if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
-        const btnWa = document.getElementById('btnWhatsMotoristaMapa');
         if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
-        if (btnWa) btnWa.style.display = temRota ? 'none' : '';
+        // Buzina/Ligar/WhatsApp sempre disponíveis, carona publicada ou modo amarelo.
+        document.getElementById('carroContatos').innerHTML = botoesContato(m.id);
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
         const d = m.destino_lat != null ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
         desenharRotaMini('carroMapa', o, d);
     }
     function fecharCarro() { document.getElementById('modalCarro').style.display = 'none'; }
-    async function solicitarContatoMotorista() {
-        const m = carroSel;
-        if (!m || m.carona_id) return msg('Esse motorista não está mais disponível.', 'error');
-        if (!user.telefone) return msg('Adicione seu WhatsApp no Perfil para continuar', 'error');
-        const btn = document.getElementById('btnWhatsMotoristaMapa');
-        if (btn) { btn.disabled = true; btn.textContent = 'Abrindo…'; }
-        try {
-            const r = await fetchWithAuth('/api/motoristas-online/' + m.id + '/contato', { method: 'POST', body: '{}' });
-            const d = await r.json();
-            if (!r.ok) return msg(d.error || 'Erro', 'error');
-            abrirWhatsApp(d.telefone, d.mensagem || 'Olá, qual é o seu destino agora?');
-            fecharCarro();
-            msg('WhatsApp aberto — combine o destino com o motorista.');
-        } catch (_) {
-            msg('Erro de conexão. Tente novamente.', 'error');
-        } finally {
-            if (btn) { btn.disabled = false; btn.textContent = 'Falar no WhatsApp'; }
-        }
-    }
     async function pedirCaronaDoCarro() {
         const m = carroSel;
         fecharCarro();
@@ -2368,6 +2399,61 @@
             msg('Solicitação recusada.');
         }
     }
+    /* -------- fila de motoristas na rota: oferta sequencial (mais perto primeiro) -------- */
+    let ofertaFilaAtual = null;
+    let ofertaFilaCronometro = null;
+    function pararCronometroFila() {
+        if (ofertaFilaCronometro) { clearInterval(ofertaFilaCronometro); ofertaFilaCronometro = null; }
+    }
+    function mostrarOfertaFila(o) {
+        ofertaFilaAtual = o;
+        document.getElementById('filaOfNome').textContent = o.passageiro_nome
+            ? `${o.passageiro_nome} está pedindo carona` : 'Passageiro pedindo carona';
+        document.getElementById('filaOfRota').innerHTML =
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Embarque:</b> ${esc(o.origem_texto || 'local do passageiro')}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(o.destino_texto || 'destino no mapa')}</div>`;
+        document.getElementById('modalOfertaFila').style.display = 'flex';
+        pararCronometroFila();
+        const tick = () => {
+            const restam = Math.max(0, Math.round((new Date(o.expira_em).getTime() - Date.now()) / 1000));
+            const el = document.getElementById('filaOfCronometro');
+            if (el) el.textContent = restam + 's';
+            if (restam <= 0) { pararCronometroFila(); fecharOfertaFila(); }
+        };
+        tick();
+        ofertaFilaCronometro = setInterval(tick, 1000);
+    }
+    function fecharOfertaFila() {
+        ofertaFilaAtual = null;
+        pararCronometroFila();
+        document.getElementById('modalOfertaFila').style.display = 'none';
+    }
+    async function responderOfertaFila(aceitar) {
+        const o = ofertaFilaAtual;
+        if (!o) return;
+        fecharOfertaFila();
+        const r = await fetchWithAuth('/api/pedido-fila/' + o.id + '/' + (aceitar ? 'aceitar' : 'recusar'), { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Não foi possível responder — talvez tenha vencido o tempo.', 'error');
+        if (aceitar && d.viagem_id) {
+            const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
+            if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+        } else if (!aceitar) {
+            msg('Repassado para o próximo motorista da rota.');
+        }
+    }
+    async function pollOfertaFila() {
+        if (document.hidden) return;
+        if (document.querySelector('.cam-video')) return;   // já em viagem: não interrompe
+        try {
+            const r = await fetchWithAuth('/api/motorista/oferta-atual');
+            if (!r || !r.ok) return;
+            const o = await r.json();
+            if (o && (!ofertaFilaAtual || ofertaFilaAtual.id !== o.id)) mostrarOfertaFila(o);
+            else if (!o && ofertaFilaAtual) fecharOfertaFila();   // expirou/foi cancelada em outro lugar
+        } catch (_) { /* falha silenciosa: só tenta de novo no próximo tick */ }
+    }
+
     async function pollPropostas() {
         if (document.hidden) return;   // app em segundo plano: não consome rede
         try {
@@ -2828,6 +2914,8 @@
         route: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V9a4 4 0 0 1 4-4h4M18 7v8a4 4 0 0 1-4 4h-4"/></svg>',
         car: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>',
         phone: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M6 3h3l2 5-2 1.5a11 11 0 0 0 5.5 5.5L18 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg>',
+        horn: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 10v4h3l6 4V6l-6 4H4z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg>',
+        whats: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 20l1.4-4.2A8 8 0 1 1 9 18.6L4 20z"/><path d="M8.5 9.5c0 3.5 2.5 6 6 6l1-2-2.5-1-1 1c-1-.5-2-1.5-2.5-2.5l1-1-1-2.5z"/></svg>',
     };
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
@@ -2837,11 +2925,24 @@
         async function tick() {
             if (document.hidden) return;   // segundo plano: não polla
             try {
-                // Posição do passageiro: motoristas online num raio de 600 m.
+                // Posição do passageiro: motoristas online num raio de 600 m. Com um
+                // destino escolhido, junta também a fila da rota (mesma ordem da chamada
+                // sequencial) pra numerar os carros no mapa (1º, 2º, 3º...).
                 const o = selPed ? selPed.getOrigem() : null;
+                const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
                 const lista = await r.json();
+                if (o && dest) {
+                    const qRota = '?' + new URLSearchParams({
+                        origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
+                    }).toString();
+                    const naRota = await fetchWithAuth('/api/motoristas-rota' + qRota).then((rr) => rr.ok ? rr.json() : []).catch(() => []);
+                    const ordemPorId = new Map((Array.isArray(naRota) ? naRota : []).map((m) => [m.id, m.ordem]));
+                    const idsJaListados = new Set(lista.map((m) => m.id));
+                    lista.forEach((m) => { if (ordemPorId.has(m.id)) m.ordem = ordemPorId.get(m.id); });
+                    (Array.isArray(naRota) ? naRota : []).forEach((m) => { if (!idsJaListados.has(m.id)) lista.push(m); });
+                }
                 const vistos = {};
                 lista.forEach((m) => {
                     vistos[m.id] = true;
@@ -2856,6 +2957,7 @@
                         const icon = m.carona_id ? CAR_ICON_URL : CAR_ICON_GOLD_URL;
                         const car = criarMarcador({
                             position: pos, map, icon,
+                            badge: m.ordem != null ? m.ordem + 1 : undefined,
                             title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
                         const abrir = () => mostrarCaronaDoCarro(fleet.markers[m.id].m);
@@ -3182,10 +3284,13 @@
         registrarPush(true);   // sincroniza a inscrição se a permissão já foi dada (sem popup)
         pollPropostas();
         setInterval(pollPropostas, 8000);   // detecta aceite/oferta sem martelar o servidor
+        pollOfertaFila();
+        setInterval(pollOfertaFila, 5000);   // fila sequencial: cronômetro curto, poll um pouco mais frequente
         // Voltou do segundo plano: atualiza na hora, sem esperar o próximo tick.
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 pollPropostas();
+                pollOfertaFila();
                 if (document.getElementById('tabPedir')?.classList.contains('active')) sincronizarQuandoPed();
                 if (motoristaOnlineModo) {
                     ativarWakeLock();   // o navegador solta o lock ao ocultar a aba: re-adquire ao voltar
@@ -3199,6 +3304,10 @@
                 if (ev.data && ev.data.action === 'contato_whatsapp') {
                     buzinar();
                     pollContatosMotoristaOnce();
+                }
+                if (ev.data && ev.data.action === 'nova_oferta_fila') {
+                    buzinar();
+                    pollOfertaFila();   // não espera o próximo tick — mostra a oferta na hora
                 }
             });
         }
