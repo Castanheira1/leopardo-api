@@ -1640,45 +1640,95 @@
         </div>`;
     }
 
-    // Card estilo lista (sem preço): empresa do motorista + marca/modelo (TAG) + placa,
-    // com a distância em km da minha posição. Ordenado no servidor (perto -> longe).
-    function cardMotoristaDestino(c) {
-        const km = c.dist_origem != null ? `${Number(c.dist_origem).toFixed(1)} km` : '';
-        const carro = [c.tag, c.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
-        const empresa = esc(c.motorista_empresa || c.motorista_nome || 'Motorista');
+    // Chama um motorista em modo online (modo amarelo, sem destino publicado) direto
+    // pela lista: avisa o motorista (ele buzina) e abre o WhatsApp para combinar.
+    async function chamarMotoristaOnlineId(id) {
+        if (!user.telefone) return msg('Adicione seu WhatsApp no Perfil para continuar', 'error');
+        try {
+            const r = await fetchWithAuth('/api/motoristas-online/' + id + '/contato', { method: 'POST', body: '{}' });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            abrirWhatsApp(d.telefone, d.mensagem || 'Olá, qual é o seu destino agora?');
+            msg('WhatsApp aberto — combine o destino com o motorista.');
+        } catch (_) {
+            msg('Erro de conexão. Tente novamente.', 'error');
+        }
+    }
+
+    // Card estilo lista (sem preço): empresa/nome do motorista + marca/modelo (TAG) +
+    // placa, com a distância em km da minha posição. Dois tipos:
+    //   - carona (caronaId): motorista indo para o meu destino -> "Solicitar" (pedirVaga).
+    //   - online geral (sem carona): motorista disponível por perto -> "Chamar" (WhatsApp).
+    function cardMotoristaDisponivel(it) {
+        const km = it.dist != null && isFinite(it.dist) ? `${Number(it.dist).toFixed(1)} km` : '';
+        const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
+        const empresa = esc(it.nome || 'Motorista');
+        const linha = it.caronaId
+            ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} • ${it.vagas || 1} vaga(s)`
+            : `${ICN.car} Disponível agora — combine o destino`;
+        const botao = it.caronaId
+            ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${it.caronaId})">Solicitar</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="chamarMotoristaOnlineId(${it.id})">Chamar</button>`;
         return `<div class="ride-item">
-            ${c.foto_carro_url ? `<img src="${esc(c.foto_carro_url)}" class="ride-thumb">` : ''}
+            ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb">` : ''}
             <div class="ride-info">
                 <strong>${empresa}</strong><br>
                 <small>${carro}</small><br>
-                <small>${ICN.pin} ${esc(c.destino_texto || 'mesmo destino')} • ${c.vagas} vaga(s)</small>
+                <small>${linha}</small>
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto;">
                 ${km ? `<div style="font-weight:700;white-space:nowrap;">${km}</div>` : ''}
-                <button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Solicitar</button>
+                ${botao}
             </div>
         </div>`;
     }
 
-    // Ao escolher um local no mapa, mostra os motoristas que estão indo para lá (com vaga),
-    // do mais perto ao mais longe da minha localização. dest = null -> esconde a lista.
+    // Ao escolher um local no mapa, monta a lista (estilo Uber) de motoristas para lá,
+    // do mais perto ao mais longe. Junta DUAS fontes para nunca vir vazia à toa:
+    //   1) caronas indo para o destino escolhido (com vaga);
+    //   2) motoristas online por perto no modo amarelo (sem destino publicado).
+    // dest = null -> esconde a lista.
     async function carregarCaronasDestino(dest) {
         const cont = document.getElementById('motoristasDestino');
         const lista = document.getElementById('listaMotoristasDestino');
         if (!cont || !lista) return;
         if (!dest) { cont.style.display = 'none'; lista.innerHTML = ''; return; }
         const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
-        const params = new URLSearchParams();
-        if (o) { params.set('lat', o.lat); params.set('lng', o.lng); }
-        params.set('dest_lat', dest.lat); params.set('dest_lng', dest.lng);
         cont.style.display = 'block';
         lista.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
         try {
-            const r = await fetchWithAuth('/api/caronas?' + params.toString());
-            const caronas = await r.json();
-            lista.innerHTML = (Array.isArray(caronas) && caronas.length)
-                ? caronas.map(cardMotoristaDestino).join('')
-                : '<p class="cam-hint">Nenhum motorista indo para esse local com vaga agora.</p>';
+            const qCaronas = new URLSearchParams();
+            if (o) { qCaronas.set('lat', o.lat); qCaronas.set('lng', o.lng); }
+            qCaronas.set('dest_lat', dest.lat); qCaronas.set('dest_lng', dest.lng);
+            const qOnline = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
+            const [caronas, online] = await Promise.all([
+                fetchWithAuth('/api/caronas?' + qCaronas.toString()).then(r => r.ok ? r.json() : []).catch(() => []),
+                o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
+            ]);
+            // Chave por motorista: a carona (indo ao destino) tem prioridade sobre o modo geral.
+            const porMotorista = new Map();
+            (Array.isArray(caronas) ? caronas : []).forEach((c) => {
+                porMotorista.set(c.motorista_id, {
+                    id: c.motorista_id, caronaId: c.id,
+                    nome: c.motorista_empresa || c.motorista_nome, placa: c.placa, tag: c.tag,
+                    foto: c.foto_carro_url, vagas: c.vagas, destino: c.destino_texto,
+                    dist: c.dist_origem != null ? Number(c.dist_origem) : Infinity,
+                });
+            });
+            (Array.isArray(online) ? online : []).forEach((m) => {
+                if (m.carona_id) return;              // com carona: só entra se casar com o destino (já veio acima)
+                if (porMotorista.has(m.id)) return;   // já listado
+                const dist = (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity;
+                porMotorista.set(m.id, {
+                    id: m.id, caronaId: null,
+                    nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
+                    vagas: m.vagas || 1, destino: null, dist,
+                });
+            });
+            const itens = [...porMotorista.values()].sort((a, b) => a.dist - b.dist);
+            lista.innerHTML = itens.length
+                ? itens.map(cardMotoristaDisponivel).join('')
+                : '<p class="cam-hint">Nenhum motorista por perto agora. Você pode pedir a carona mesmo assim — avisamos os motoristas na sua rota.</p>';
         } catch (_) {
             lista.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
         }
@@ -2197,7 +2247,7 @@
             // Número visível: dá para conferir DE QUEM é o WhatsApp que vai abrir
             // (se abrir o seu próprio chat, o cadastro do outro está com o seu número).
             acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${JSON.stringify(tel)})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>` : ''}`;
+                     ${tel ? `<button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${esc(JSON.stringify(tel))})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
@@ -2496,7 +2546,7 @@
         const eta = document.getElementById('viagemEta');
         if (fase) fase.textContent = rotuloFaseViagem(vv);
         const wppBtn = vv.tel
-            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `abrirWhatsApp(${JSON.stringify(vv.tel)})`)
+            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `abrirWhatsApp(${esc(JSON.stringify(vv.tel))})`)
             : '';
         const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
         const btnAnd = document.getElementById('btnViagemAndamento');

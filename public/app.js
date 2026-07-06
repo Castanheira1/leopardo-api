@@ -839,20 +839,31 @@ function linkWhatsApp(telefone) {
     return n ? `https://wa.me/${n}` : null;
 }
 
-// Abre o WhatsApp direto no app (evita a página intermediária api.whatsapp.com no celular).
+// Abre o WhatsApp direto no app (evita a página intermediária api.whatsapp.com no
+// celular). Se o esquema whatsapp:// não abrir — sem WhatsApp instalado ou bloqueado
+// num PWA em modo standalone — cai automaticamente para o link wa.me em nova aba,
+// para o botão NUNCA ficar sem efeito.
 function abrirWhatsApp(telefone, texto) {
     const n = normalizarTelefoneWhatsApp(telefone);
     if (!n) return false;
     const msg = texto != null ? String(texto) : '';
+    const waWeb = `https://wa.me/${n}` + (msg ? `?text=${encodeURIComponent(msg)}` : '');
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     if (mobile) {
-        let url = `whatsapp://send?phone=${n}`;
-        if (msg) url += `&text=${encodeURIComponent(msg)}`;
-        window.location.href = url;
+        const appUrl = `whatsapp://send?phone=${n}` + (msg ? `&text=${encodeURIComponent(msg)}` : '');
+        let abriu = false;
+        const cancelar = () => { abriu = true; };
+        // O app abrindo tira o foco da página (fica oculta): isso cancela o fallback.
+        document.addEventListener('visibilitychange', cancelar, { once: true });
+        window.addEventListener('pagehide', cancelar, { once: true });
+        setTimeout(() => {
+            document.removeEventListener('visibilitychange', cancelar);
+            window.removeEventListener('pagehide', cancelar);
+            if (!abriu) window.open(waWeb, '_blank', 'noopener');   // esquema não abriu: usa wa.me
+        }, 1200);
+        window.location.href = appUrl;
     } else {
-        let url = `https://wa.me/${n}`;
-        if (msg) url += `?text=${encodeURIComponent(msg)}`;
-        window.open(url, '_blank', 'noopener');
+        window.open(waWeb, '_blank', 'noopener');
     }
     return true;
 }
