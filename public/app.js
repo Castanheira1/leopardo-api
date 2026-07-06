@@ -310,11 +310,55 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
+// Carro visto de cima (SVG) para marcadores no mapa. variant: 'white' | 'gold'.
+function svgCarroTopoUrl(heading = 0, variant = 'white') {
+    const body = variant === 'gold' ? '#EAD298' : '#ffffff';
+    const stroke = variant === 'gold' ? '#c9a227' : '#d0d0d0';
+    const hood = variant === 'gold' ? '#fff3c4' : '#e8e8e8';
+    const mirror = variant === 'gold' ? '#b8942e' : '#cfcfcf';
+    const h = Number(heading) || 0;
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200" width="40" height="80">'
+        + `<g transform="rotate(${h} 50 100)">`
+        + `<rect x="20" y="10" width="60" height="180" rx="28" fill="${body}" stroke="${stroke}" stroke-width="1.5"/>`
+        + '<rect x="28" y="55" width="44" height="70" rx="10" fill="#1a1a1a"/>'
+        + `<rect x="26" y="30" width="48" height="14" rx="6" fill="${hood}"/>`
+        + '<rect x="22" y="150" width="18" height="10" rx="3" fill="#e02020"/>'
+        + '<rect x="60" y="150" width="18" height="10" rx="3" fill="#e02020"/>'
+        + `<circle cx="20" cy="45" r="4" fill="${mirror}"/>`
+        + `<circle cx="80" cy="45" r="4" fill="${mirror}"/>`
+        + '</g></svg>';
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
+// Rumo (graus, 0 = norte) entre dois pontos — para orientar o ícone do carro.
+function bearingEntrePontos(de, para) {
+    if (!de || !para) return null;
+    const dLat = Math.abs(de.lat - para.lat);
+    const dLng = Math.abs(de.lng - para.lng);
+    if (dLat < 1e-7 && dLng < 1e-7) return null;
+    const lat1 = de.lat * Math.PI / 180;
+    const lat2 = para.lat * Math.PI / 180;
+    const dLngRad = (para.lng - de.lng) * Math.PI / 180;
+    const y = Math.sin(dLngRad) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLngRad);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function atualizarPosicaoCarro(mk, pos, posAnterior) {
+    if (!mk) return;
+    mk.setPosition(pos);
+    if (posAnterior) {
+        const h = bearingEntrePontos(posAnterior, pos);
+        if (h != null) mk.setHeading(h);
+    }
+}
+
 // Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
 function criarMarcador(opts = {}) {
-    const { map, position, title, icon, label, zIndex, cor, invisivel, badge } = opts;
+    const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading } = opts;
     let pinEl = null;
     let content = null;
+    let imgEl = null;
     if (invisivel) {
         const d = document.createElement('div');
         d.style.cssText = 'width:36px;height:36px;opacity:0.001;';
@@ -322,13 +366,20 @@ function criarMarcador(opts = {}) {
     } else if (typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('data:'))) {
         const img = document.createElement('img');
         img.src = icon;
-        img.style.width = '44px';
-        img.style.height = '44px';
+        const iw = iconW || 44;
+        const ih = iconH || 44;
+        img.style.width = iw + 'px';
+        img.style.height = ih + 'px';
         img.draggable = false;
+        imgEl = img;
+        if (heading != null) {
+            img.style.transform = `rotate(${heading}deg)`;
+            img.style.transformOrigin = 'center center';
+        }
         if (badge != null) {
             // Selo numerado (posição na fila) por cima do ícone do carro.
             const wrap = document.createElement('div');
-            wrap.style.cssText = 'position:relative;width:44px;height:44px;';
+            wrap.style.cssText = `position:relative;width:${iw}px;height:${ih}px;`;
             const sel = document.createElement('span');
             sel.textContent = String(badge);
             sel.style.cssText = 'position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;'
@@ -363,6 +414,9 @@ function criarMarcador(opts = {}) {
         getPosition() { return posicaoLegada(mk); },
         setMap(m) { mk.map = m; },
         setTitle(t) { mk.title = t || ''; },
+        setHeading(h) {
+            if (imgEl) imgEl.style.transform = `rotate(${Number(h) || 0}deg)`;
+        },
         addListener(ev, fn) { return mk.addListener(ev, fn); },
     };
 }

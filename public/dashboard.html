@@ -1236,6 +1236,7 @@
         } catch (_) { iconeUser = null; }
         const mkOrigem = criarMarcador({
             position: origem, map, icon: iconeUser, invisivel: !comoCarro,
+            iconW: comoCarro ? 40 : undefined, iconH: comoCarro ? 80 : undefined,
             title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
         });
         let pulseOrigem = null;
@@ -1263,9 +1264,11 @@
                 const p = await obterLocalizacao();
                 estado.gpsOk = true;
                 const atual = mkOrigem.getPosition();
-                const moveu = Math.abs(atual.lat() - p.lat) + Math.abs(atual.lng() - p.lng) > 0.0005; // ~50 m
-                mkOrigem.setPosition(p);
-                if (pulseOrigem) pulseOrigem.setPosition(p);
+                const pos = { lat: p.lat, lng: p.lng };
+                const moveu = Math.abs(atual.lat() - pos.lat) + Math.abs(atual.lng() - pos.lng) > 0.0005; // ~50 m
+                if (comoCarro) atualizarPosicaoCarro(mkOrigem, pos, { lat: atual.lat(), lng: atual.lng() });
+                else mkOrigem.setPosition(pos);
+                if (pulseOrigem) pulseOrigem.setPosition(pos);
                 if (moveu && destino) tracarRota();
             } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
         }, 10000);
@@ -2690,8 +2693,17 @@
         const vv = viagemView; if (!vv || vv.status !== 'em_andamento') return;
         // Carro do motorista
         if (vv.posMotorista) {
-            if (vv.carMarker) vv.carMarker.setPosition(vv.posMotorista);
-            else vv.carMarker = criarMarcador({ position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL, title: 'Motorista', zIndex: 999 });
+            if (vv.carMarker) {
+                const prev = vv.carPosAnterior || vv.posMotorista;
+                atualizarPosicaoCarro(vv.carMarker, vv.posMotorista, prev);
+                vv.carPosAnterior = { ...vv.posMotorista };
+            } else {
+                vv.carMarker = criarMarcador({
+                    position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL,
+                    iconW: 40, iconH: 80, title: 'Motorista', zIndex: 999,
+                });
+                vv.carPosAnterior = { ...vv.posMotorista };
+            }
         }
         // Passageiro: círculo pulsante (o mesmo do modo chamada), só na fase de
         // encontro — depois que embarca ele está dentro do carro.
@@ -2871,48 +2883,9 @@
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
-    // Carro visto de cima (estilo "top-down" de navegação): carroceria com brilho
-    // encerado (gradiente vertical + realce radial), canopy escuro contínuo (para-brisa
-    // + teto panorâmico + vidro traseiro), retrovisores, faróis na frente e lanternas
-    // atrás — o nariz aponta pra cima, deixando a orientação do carro clara no mapa.
-    const CAR_ICON_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 64 64">' +
-        '<defs>' +
-        '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4d55"/><stop offset="0.45" stop-color="#26282e"/><stop offset="1" stop-color="#131418"/></linearGradient>' +
-        '<radialGradient id="cw" cx="0.5" cy="0.3" r="0.6"><stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/><stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/></radialGradient>' +
-        '<linearGradient id="cgl" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#2a3550"/><stop offset="0.5" stop-color="#0c0e15"/><stop offset="1" stop-color="#182034"/></linearGradient>' +
-        '</defs>' +
-        '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.22"/>' +
-        '<path d="M47 27 C50 26 52 28 51 30 C50 32 47 31 46 29 Z" fill="#26282e"/>' +
-        '<path d="M17 27 C14 26 12 28 13 30 C14 32 17 31 18 29 Z" fill="#26282e"/>' +
-        '<path d="M32 4 C40.5 4 46 10 47 20 C48 32 47.6 45.5 45.2 53.5 C43.4 59 20.6 59 18.8 53.5 C16.2 45.5 16 32 17 20 C18 10 23.5 4 32 4 Z" fill="url(#cb)" stroke="#EAD298" stroke-width="1.1"/>' +
-        '<path d="M32 4 C40.5 4 46 10 47 20 C48 32 47.6 45.5 45.2 53.5 C43.4 59 20.6 59 18.8 53.5 C16.2 45.5 16 32 17 20 C18 10 23.5 4 32 4 Z" fill="url(#cw)"/>' +
-        '<path d="M24.5 6.5 Q32 5 39.5 6.5 L38.5 9 Q32 7.6 25.5 9 Z" fill="#ffe9a8"/>' +
-        '<path d="M32 18 C36.5 18 39 21.5 39.5 27 C40 34 40 41 38.7 45 C37.7 47.6 34.8 48.6 32 48.6 C29.2 48.6 26.3 47.6 25.3 45 C24 41 24 34 24.5 27 C25 21.5 27.5 18 32 18 Z" fill="url(#cgl)"/>' +
-        '<path d="M32 27 L32 44" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3.4" stroke-linecap="round"/>' +
-        '<path d="M26 27 Q32 24 38 27" fill="none" stroke="#3a4a6a" stroke-width="1" stroke-opacity="0.6" stroke-linecap="round"/>' +
-        '<path d="M23 53 Q32 50 41 53 L41 56 Q32 58.5 23 56 Z" fill="#e0524d"/>' +
-        '</svg>'
-    );
-    const CAR_ICON_GOLD_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 64 64">' +
-        '<defs>' +
-        '<linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.45" stop-color="#EAD298"/><stop offset="1" stop-color="#c9a227"/></linearGradient>' +
-        '<radialGradient id="cgw" cx="0.5" cy="0.3" r="0.6"><stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/><stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/></radialGradient>' +
-        '<linearGradient id="cgl2" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#2a3550"/><stop offset="0.5" stop-color="#0c0e15"/><stop offset="1" stop-color="#182034"/></linearGradient>' +
-        '</defs>' +
-        '<ellipse cx="32" cy="34" rx="15" ry="27" fill="#000" opacity="0.18"/>' +
-        '<path d="M47 27 C50 26 52 28 51 30 C50 32 47 31 46 29 Z" fill="#c9a227"/>' +
-        '<path d="M17 27 C14 26 12 28 13 30 C14 32 17 31 18 29 Z" fill="#c9a227"/>' +
-        '<path d="M32 4 C40.5 4 46 10 47 20 C48 32 47.6 45.5 45.2 53.5 C43.4 59 20.6 59 18.8 53.5 C16.2 45.5 16 32 17 20 C18 10 23.5 4 32 4 Z" fill="url(#cg)" stroke="#fff8dc" stroke-width="1.2"/>' +
-        '<path d="M32 4 C40.5 4 46 10 47 20 C48 32 47.6 45.5 45.2 53.5 C43.4 59 20.6 59 18.8 53.5 C16.2 45.5 16 32 17 20 C18 10 23.5 4 32 4 Z" fill="url(#cgw)"/>' +
-        '<path d="M24.5 6.5 Q32 5 39.5 6.5 L38.5 9 Q32 7.6 25.5 9 Z" fill="#fff8dc"/>' +
-        '<path d="M32 18 C36.5 18 39 21.5 39.5 27 C40 34 40 41 38.7 45 C37.7 47.6 34.8 48.6 32 48.6 C29.2 48.6 26.3 47.6 25.3 45 C24 41 24 34 24.5 27 C25 21.5 27.5 18 32 18 Z" fill="url(#cgl2)"/>' +
-        '<path d="M32 27 L32 44" stroke="#ffffff" stroke-opacity="0.12" stroke-width="3.4" stroke-linecap="round"/>' +
-        '<path d="M26 27 Q32 24 38 27" fill="none" stroke="#3a4a6a" stroke-width="1" stroke-opacity="0.6" stroke-linecap="round"/>' +
-        '<path d="M23 53 Q32 50 41 53 L41 56 Q32 58.5 23 56 Z" fill="#e0524d"/>' +
-        '</svg>'
-    );
+    // Carro visto de cima: carroceria branca, vidro escuro, lanternas vermelhas.
+    const CAR_ICON_URL = svgCarroTopoUrl(0, 'white');
+    const CAR_ICON_GOLD_URL = svgCarroTopoUrl(0, 'gold');
 
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {
@@ -2958,12 +2931,15 @@
                     let item = fleet.markers[m.id];
                     if (item) {
                         item.m = m;
-                        item.car.setPosition(pos);
+                        const prev = item.lastPos || pos;
+                        atualizarPosicaoCarro(item.car, pos, prev);
+                        item.lastPos = pos;
                         if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
                     } else {
                         const icon = m.carona_id ? CAR_ICON_URL : CAR_ICON_GOLD_URL;
                         const car = criarMarcador({
                             position: pos, map, icon,
+                            iconW: 40, iconH: 80,
                             badge: m.ordem != null ? m.ordem + 1 : undefined,
                             title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
@@ -2984,7 +2960,7 @@
                             });
                             destinoMk.addListener('click', abrir);
                         }
-                        fleet.markers[m.id] = { m, car, linha, destinoMk };
+                        fleet.markers[m.id] = { m, car, linha, destinoMk, lastPos: pos };
                     }
                 });
                 Object.keys(fleet.markers).forEach((id) => {
@@ -3158,16 +3134,24 @@
     }
 
     // Mostra o próprio carro do motorista no mapa de "Oferecer" (atualiza a cada 5s).
-    let selfCar = { marker: null, timer: null };
+    let selfCar = { marker: null, timer: null, lastPos: null };
     function acompanharProprioCarro(map) {
         if (selfCar.timer) clearInterval(selfCar.timer);
-        if (selfCar.marker) { selfCar.marker.setMap(null); selfCar.marker = null; }  // recria no mapa atual
+        if (selfCar.marker) { selfCar.marker.setMap(null); selfCar.marker = null; }
+        selfCar.lastPos = null;
         async function upd() {
             try {
                 const p = await obterLocalizacao();
                 const pos = { lat: p.lat, lng: p.lng };
-                if (selfCar.marker) selfCar.marker.setPosition(pos);
-                else selfCar.marker = criarMarcador({ position: pos, map, icon: CAR_ICON_URL, title: 'Você', zIndex: 999 });
+                if (selfCar.marker) {
+                    atualizarPosicaoCarro(selfCar.marker, pos, selfCar.lastPos);
+                } else {
+                    selfCar.marker = criarMarcador({
+                        position: pos, map, icon: CAR_ICON_URL,
+                        iconW: 40, iconH: 80, title: 'Você', zIndex: 999,
+                    });
+                }
+                selfCar.lastPos = pos;
             } catch (_) { /* sem GPS: ignora */ }
         }
         upd();
