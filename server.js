@@ -1858,7 +1858,18 @@ async function criarViagemDaProposta(propostaId) {
       destino.texto || null, destino.lat || null, destino.lng || null,
     ]
   );
-  if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'concluida' WHERE id = $1", [pr.carona_id]);
+  // Cada aceite ocupa 1 vaga. A carona só fecha (concluida) quando as vagas
+  // acabam — com mais de uma vaga, ela continua ativa e visível para os
+  // demais passageiros até esgotar.
+  if (pr.carona_id) {
+    await pool.query(
+      `UPDATE caronas
+       SET vagas = GREATEST(vagas - 1, 0),
+           status = CASE WHEN vagas - 1 <= 0 THEN 'concluida' ELSE status END
+       WHERE id = $1`,
+      [pr.carona_id]
+    );
+  }
   if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
   return rows[0];
 }
@@ -1912,21 +1923,42 @@ app.post("/api/propostas/:id/recusar", verificarAuth, async (req, res) => {
 app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
   try {
     // Permite cancelar uma proposta PENDENTE (chamada em espera) ou ACEITA (antes da
-    // viagem iniciar). Vale para quem enviou ou recebeu.
+    // viagem iniciar). Vale para quem enviou ou recebeu. Guarda o status ANTERIOR
+    // (numa CTE, atômico com o UPDATE) para saber se uma vaga precisa voltar.
     const pr = (await pool.query(
-      `UPDATE propostas SET status = 'recusado'
-       WHERE id = $1 AND (de_usuario_id = $2 OR para_usuario_id = $2)
-         AND status IN ('pendente', 'aceito')
-         AND NOT EXISTS (
-           SELECT 1 FROM viagens v WHERE v.proposta_id = propostas.id AND v.status = 'em_andamento'
-         )
-       RETURNING *`,
+      `WITH alvo AS (
+         SELECT * FROM propostas
+         WHERE id = $1 AND (de_usuario_id = $2 OR para_usuario_id = $2)
+           AND status IN ('pendente', 'aceito')
+           AND NOT EXISTS (
+             SELECT 1 FROM viagens v WHERE v.proposta_id = propostas.id AND v.status = 'em_andamento'
+           )
+         FOR UPDATE
+       ),
+       atualizado AS (
+         UPDATE propostas SET status = 'recusado'
+         WHERE id = (SELECT id FROM alvo)
+         RETURNING *
+       )
+       SELECT atualizado.*, alvo.status AS status_anterior
+       FROM atualizado JOIN alvo ON alvo.id = atualizado.id`,
       [req.params.id, req.user.id]
     )).rows[0];
     if (!pr) return res.status(400).json({ error: "Não é possível cancelar (viagem já iniciada ou proposta inválida)" });
 
-    // Reabre a carona/pedido para que possam ser oferecidos de novo
-    if (pr.carona_id) await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);
+    // Reabre a carona/pedido para que possam ser oferecidos de novo. Se a
+    // proposta JÁ estava aceita, ela tinha ocupado 1 vaga (ver
+    // criarViagemDaProposta) — devolve essa vaga agora.
+    if (pr.carona_id) {
+      if (pr.status_anterior === "aceito") {
+        await pool.query(
+          "UPDATE caronas SET vagas = vagas + 1, status = 'ativa' WHERE id = $1 AND status <> 'cancelada'",
+          [pr.carona_id]
+        );
+      } else {
+        await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);
+      }
+    }
     if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'", [pr.pedido_id]);
 
     res.json({ success: true });
@@ -2105,37 +2137,48 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   try {
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
-    const params = lat && lng ? [req.user.id, lat, lng, RAIO_ONLINE_KM, RAIO_VISIVEL_KM, pid] : [req.user.id, pid];
-    const raio = lat && lng ? `AND (
-      (ca.id IS NULL AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $4)
-      OR (ca.id IS NOT NULL AND ${haversine("l.lat", "l.lng", "$2", "$3")} <= $5)
+    const temPos = lat != null && lng != null;
+    const params = temPos ? [req.user.id, lat, lng, RAIO_ONLINE_KM, RAIO_VISIVEL_KM, pid] : [req.user.id, pid];
+    const distExpr = haversine("lat", "lng", "$2", "$3");
+    // Filtro de raio: 600 m para quem está só no modo online (sem carona ativa
+    // publicada); 10 km para quem tem carona com destino publicada. Aplicado
+    // DEPOIS de reduzir a 1 linha por motorista (CTE abaixo), e a ordenação
+    // final é pela distância real até o passageiro — não pelo id de cadastro
+    // — para o LIMIT 100 nunca cortar quem está fisicamente mais perto.
+    const raio = temPos ? `WHERE (
+      (carona_id IS NULL AND ${distExpr} <= $4)
+      OR (carona_id IS NOT NULL AND ${distExpr} <= $5)
     )` : "";
-    const filtroProj = lat && lng ? `AND u.projeto_id = $6` : `AND u.projeto_id = $2`;
+    const filtroProj = temPos ? `AND u.projeto_id = $6` : `AND u.projeto_id = $2`;
     const { rows } = await pool.query(
-      `SELECT DISTINCT ON (u.id)
-              u.id, u.nome, u.sexo, l.lat, l.lng, l.vagas,
-              h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
-              ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
-              ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas
-       FROM localizacoes_online l
-       JOIN usuarios u ON u.id = l.usuario_id
-       JOIN habilitacoes_motorista h
-         ON h.motorista_id = u.id AND h.status = 'ativa'
-            AND ${sqlSelfieValida("h")}
-       LEFT JOIN LATERAL (
-         SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng, vagas
-         FROM caronas
-         WHERE motorista_id = u.id AND status = 'ativa'
-         ORDER BY created_at DESC
-         LIMIT 1
-       ) ca ON TRUE
-       WHERE l.disponivel = TRUE
-         AND COALESCE(u.ativo, TRUE) = TRUE
-         AND (l.atualizado_em > NOW() - INTERVAL '3 minutes' OR l.online_desde IS NOT NULL OR ca.id IS NOT NULL)
-         AND u.id <> $1
-         ${filtroProj}
-         ${raio}
-       ORDER BY u.id, h.created_at DESC
+      `WITH candidatos AS (
+         SELECT DISTINCT ON (u.id)
+                u.id, u.nome, u.sexo, l.lat, l.lng, l.vagas,
+                h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
+                ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
+                ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas
+         FROM localizacoes_online l
+         JOIN usuarios u ON u.id = l.usuario_id
+         JOIN habilitacoes_motorista h
+           ON h.motorista_id = u.id AND h.status = 'ativa'
+              AND ${sqlSelfieValida("h")}
+         LEFT JOIN LATERAL (
+           SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng, vagas
+           FROM caronas
+           WHERE motorista_id = u.id AND status = 'ativa'
+           ORDER BY created_at DESC
+           LIMIT 1
+         ) ca ON TRUE
+         WHERE l.disponivel = TRUE
+           AND COALESCE(u.ativo, TRUE) = TRUE
+           AND (l.atualizado_em > NOW() - INTERVAL '3 minutes' OR l.online_desde IS NOT NULL OR ca.id IS NOT NULL)
+           AND u.id <> $1
+           ${filtroProj}
+         ORDER BY u.id, h.created_at DESC
+       )
+       SELECT * FROM candidatos
+       ${raio}
+       ORDER BY ${temPos ? distExpr : "id"}
        LIMIT 100`,
       params
     );
