@@ -1,0 +1,410 @@
+{
+  "geradoEm": "2026-07-06T11:25:36.336Z",
+  "duracaoTotalS": 11.3,
+  "concorrencia": 25,
+  "totalUsuariosAlvo": 500,
+  "controleRateLimitPadrao": {
+    "primeiro429": 1200,
+    "tentativas": 1260
+  },
+  "requisicoes": {
+    "total": 2666,
+    "ok": 2626,
+    "falhas": 40
+  },
+  "porPasso": {
+    "registro": {
+      "ok": 500,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 500
+      },
+      "p50ms": 432,
+      "p95ms": 468,
+      "maxMs": 519
+    },
+    "habilitacao": {
+      "ok": 250,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 250
+      },
+      "p50ms": 22,
+      "p95ms": 33,
+      "maxMs": 45
+    },
+    "publicar_carona": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 30,
+      "p95ms": 41,
+      "maxMs": 43
+    },
+    "ficar_online_amarelo": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 25,
+      "p95ms": 34,
+      "maxMs": 37
+    },
+    "publicar_pedido": {
+      "ok": 250,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 250
+      },
+      "p50ms": 35,
+      "p95ms": 43,
+      "maxMs": 50
+    },
+    "mapa_ver_carona_destino": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 50,
+      "p95ms": 90,
+      "maxMs": 94
+    },
+    "mapa_ver_motorista_online": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 55,
+      "p95ms": 80,
+      "maxMs": 89
+    },
+    "mapa_listagem_total": {
+      "ok": 1,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 1
+      },
+      "p50ms": 11,
+      "p95ms": 11,
+      "maxMs": 11
+    },
+    "proposta_pedir_vaga_carona": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 22,
+      "p95ms": 31,
+      "maxMs": 34
+    },
+    "aceitar_proposta_carona": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 26,
+      "p95ms": 31,
+      "maxMs": 35
+    },
+    "checar_vaga_sobrando_apos_1o_aceite": {
+      "ok": 0,
+      "falhas": 40,
+      "statusCodes": {
+        "404": 40
+      },
+      "p50ms": 13,
+      "p95ms": 18,
+      "maxMs": 18
+    },
+    "amarelo_ver_pedido_perto": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 25,
+      "p95ms": 48,
+      "maxMs": 51
+    },
+    "amarelo_oferecer_carona": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 23,
+      "p95ms": 35,
+      "maxMs": 38
+    },
+    "aceitar_proposta_amarelo": {
+      "ok": 125,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 125
+      },
+      "p50ms": 25,
+      "p95ms": 29,
+      "maxMs": 32
+    },
+    "gravar_pontos_gps": {
+      "ok": 250,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 250
+      },
+      "p50ms": 18,
+      "p95ms": 24,
+      "maxMs": 27
+    },
+    "finalizar_viagem": {
+      "ok": 250,
+      "falhas": 0,
+      "statusCodes": {
+        "200": 250
+      },
+      "p50ms": 18,
+      "p95ms": 23,
+      "maxMs": 27
+    }
+  },
+  "funil": {
+    "usuarios_cadastrados": 500,
+    "motoristas_habilitados": 250,
+    "caronas_publicadas": 125,
+    "motoristas_amarelo_online": 125,
+    "pedidos_publicados": 250,
+    "vistos_no_mapa_carona": 125,
+    "vistos_no_mapa_amarelo": 65,
+    "listagem_mapa_total_retornada": 100,
+    "listagem_mapa_total_esperada": 250,
+    "propostas_carona": 125,
+    "propostas_amarelo": 125,
+    "viagens_iniciadas": 250,
+    "viagens_finalizadas": 250,
+    "viagens_deslocamento_valido": 250,
+    "vagas_sobrando_testadas": 40,
+    "vagas_sobrando_ainda_disponiveis": 0
+  },
+  "contagemBanco": {
+    "usuarios": "500",
+    "habilitacoes": "250",
+    "caronas": "125",
+    "caronas_concluidas": "125",
+    "online": "250",
+    "pedidos": "250",
+    "propostas": "250",
+    "propostas_aceitas": "250",
+    "viagens": "250",
+    "viagens_concluidas": "250",
+    "viagens_deslocamento_valido": "250"
+  },
+  "amostraErros": [
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    },
+    {
+      "passo": "checar_vaga_sobrando_apos_1o_aceite",
+      "status": 404,
+      "erro": "Carona indisponível"
+    }
+  ]
+}
