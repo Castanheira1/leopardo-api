@@ -2197,7 +2197,7 @@
             // Número visível: dá para conferir DE QUEM é o WhatsApp que vai abrir
             // (se abrir o seu próprio chat, o cadastro do outro está com o seu número).
             acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${JSON.stringify(tel)})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>` : ''}`;
+                     ${tel ? `<button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${esc(JSON.stringify(tel))})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>` : ''}`;
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
@@ -2496,7 +2496,7 @@
         const eta = document.getElementById('viagemEta');
         if (fase) fase.textContent = rotuloFaseViagem(vv);
         const wppBtn = vv.tel
-            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `abrirWhatsApp(${JSON.stringify(vv.tel)})`)
+            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `abrirWhatsApp(${esc(JSON.stringify(vv.tel))})`)
             : '';
         const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
         const btnAnd = document.getElementById('btnViagemAndamento');
