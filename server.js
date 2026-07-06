@@ -47,8 +47,9 @@ app.use(compression({
     return compression.filter(req, res);
   },
 }));
-// 1200: o polling legítimo de um motorista em viagem chega perto de 600/15min
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 1200 }));
+// 1200: o polling legítimo de um motorista em viagem chega perto de 600/15min.
+// Configurável via RATE_LIMIT_MAX (ex.: testes de carga controlados) — padrão inalterado.
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: Number(process.env.RATE_LIMIT_MAX || 1200) }));
 
 // CORS restrito. O front (PWA) é servido pela MESMA origem desta API, então não
 // precisa de CORS cross-origin no uso normal. Por padrão, nenhuma origem externa
