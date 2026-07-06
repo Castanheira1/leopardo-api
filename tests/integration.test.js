@@ -586,6 +586,23 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status } = await api("GET", "/api/admin/seguranca", { token: tokAdmin });
       eq(status, 200, "status");
     });
+    await test("admin desativa e reativa usuário do projeto", async () => {
+      let r = await api("POST", `/api/admin/usuarios/${encodeURIComponent(uPax.matricula)}/desativar`, {
+        token: tokAdmin, body: { motivo: "Teste integração" },
+      });
+      eq(r.status, 200, "status desativar");
+
+      r = await api("POST", "/api/login", { body: { matricula: uPax.matricula, senha: uPax.senha } });
+      eq(r.status, 401, "login bloqueado após desativar");
+
+      r = await api("POST", `/api/admin/usuarios/${encodeURIComponent(uPax.matricula)}/reativar`, {
+        token: tokAdmin, body: {},
+      });
+      eq(r.status, 200, "status reativar");
+
+      r = await api("POST", "/api/login", { body: { matricula: uPax.matricula, senha: uPax.senha } });
+      eq(r.status, 200, "login ok após reativar");
+    });
 
     /* =================== LGPD: consentimento de usuário existente =================== */
     grupo("LGPD — aceite de usuário já cadastrado (portão)");

@@ -3250,6 +3250,32 @@ app.post("/api/admin/usuarios/:matricula/desativar", verificarAuth, carregarAdmi
   }
 });
 
+app.post("/api/admin/usuarios/:matricula/reativar", verificarAuth, carregarAdminEscopo, async (req, res) => {
+  const matricula = String(req.params.matricula || "").trim();
+  if (!matricula || matricula.length < 6) return res.status(400).json({ error: "Matrícula inválida" });
+  const pid = req.adminEscopo.admin_projeto_id;
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, matricula, is_admin, COALESCE(ativo, TRUE) AS ativo FROM usuarios WHERE matricula = $1 AND projeto_id = $2",
+      [matricula, pid]
+    );
+    const alvo = rows[0];
+    if (!alvo) return res.status(404).json({ error: "Usuário não encontrado neste projeto" });
+
+    await pool.query("UPDATE usuarios SET ativo = TRUE WHERE id = $1", [alvo.id]);
+    await pool.query("DELETE FROM matriculas_bloqueadas WHERE matricula = $1", [matricula]);
+    res.json({
+      success: true,
+      message: alvo.ativo
+        ? `Matrícula ${matricula} desbloqueada (já estava ativa).`
+        : `Matrícula ${matricula} reativada e desbloqueada.`,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao reativar usuário" });
+  }
+});
+
 app.get("/api/admin/seguranca", verificarAuth, carregarAdminEscopo, async (req, res) => {
   const pid = req.adminEscopo.admin_projeto_id;
   const matricula = String(req.query.matricula || "").trim();
