@@ -1,7 +1,7 @@
 # TERMO DE USO
 ### Aplicativo VAP — caronas entre colaboradores
 
-**Versão 1.1 — vigente desde 03/07/2026**
+**Versão 1.2 — vigente desde 06/07/2026**
 
 > **Antes de publicar:** substitua os campos entre colchetes `[ ]` pelos dados reais e
 > submeta à revisão jurídica antes do uso comercial. Complementado pela *Política de
@@ -44,7 +44,42 @@ guarda da sua senha e por toda atividade realizada em sua conta.
 
 ---
 
-## 4. Responsabilidades do motorista
+## 4. Disponibilidade do benefício
+
+4.1. O acesso ao Aplicativo poderá ser disponibilizado a colaboradores da empresa
+contratante e a terceiros expressamente autorizados, conforme os critérios de
+elegibilidade definidos pela empresa contratante e/ou pelo Controlador.
+
+4.2. A disponibilização do Aplicativo constitui **benefício operacional e
+facultativo**, oferecido a critério da empresa contratante e/ou do Controlador. Ele
+**não gera ao Usuário direito adquirido, expectativa de continuidade ou caráter
+vitalício**, e **não integra a remuneração, o contrato de trabalho ou qualquer
+vínculo empregatício** do Usuário, para nenhum efeito, inclusive trabalhista,
+previdenciário ou fiscal, ainda que utilizado de forma habitual e contínua.
+
+4.3. O acesso ao Aplicativo poderá ser restringido, suspenso ou encerrado a
+qualquer tempo, por decisão do Controlador ou da empresa contratante, em razão de,
+entre outros motivos legítimos:
+
+a) término, rescisão ou não renovação do contrato de licenciamento entre o
+   Controlador e a empresa contratante;
+
+b) perda, pelo Usuário, dos requisitos de elegibilidade (como o desligamento do
+   vínculo com a empresa contratante);
+
+c) razões de segurança da informação, de integridade da Plataforma ou de violação
+   deste Termo; ou
+
+d) outros motivos legítimos relacionados à operação do serviço.
+
+4.4. A restrição, a suspensão ou o encerramento do acesso nos termos deste item
+não configuram ato ilícito nem dão causa a indenização por dano moral ou material,
+ressalvadas as hipóteses de má-fé, discriminação ilícita ou violação à legislação
+aplicável.
+
+---
+
+## 5. Responsabilidades do motorista
 
 Ao atuar como motorista, o Usuário declara e se responsabiliza por:
 
@@ -64,7 +99,7 @@ administrativas decorrentes da condução são de responsabilidade **exclusiva d
 
 ---
 
-## 5. Responsabilidades do passageiro
+## 6. Responsabilidades do passageiro
 
 Ao atuar como passageiro, o Usuário se responsabiliza por:
 
@@ -78,7 +113,7 @@ d) arcar com eventuais danos que causar ao veículo ou a terceiros.
 
 ---
 
-## 6. Uso adequado e condutas proibidas
+## 7. Uso adequado e condutas proibidas
 
 É proibido ao Usuário:
 
@@ -99,27 +134,27 @@ f) tentar comprometer a segurança, a integridade ou o funcionamento da Platafor
 
 ---
 
-## 7. Segurança, incidentes e informações prestadas
+## 8. Segurança, incidentes e informações prestadas
 
-7.1. Os registros de segurança (selfie ao vivo, foto do veículo com placa, rota GPS e
+8.1. Os registros de segurança (selfie ao vivo, foto do veículo com placa, rota GPS e
 horários) existem para **rastreabilidade e segurança** dos participantes e podem ser
 usados na apuração de incidentes.
 
-7.2. O Usuário é o **único responsável pela veracidade** das informações que presta.
+8.2. O Usuário é o **único responsável pela veracidade** das informações que presta.
 Informações falsas ou fraudulentas podem ocasionar suspensão ou banimento, sem prejuízo
 das responsabilidades legais.
 
-7.3. **Acidentes, colisões, furtos, multas, infrações, lesões e quaisquer danos**
+8.3. **Acidentes, colisões, furtos, multas, infrações, lesões e quaisquer danos**
 ocorridos antes, durante ou após a carona são de responsabilidade dos **participantes
 envolvidos** (motorista e/ou passageiro), não cabendo à Plataforma qualquer
 responsabilidade por tais eventos.
 
-7.4. Em caso de incidente, o Usuário deve acionar as autoridades competentes e poderá
+8.4. Em caso de incidente, o Usuário deve acionar as autoridades competentes e poderá
 solicitar ao Controlador os registros pertinentes, nos termos da Política de Privacidade.
 
 ---
 
-## 8. Cancelamentos
+## 9. Cancelamentos
 
 O motorista e o passageiro podem cancelar a carona ou a proposta antes do início da
 viagem. Cancelamentos reiterados ou de má-fé podem sujeitar o Usuário a medidas de
@@ -128,23 +163,23 @@ atrasos ou não comparecimento de qualquer das partes.
 
 ---
 
-## 9. Suspensão, banimento e suspensão preventiva
+## 10. Suspensão, banimento e suspensão preventiva
 
-9.1. O VAP poderá, a seu critério e sem aviso prévio, advertir, suspender ou **banir**
+10.1. O VAP poderá, a seu critério e sem aviso prévio, advertir, suspender ou **banir**
 Usuários que violem este Termo, forneçam dados falsos, burlem mecanismos de segurança,
 pratiquem fraude ou conduta abusiva, ou representem risco à segurança dos demais. A
 matrícula banida poderá ser bloqueada para novos cadastros.
 
-9.2. **Suspensão preventiva:** ao receber uma denúncia ou identificar indício de conduta
+10.2. **Suspensão preventiva:** ao receber uma denúncia ou identificar indício de conduta
 grave, o VAP poderá **bloquear a conta preventivamente enquanto apura os fatos**, medida
 que não constitui reconhecimento de culpa e visa proteger os demais Usuários. Concluída a
 apuração, a conta é restabelecida ou definitivamente encerrada.
 
 ---
 
-## 10. Limitação de responsabilidade
+## 11. Limitação de responsabilidade
 
-10.1. O VAP é fornecido "no estado em que se encontra", como ferramenta de intermediação.
+11.1. O VAP é fornecido "no estado em que se encontra", como ferramenta de intermediação.
 Na máxima extensão permitida em lei, o VAP **não se responsabiliza** por:
 
 a) atos, omissões, condutas ou danos causados por Usuários entre si;
@@ -155,29 +190,29 @@ c) veracidade das informações prestadas pelos Usuários;
 
 d) indisponibilidades temporárias, falhas de rede, de GPS, de terceiros ou de força maior.
 
-10.2. A responsabilidade do VAP, quando cabível, limita-se à disponibilização e ao
+11.2. A responsabilidade do VAP, quando cabível, limita-se à disponibilização e ao
 funcionamento da Plataforma de intermediação.
 
 ---
 
-## 11. Disponibilidade, alterações e encerramento do serviço
+## 12. Disponibilidade, alterações e encerramento do serviço
 
-11.1. **Disponibilidade:** o VAP é oferecido sem garantia de funcionamento contínuo ou
+12.1. **Disponibilidade:** o VAP é oferecido sem garantia de funcionamento contínuo ou
 ininterrupto. O serviço pode ficar **indisponível** por manutenção programada ou
 emergencial, falhas técnicas, indisponibilidade de terceiros (rede, GPS, provedores de
 nuvem) ou eventos de força maior, sem que isso gere qualquer responsabilidade da Plataforma.
 
-11.2. **Alterações do Aplicativo:** o VAP pode, a qualquer tempo, **adicionar, modificar
+12.2. **Alterações do Aplicativo:** o VAP pode, a qualquer tempo, **adicionar, modificar
 ou remover** funcionalidades, recursos ou requisitos técnicos, sem aviso prévio, buscando
 a melhoria e a segurança do serviço.
 
-11.3. **Encerramento da Plataforma:** o Controlador pode **descontinuar** o Aplicativo, no
+12.3. **Encerramento da Plataforma:** o Controlador pode **descontinuar** o Aplicativo, no
 todo ou em parte, mediante comunicação aos Usuários com antecedência razoável, resguardado
 o tratamento dos dados conforme a Política de Privacidade e a legislação aplicável.
 
 ---
 
-## 12. Suporte
+## 13. Suporte
 
 Dúvidas, solicitações e denúncias podem ser encaminhadas pelo canal oficial de
 atendimento: **[EMAIL/CANAL DE SUPORTE]**. Solicitações relativas a dados pessoais devem
@@ -185,14 +220,14 @@ ser direcionadas ao Encarregado (DPO): **[NOME DO ENCARREGADO] — [EMAIL-DPO]**
 
 ---
 
-## 13. Propriedade intelectual
+## 14. Propriedade intelectual
 
 O Aplicativo, sua marca, código, layout e conteúdos são de titularidade do Controlador. É
 vedada a reprodução, distribuição ou modificação sem autorização.
 
 ---
 
-## 14. Proteção de dados (LGPD)
+## 15. Proteção de dados (LGPD)
 
 O tratamento de dados pessoais é regido pela **Política de Privacidade** e pelo **Termo de
 Consentimento**. Parte do tratamento ocorre com base no **consentimento** do Usuário
@@ -203,7 +238,7 @@ direitos junto ao Encarregado (DPO): **[NOME DO ENCARREGADO] — [EMAIL-DPO]**.
 
 ---
 
-## 15. Alterações deste Termo
+## 16. Alterações deste Termo
 
 O VAP poderá atualizar este Termo a qualquer tempo. Mudanças relevantes serão informadas
 no Aplicativo e, quando exigido, será solicitado novo aceite. A versão vigente é sempre a
@@ -211,17 +246,17 @@ publicada no Aplicativo.
 
 ---
 
-## 16. Legislação aplicável e foro
+## 17. Legislação aplicável e foro
 
-16.1. Este Termo é regido pelas leis da República Federativa do Brasil.
+17.1. Este Termo é regido pelas leis da República Federativa do Brasil.
 
-16.2. Fica eleito o foro da comarca de **[CIDADE/UF]** para dirimir controvérsias. Nas
+17.2. Fica eleito o foro da comarca de **[CIDADE/UF]** para dirimir controvérsias. Nas
 relações regidas pelo Código de Defesa do Consumidor, fica **ressalvado o direito do
 Usuário de ajuizar demanda no foro do seu domicílio**, conforme a legislação aplicável.
 
 ---
 
-## 17. Aceite
+## 18. Aceite
 
 O aceite deste Termo de Uso é registrado eletronicamente no momento do cadastro (ou do
 primeiro acesso, para contas anteriores), com data, hora e versão.
@@ -231,7 +266,7 @@ primeiro acesso, para contas anteriores), com data, hora e versão.
 | **Nome:** | ______________________________________ |
 | **Matrícula:** | ____________________ |
 | **Data do aceite:** | ____ / ____ / ________ |
-| **Versão aceita:** | 1.1 |
+| **Versão aceita:** | 1.2 |
 
 ---
 
