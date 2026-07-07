@@ -1174,6 +1174,17 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .ride-card__route { font-size: 0.84rem; color: #cfd2d6; line-height: 1.35; }
 .ride-card__dist { font-size: 0.78rem; color: #EAD298; font-weight: 600; margin-top: 4px; }
 .ride-card__cta { margin-top: 2px; }
+.ride-erro-vagas {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    font-size: 0.84rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
 .ride-badge {
     display: inline-block;
     font-size: 0.65rem;

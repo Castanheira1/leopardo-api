@@ -131,7 +131,7 @@
                             </div>
                             <div class="form-group" id="pessoasPedWrap">
                                 <label>Quantas pessoas?</label>
-                                <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
+                                <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric" onchange="atualizarListaMotoristasPorPessoas()" oninput="atualizarListaMotoristasPorPessoas()">
                             </div>
                         </div>
                         <p id="hintPedidoImediato" class="cam-hint" style="display:none;margin:0 0 8px;">
@@ -1542,6 +1542,7 @@
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
                 iniciarPedidosAoVivo(selOfe.map);
+                iniciarContatosAoVivo(selOfe.map);
             }
             return selOfe;
         })();
@@ -1768,17 +1769,46 @@
                 <small>${ICN.pin} ${esc(c.destino_texto || 'Destino no mapa')} • ${ICN.clock} ${fmtHorario(c.horario)} • ${c.vagas} vaga(s)${dist}</small>
                 ${c.observacao ? `<br><small>"${esc(c.observacao)}"</small>` : ''}
             </div>
-            ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id})">Solicitar</button>` : ''}
+            ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id}, ${c.vagas || 1})">Solicitar</button>` : ''}
         </div>`;
+    }
+
+    function lerPessoasPed() {
+        return Math.min(6, Math.max(1, +document.getElementById('pessoasPed')?.value || 1));
+    }
+    function atualizarListaMotoristasPorPessoas() {
+        const dest = selPed?.getDestino?.();
+        if (dest) carregarCaronasDestino(dest);
     }
 
     // Três jeitos de falar com um motorista disponível na rota (buzina, ligação,
     // WhatsApp) — vale tanto pro modo amarelo quanto pra carona publicada. Cada
     // toque avisa o motorista (push) e revela o telefone pra essa ação.
+    // Envia GPS + destino para o motorista ver o pulso no mapa.
     async function contatoMotorista(id) {
         if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
+        const dest = selPed?.getDestino?.();
+        if (!dest) {
+            msg('Escolha um destino no mapa para o motorista ver sua rota.', 'error');
+            return null;
+        }
+        if (!selPed?.origemConfiavel?.()) {
+            selPed?.recentrar?.();
+            msg('Ative sua localização (GPS) para aparecer no mapa do motorista.', 'error');
+            return null;
+        }
+        const origem = selPed.getOrigem();
+        const pessoas = lerPessoasPed();
         try {
-            const r = await fetchWithAuth('/api/motoristas-online/' + id + '/contato', { method: 'POST', body: '{}' });
+            const r = await fetchWithAuth('/api/motoristas-online/' + id + '/contato', {
+                method: 'POST',
+                body: JSON.stringify({
+                    origem_lat: origem.lat, origem_lng: origem.lng,
+                    destino_lat: dest.lat, destino_lng: dest.lng,
+                    destino_texto: dest.texto || null,
+                    pessoas,
+                }),
+            });
             const d = await r.json();
             if (!r.ok) { msg(d.error || 'Erro', 'error'); return null; }
             return d;
@@ -1789,7 +1819,7 @@
     }
     async function buzinarMotorista(id) {
         const d = await contatoMotorista(id);
-        if (d) msg('Motorista avisado! Ele deve responder em instantes.');
+        if (d) msg('Motorista avisado! Você aparece no mapa dele com seu destino.');
     }
     async function ligarMotorista(id) {
         const d = await contatoMotorista(id);
@@ -1826,8 +1856,13 @@
         const foto = it.foto
             ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
             : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
+        const pessoas = lerPessoasPed();
+        const vagasDisp = it.vagas || 1;
+        const vagasOk = !it.caronaId || pessoas <= vagasDisp;
         const acaoPrincipal = it.caronaId
-            ? `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId})">Solicitar vaga</button>`
+            ? (vagasOk
+                ? `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`
+                : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
             : '';
         return `<article class="ride-card">
             <div class="ride-card__head">
@@ -1936,12 +1971,17 @@
         }
     }
 
-    async function pedirVaga(caronaId) {
+    async function pedirVaga(caronaId, vagasDisp) {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
+        const pessoas = lerPessoasPed();
+        if (vagasDisp != null && pessoas > vagasDisp) {
+            return msg(`Este veículo tem ${vagasDisp} vaga(s). Você pediu ${pessoas}.`, 'error');
+        }
         try {
             const selfie = await obterSelfieSeguranca('Selfie para pedir a vaga');
             const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({
-                carona_id: caronaId, selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+                carona_id: caronaId, pessoas,
+                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
             }) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
@@ -2203,7 +2243,7 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
-            iniciarPollContatosMotorista();
+            iniciarContatosAoVivo(selOfe.map);
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
@@ -2224,7 +2264,7 @@
         motoristaModoDestino = false;
         motoristaOnlineModo = false;
         atualizarUiMotoristaOnline();
-        pararPollContatosMotorista();
+        pararContatosAoVivo();
         // Para o broadcast ANTES do DELETE: senão o próximo tick (a cada 8s) reenvia
         // disponivel=TRUE e o motorista volta a ficar "online" — caindo no modo
         // motorista em todo login, mesmo depois de Encerrar.
@@ -2275,7 +2315,7 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
-            iniciarPollContatosMotorista();
+            iniciarContatosAoVivo(selOfe.map);
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_destino', { vagas, destino: dest.texto || null });
@@ -2311,7 +2351,7 @@
             iniciarBroadcastLocalizacao(true);
             acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
-            if (!motoristaModoDestino) iniciarPollContatosMotorista();
+            iniciarContatosAoVivo(selOfe.map);
             await ativarWakeLock();
         } catch (_) {}
     }
@@ -3327,8 +3367,11 @@
 
     // Motorista toca num passageiro que está chamando e oferece a carona.
     let pedidoSel = null;
+    let contatoSel = null;
     function mostrarPedido(p) {
+        contatoSel = null;
         pedidoSel = p;
+        document.querySelector('#modalPedido .sol-badge').textContent = 'Pedindo carona';
         document.getElementById('pedidoNome').textContent = p.passageiro_nome || 'Passageiro';
         document.getElementById('pedidoRota').innerHTML =
             `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
@@ -3341,8 +3384,12 @@
         const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
         desenharRotaMini('pedidoMapa', o, d);
     }
-    function fecharPedido() { document.getElementById('modalPedido').style.display = 'none'; }
+    function fecharPedido() {
+        document.getElementById('modalPedido').style.display = 'none';
+        contatoSel = null;
+    }
     async function oferecerAoPedido() {
+        if (contatoSel) return oferecerAoContato();
         const p = pedidoSel;
         fecharPedido();
         if (!p) return;
@@ -3353,6 +3400,35 @@
         if (navigator.vibrate) navigator.vibrate(80);   // vibrasinha curta ao aceitar
         removerPulsoPedido(p.id);                        // o círculo pulsando some
         mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id });
+    }
+
+    function mostrarContato(c) {
+        contatoSel = c;
+        pedidoSel = null;
+        document.querySelector('#modalPedido .sol-badge').textContent = 'Quer carona';
+        document.getElementById('pedidoNome').textContent = c.passageiro_nome || 'Passageiro';
+        document.getElementById('pedidoRota').innerHTML =
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Onde está:</b> ${esc(c.origem_texto || 'Local do passageiro')}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(c.destino_texto || 'Destino no mapa')}</div>`
+            + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${c.pessoas || 1} pessoa(s)</div>`;
+        const sf = document.getElementById('pedidoSelfie');
+        sf.style.display = 'none';
+        document.getElementById('modalPedido').style.display = 'flex';
+        const o = c.origem_lat != null ? { lat: +c.origem_lat, lng: +c.origem_lng } : null;
+        const d = c.destino_lat != null ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
+        desenharRotaMini('pedidoMapa', o, d);
+    }
+    async function oferecerAoContato() {
+        const c = contatoSel;
+        fecharPedido();
+        if (!c) return;
+        if (!habHoje) { msg('Ative o modo motorista no Perfil para oferecer.', 'error'); abrirPerfil(); return; }
+        const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ contato_id: c.id }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (navigator.vibrate) navigator.vibrate(80);
+        removerPulsoContato(c.id);
+        mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id });
     }
 
     // Mostra o próprio carro no mapa (atualiza a cada 5s). Se marcadorEmprestado for
@@ -3385,39 +3461,62 @@
         selfCar.timer = setInterval(upd, 5000);
     }
 
-    let contatoPollTimer = null;
-    let ultimoContatoId = 0;
+    let contatoFleet = { markers: {}, timer: null, ultimoId: 0, viuPrimeiraLeva: false };
 
-    async function pollContatosMotoristaOnce() {
-        if (!motoristaOnlineModo || motoristaModoDestino) return;
-        try {
-            const r = await fetchWithAuth('/api/motorista/contatos/novos?desde=' + ultimoContatoId);
-            if (!r.ok) return;
-            const lista = await r.json();
-            for (const c of lista) {
-                ultimoContatoId = Math.max(ultimoContatoId, c.id);
-                buzinar();
-                abrirWhatsAppPassageiro(c);
-            }
-        } catch (_) {}
+    function removerPulsoContato(contatoId) {
+        const mk = contatoFleet.markers['c' + contatoId];
+        if (mk) { mk.setMap(null); delete contatoFleet.markers['c' + contatoId]; }
     }
 
-    function iniciarPollContatosMotorista() {
-        if (motoristaModoDestino) return;
-        if (contatoPollTimer) return;
-        pollContatosMotoristaOnce();
-        contatoPollTimer = setInterval(pollContatosMotoristaOnce, 6000);
+    // Passageiro que buzina/liga/WhatsApp aparece no mapa do motorista (modo amarelo e rota).
+    function iniciarContatosAoVivo(map) {
+        if (contatoFleet.timer) clearInterval(contatoFleet.timer);
+        async function tick() {
+            if (!motoristaOnlineModo) return;
+            try {
+                const r = await fetchWithAuth('/api/motorista/contatos/mapa');
+                if (!r.ok) return;
+                const lista = await r.json();
+                const vistos = {};
+                let novos = 0;
+                (Array.isArray(lista) ? lista : []).forEach((c) => {
+                    if (c.origem_lat == null || c.origem_lng == null) return;
+                    const key = 'c' + c.id;
+                    vistos[key] = true;
+                    const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
+                    if (contatoFleet.markers[key]) {
+                        contatoFleet.markers[key].setPosition(pos);
+                        contatoFleet.markers[key]._c = c;
+                    } else {
+                        if (contatoFleet.viuPrimeiraLeva && c.id > contatoFleet.ultimoId) novos++;
+                        const titulo = (c.passageiro_nome || 'Passageiro') + ' — quer carona';
+                        const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo,
+                            '→ ' + (c.destino_texto || 'destino no mapa'));
+                        mk._c = c;
+                        contatoFleet.markers[key] = mk;
+                    }
+                    contatoFleet.ultimoId = Math.max(contatoFleet.ultimoId, c.id);
+                });
+                Object.keys(contatoFleet.markers).forEach((key) => {
+                    if (!vistos[key]) { contatoFleet.markers[key].setMap(null); delete contatoFleet.markers[key]; }
+                });
+                if (novos) {
+                    buzinar();
+                    msg('Passageiro no mapa — toque no pulso para oferecer carona.');
+                }
+                contatoFleet.viuPrimeiraLeva = true;
+            } catch (_) {}
+        }
+        tick();
+        contatoFleet.timer = setInterval(tick, 6000);
     }
 
-    function pararPollContatosMotorista() {
-        if (contatoPollTimer) { clearInterval(contatoPollTimer); contatoPollTimer = null; }
-    }
-
-    function abrirWhatsAppPassageiro(c) {
-        if (!c.passageiro_telefone) return;
-        msg((c.passageiro_nome || 'Passageiro') + ' quer falar no WhatsApp — abrindo chat…');
-        abrirWhatsApp(c.passageiro_telefone);
-        fetchWithAuth('/api/motorista/contatos/' + c.id + '/lido', { method: 'POST' }).catch(() => {});
+    function pararContatosAoVivo() {
+        if (contatoFleet.timer) { clearInterval(contatoFleet.timer); contatoFleet.timer = null; }
+        Object.values(contatoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
+        contatoFleet.markers = {};
+        contatoFleet.ultimoId = 0;
+        contatoFleet.viuPrimeiraLeva = false;
     }
 
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
