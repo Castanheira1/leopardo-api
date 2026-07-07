@@ -2587,10 +2587,11 @@
             acoes = `<button class="btn btn-success btn-sm" onclick="aceitarProposta(${p.id})">Aceitar</button>
                      <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
         } else if (aceito) {
-            // Número visível: dá para conferir DE QUEM é o WhatsApp que vai abrir
-            // (se abrir o seu próprio chat, o cadastro do outro está com o seu número).
-            acoes = `<span class="badge badge-ativo">Confirmado</span>
-                     ${tel ? `<button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${esc(JSON.stringify(tel))})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>` : ''}`;
+            acoes = `<span class="badge badge-ativo">Confirmado</span>`;
+            // WhatsApp só antes da viagem; com viagem ativa o app rastreia ao vivo.
+            if (tel && !p.viagem_id) {
+                acoes += ` <button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${esc(JSON.stringify(tel))})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>`;
+            }
             if (p.viagem_id) {
                 acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
             } else if (souMotorista) {
@@ -2879,7 +2880,6 @@
 
         // Mostra o "outro": passageiro vê o motorista; motorista vê o passageiro.
         const nome = ehMotorista ? v.passageiro_nome : v.motorista_nome;
-        const tel = ehMotorista ? v.passageiro_telefone : v.motorista_telefone;
         const selfie = ehMotorista ? v.passageiro_selfie : v.motorista_selfie;
         const sel = document.getElementById('viagemSelfie');
         if (selfie) { sel.src = selfie; sel.style.display = 'block'; } else { sel.style.display = 'none'; }
@@ -2907,7 +2907,7 @@
 
         viagemView = {
             id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
-            embarque, destino, tel, map, rotaCtrl,
+            embarque, destino, map, rotaCtrl,
             motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
             posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
@@ -2940,16 +2940,13 @@
         return `<button type="button" class="${cls}" onclick="${acao}">${rotulo}</button>`;
     }
 
-    // Título + botões conforme papel e fase.
+    // Título + botões conforme papel e fase (viagem ativa = app ao vivo, sem WhatsApp).
     function atualizarCabecalhoViagem() {
         const vv = viagemView; if (!vv) return;
         const fase = document.getElementById('viagemFase');
         const ctrl = document.getElementById('viagemControles');
         const eta = document.getElementById('viagemEta');
         if (fase) fase.textContent = rotuloFaseViagem(vv);
-        const wppBtn = vv.tel
-            ? btnViagem('outline', `${ICN.phone} WhatsApp · ${vv.tel}`, `abrirWhatsApp(${esc(JSON.stringify(vv.tel))})`)
-            : '';
         const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
         const btnAnd = document.getElementById('btnViagemAndamento');
         if (vv.status !== 'em_andamento') {
@@ -2961,17 +2958,15 @@
         if (btnAnd) btnAnd.style.display = 'inline-block';
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
-                ctrl.innerHTML = btnViagem('primary', 'Passageiro embarcou', `cheguei(${vv.id})`)
-                    + mapsBtn + wppBtn;
+                ctrl.innerHTML = btnViagem('primary', 'Passageiro embarcou', `cheguei(${vv.id})`) + mapsBtn;
             } else {
-                ctrl.innerHTML = btnViagem('danger', 'Finalizar viagem', `finalizarViagem(${vv.id})`)
-                    + mapsBtn + wppBtn;
+                ctrl.innerHTML = btnViagem('danger', 'Finalizar viagem', `finalizarViagem(${vv.id})`) + mapsBtn;
             }
         } else {
             const hint = vv.fase === 'encontro'
                 ? 'Acompanhe o motorista no mapa'
                 : 'Viagem em andamento — acompanhe no mapa';
-            ctrl.innerHTML = (wppBtn ? wppBtn + '<p class="sheet-hint">' + hint + '</p>' : '<p class="sheet-hint">' + hint + '</p>');
+            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>';
         }
     }
     // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
