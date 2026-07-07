@@ -419,7 +419,10 @@
     </div>
 
     <!-- Tela inicial: escolher o papel (trava no modo escolhido) -->
-    <div id="telaPapel" class="papel-overlay" style="display:none;">
+    <!-- Começa VISÍVEL: é a 1ª coisa que aparece, para o usuário não cair na
+         tela de "Pedir carona" (com o mapa carregando) enquanto a sessão
+         restaura. A restauração de viagem/pedido em andamento a esconde depois. -->
+    <div id="telaPapel" class="papel-overlay" style="display:flex;">
         <div class="papel-box">
             <h2>O que você quer fazer?</h2>
             <button type="button" class="papel-opt" onclick="escolherPapel('passageiro')">
@@ -3365,6 +3368,7 @@
 
     /* -------- init -------- */
     (async function init() {
+        abrirEscolhaPapel();              // mostra a escolha JÁ — nada de encarar a tela de Pedir durante os awaits
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
         await sincronizarPerfil();
         await carregarOpcoesProjetoPerfil();
