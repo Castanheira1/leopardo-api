@@ -475,6 +475,28 @@
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
 
+    /* -------- bottom sheet: peek (altura visível quando colapsado) -------- */
+    const SHEET_PEEK_MIN = 132;
+    function medirPeekSheet(sheet) {
+        if (!sheet) return SHEET_PEEK_MIN;
+        const grip = sheet.querySelector('.acao-grip');
+        const limparBar = sheet.querySelector('.limpar-rota-bar');
+        const foot = sheet.querySelector('.acao-sheet-footer');
+        let h = 0;
+        if (grip) h += grip.getBoundingClientRect().height;
+        if (limparBar && limparBar.style.display !== 'none' && getComputedStyle(limparBar).display !== 'none') {
+            h += limparBar.getBoundingClientRect().height;
+        }
+        if (foot) h += foot.getBoundingClientRect().height;
+        return Math.max(SHEET_PEEK_MIN, Math.ceil(h + 6));
+    }
+    function sincronizarPeekSheet(sheet) {
+        if (!sheet) return;
+        const peek = medirPeekSheet(sheet);
+        sheet.style.setProperty('--sheet-peek', peek + 'px');
+        sheet._peekVis = peek;
+    }
+
     /* -------- altura real da tela + compensação do teclado virtual -------- */
     // Fallback p/ navegadores sem "dvh": 100vh passa da área visível e CORTA a
     // barra de baixo — e como a tela é travada (sem rolagem), o botão fica
@@ -3251,26 +3273,6 @@
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
     // peek = quanto fica visível (a "abinha") quando colapsado.
-    const SHEET_PEEK_MIN = 132;
-    function medirPeekSheet(sheet) {
-        if (!sheet) return SHEET_PEEK_MIN;
-        const grip = sheet.querySelector('.acao-grip');
-        const limparBar = sheet.querySelector('.limpar-rota-bar');
-        const foot = sheet.querySelector('.acao-sheet-footer');
-        let h = 0;
-        if (grip) h += grip.getBoundingClientRect().height;
-        if (limparBar && limparBar.style.display !== 'none' && getComputedStyle(limparBar).display !== 'none') {
-            h += limparBar.getBoundingClientRect().height;
-        }
-        if (foot) h += foot.getBoundingClientRect().height;
-        return Math.max(SHEET_PEEK_MIN, Math.ceil(h + 6));
-    }
-    function sincronizarPeekSheet(sheet) {
-        if (!sheet) return;
-        const peek = medirPeekSheet(sheet);
-        sheet.style.setProperty('--sheet-peek', peek + 'px');
-        sheet._peekVis = peek;
-    }
     function tornarArrastavel(sheet, grip, peekVis = 44) {
         if (!sheet || !grip || sheet._dragReady) return;
         sheet._dragReady = true;
