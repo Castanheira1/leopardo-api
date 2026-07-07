@@ -3555,7 +3555,23 @@
         );
     }
 
-    let contatoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false, passageirosAtivos: new Set() };
+    let contatoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false, passageirosAtivos: new Set(), buzinados: new Set() };
+
+    function chaveBuzinaContato(c) {
+        const ts = c.created_at ? new Date(c.created_at).getTime() : 0;
+        return `${c.passageiro_id}:${ts}`;
+    }
+
+    // Buzina quando o passageiro acabou de tocar (created_at recente), inclusive
+    // re-buzina no mesmo contato — a lógica antiga só tocava em pulso novo.
+    function deveBuzinarContato(c) {
+        const ts = c.created_at ? new Date(c.created_at).getTime() : 0;
+        if (!ts || Date.now() - ts > 15000) return false;
+        const key = chaveBuzinaContato(c);
+        if (contatoFleet.buzinados.has(key)) return false;
+        contatoFleet.buzinados.add(key);
+        return true;
+    }
 
     function chavePulsoContato(passageiroId) {
         return 'p' + passageiroId;
@@ -3623,12 +3639,12 @@
                     const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
                     const rotulo = rotuloPulsoContato(c);
                     const existente = contatoFleet.markers[key];
+                    if (deveBuzinarContato(c)) novos++;
                     if (existente) {
                         existente.setPosition(pos);
                         existente._c = c;
                         atualizarRotuloPulso(existente, rotulo);
                     } else {
-                        if (contatoFleet.viuPrimeiraLeva && !contatoFleet.passageirosAtivos.has(c.passageiro_id)) novos++;
                         const titulo = (c.passageiro_nome || 'Passageiro') + ' — quer carona';
                         const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo, rotulo);
                         mk._c = c;
@@ -3651,7 +3667,7 @@
         }
         contatoTickFn = tick;
         tick();
-        contatoFleet.timer = setInterval(tick, 6000);
+        contatoFleet.timer = setInterval(tick, 3000);
     }
 
     function pararContatosAoVivo() {
@@ -3661,6 +3677,7 @@
         contatoFleet.markers = {};
         contatoFleet.passageirosAtivos = new Set();
         contatoFleet.viuPrimeiraLeva = false;
+        contatoFleet.buzinados = new Set();
     }
 
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
