@@ -311,17 +311,15 @@ function carregarMaps() {
 }
 
 // Carro visto de cima em perspectiva 3/4 (estilo Uber/Google Maps).
-// variant: 'white' | 'gold'. Frente aponta para cima; gira com heading.
-function svgCarroTopoUrl(heading = 0, variant = 'white') {
+// variant: 'white' | 'gold'. Frente aponta para cima; rotação só via CSS no marcador.
+function svgCarroTopoUrl(variant = 'white') {
     const body = variant === 'gold' ? '#EAD298' : '#ffffff';
     const bodySide = variant === 'gold' ? '#d4bc7a' : '#eceff1';
     const stroke = variant === 'gold' ? '#9a7514' : '#b0b8c0';
     const hood = variant === 'gold' ? '#fff8dc' : '#ffffff';
     const glass = '#2f3640';
     const glassFront = '#455a64';
-    const h = Number(heading) || 0;
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="30" height="40">'
-        + `<g transform="rotate(${h} 24 32)">`
         + `<path d="M24 5 C16 5 11 10 10 17 L9 45 C9 53 14 58 24 58 C34 58 39 53 39 45 L38 17 C37 10 32 5 24 5Z" fill="${body}" stroke="${stroke}" stroke-width="1.1"/>`
         + `<path d="M10 17 L9 45 C9 53 14 58 24 58 L24 5 C16 5 11 10 10 17Z" fill="${bodySide}" opacity="0.6"/>`
         + `<path d="M16 7 C20 5 28 5 32 7 L30 12 C27 10 21 10 18 12Z" fill="${hood}" opacity="0.95"/>`
@@ -331,8 +329,23 @@ function svgCarroTopoUrl(heading = 0, variant = 'white') {
         + `<ellipse cx="10.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
         + `<ellipse cx="37.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
         + '<path d="M17 54 L31 54 L30 56.5 L18 56.5Z" fill="#e53935"/>'
-        + '</g></svg>';
+        + '</svg>';
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
+function distMetrosGps(a, b) {
+    if (!a || !b) return 0;
+    const R = 6371000;
+    const lat1 = a.lat * Math.PI / 180;
+    const lat2 = b.lat * Math.PI / 180;
+    const dLat = (b.lat - a.lat) * Math.PI / 180;
+    const dLng = (b.lng - a.lng) * Math.PI / 180;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function diferencaAngulo(a, b) {
+    return Math.abs(((Number(a) - Number(b) + 540) % 360) - 180);
 }
 
 // Rumo (graus, 0 = norte) entre dois pontos — para orientar o ícone do carro.
@@ -352,10 +365,14 @@ function bearingEntrePontos(de, para) {
 function atualizarPosicaoCarro(mk, pos, posAnterior) {
     if (!mk) return;
     mk.setPosition(pos);
-    if (posAnterior) {
-        const h = bearingEntrePontos(posAnterior, pos);
-        if (h != null) mk.setHeading(h);
-    }
+    if (!posAnterior || !mk.setHeading) return;
+    const metros = distMetrosGps(posAnterior, pos);
+    if (metros < 8) return;   // GPS oscilando parado: não gira
+    const h = bearingEntrePontos(posAnterior, pos);
+    if (h == null) return;
+    const ultimo = mk.getHeading ? mk.getHeading() : null;
+    if (ultimo != null && diferencaAngulo(ultimo, h) < 12 && metros < 30) return;
+    mk.setHeading(h);
 }
 
 // Marcadores de carro redimensionam conforme o zoom do mapa (como Uber/Maps).
@@ -413,10 +430,11 @@ function criarMarcador(opts = {}) {
         img.style.height = ih + 'px';
         img.draggable = false;
         imgEl = img;
-        if (heading != null && !iconVariant) {
-            img.style.transform = `rotate(${heading}deg)`;
+        if (iconVariant || heading != null) {
             img.style.transformOrigin = 'center center';
+            img.style.willChange = 'transform';
         }
+        if (heading != null) img.style.transform = `rotate(${Number(heading) || 0}deg)`;
         if (badge != null) {
             // Selo numerado (posição na fila) por cima do ícone do carro.
             const wrap = document.createElement('div');
@@ -452,6 +470,7 @@ function criarMarcador(opts = {}) {
         zIndex,
     });
     if (pinEl) mk.append(pinEl);
+    let _headingDeg = heading != null ? Number(heading) || 0 : 0;
     const api = {
         setPosition(p) { mk.position = normalizarLatLng(p); },
         getPosition() { return posicaoLegada(mk); },
@@ -464,11 +483,11 @@ function criarMarcador(opts = {}) {
             }
         },
         setTitle(t) { mk.title = t || ''; },
+        getHeading() { return _headingDeg; },
         setHeading(h) {
             if (!imgEl) return;
-            const headingAtual = Number(h) || 0;
-            if (iconVariant) imgEl.src = svgCarroTopoUrl(headingAtual, iconVariant);
-            else imgEl.style.transform = `rotate(${headingAtual}deg)`;
+            _headingDeg = Number(h) || 0;
+            imgEl.style.transform = `rotate(${_headingDeg}deg)`;
         },
         setIconSize(w, h) {
             if (!imgEl) return;
