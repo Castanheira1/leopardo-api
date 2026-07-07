@@ -625,8 +625,9 @@ gmp-place-autocomplete.map-search-float {
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
 }
-/* colapsado: mantém uma faixa discreta para indicar que o painel pode ser puxado */
-.acao-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
+/* colapsado: mantém a alça (grip) visível ACIMA da barra de gestos do Android,
+   senão o painel "some" e não dá pra puxar de volta. */
+.acao-sheet.collapsed { transform: translateY(calc(100% - 92px)); }
 .acao-grip {
     position: relative;
     display: flex;
