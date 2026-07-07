@@ -311,16 +311,14 @@ function carregarMaps() {
 }
 
 // Carro visto de cima em perspectiva 3/4 (estilo Uber/Google Maps).
-// variant: 'white' | 'gold'. Frente aponta para cima; rotação só via CSS no marcador.
-function svgCarroTopoUrl(variant = 'white') {
+function carSvgPaths(variant = 'white') {
     const body = variant === 'gold' ? '#EAD298' : '#ffffff';
     const bodySide = variant === 'gold' ? '#d4bc7a' : '#eceff1';
     const stroke = variant === 'gold' ? '#9a7514' : '#b0b8c0';
     const hood = variant === 'gold' ? '#fff8dc' : '#ffffff';
     const glass = '#2f3640';
     const glassFront = '#455a64';
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="30" height="40">'
-        + `<path d="M24 5 C16 5 11 10 10 17 L9 45 C9 53 14 58 24 58 C34 58 39 53 39 45 L38 17 C37 10 32 5 24 5Z" fill="${body}" stroke="${stroke}" stroke-width="1.1"/>`
+    return `<path d="M24 5 C16 5 11 10 10 17 L9 45 C9 53 14 58 24 58 C34 58 39 53 39 45 L38 17 C37 10 32 5 24 5Z" fill="${body}" stroke="${stroke}" stroke-width="1.1"/>`
         + `<path d="M10 17 L9 45 C9 53 14 58 24 58 L24 5 C16 5 11 10 10 17Z" fill="${bodySide}" opacity="0.6"/>`
         + `<path d="M16 7 C20 5 28 5 32 7 L30 12 C27 10 21 10 18 12Z" fill="${hood}" opacity="0.95"/>`
         + `<path d="M15 15 C18 12 30 12 33 15 L34 25 L14 25Z" fill="${glassFront}"/>`
@@ -328,9 +326,26 @@ function svgCarroTopoUrl(variant = 'white') {
         + `<path d="M16 45 L32 45 L30 51 L18 51Z" fill="${glassFront}"/>`
         + `<ellipse cx="10.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
         + `<ellipse cx="37.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
-        + '<path d="M17 54 L31 54 L30 56.5 L18 56.5Z" fill="#e53935"/>'
-        + '</svg>';
-    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+        + '<path d="M17 54 L31 54 L30 56.5 L18 56.5Z" fill="#e53935"/>';
+}
+
+function htmlSvgCarro(variant, w, h) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="${w}" height="${h}" style="display:block;pointer-events:none">${carSvgPaths(variant)}</svg>`;
+}
+
+// Data-URL só para referência/legado; marcadores usam SVG inline no DOM.
+function svgCarroTopoUrl(variant = 'white') {
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="30" height="40">${carSvgPaths(variant)}</svg>`
+    );
+}
+
+function montarNoCarro(variant, w, h) {
+    const rot = document.createElement('div');
+    rot.className = 'vap-car-rot';
+    rot.style.cssText = `width:${w}px;height:${h}px;transform-origin:50% 50%;transform:rotate(0deg);contain:layout style paint;`;
+    rot.innerHTML = htmlSvgCarro(variant, w, h);
+    return rot;
 }
 
 function distMetrosGps(a, b) {
@@ -367,11 +382,11 @@ function atualizarPosicaoCarro(mk, pos, posAnterior) {
     mk.setPosition(pos);
     if (!posAnterior || !mk.setHeading) return;
     const metros = distMetrosGps(posAnterior, pos);
-    if (metros < 8) return;   // GPS oscilando parado: não gira
+    if (metros < 12) return;   // GPS oscilando parado: não gira
     const h = bearingEntrePontos(posAnterior, pos);
     if (h == null) return;
     const ultimo = mk.getHeading ? mk.getHeading() : null;
-    if (ultimo != null && diferencaAngulo(ultimo, h) < 12 && metros < 30) return;
+    if (ultimo != null && diferencaAngulo(ultimo, h) < 18 && metros < 35) return;
     mk.setHeading(h);
 }
 
@@ -415,12 +430,33 @@ function criarMarcador(opts = {}) {
     let pinEl = null;
     let content = null;
     let imgEl = null;
+    let rotEl = null;
     let wrapEl = null;
     let mapRef = map || null;
     if (invisivel) {
         const d = document.createElement('div');
         d.style.cssText = 'width:36px;height:36px;opacity:0.001;';
         content = d;
+    } else if (iconVariant) {
+        const iw = iconW || 30;
+        const ih = iconH || 40;
+        rotEl = montarNoCarro(iconVariant, iw, ih);
+        if (badge != null) {
+            const wrap = document.createElement('div');
+            wrap.style.cssText = `position:relative;width:${iw}px;height:${ih}px;overflow:visible;`;
+            const sel = document.createElement('span');
+            sel.textContent = String(badge);
+            sel.style.cssText = 'position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;'
+                + 'padding:0 3px;border-radius:50%;background:#EAD298;color:#0F3D3E;'
+                + 'font:700 11px/16px system-ui,sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+            wrap.appendChild(rotEl);
+            wrap.appendChild(sel);
+            content = wrap;
+            wrapEl = wrap;
+        } else {
+            content = rotEl;
+            wrapEl = rotEl;
+        }
     } else if (typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('data:'))) {
         const img = document.createElement('img');
         img.src = icon;
@@ -471,6 +507,11 @@ function criarMarcador(opts = {}) {
     });
     if (pinEl) mk.append(pinEl);
     let _headingDeg = heading != null ? Number(heading) || 0 : 0;
+    let _headingRaf = null;
+    const aplicarRotacao = () => {
+        if (!rotEl) return;
+        rotEl.style.transform = `rotate(${_headingDeg}deg)`;
+    };
     const api = {
         setPosition(p) { mk.position = normalizarLatLng(p); },
         getPosition() { return posicaoLegada(mk); },
@@ -485,15 +526,26 @@ function criarMarcador(opts = {}) {
         setTitle(t) { mk.title = t || ''; },
         getHeading() { return _headingDeg; },
         setHeading(h) {
-            if (!imgEl) return;
+            if (!rotEl && !imgEl) return;
             _headingDeg = Number(h) || 0;
-            imgEl.style.transform = `rotate(${_headingDeg}deg)`;
+            if (rotEl) {
+                if (_headingRaf) cancelAnimationFrame(_headingRaf);
+                _headingRaf = requestAnimationFrame(() => { aplicarRotacao(); _headingRaf = null; });
+                return;
+            }
+            if (imgEl) imgEl.style.transform = `rotate(${_headingDeg}deg)`;
         },
         setIconSize(w, h) {
-            if (!imgEl) return;
-            imgEl.style.width = w + 'px';
-            imgEl.style.height = h + 'px';
-            if (wrapEl && wrapEl !== imgEl) {
+            if (rotEl) {
+                rotEl.style.width = w + 'px';
+                rotEl.style.height = h + 'px';
+                const svg = rotEl.querySelector('svg');
+                if (svg) { svg.setAttribute('width', w); svg.setAttribute('height', h); }
+            } else if (imgEl) {
+                imgEl.style.width = w + 'px';
+                imgEl.style.height = h + 'px';
+            } else return;
+            if (wrapEl && wrapEl !== rotEl && wrapEl !== imgEl) {
                 wrapEl.style.width = w + 'px';
                 wrapEl.style.height = h + 'px';
             }
