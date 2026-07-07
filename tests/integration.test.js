@@ -380,6 +380,16 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(!json.some((x) => x.id === caronaId), "não deveria casar um destino distante");
     });
+    await test("GET /api/caronas?dest casa destino no caminho (passageiro desce antes)", async () => {
+      const parada = {
+        lat: ORIGEM.lat + (DESTINO.lat - ORIGEM.lat) * 0.35,
+        lng: ORIGEM.lng + (DESTINO.lng - ORIGEM.lng) * 0.35,
+      };
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${parada.lat}&dest_lng=${parada.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status");
+      assert(json.some((x) => x.id === caronaId), "carona deveria aparecer — parada no trajeto publicado");
+    });
 
     /* =================== PEDIDOS =================== */
     grupo("Pedidos");

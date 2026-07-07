@@ -670,6 +670,33 @@ function distanciaSegmentoKm(latCol, lngCol, aLat, aLng, bLat, bLng) {
   return `sqrt(POWER((${px}) - (${t})*(${bx}), 2) + POWER((${py}) - (${t})*(${by}), 2))`;
 }
 
+// Destino do passageiro compatível com carona: mesmo lugar OU no segmento origem→destino.
+function sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const mesmo = `${haversine(carDestLat, carDestLng, pDestLat, pDestLng)} <= ${RAIO_VISIVEL_KM}`;
+  const noTrajeto = `${distanciaSegmentoKm(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng)} <= ${RAIO_ROTA_KM}`;
+  return `(${mesmo} OR ${noTrajeto})`;
+}
+
+// Pedido combina com carona se embarque OU destino ficam no trajeto publicado.
+function sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const origNoTrajeto = `${distanciaSegmentoKm(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng)} <= ${RAIO_ROTA_KM}`;
+  const destCompat = sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  return `(${destCompat} OR ${origNoTrajeto})`;
+}
+
+// Motorista "na pista": GPS na faixa da rota do passageiro OU carona publicada compatível.
+function sqlMotoristaNaRotaPassageiro(pOrigLat, pOrigLng, pDestLat, pDestLng, gpsLatCol, gpsLngCol, motoristaIdCol) {
+  const gpsNaFaixa = `${distanciaSegmentoKm(gpsLatCol, gpsLngCol, pOrigLat, pOrigLng, pDestLat, pDestLng)} <= ${RAIO_ROTA_KM}`;
+  const caronaCompat = `EXISTS (
+    SELECT 1 FROM caronas ca
+    WHERE ca.motorista_id = ${motoristaIdCol}
+      AND ca.status = 'ativa' AND ca.vagas > 0
+      AND ca.origem_lat IS NOT NULL AND ca.destino_lat IS NOT NULL
+      AND ${sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+  )`;
+  return `(${gpsNaFaixa} OR ${caronaCompat})`;
+}
+
 function haversineKmCoord(lat1, lng1, lat2, lng2) {
   const p1 = Number(lat1);
   const p2 = Number(lat2);
@@ -1566,12 +1593,6 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
-       AND NOT EXISTS (
-         SELECT 1 FROM localizacoes_online lo
-         WHERE lo.usuario_id = c.motorista_id
-           AND lo.disponivel = TRUE
-           AND lo.online_desde IS NOT NULL
-       )
        ${filtroProj}
        ${origemRaio}
        ${destFiltro}
@@ -1756,6 +1777,7 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
     if (!ped) return res.status(404).json({ error: "Pedido não encontrado" });
     if (ped.passageiro_id !== req.user.id) return res.status(403).json({ error: "Pedido de outro usuário" });
 
+    const combinaRota = sqlPedidoCombinaComCarona("$1", "$2", "$3", "$4", "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng");
     const { rows } = await pool.query(
       `SELECT * FROM (
          SELECT c.*, u.nome AS motorista_nome, h.placa, h.tag, h.foto_carro_url,
@@ -1767,10 +1789,11 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
          WHERE c.status = 'ativa' AND c.motorista_id <> $5
            AND u.projeto_id = $8
            AND COALESCE(u.ativo, TRUE) = TRUE
+           AND c.vagas > 0
            AND (c.horario IS NULL OR $7::timestamp IS NULL
                 OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
        ) s
-       WHERE s.dist_origem <= $6 AND s.dist_destino <= ${RAIO_VISIVEL_KM}
+       WHERE ${combinaRota.replace(/c\./g, "s.")}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
       [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario, pid]
@@ -1793,6 +1816,7 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
     const car = (await pool.query("SELECT * FROM caronas WHERE id = $1", [carona_id])).rows[0];
     if (!car) return res.status(404).json({ error: "Carona não encontrada" });
 
+    const combinaRota = sqlPedidoCombinaComCarona("p.origem_lat", "p.origem_lng", "p.destino_lat", "p.destino_lng", "$1", "$2", "$3", "$4");
     const { rows } = await pool.query(
       `SELECT * FROM (
          SELECT p.*, u.nome AS passageiro_nome,
@@ -1806,7 +1830,7 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
            AND (p.horario IS NULL OR $7::timestamp IS NULL
                 OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
        ) s
-       WHERE s.dist_origem <= $6 AND s.dist_destino <= ${RAIO_VISIVEL_KM}
+       WHERE ${combinaRota.replace(/p\./g, "s.")}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
       [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario, pid]
@@ -1984,8 +2008,8 @@ async function criarViagemDaProposta(propostaId) {
 // Motoristas habilitados e disponíveis dentro de RAIO_ROTA_KM da rota
 // origem->destino, ordenados do mais perto da ORIGEM pro mais longe.
 async function motoristasNaRota(origem, destino, projetoId, excluirUsuarioId) {
-  const distRota = distanciaSegmentoKm("l.lat", "l.lng", "$1", "$2", "$3", "$4");
   const distOrigem = haversine("l.lat", "l.lng", "$1", "$2");
+  const naPista = sqlMotoristaNaRotaPassageiro("$1", "$2", "$3", "$4", "l.lat", "l.lng", "u.id");
   const { rows } = await pool.query(
     `SELECT DISTINCT ON (u.id) u.id AS motorista_id, ${distOrigem} AS dist_km
      FROM localizacoes_online l
@@ -2001,9 +2025,9 @@ async function motoristasNaRota(origem, destino, projetoId, excluirUsuarioId) {
        AND u.id <> $5
        AND u.projeto_id = $6
        AND (ca.vagas IS NULL OR ca.vagas > 0)
-       AND ${distRota} <= $7
+       AND ${naPista}
      ORDER BY u.id, h.created_at DESC`,
-    [origem.lat, origem.lng, destino.lat, destino.lng, excluirUsuarioId, projetoId, RAIO_ROTA_KM]
+    [origem.lat, origem.lng, destino.lat, destino.lng, excluirUsuarioId, projetoId]
   );
   rows.sort((a, b) => Number(a.dist_km) - Number(b.dist_km));
   return rows;
@@ -2520,8 +2544,8 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
   try {
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
-    const distRota = distanciaSegmentoKm("l.lat", "l.lng", "$2", "$3", "$4", "$5");
     const distOrigem = haversine("l.lat", "l.lng", "$2", "$3");
+    const naPista = sqlMotoristaNaRotaPassageiro("$2", "$3", "$4", "$5", "l.lat", "l.lng", "u.id");
     const { rows } = await pool.query(
       `SELECT * FROM (
          SELECT DISTINCT ON (u.id)
@@ -2544,12 +2568,12 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
            AND u.id <> $1
            AND u.projeto_id = $6
            AND (ca.vagas IS NULL OR ca.vagas > 0)
-           AND ${distRota} <= $7
+           AND ${naPista}
          ORDER BY u.id, h.created_at DESC
        ) s
        ORDER BY dist_km ASC
        LIMIT 100`,
-      [req.user.id, origem_lat, origem_lng, destino_lat, destino_lng, pid, RAIO_ROTA_KM]
+      [req.user.id, origem_lat, origem_lng, destino_lat, destino_lng, pid]
     );
     res.json(rows.map((r, i) => ({ ...motoristaVisivelPassageiro(r), ordem: i })));
   } catch (err) {
