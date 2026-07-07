@@ -129,7 +129,7 @@
                         </div>
                         <div class="acao-sheet-body">
                         <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
-                            Escolha <strong>para onde vamos</strong> no mapa para ver motoristas online.
+                            Escolha <strong>para onde vamos</strong> no mapa para ver sua rota e pedir carona.
                         </p>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
@@ -692,7 +692,7 @@
     function exigirDestinoPassageiro(acao) {
         const texto = acao
             ? `Escolha primeiro para onde vamos — depois você pode ${acao}.`
-            : 'Escolha primeiro para onde vamos para ver motoristas online no mapa.';
+            : 'Escolha para onde vamos no mapa para ver sua rota e pedir carona.';
         msg(texto, 'error', 9000);
         selPed?.focarBuscaDestino?.();
         atualizarHintDestinoPed();
@@ -1489,11 +1489,7 @@
                 const titulo = destino.texto ? `<strong>${esc(destino.texto)}</strong><br>` : '';
                 rotaInfo.innerHTML = `${titulo}${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
                 rotaInfo.style.display = 'block';
-                const o = mkOrigem.getPosition();
-                const bounds = new g.maps.LatLngBounds();
-                bounds.extend({ lat: o.lat(), lng: o.lng() });
-                bounds.extend({ lat: destino.lat, lng: destino.lng });
-                map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
+                enquadrarMapaPedidoDebounced();
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
@@ -3482,6 +3478,8 @@
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
     let fleet = { markers: {}, timer: null, map: null, naRota: [], naRotaEm: 0 };
+    let enquadrarMapaPedidoTimer = null;
+    let enquadrarMapaPedidoDebounced = () => {};
     let atualizarFrotaAoVivo = null;
     function limparFrotaAoVivo() {
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
@@ -3501,6 +3499,30 @@
         return m && m.carona_id && m.destino_lat != null
             ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
     }
+    // Enquadra rota do passageiro (preta) + motoristas/rotas douradas no mesmo zoom.
+    function enquadrarMapaPedido() {
+        if (!selPed?.map || !g?.maps) return;
+        const map = selPed.map;
+        const bounds = new g.maps.LatLngBounds();
+        let tem = false;
+        try {
+            const o = selPed.getOrigem?.();
+            const dest = selPed.getDestino?.();
+            if (o) { bounds.extend(o); tem = true; }
+            if (dest) { bounds.extend(dest); tem = true; }
+            Object.values(fleet.markers || {}).forEach((it) => {
+                if (it.lastPos) { bounds.extend(it.lastPos); tem = true; }
+                const d = destinoPublicadoCarro(it.m);
+                if (d) { bounds.extend(d); tem = true; }
+            });
+            if (!tem) return;
+            map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
+        } catch (_) { /* mapa ainda montando */ }
+    }
+    enquadrarMapaPedidoDebounced = () => {
+        clearTimeout(enquadrarMapaPedidoTimer);
+        enquadrarMapaPedidoTimer = setTimeout(enquadrarMapaPedido, 350);
+    };
     const FLEET_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
     const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
     const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
@@ -3526,6 +3548,7 @@
             await item.rotaCtrl.calcular(pos, destino);
             item.rotaUltimaPos = { ...pos };
             item.rotaUltimaEm = agora;
+            if (selPed?.getDestino?.()) enquadrarMapaPedidoDebounced();
         } catch (_) { /* sem rota: só o carro */ }
         finally { item.rotaCalculando = false; }
     }
@@ -3540,28 +3563,11 @@
             const modalCarroAberto = carroSel && document.getElementById('modalCarro')?.style.display === 'flex';
             if (document.hidden && !modalCarroAberto) return;
             try {
-                // Posição do passageiro + destino escolhido: motoristas online no raio
-                // de 600 m e caronas publicadas na rota (fora do raio). Sem destino,
-                // a frota fica oculta — o passageiro precisa marcar "para onde vamos".
+                // Motoristas online no raio de 600 m (+ caronas na rota quando o
+                // passageiro já escolheu destino). Rotas douradas = carona publicada.
+                // Buzina/ligação/WhatsApp continuam exigindo destino do passageiro.
                 const o = selPed ? selPed.getOrigem() : null;
                 const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
-                // Sem destino escolhido: não mostra carros no mapa (evita buzina/ligação sem rota).
-                if (!dest) {
-                    const ids = Object.keys(fleet.markers);
-                    if (ids.length) {
-                        ids.forEach((id) => {
-                            const it = fleet.markers[id];
-                            if (it.car) it.car.setMap(null);
-                            if (it.rotaCtrl) it.rotaCtrl.limpar();
-                            if (it.destinoMk) it.destinoMk.setMap(null);
-                        });
-                        if (carroSel) fecharCarro();
-                        fleet.markers = {};
-                        fleet.naRota = [];
-                        fleet.naRotaEm = 0;
-                    }
-                    return;
-                }
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
                 const lista = await r.json();
@@ -3650,6 +3656,7 @@
                     }
                 });
                 sincronizarModalCarroAoVivo(lista, removidos);
+                if (dest && Object.keys(fleet.markers).length) enquadrarMapaPedidoDebounced();
             } catch (_) {}
         }
         tick();
