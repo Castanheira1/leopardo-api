@@ -125,6 +125,38 @@
               "google": true
             },
             {
+              "nome": "Tamanduá-Usina",
+              "busca": "Manutenção Mecânica Usina Tamanduazinho S11D",
+              "ref": {
+                "lat": -6.448586,
+                "lng": -50.248101
+              }
+            },
+            {
+              "nome": "Ambulatório-Usina",
+              "busca": "Ambulatório S11D Usina",
+              "ref": {
+                "lat": -6.448595,
+                "lng": -50.248373
+              }
+            },
+            {
+              "nome": "CMD-Usina",
+              "busca": "CMD Serra Sul S11D",
+              "ref": {
+                "lat": -6.462301,
+                "lng": -50.265667
+              }
+            },
+            {
+              "nome": "CCP-Usina",
+              "busca": "CCP Usina S11D",
+              "ref": {
+                "lat": -6.452327,
+                "lng": -50.246885
+              }
+            },
+            {
               "nome": "Britagem Terciária B",
               "busca": "Britagem Terciária B S11D",
               "ref": {
