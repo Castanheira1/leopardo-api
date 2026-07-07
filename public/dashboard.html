@@ -1782,30 +1782,9 @@
     }
 
     // Três jeitos de falar com um motorista disponível na rota (buzina, ligação,
-    // WhatsApp) — vale tanto pro modo amarelo quanto pra carona publicada. Cada
-    // toque avisa o motorista (push) e revela o telefone pra essa ação.
-    // Envia GPS + destino para o motorista ver o pulso no mapa.
-    function confirmarRotaParcial(destinoMotorista) {
-        const destPax = selPed?.getDestino?.()?.texto || 'seu destino';
-        return confirm(
-            `Este motorista só vai até ${destinoMotorista || 'o destino dele'}.\n`
-            + `Você pediu ${destPax} (mais longe).\n\n`
-            + 'Pedir assim mesmo e embarcar só até lá?'
-        );
-    }
-
-    function confirmarRotaProximo(destinoMotorista) {
-        const destPax = selPed?.getDestino?.()?.texto || 'seu destino';
-        return confirm(
-            `Motorista vai até ${destinoMotorista || 'o destino dele'} — passa perto de ${destPax}.\n\n`
-            + 'Ele NÃO é obrigado a levar até lá. Combinar mesmo assim?'
-        );
-    }
-
-    async function contatoMotorista(id, opts) {
+    // WhatsApp). Envia GPS + destino para o motorista ver o pulso no mapa.
+    async function contatoMotorista(id) {
         if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
-        if (opts?.parcial && !confirmarRotaParcial(opts.destinoMotorista)) return null;
-        if (opts?.proximo && !confirmarRotaProximo(opts.destinoMotorista)) return null;
         const dest = selPed?.getDestino?.();
         if (!dest) {
             msg('Escolha um destino no mapa para o motorista ver sua rota.', 'error');
@@ -1836,38 +1815,27 @@
             return null;
         }
     }
-    async function buzinarMotorista(id, destinoMotorista, modoCompat) {
-        const opts = modoCompat === 'parcial'
-            ? { parcial: true, destinoMotorista }
-            : (modoCompat === 'proximo' ? { proximo: true, destinoMotorista } : null);
-        const d = await contatoMotorista(id, opts);
+    async function buzinarMotorista(id) {
+        const d = await contatoMotorista(id);
         if (d) msg('Motorista avisado! Você aparece no mapa dele com seu destino.');
     }
-    async function ligarMotorista(id, destinoMotorista, modoCompat) {
-        const opts = modoCompat === 'parcial'
-            ? { parcial: true, destinoMotorista }
-            : (modoCompat === 'proximo' ? { proximo: true, destinoMotorista } : null);
-        const d = await contatoMotorista(id, opts);
+    async function ligarMotorista(id) {
+        const d = await contatoMotorista(id);
         if (d && d.telefone) window.location.href = 'tel:' + d.telefone.replace(/\D/g, '');
     }
-    async function whatsappMotorista(id, destinoMotorista, modoCompat) {
-        const opts = modoCompat === 'parcial'
-            ? { parcial: true, destinoMotorista }
-            : (modoCompat === 'proximo' ? { proximo: true, destinoMotorista } : null);
-        const d = await contatoMotorista(id, opts);
+    async function whatsappMotorista(id) {
+        const d = await contatoMotorista(id);
         if (d && d.telefone) {
             abrirWhatsApp(d.telefone, d.mensagem);
             msg('WhatsApp aberto — combine com o motorista.');
         }
     }
-    function botoesContato(id, compacto, destinoMotoristaParcial, modoCompat) {
-        const dm = destinoMotoristaParcial ? `'${String(destinoMotoristaParcial).replace(/'/g, "\\'")}'` : 'null';
-        const mc = modoCompat ? `'${modoCompat}'` : 'null';
+    function botoesContato(id, compacto) {
         const cls = compacto ? 'ride-icon-btn' : 'btn btn-secondary btn-sm';
         return `<div class="ride-contatos" role="group" aria-label="Falar com motorista">
-            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id}, ${dm}, ${mc})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
-            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id}, ${dm}, ${mc})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
-            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id}, ${dm}, ${mc})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
+            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
+            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
+            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
         </div>`;
     }
 
@@ -1905,9 +1873,6 @@
         const vagasDisp = it.vagas || 1;
         const vagasOk = !it.caronaId || pessoas <= vagasDisp;
         const destParcialJs = parcial ? (it.destinoMotorista || it.destino || '').replace(/'/g, "\\'") : '';
-        const destProximoJs = proximo ? (it.destinoMotorista || it.destino || '').replace(/'/g, "\\'") : '';
-        const modoContato = parcial ? 'parcial' : (proximo ? 'proximo' : null);
-        const destContato = modoContato ? (it.destinoMotorista || it.destino) : null;
         const acaoPrincipal = it.caronaId
             ? (vagasOk
                 ? (parcial
@@ -1931,7 +1896,7 @@
                 </div>
             </div>
             ${acaoPrincipal}
-            ${botoesContato(it.id, true, destContato, modoContato)}
+            ${botoesContato(it.id, true)}
         </article>`;
     }
 
@@ -2041,8 +2006,7 @@
         }
     }
 
-    async function pedirVagaParcial(caronaId, vagasDisp, destinoMotorista) {
-        if (!confirmarRotaParcial(destinoMotorista)) return;
+    async function pedirVagaParcial(caronaId, vagasDisp) {
         await pedirVaga(caronaId, vagasDisp);
     }
 
