@@ -120,35 +120,37 @@
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped">
-                        <div class="acao-grip acao-grip--minimal" id="gripPed">
+                        <div class="acao-grip" id="gripPed">
                             <span class="acao-handle"></span>
-                            <span class="acao-titulo" aria-hidden="true">Sua viagem</span>
-                            <button type="button" id="btnLimparPed" class="btn-limpar-dest" style="display:none;" onclick="limparDestinoPassageiro()">Limpar</button>
+                            <span class="acao-titulo">Pedir carona</span>
                         </div>
                         <div class="acao-sheet-body">
                         <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
-                            Informe o destino para ver motoristas disponíveis.
+                            Escolha <strong>para onde vamos</strong> no mapa para ver motoristas online.
                         </p>
+                        <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
+                            <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota" onclick="limparDestinoPassageiro()">Limpar rota</button>
+                        </div>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
-                                <label for="horaPed">Partida</label>
-                                <input type="datetime-local" id="horaPed" step="300" aria-label="Data e hora da partida">
+                                <label>Quando?</label>
+                                <input type="datetime-local" id="horaPed" step="300" aria-label="Data e hora da carona">
                             </div>
                             <div class="form-group" id="pessoasPedWrap">
-                                <label for="pessoasPed">Passageiros</label>
+                                <label>Quantas pessoas?</label>
                                 <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric" onchange="atualizarListaMotoristasPorPessoas()" oninput="atualizarListaMotoristasPorPessoas()">
                             </div>
                         </div>
-                        <p id="hintPedidoImediato" class="cam-hint sheet-hint-imediato" style="display:none;">
-                            Motoristas na rota — partida imediata.
+                        <p id="hintPedidoImediato" class="cam-hint" style="display:none;margin:0 0 8px;">
+                            Motorista na rota — pedido imediato, sem agendamento.
                         </p>
                         <div id="motoristasDestinoWrap" class="motoristas-destino-wrap" style="display:none;">
                             <div id="motoristasIndoDestino">
-                                <span class="sheet-sec-tit">Na sua rota</span>
+                                <strong class="painel-tit">Motoristas indo para lá</strong>
                                 <div id="listaIndoDestino"></div>
                             </div>
                             <div id="motoristasPorPerto" style="display:none;margin-top:10px;">
-                                <span class="sheet-sec-tit">Disponíveis por perto</span>
+                                <strong class="painel-tit">Por perto (sem rota publicada)</strong>
                                 <div id="listaPorPerto"></div>
                             </div>
                         </div>
@@ -652,8 +654,8 @@
     }
     function exigirDestinoPassageiro(acao) {
         const texto = acao
-            ? `Informe o destino antes de ${acao}.`
-            : 'Informe o destino para ver motoristas disponíveis.';
+            ? `Escolha primeiro para onde vamos — depois você pode ${acao}.`
+            : 'Escolha primeiro para onde vamos para ver motoristas online no mapa.';
         msg(texto, 'error', 9000);
         selPed?.focarBuscaDestino?.();
         atualizarHintDestinoPed();
@@ -1019,9 +1021,8 @@
         if (sel && sel.limparRota) sel.limparRota();
     }
     function atualizarBtnLimparPed(visivel) {
-        const btn = document.getElementById('btnLimparPed');
-        if (btn) btn.style.display = visivel ? 'inline-block' : 'none';
-        sincronizarPeekSheetPed();
+        const wrap = document.getElementById('limparRotaPedWrap');
+        if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
     }
     function limparDestinoPassageiro() {
         const inp = document.getElementById('destPedInput');
@@ -1621,29 +1622,27 @@
     function atualizarFormPedidoRota(temCarona, temMotoristasVisiveis) {
         pedidoTemCaronaNaRota = !!temCarona;
         const horaWrap = document.getElementById('horaPedWrap');
-        const formRow = document.getElementById('formPedRow');
         const hint = document.getElementById('hintPedidoImediato');
         const btn = document.getElementById('btnCtaPedir');
+        const ctaHtmlPedirAgro = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir agora</span>';
+        const ctaHtmlPedirCarona = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir carona</span>';
         if (temCarona) {
             horaPedModoAgenda = false;
-            if (horaWrap) horaWrap.style.display = 'none';
-            if (formRow) formRow.classList.remove('form-row-2col');
+            if (horaWrap) horaWrap.classList.add('form-slot-reservado');
             if (hint) hint.style.display = 'block';
-            if (btn) btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir carona</span>';
+            if (btn) btn.innerHTML = ctaHtmlPedirAgro;
         } else {
-            if (horaWrap) horaWrap.style.display = '';
-            if (formRow) formRow.classList.add('form-row-2col');
+            if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
-            if (btn) btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir carona</span>';
+            if (btn) btn.innerHTML = ctaHtmlPedirCarona;
             sincronizarQuandoPed();
         }
-        // Com motoristas na lista, a ação fica no card — esconde o botão fixo.
-        if (btn) btn.style.display = temMotoristasVisiveis ? 'none' : '';
-        const sheet = document.getElementById('acaoSheetPed');
-        const foot = sheet?.querySelector('.acao-sheet-footer');
-        if (foot) foot.style.display = temMotoristasVisiveis ? 'none' : '';
-        if (sheet) sheet.classList.toggle('sem-cta-footer', !!temMotoristasVisiveis);
-        sincronizarPeekSheetPed();
+        // Com motoristas na lista, a ação fica no card — mantém o footer para não mexer o peek.
+        if (btn) {
+            btn.style.display = '';
+            btn.style.visibility = temMotoristasVisiveis ? 'hidden' : 'visible';
+            btn.style.pointerEvents = temMotoristasVisiveis ? 'none' : 'auto';
+        }
     }
 
     function parseDatetimeLocalValue(v) {
@@ -1931,7 +1930,7 @@
                 : '');
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
-            : `${ICN.car} Por perto · combine pelo app`;
+            : `${ICN.car} Disponível por perto — combine o destino`;
         const foto = it.foto
             ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
             : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
@@ -1997,7 +1996,7 @@
         atualizarBtnLimparPed(true);
         wrap.style.display = 'block';
         const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
-        listaIndo.innerHTML = '<p class="cam-hint sheet-empty-hint">Buscando motoristas…</p>';
+        listaIndo.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
         listaPerto.innerHTML = '';
         if (contPerto) contPerto.style.display = 'none';
         try {
@@ -2056,7 +2055,7 @@
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
-                : '<p class="cam-hint sheet-empty-hint">Nenhum motorista nesta rota. Toque em <strong>Pedir carona</strong> para avisarmos quem passa por aí.</p>';
+                : '<p class="cam-hint">Ninguém indo para esse local agora. Toque em <strong>Pedir agora</strong> — avisamos motoristas na rota.</p>';
             if (porPerto.length) {
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
@@ -2074,7 +2073,7 @@
                 }, 12000);
             }
         } catch (_) {
-            listaIndo.innerHTML = '<p class="cam-hint sheet-empty-hint">Não foi possível carregar agora.</p>';
+            listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
             atualizarFormPedidoRota(false, false);
         }
     }
