@@ -180,8 +180,11 @@
                             </div>
                         </div>
                         <div id="statusMotoristaOnline" class="ios-banner" style="display:none;" role="status" aria-live="polite">
-                            <span class="ios-banner__icon" aria-hidden="true">VAP</span>
-                            <span class="ios-banner__text"></span>
+                            <span class="ios-banner__icon" aria-hidden="true">V</span>
+                            <span class="ios-banner__body">
+                                <strong class="ios-banner__title"></strong>
+                                <span class="ios-banner__sub"></span>
+                            </span>
                         </div>
                         </div>
                         <div class="acao-sheet-footer">
@@ -2395,19 +2398,23 @@
         if (vagasWrap) vagasWrap.style.display = motoristaOnlineModo ? 'none' : '';
         if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
         if (st) {
-            const txt = st.querySelector('.ios-banner__text');
+            const tit = st.querySelector('.ios-banner__title');
+            const sub = st.querySelector('.ios-banner__sub');
             const dest = selOfe && selOfe.getDestino ? selOfe.getDestino() : null;
             if (!motoristaOnlineModo) {
                 st.style.display = 'none';
             } else {
                 st.style.display = 'flex';
                 st.classList.toggle('ios-banner--destino', !!motoristaModoDestino);
-                const msg = motoristaModoDestino
-                    ? (dest?.texto
-                        ? ('Indo para ' + dest.texto + ' — visível em 10 km')
-                        : 'Rota publicada — visível em 10 km')
-                    : 'Você está online — pedidos em 600 m';
-                if (txt) txt.textContent = msg;
+                if (motoristaModoDestino) {
+                    if (tit) tit.textContent = dest?.texto ? 'Rota publicada' : 'Carona ativa';
+                    if (sub) sub.textContent = dest?.texto
+                        ? (dest.texto + ' · visível em 10 km')
+                        : 'Visível em 10 km para passageiros';
+                } else {
+                    if (tit) tit.textContent = 'Você está online';
+                    if (sub) sub.textContent = 'Recebendo pedidos em 600 m';
+                }
             }
         }
         atualizarIndicadorModoOperante();
