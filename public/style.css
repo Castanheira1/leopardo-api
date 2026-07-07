@@ -755,9 +755,11 @@ html.teclado-aberto {
     overflow-y: auto;
     touch-action: pan-y;
 }
-/* colapsado: alça + botão principal sempre visíveis */
+/* Colapsado: esconde só o CORPO (lista/campos). A alça, a barra "Limpar rota"
+   e o RODAPÉ com o botão principal continuam ancorados na base (bottom:0),
+   sempre visíveis e tocáveis — sem transform que jogue o botão pra fora. */
 .acao-sheet.collapsed {
-    transform: translateY(calc(100% - var(--sheet-peek, 118px)));
+    transform: none;
 }
 .acao-sheet.collapsed .acao-sheet-body {
     display: none;
