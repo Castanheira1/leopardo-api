@@ -350,12 +350,48 @@ function atualizarPosicaoCarro(mk, pos, posAnterior) {
     }
 }
 
+// Marcadores de carro redimensionam conforme o zoom do mapa (como Uber/Maps).
+const _regZoomCar = new WeakMap();
+
+function tamanhoCarroPorZoom(zoom) {
+    const z = Math.max(10, Math.min(20, Number(zoom) || 15));
+    const f = Math.pow(1.12, z - 15);   // zoom 15 = 28×34 px (referência)
+    return { w: Math.round(28 * f), h: Math.round(34 * f) };
+}
+
+function vincularZoomCarros(map) {
+    if (!map || _regZoomCar.has(map)) return;
+    const set = new Set();
+    _regZoomCar.set(map, set);
+    const aplicar = () => {
+        const tam = tamanhoCarroPorZoom(map.getZoom());
+        set.forEach((mk) => { if (mk.setIconSize) mk.setIconSize(tam.w, tam.h); });
+    };
+    map.addListener('zoom_changed', aplicar);
+    aplicar();
+}
+
+function registrarMarcadorCarro(map, marker) {
+    if (!map || !marker?.setIconSize) return;
+    vincularZoomCarros(map);
+    _regZoomCar.get(map).add(marker);
+    const tam = tamanhoCarroPorZoom(map.getZoom());
+    marker.setIconSize(tam.w, tam.h);
+}
+
+function removerMarcadorCarro(map, marker) {
+    const set = map && _regZoomCar.get(map);
+    if (set) set.delete(marker);
+}
+
 // Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
 function criarMarcador(opts = {}) {
     const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading, iconVariant } = opts;
     let pinEl = null;
     let content = null;
     let imgEl = null;
+    let wrapEl = null;
+    let mapRef = map || null;
     if (invisivel) {
         const d = document.createElement('div');
         d.style.cssText = 'width:36px;height:36px;opacity:0.001;';
@@ -385,8 +421,10 @@ function criarMarcador(opts = {}) {
             wrap.appendChild(img);
             wrap.appendChild(sel);
             content = wrap;
+            wrapEl = wrap;
         } else {
             content = img;
+            wrapEl = img;
         }
     } else if (label || cor) {
         const pinOpts = {
@@ -406,10 +444,17 @@ function criarMarcador(opts = {}) {
         zIndex,
     });
     if (pinEl) mk.append(pinEl);
-    return {
+    const api = {
         setPosition(p) { mk.position = normalizarLatLng(p); },
         getPosition() { return posicaoLegada(mk); },
-        setMap(m) { mk.map = m; },
+        setMap(m) {
+            if (!m && mapRef && iconVariant) removerMarcadorCarro(mapRef, api);
+            mk.map = m;
+            if (m) {
+                mapRef = m;
+                if (iconVariant) registrarMarcadorCarro(m, api);
+            }
+        },
         setTitle(t) { mk.title = t || ''; },
         setHeading(h) {
             if (!imgEl) return;
@@ -417,8 +462,19 @@ function criarMarcador(opts = {}) {
             if (iconVariant) imgEl.src = svgCarroTopoUrl(headingAtual, iconVariant);
             else imgEl.style.transform = `rotate(${headingAtual}deg)`;
         },
+        setIconSize(w, h) {
+            if (!imgEl) return;
+            imgEl.style.width = w + 'px';
+            imgEl.style.height = h + 'px';
+            if (wrapEl && wrapEl !== imgEl) {
+                wrapEl.style.width = w + 'px';
+                wrapEl.style.height = h + 'px';
+            }
+        },
         addListener(ev, fn) { return mk.addListener(ev, fn); },
     };
+    if (mapRef && iconVariant) registrarMarcadorCarro(mapRef, api);
+    return api;
 }
 
 // Rotas: Route.computeRoutes (novo) com fallback para DirectionsService (legado).
