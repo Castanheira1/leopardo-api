@@ -472,13 +472,25 @@
         if (!emCampo && inset < 120) return 0;
         return inset;
     }
+    // Idempotente: o visualViewport dispara scroll/resize o tempo todo no celular
+    // (barra do navegador, micro-ajustes). Reescrever as variáveis a cada disparo
+    // fazia o bottom sheet reposicionar e o toque no botão "escorregar" (parecia
+    // travar). Só reescreve quando o valor MUDA de verdade.
+    let _appvhAnt = null, _kbdAnt = null;
     function compensarTeclado() {
         const vv = window.visualViewport;
         const h = vv ? vv.height : window.innerHeight;
         const inset = insetTeclado();
-        document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
-        document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
-        document.documentElement.classList.toggle('teclado-aberto', inset > 80);
+        const appvh = Math.round(h * 0.1) / 10;   // 0.1px de tolerância: ignora tremor
+        if (appvh !== _appvhAnt) {
+            document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
+            _appvhAnt = appvh;
+        }
+        if (inset !== _kbdAnt) {
+            document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
+            document.documentElement.classList.toggle('teclado-aberto', inset > 80);
+            _kbdAnt = inset;
+        }
     }
     function ajustarAltura() { compensarTeclado(); }
     ajustarAltura();
