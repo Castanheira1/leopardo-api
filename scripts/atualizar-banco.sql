@@ -93,6 +93,7 @@ ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS destino_lat NUMERIC(10,6
 ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS destino_lng NUMERIC(10,6);
 ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS destino_texto TEXT;
 ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1;
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS compat_rota VARCHAR(10);
 
 -- Admin padrão com escopo S11D
 UPDATE usuarios
