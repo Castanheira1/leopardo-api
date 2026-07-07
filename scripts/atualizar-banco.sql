@@ -100,6 +100,16 @@ SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1),
     ativo = TRUE
 WHERE matricula = '000000' AND admin_projeto_id IS NULL;
 
+-- Caronas ativas duplicadas (mesmo motorista 2x na lista)
+UPDATE caronas SET status = 'cancelada'
+WHERE status = 'ativa'
+  AND id NOT IN (
+    SELECT DISTINCT ON (motorista_id) id
+    FROM caronas
+    WHERE status = 'ativa'
+    ORDER BY motorista_id, created_at DESC
+  );
+
 -- Segurança Supabase: RLS + revoke anon/authenticated (corrige alertas Security Advisor)
 ALTER TABLE matriculas_bloqueadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;

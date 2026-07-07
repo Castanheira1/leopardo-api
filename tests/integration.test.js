@@ -360,6 +360,27 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(json.status, "ativa", "status carona");
       caronaId = json.id;
     });
+    await test("POST /api/caronas cancela carona anterior — lista sem duplicata", async () => {
+      const { status: s1, json: j1 } = await api("POST", "/api/caronas", {
+        token: tokDriver,
+        body: {
+          origem_texto: "Portaria", origem_lat: ORIGEM.lat, origem_lng: ORIGEM.lng,
+          destino_texto: "Alojamento", destino_lat: DESTINO.lat, destino_lng: DESTINO.lng,
+          vagas: 1,
+        },
+      });
+      eq(s1, 200, "status republicar");
+      const antiga = caronaId;
+      caronaId = j1.id;
+      assert(j1.id !== antiga, "nova carona deve ter id diferente");
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${DESTINO.lat}&dest_lng=${DESTINO.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status lista");
+      const doMotorista = json.filter((x) => x.motorista_id === j1.motorista_id);
+      eq(doMotorista.length, 1, "só 1 carona ativa por motorista na lista");
+      eq(doMotorista[0].id, j1.id, "deve ser a carona mais recente");
+      eq(doMotorista[0].vagas, 1, "vagas da republicação");
+    });
     await test("GET /api/caronas?meus lista a carona do motorista", async () => {
       const { status, json } = await api("GET", "/api/caronas?meus=1", { token: tokDriver });
       eq(status, 200, "status");
