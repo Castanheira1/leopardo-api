@@ -157,6 +157,14 @@
               }
             },
             {
+              "nome": "Pérola Negra-Usina",
+              "busca": "Pérola Negra S11D Usina",
+              "ref": {
+                "lat": -6.427950,
+                "lng": -50.239585
+              }
+            },
+            {
               "nome": "Britagem Terciária B",
               "busca": "Britagem Terciária B S11D",
               "ref": {
