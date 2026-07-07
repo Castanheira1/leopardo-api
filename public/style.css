@@ -616,7 +616,11 @@ gmp-place-autocomplete.map-search-float {
        celular (env() adapta por modelo; a folga fixa fica acima da barra de gestos). */
     padding: 0 16px calc(58px + env(safe-area-inset-bottom));
     transition: transform 0.22s ease, bottom 0.22s ease;
-    touch-action: none;   /* toque imediato nos botões; rolagem só com teclado aberto */
+    /* manipulation (não "none"): em alguns navegadores mobile o "none" fazia um
+       toque com micro-movimento ser tratado como gesto e NÃO virar clique — o
+       botão parecia oscilar entre responsivo e não. A alça (grip) mantém o seu
+       próprio touch-action:none para arrastar. */
+    touch-action: manipulation;
     overscroll-behavior: contain;
 }
 .acao-sheet.teclado-aberto {
