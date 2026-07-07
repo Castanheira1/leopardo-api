@@ -716,9 +716,7 @@ html.teclado-aberto {
 }
 .acao-sheet-footer {
     flex-shrink: 0;
-    padding-top: 10px;
-    /* Folga acima da barra de gestos / home indicator (iPhone e Android) */
-    padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 0 calc(28px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: #161719;
 }
@@ -755,10 +753,19 @@ html.teclado-aberto {
     overflow-y: auto;
     touch-action: pan-y;
 }
-/* Colapsado: esconde campos/lista; alça + botão ficam na base */
+/* Colapsado: só a alça fica visível — botão e campos aparecem ao puxar pra cima */
 .acao-sheet.collapsed .acao-sheet-body,
+.acao-sheet.collapsed .acao-sheet-footer,
 .acao-sheet.collapsed .limpar-rota-bar {
     display: none !important;
+}
+.acao-sheet.collapsed .acao-grip {
+    padding: 10px 0 14px;
+}
+.acao-sheet.collapsed .acao-titulo {
+    font-size: 0.92rem;
+    color: #9aa0a6;
+    font-weight: 600;
 }
 .acao-grip {
     position: relative;

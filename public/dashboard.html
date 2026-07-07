@@ -119,7 +119,7 @@
                 <div class="map-stage">
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
-                    <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped">
+                    <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped collapsed">
                         <div class="acao-grip" id="gripPed">
                             <span class="acao-handle"></span>
                             <span class="acao-titulo">Pedir carona</span>
@@ -167,7 +167,7 @@
                 <div class="map-stage">
                     <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
-                    <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe">
+                    <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe collapsed">
                         <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
                         <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
                             <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar rota</button>
@@ -1084,7 +1084,7 @@
         const wrap = document.getElementById('motoristasDestinoWrap');
         if (wrap) wrap.style.display = 'none';
         const sheet = document.getElementById('acaoSheetPed');
-        if (sheet) sheet.classList.remove('collapsed');
+        if (sheet) sheet.classList.add('collapsed');
     }
     function limparDestinoMotorista() {
         limparBuscaDestino('mapOfe');
@@ -1653,7 +1653,6 @@
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
-            document.getElementById('acaoSheetPed')?.classList.remove('collapsed');
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1665,7 +1664,6 @@
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
-            document.getElementById('acaoSheetOfe')?.classList.remove('collapsed');
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
