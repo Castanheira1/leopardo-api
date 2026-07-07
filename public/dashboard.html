@@ -1559,7 +1559,7 @@
     let horaPedModoAgenda = false;   // true = usuário escolheu horário futuro; não sobrescreve o relógio
     let pedidoTemCaronaNaRota = false;   // carona publicada indo ao destino → pedido imediato
 
-    function atualizarFormPedidoRota(temCarona) {
+    function atualizarFormPedidoRota(temCarona, temMotoristasVisiveis) {
         pedidoTemCaronaNaRota = !!temCarona;
         const horaWrap = document.getElementById('horaPedWrap');
         const formRow = document.getElementById('formPedRow');
@@ -1578,6 +1578,8 @@
             if (btn) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona';
             sincronizarQuandoPed();
         }
+        // Com motoristas na lista, a ação fica no card — evita duplicar com o botão fixo.
+        if (btn) btn.style.display = temMotoristasVisiveis ? 'none' : '';
     }
 
     function parseDatetimeLocalValue(v) {
@@ -1883,6 +1885,8 @@
                 : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
             : '';
         const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
+        // Mesmo destino → só "Solicitar vaga". Buzina/WhatsApp só em passa perto ou parcial.
+        const mostrarContato = !it.caronaId || proximo || parcial;
         return `<article class="ride-card${cardMod}">
             <div class="ride-card__head">
                 ${foto}
@@ -1896,7 +1900,7 @@
                 </div>
             </div>
             ${acaoPrincipal}
-            ${botoesContato(it.id, true)}
+            ${mostrarContato ? botoesContato(it.id, true) : ''}
         </article>`;
     }
 
@@ -1920,7 +1924,7 @@
             listaIndo.innerHTML = '';
             listaPerto.innerHTML = '';
             if (contPerto) contPerto.style.display = 'none';
-            atualizarFormPedidoRota(false);
+            atualizarFormPedidoRota(false, false);
             return;
         }
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
@@ -1991,7 +1995,10 @@
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
             }
-            atualizarFormPedidoRota(indoDestino.some((it) => it.compatRota === 'total'));
+            atualizarFormPedidoRota(
+                indoDestino.some((it) => it.compatRota === 'total'),
+                indoDestino.length > 0 || porPerto.length > 0,
+            );
             if (!listaMotoristasTimer) {
                 listaMotoristasTimer = setInterval(() => {
                     const d = selPed?.getDestino?.();
@@ -2002,7 +2009,7 @@
             }
         } catch (_) {
             listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
-            atualizarFormPedidoRota(false);
+            atualizarFormPedidoRota(false, false);
         }
     }
 
@@ -2154,8 +2161,8 @@
         if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
         if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
-        // Buzina/Ligar/WhatsApp sempre disponíveis, carona publicada ou modo amarelo.
-        document.getElementById('carroContatos').innerHTML = botoesContato(m.id);
+        // Carona publicada = pedir vaga direto; buzina só para motorista online sem rota.
+        document.getElementById('carroContatos').innerHTML = temRota ? '' : botoesContato(m.id);
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
         const d = destinoPublicadoCarro(m);
