@@ -102,6 +102,16 @@
         document.getElementById('detalhe').scrollIntoView({ behavior: 'smooth' });
     }
 
+    function fecharCamadaVoltar() {
+        const det = document.getElementById('detalhe');
+        if (det && det.style.display === 'block') {
+            det.style.display = 'none';
+            return true;
+        }
+        return false;
+    }
+
+    instalarGuardaVoltar(fecharCamadaVoltar, { bloquearSaida: false });
     carregar();
     </script>
 </body>

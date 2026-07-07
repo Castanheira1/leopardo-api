@@ -3306,6 +3306,47 @@
         return false;
     }
 
+    function fecharCamadaVoltar() {
+        fecharMenu();
+        const perfil = document.getElementById('modalPerfil');
+        if (perfil && perfil.style.display === 'flex') {
+            const dados = document.getElementById('perfilViewDados');
+            const fav = document.getElementById('perfilViewFavoritos');
+            if ((dados && dados.style.display === 'block') || (fav && fav.style.display === 'block')) {
+                perfilIrPara('menu');
+                return true;
+            }
+            fecharPerfil();
+            return true;
+        }
+        const camadas = [
+            ['modalChamando', fecharChamando],
+            ['modalOfertaFila', fecharOfertaFila],
+            ['modalSolicitacao', dismissSolicitacao],
+            ['modalCarro', fecharCarro],
+            ['modalPedido', fecharPedido],
+            ['modalVeiculo', () => { document.getElementById('modalVeiculo').style.display = 'none'; }],
+            ['painelPassageiro', () => fecharPainel('painelPassageiro')],
+            ['painelMotorista', () => fecharPainel('painelMotorista')],
+            ['painelFavoritos', () => fecharPainel('painelFavoritos')],
+        ];
+        for (const [id, fn] of camadas) {
+            const el = document.getElementById(id);
+            if (el && el.style.display === 'flex') { fn(); return true; }
+        }
+        const telaPapel = document.getElementById('telaPapel');
+        if (telaPapel && telaPapel.style.display === 'flex') {
+            telaPapel.style.display = 'none';
+            return true;
+        }
+        const tabViagem = document.getElementById('tabViagem');
+        if (tabViagem && tabViagem.classList.contains('active')) {
+            showTab(localStorage.getItem('papel') === 'motorista' ? 'tabOferecer' : 'tabPedir');
+            return true;
+        }
+        return false;
+    }
+
     /* -------- init -------- */
     (async function init() {
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
@@ -3349,6 +3390,7 @@
                 }
             });
         }
+        instalarGuardaVoltar(fecharCamadaVoltar);
     })();
     </script>
 </body>

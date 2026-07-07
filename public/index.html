@@ -13,6 +13,16 @@
     <meta name="apple-mobile-web-app-title" content="VAP">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <script src="/pwa.js" defer></script>
+    <script>
+        // Sessão ativa: não fica na tela de login por causa do botão voltar.
+        (function () {
+            try {
+                const t = localStorage.getItem('token');
+                const u = JSON.parse(localStorage.getItem('user') || 'null');
+                if (t && u) location.replace(u.is_admin ? 'admin.html' : 'dashboard.html');
+            } catch (_) {}
+        })();
+    </script>
     <script src="/app.js" defer></script>   <!-- toast global (ex.: aviso de sessão expirada) -->
     <title>VAP - Login</title>
 
@@ -256,7 +266,7 @@
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
                     localStorage.removeItem('papel');   // novo login → pergunta o papel
-                    window.location.href = data.user.is_admin ? 'admin.html' : 'dashboard.html';
+                    window.location.replace(data.user.is_admin ? 'admin.html' : 'dashboard.html');
                 } else {
                     errorDiv.textContent = data.error || 'Erro ao fazer login';
                     errorDiv.style.display = 'block';
