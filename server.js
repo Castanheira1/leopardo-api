@@ -300,7 +300,28 @@ async function registrarEventoUso(usuarioId, evento, detalhes) {
 }
 
 async function garantirRlsSupabase() {
-  const tabelas = ["matriculas_bloqueadas", "push_subscriptions", "tokens_recuperacao"];
+  const tabelas = [
+    "matriculas_bloqueadas",
+    "push_subscriptions",
+    "tokens_recuperacao",
+    "usuarios_favoritos",
+    "anuncios",
+    "contatos_motorista",
+    "eventos_uso",
+    "pedido_fila",
+    "admin_chamados",
+    "caronas",
+    "pedidos",
+    "propostas",
+    "viagens",
+    "viagem_pontos",
+    "habilitacoes_motorista",
+    "localizacoes_online",
+    "usuarios",
+    "contratos",
+    "empresas",
+    "projetos",
+  ];
   for (const t of tabelas) {
     try {
       await pool.query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
