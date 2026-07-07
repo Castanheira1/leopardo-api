@@ -693,23 +693,22 @@ html.teclado-aberto {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: var(--sheet-kbd, 0px);   /* sobe quando o teclado virtual aparece (JS) */
+    bottom: var(--sheet-kbd, 0px);
     z-index: 18;
     display: flex;
     flex-direction: column;
-    max-height: min(62vh, calc(var(--appvh, 1vh) * 62));
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
     padding: 0 16px 0;
-    transition: transform 0.22s ease, bottom 0.22s ease;
+    transition: bottom 0.22s ease;
     touch-action: manipulation;
     overscroll-behavior: contain;
-    --sheet-peek: calc(132px + env(safe-area-inset-bottom, 0px));
 }
 .acao-sheet-body {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
+    max-height: min(44vh, calc(var(--appvh, 1vh) * 44));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 8px;
@@ -718,7 +717,8 @@ html.teclado-aberto {
 .acao-sheet-footer {
     flex-shrink: 0;
     padding-top: 10px;
-    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    /* Folga acima da barra de gestos / home indicator (iPhone e Android) */
+    padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: #161719;
 }
@@ -755,14 +755,10 @@ html.teclado-aberto {
     overflow-y: auto;
     touch-action: pan-y;
 }
-/* Colapsado: esconde só o CORPO (lista/campos). A alça, a barra "Limpar rota"
-   e o RODAPÉ com o botão principal continuam ancorados na base (bottom:0),
-   sempre visíveis e tocáveis — sem transform que jogue o botão pra fora. */
-.acao-sheet.collapsed {
-    transform: none;
-}
-.acao-sheet.collapsed .acao-sheet-body {
-    display: none;
+/* Colapsado: esconde campos/lista; alça + botão ficam na base */
+.acao-sheet.collapsed .acao-sheet-body,
+.acao-sheet.collapsed .limpar-rota-bar {
+    display: none !important;
 }
 .acao-grip {
     position: relative;
