@@ -241,7 +241,12 @@ let _PinElement = null;
 function mapIdAtual() { return _mapId; }
 
 function opcoesMapa(opts = {}) {
-    return { mapId: _mapId, ...opts };
+    const o = { mapId: _mapId, ...opts };
+    // Vector + DEMO_MAP_ID dispara RPC interno GetViewportInfo (502/CORS intermitente).
+    if (!o.renderingType && window.google?.maps?.RenderingType) {
+        o.renderingType = google.maps.RenderingType.RASTER;
+    }
+    return o;
 }
 
 function normalizarLatLng(pos) {
@@ -608,7 +613,15 @@ function criarMarcador(opts = {}) {
                 wrapEl.style.height = h + 'px';
             }
         },
-        addListener(ev, fn) { return mk.addListener(ev, fn); },
+        addListener(ev, fn) {
+            const e = ev === 'click' ? 'gmp-click' : ev;
+            if (e === 'gmp-click') mk.gmpClickable = true;
+            if (typeof mk.addEventListener === 'function') {
+                mk.addEventListener(e, fn);
+                return { remove: () => mk.removeEventListener(e, fn) };
+            }
+            return mk.addListener(e, fn);
+        },
     };
     if (mapRef && iconVariant) registrarMarcadorCarro(mapRef, api);
     return api;
