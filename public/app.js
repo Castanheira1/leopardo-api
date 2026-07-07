@@ -306,6 +306,7 @@ function respostaRotaLegada(route) {
     return {
         routes: [{ legs: [{ distance: { text: distText }, duration: { text: durText }, steps }] }],
         _route: route,
+        km: Math.round(((route.distanceMeters ?? leg?.distanceMeters ?? 0) / 1000) * 100) / 100,
     };
 }
 
@@ -318,6 +319,7 @@ function respostaRotaFallback(o, d) {
     return {
         routes: [{ legs: [{ distance: { text: distText }, duration: { text: min + ' min' }, steps: [] }] }],
         _fallbackLine: [o, d],
+        km: Math.round(distKm * 100) / 100,
     };
 }
 

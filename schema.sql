@@ -186,6 +186,10 @@ CREATE TABLE viagens (
     fase VARCHAR(20) DEFAULT 'encontro' CHECK (fase IN ('encontro', 'destino')),
     distancia_km NUMERIC(10,2),
     deslocamento_valido BOOLEAN DEFAULT FALSE,
+    embarque_em TIMESTAMP,
+    km_maps NUMERIC(10,2),
+    km_tela NUMERIC(10,2),
+    km_fonte VARCHAR(20),
     iniciada_em TIMESTAMP DEFAULT NOW(),
     finalizada_em TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW()

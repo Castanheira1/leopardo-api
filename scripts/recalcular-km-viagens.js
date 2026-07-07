@@ -67,19 +67,34 @@ const pool = new Pool({
   const client = await pool.connect();
   try {
     await client.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS deslocamento_valido BOOLEAN DEFAULT FALSE");
+    await client.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS embarque_em TIMESTAMP");
+    await client.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_maps NUMERIC(10,2)");
+    await client.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_tela NUMERIC(10,2)");
+    await client.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_fonte VARCHAR(20)");
     const { rows: viagens } = await client.query(
-      "SELECT id, distancia_km FROM viagens WHERE status = 'concluida' ORDER BY id"
+      "SELECT id, distancia_km, embarque_em, km_maps, km_tela, origem_lat, origem_lng, destino_lat, destino_lng FROM viagens WHERE status = 'concluida' ORDER BY id"
     );
     let validas = 0;
     for (const v of viagens) {
-      const { rows: pontos } = await client.query(
-        "SELECT lat::float8 AS lat, lng::float8 AS lng, registrado_em FROM viagem_pontos WHERE viagem_id = $1 ORDER BY registrado_em",
-        [v.id]
-      );
+      let sql = "SELECT lat::float8 AS lat, lng::float8 AS lng, registrado_em FROM viagem_pontos WHERE viagem_id = $1";
+      const params = [v.id];
+      if (v.embarque_em) {
+        sql += " AND registrado_em >= $2::timestamptz";
+        params.push(v.embarque_em);
+      }
+      sql += " ORDER BY registrado_em";
+      const { rows: pontos } = await client.query(sql, params);
       const calc = calcularKmGpsFromPontos(pontos);
+      let km = calc.km;
+      let valido = calc.valido;
+      let fonte = calc.valido ? "gps" : null;
+      const maps = Number(v.km_maps) || 0;
+      const tela = Number(v.km_tela) || 0;
+      if (!valido && tela >= KM_MINIMO_VIAGEM) { km = Math.round(tela * 100) / 100; valido = true; fonte = "tela"; }
+      else if (!valido && maps >= KM_MINIMO_VIAGEM) { km = Math.round(maps * 100) / 100; valido = true; fonte = "maps"; }
       await client.query(
-        "UPDATE viagens SET distancia_km = $2, deslocamento_valido = $3 WHERE id = $1",
-        [v.id, calc.km, calc.valido]
+        "UPDATE viagens SET distancia_km = $2, deslocamento_valido = $3, km_fonte = COALESCE($4, km_fonte) WHERE id = $1",
+        [v.id, km, valido, fonte]
       );
       if (calc.valido) validas++;
       console.log(`viagem ${v.id}: ${v.distancia_km} km → ${calc.km} km (bruto ${calc.kmBruto}) valido=${calc.valido}`);
