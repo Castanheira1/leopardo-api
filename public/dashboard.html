@@ -121,16 +121,19 @@
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
                         <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
-                        <div class="form-row form-row-2col">
-                            <div class="form-group">
+                        <div class="form-row form-row-2col" id="formPedRow">
+                            <div class="form-group" id="horaPedWrap">
                                 <label>Quando?</label>
                                 <input type="datetime-local" id="horaPed" step="300" aria-label="Data e hora da carona">
                             </div>
-                            <div class="form-group">
+                            <div class="form-group" id="pessoasPedWrap">
                                 <label>Quantas pessoas?</label>
                                 <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
+                        <p id="hintPedidoImediato" class="cam-hint" style="display:none;margin:0 0 8px;">
+                            Motorista na rota — pedido imediato, sem agendamento.
+                        </p>
                         <div id="motoristasDestinoWrap" style="display:none;max-height:36vh;overflow-y:auto;margin-bottom:10px;">
                             <div id="motoristasIndoDestino">
                                 <strong class="painel-tit">Motoristas indo para lá</strong>
@@ -1479,6 +1482,28 @@
 
     let horaPedTimer = null;
     let horaPedModoAgenda = false;   // true = usuário escolheu horário futuro; não sobrescreve o relógio
+    let pedidoTemCaronaNaRota = false;   // carona publicada indo ao destino → pedido imediato
+
+    function atualizarFormPedidoRota(temCarona) {
+        pedidoTemCaronaNaRota = !!temCarona;
+        const horaWrap = document.getElementById('horaPedWrap');
+        const formRow = document.getElementById('formPedRow');
+        const hint = document.getElementById('hintPedidoImediato');
+        const btn = document.getElementById('btnCtaPedir');
+        if (temCarona) {
+            horaPedModoAgenda = false;
+            if (horaWrap) horaWrap.style.display = 'none';
+            if (formRow) formRow.classList.remove('form-row-2col');
+            if (hint) hint.style.display = 'block';
+            if (btn) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir agora';
+        } else {
+            if (horaWrap) horaWrap.style.display = '';
+            if (formRow) formRow.classList.add('form-row-2col');
+            if (hint) hint.style.display = 'none';
+            if (btn) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona';
+            sincronizarQuandoPed();
+        }
+    }
 
     function parseDatetimeLocalValue(v) {
         const m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
@@ -1598,13 +1623,19 @@
             return msg('Ative sua localização (GPS) para pedir carona.', 'error');
         }
         const origem = selPed.getOrigem();
-        if (!horaPedModoAgenda) sincronizarQuandoPed();
-        const hor = lerHorarioPedido();
-        if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
-        const margemAgenda = 60000;
-        const ehAgendado = hor.local && hor.local.getTime() > Date.now() + margemAgenda;
-        if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
-            return msg('Escolha um horário futuro para agendar.', 'error');
+        let ehAgendado = false;
+        let hor = { iso: null, local: null };
+        if (pedidoTemCaronaNaRota) {
+            ehAgendado = false;
+        } else {
+            if (!horaPedModoAgenda) sincronizarQuandoPed();
+            hor = lerHorarioPedido();
+            if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
+            const margemAgenda = 60000;
+            ehAgendado = !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
+            if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
+                return msg('Escolha um horário futuro para agendar.', 'error');
+            }
         }
         const soltar = travarBotao('btnCtaPedir', 'Abrindo a câmera…');
         if (!soltar) return;   // já tem um pedido em andamento
@@ -1752,6 +1783,7 @@
             listaIndo.innerHTML = '';
             listaPerto.innerHTML = '';
             if (contPerto) contPerto.style.display = 'none';
+            atualizarFormPedidoRota(false);
             return;
         }
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
@@ -1806,8 +1838,10 @@
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
             }
+            atualizarFormPedidoRota(indoDestino.length > 0);
         } catch (_) {
             listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
+            atualizarFormPedidoRota(false);
         }
     }
 
