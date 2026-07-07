@@ -3377,6 +3377,10 @@
 
     /* -------- init -------- */
     (async function init() {
+        // Trava o botão voltar do celular JÁ — antes dos awaits de rede. Se instalar
+        // só no fim, durante a abertura o "voltar" navega o histórico real do WebView
+        // (dashboard -> login -> recarrega) e cai no seletor de papel sozinho.
+        instalarGuardaVoltar(fecharCamadaVoltar);
         // Rede lenta/erro nunca pode deixar o usuário preso no splash: some sozinho.
         setTimeout(esconderBootSplash, 8000);
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
@@ -3420,7 +3424,6 @@
                 }
             });
         }
-        instalarGuardaVoltar(fecharCamadaVoltar);
     })();
     </script>
 </body>
