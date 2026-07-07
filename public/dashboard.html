@@ -1461,7 +1461,7 @@
             selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
-            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 92);
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1472,7 +1472,7 @@
         if (initOfePromise) return initOfePromise;
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
-            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'), 92);
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map);
