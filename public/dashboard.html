@@ -418,11 +418,15 @@
         </div>
     </div>
 
-    <!-- Tela inicial: escolher o papel (trava no modo escolhido) -->
-    <!-- Começa VISÍVEL: é a 1ª coisa que aparece, para o usuário não cair na
-         tela de "Pedir carona" (com o mapa carregando) enquanto a sessão
-         restaura. A restauração de viagem/pedido em andamento a esconde depois. -->
-    <div id="telaPapel" class="papel-overlay" style="display:flex;">
+    <!-- Splash de abertura: cobre a tela enquanto a sessão é restaurada, para o
+         usuário não encarar a tela de "Pedir carona" (mapa carregando) nem ver o
+         seletor de papel piscar quando ele já tem carona/viagem em andamento.
+         O init() o remove assim que decide: retoma direto ou mostra a escolha. -->
+    <div id="bootSplash" class="boot-splash"><span class="boot-spinner" aria-label="Carregando"></span></div>
+
+    <!-- Tela inicial: escolher o papel (trava no modo escolhido).
+         Fica oculta e só aparece quando NÃO há sessão a retomar (via init/menu). -->
+    <div id="telaPapel" class="papel-overlay" style="display:none;">
         <div class="papel-box">
             <h2>O que você quer fazer?</h2>
             <button type="button" class="papel-opt" onclick="escolherPapel('passageiro')">
@@ -910,13 +914,21 @@
     }
 
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
+    // Remove o splash de abertura (idempotente): chamado assim que a UI real
+    // está pronta — seja o seletor de papel, seja a tela retomada.
+    function esconderBootSplash() {
+        const s = document.getElementById('bootSplash');
+        if (s) s.remove();
+    }
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
+        esconderBootSplash();
     }
     function escolherPapel(papel) {
         localStorage.setItem('papel', papel);   // volta no mesmo modo ao reabrir o app
         registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
+        esconderBootSplash();
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
@@ -3368,7 +3380,8 @@
 
     /* -------- init -------- */
     (async function init() {
-        abrirEscolhaPapel();              // mostra a escolha JÁ — nada de encarar a tela de Pedir durante os awaits
+        // Rede lenta/erro nunca pode deixar o usuário preso no splash: some sozinho.
+        setTimeout(esconderBootSplash, 8000);
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
         await sincronizarPerfil();
         await carregarOpcoesProjetoPerfil();
