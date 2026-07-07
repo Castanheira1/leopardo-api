@@ -145,12 +145,22 @@ function instalarGuardaVoltar(fecharCamada, opts = {}) {
     try { history.replaceState({ vapRoot: 1 }, '', location.href); } catch (_) {}
     if (bloquearSaida) empilhar();
     window.addEventListener('popstate', () => {
-        if (typeof fecharCamada === 'function' && fecharCamada()) {
-            empilhar();
-            return;
-        }
+        // Re-empilha SEMPRE e PRIMEIRO: o voltar nunca sai do app, mesmo que
+        // fecharCamada lance erro. Só depois tenta fechar uma camada aberta.
         if (bloquearSaida) empilhar();
+        try { if (typeof fecharCamada === 'function') fecharCamada(); } catch (_) {}
     });
+    // Capacitor (APK): sem um listener de backButton o Android FECHA o app no
+    // voltar (o popstate acima nem chega a rodar). Com o listener, o voltar passa
+    // a fechar camadas/ficar no app, igual à PWA. No-op se o plugin não existir.
+    try {
+        const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+        if (capApp && capApp.addListener) {
+            capApp.addListener('backButton', () => {
+                try { if (typeof fecharCamada === 'function') fecharCamada(); } catch (_) {}
+            });
+        }
+    } catch (_) {}
 }
 
 async function fetchWithAuth(url, options = {}) {
