@@ -1541,7 +1541,15 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     if (temDest) {
       params.push(dest_lat, dest_lng);
       const dl = `$${params.length - 1}`, dg = `$${params.length}`;
-      destFiltro = `AND ${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_VISIVEL_KM} AND c.vagas > 0`;
+      // Casa em DOIS jeitos (com vaga):
+      //  1) mesmo destino: o destino do motorista está a até RAIO_VISIVEL_KM do
+      //     destino do passageiro;
+      //  2) no caminho (corredor): o destino do passageiro fica a até RAIO_ROTA_KM
+      //     do TRAJETO do motorista (origem->destino) — ele passa pelo local do
+      //     passageiro sem desviar da rota, mesmo indo para outro lugar.
+      const mesmoDestino = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_VISIVEL_KM}`;
+      const noCaminho = `${distanciaSegmentoKm(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng")} <= ${RAIO_ROTA_KM}`;
+      destFiltro = `AND (${mesmoDestino} OR ${noCaminho}) AND c.vagas > 0`;
     } else if (temPos) {
       params.push(RAIO_VISIVEL_KM);
       origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
