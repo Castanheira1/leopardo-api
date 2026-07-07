@@ -47,6 +47,7 @@ const FILA_TICK_MS = Number(process.env.FILA_TICK_MS || 10 * 1000);
 const KM_MINIMO_VIAGEM = Number(process.env.KM_MINIMO_VIAGEM || 0.5);
 const KM_SEGMENTO_MIN = Number(process.env.KM_SEGMENTO_MIN || 0.03);
 const KM_VELOCIDADE_MAX_H = Number(process.env.KM_VELOCIDADE_MAX_H || 120);
+const RAIO_CHEGADA_DEST_KM = Number(process.env.RAIO_CHEGADA_DEST_KM || 0.15);
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -3190,10 +3191,26 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
     if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
     if (req.user.id !== v.motorista_id) return res.status(403).json({ error: "Apenas o motorista finaliza" });
 
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    const temPos = Number.isFinite(lat) && Number.isFinite(lng);
+    let noDestino = false;
+    if (temPos && v.destino_lat != null && v.destino_lng != null) {
+      noDestino = haversineKmCoord(lat, lng, +v.destino_lat, +v.destino_lng) <= RAIO_CHEGADA_DEST_KM;
+    }
+    if (req.body?.automatico) {
+      if (!noDestino) {
+        return res.status(400).json({ error: "Finalização automática só quando o GPS reconhece o destino." });
+      }
+    }
+
     const calc = await calcularKmGpsViagem(req.params.id, {
       desde: v.embarque_em || undefined,
     });
     const med = resolverKmMedicaoViagem(v, calc, req.body?.km_maps, req.body?.km_tela);
+    if (!med.valido && noDestino && med.km > 0) {
+      med.valido = med.km >= KM_MINIMO_VIAGEM;
+    }
     const { rows } = await pool.query(
       `UPDATE viagens SET status = 'concluida', finalizada_em = NOW(),
               distancia_km = $2, deslocamento_valido = $3,
@@ -3206,6 +3223,8 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
       deslocamento_valido: med.valido,
       km_bruto: calc.kmBruto,
       km_fonte: med.fonte,
+      chegada_destino: noDestino,
+      finalizacao_automatica: !!req.body?.automatico,
     });
   } catch (err) {
     console.error(err);
