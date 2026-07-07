@@ -482,6 +482,7 @@
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
     let enquadrarMapaPedidoTimer = null;
     let enquadrarMapaPedidoDebounced = () => {};
+    let agendarEnquadrarMapaPedido = () => {};
 
     /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
     function tornarSheetAcaoArrastavel(sheet, grip) {
@@ -1546,8 +1547,15 @@
             mkDestino.setMap(map);
             mkDestino.setPosition(pos);
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
-            map.panTo(pos);
-            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos));
+            if (mapId === 'mapPed') {
+                // Não voa pro destino: carros amarelos ficam perto da origem (600 m).
+                previewSeq++;
+                if (previewTimer) clearTimeout(previewTimer);
+                Promise.resolve(tracarRota()).finally(() => agendarEnquadrarMapaPedido());
+            } else {
+                map.panTo(pos);
+                Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos));
+            }
             if (onDestino) onDestino(destino);
             // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
             if (!nomeDestino) {
@@ -3524,6 +3532,11 @@
         clearTimeout(enquadrarMapaPedidoTimer);
         enquadrarMapaPedidoTimer = setTimeout(enquadrarMapaPedido, 350);
     };
+    agendarEnquadrarMapaPedido = () => {
+        enquadrarMapaPedidoDebounced();
+        setTimeout(enquadrarMapaPedidoDebounced, 600);
+        setTimeout(enquadrarMapaPedidoDebounced, 3200);
+    };
     const FLEET_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
     const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
     const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
@@ -3657,7 +3670,7 @@
                     }
                 });
                 sincronizarModalCarroAoVivo(lista, removidos);
-                if (dest && Object.keys(fleet.markers).length) enquadrarMapaPedidoDebounced();
+                if (dest && Object.keys(fleet.markers).length) agendarEnquadrarMapaPedido();
             } catch (_) {}
         }
         tick();
