@@ -303,9 +303,9 @@
     </div>
 
     <!-- Solicitação recebida (estilo Uber): aparece sozinha quando chega um pedido -->
-    <div id="modalSolicitacao" class="cam-overlay" style="display:none;" onclick="if(event.target===this) dismissSolicitacao()">
+    <div id="modalSolicitacao" class="cam-overlay" style="display:none;">
         <div class="cam-box sol-box">
-            <div class="sol-badge">Nova solicitação</div>
+            <div class="sol-badge">Embarque Aprovado</div>
             <img id="solSelfie" class="sol-selfie" alt="" style="display:none;">
             <h3 id="solNome">—</h3>
             <p id="solTipo" class="cam-hint"></p>
@@ -315,7 +315,6 @@
                 <button class="btn btn-danger" onclick="responderSolicitacao(false)">Recusar</button>
                 <button class="btn btn-primary" onclick="responderSolicitacao(true)">Aceitar</button>
             </div>
-            <button type="button" class="sol-depois" onclick="dismissSolicitacao()">Ver depois</button>
         </div>
     </div>
 
@@ -2610,6 +2609,8 @@
         const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
         const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
         document.getElementById('solNome').textContent = p.de_nome || 'Solicitação';
+        document.querySelector('#modalSolicitacao .sol-badge').textContent =
+            p.carona_id ? 'Nova solicitação' : 'Embarque Aprovado';
         document.getElementById('solTipo').textContent = tipo;
         document.getElementById('solRota').innerHTML = `${ICN.pin} ${rota}`;
         document.getElementById('solMsg').textContent = p.mensagem ? `"${p.mensagem}"` : '';
@@ -2617,11 +2618,6 @@
         if (p.selfie_url) { selfie.src = p.selfie_url; selfie.style.display = 'block'; }
         else { selfie.style.display = 'none'; }
         document.getElementById('modalSolicitacao').style.display = 'flex';
-    }
-    function dismissSolicitacao() {
-        if (solicitacaoAtual) propostasTratadas.add(solicitacaoAtual.id);
-        solicitacaoAtual = null;
-        document.getElementById('modalSolicitacao').style.display = 'none';
     }
     async function responderSolicitacao(aceito) {
         const p = solicitacaoAtual;
@@ -3749,7 +3745,6 @@
         const camadas = [
             ['modalChamando', fecharChamando],
             ['modalOfertaFila', fecharOfertaFila],
-            ['modalSolicitacao', dismissSolicitacao],
             ['modalCarro', fecharCarro],
             ['modalPedido', fecharPedido],
             ['modalVeiculo', () => { document.getElementById('modalVeiculo').style.display = 'none'; }],

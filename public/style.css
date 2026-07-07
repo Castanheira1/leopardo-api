@@ -364,15 +364,26 @@ body {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
+    align-items: end;
 }
 .acao-sheet .form-row-2col .form-group {
     margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
 }
 .acao-sheet .form-row-2col .form-group label {
     text-align: center;
+    min-height: 2.5em;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    line-height: 1.2;
+    margin-bottom: 6px;
 }
 .acao-sheet .form-row-2col .form-group input {
     text-align: center;
+    min-height: 44px;
+    box-sizing: border-box;
 }
 .acao-sheet .cam-hint {
     text-align: center;
@@ -807,7 +818,6 @@ body.theme-dark {
 .sol-msg { color: #9aa0a6; font-style: italic; margin: 0; min-height: 0; }
 .sol-actions { display: flex; gap: 12px; margin-top: 18px; }
 .sol-actions .btn { flex: 1; padding: 15px; font-size: 1rem; }
-.sol-depois { display: block; width: 100%; margin-top: 10px; background: none; border: none; color: #9aa0a6; font-size: 0.85rem; cursor: pointer; padding: 8px; }
 .fila-cronometro {
     font-size: 2rem;
     font-weight: 800;
