@@ -194,6 +194,11 @@ body {
     min-height: 60vh;
 }
 
+.tab-content:not(.active) {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .tab-content.active {
     display: block;
 }
@@ -361,6 +366,9 @@ body {
     font-size: 0.88rem;
     margin: 0 0 10px;
     line-height: 1.35;
+}
+.acao-sheet .form-group {
+    margin-bottom: 12px;
 }
 .acao-sheet .form-group input,
 .acao-sheet .form-group select,
@@ -569,7 +577,7 @@ a.btn { display: inline-block; text-align: center; }
     width: calc(100% - 44px);
     max-width: none;
     height: 46px;
-    z-index: 40;
+    z-index: 12;
     border-radius: 999px;
     border: 1.5px solid #EAD298;
     overflow: visible;
@@ -601,14 +609,34 @@ gmp-place-autocomplete.map-search-float {
     min-height: 440px;
     overflow: hidden;
     background: #1b1b1b;
+    isolation: isolate;
 }
-.map-stage-map { position: absolute; inset: 0; }
+.map-stage-map { position: absolute; inset: 0; z-index: 0; }
+/* Cobre o mapa na faixa do teclado — evita “vazar” outra aba/camada por trás do sheet */
+.map-stage::after {
+    content: '';
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--sheet-kbd, 0);
+    background: #161719;
+    z-index: 16;
+    pointer-events: none;
+}
+html.teclado-aberto .tab-content.active .map-stage::after {
+    display: block;
+}
+html.teclado-aberto {
+    overflow: hidden;
+}
 .acao-sheet {
     position: absolute;
     left: 0;
     right: 0;
     bottom: var(--sheet-kbd, 0px);   /* sobe quando o teclado virtual aparece (JS) */
-    z-index: 6;
+    z-index: 18;
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
@@ -780,8 +808,34 @@ body.theme-dark {
 
 /* ===== Viagem em andamento estilo Uber (mapa cheio + sheet arrastável) ===== */
 #tabViagem.tab-content { padding: 10px 8px; }
-.viagem-wrap { position: relative; height: 74vh; min-height: 460px; border-radius: 14px; overflow: hidden; background: #161719; }
-.viagem-map { position: absolute; inset: 0; }
+#tabViagem .viagem-wrap::after {
+    background: #121316;
+}
+.viagem-wrap {
+    position: relative;
+    height: 74vh;
+    min-height: 460px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #161719;
+    isolation: isolate;
+}
+.viagem-wrap::after {
+    content: '';
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--sheet-kbd, 0);
+    background: #121316;
+    z-index: 16;
+    pointer-events: none;
+}
+html.teclado-aberto #tabViagem.active .viagem-wrap::after {
+    display: block;
+}
+.viagem-map { position: absolute; inset: 0; z-index: 0; }
 /* Tela "Chamando…" — pulso radar enquanto espera o outro aceitar */
 .cam-overlay.chamando-overlay {
     flex-direction: column;
@@ -881,7 +935,7 @@ body.theme-dark {
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
     border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
-.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #121316; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.55); padding: 2px 16px calc(18px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); z-index: 18; background: #121316; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.55); padding: 2px 16px calc(18px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; touch-action: none; }

@@ -115,7 +115,7 @@
             </div>
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
-            <div id="tabPedir" class="tab-content active">
+            <div id="tabPedir" class="tab-content">
                 <div class="map-stage">
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
@@ -495,6 +495,43 @@
             _kbdAnt = inset;
         }
     }
+    function rolarCampoNoSheet(sheet, el) {
+        if (!sheet || !el) return;
+        const sheetRect = sheet.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const margem = 16;
+        if (elRect.bottom > sheetRect.bottom - margem) {
+            sheet.scrollTop += elRect.bottom - sheetRect.bottom + margem;
+        } else if (elRect.top < sheetRect.top + margem) {
+            sheet.scrollTop -= sheetRect.top + margem - elRect.top;
+        }
+    }
+    function limparEstadoTeclado() {
+        document.documentElement.style.setProperty('--sheet-kbd', '0px');
+        document.documentElement.classList.remove('teclado-aberto');
+        document.querySelectorAll('.acao-sheet.teclado-aberto, .viagem-sheet.teclado-aberto')
+            .forEach((s) => s.classList.remove('teclado-aberto'));
+        _kbdAnt = 0;
+    }
+    function syncMapasAbas(abaAtiva) {
+        [
+            ['tabPedir', () => selPed?.map],
+            ['tabOferecer', () => selOfe?.map],
+            ['tabViagem', () => viagemView?.map],
+        ].forEach(([id, getMap]) => {
+            const tab = document.getElementById(id);
+            if (!tab) return;
+            const on = id === abaAtiva;
+            tab.querySelectorAll('.map-stage-map, .viagem-map, .map-search-wrap').forEach((el) => {
+                el.style.visibility = on ? '' : 'hidden';
+                el.style.pointerEvents = on ? '' : 'none';
+            });
+            if (on) {
+                const map = getMap();
+                if (map && g?.maps) setTimeout(() => g.maps.event.trigger(map, 'resize'), 80);
+            }
+        });
+    }
     function ajustarAltura() { compensarTeclado(); }
     ajustarAltura();
     window.addEventListener('resize', ajustarAltura);
@@ -525,9 +562,7 @@
         sheet.classList.remove('collapsed');
         sheet.classList.add('teclado-aberto');
         compensarTeclado();
-        requestAnimationFrame(() => {
-            try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
-        });
+        requestAnimationFrame(() => rolarCampoNoSheet(sheet, e.target));
     });
     document.addEventListener('focusout', (e) => {
         if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
@@ -590,10 +625,12 @@
         setTimeout(() => { m.style.display = 'none'; }, 5000);
     }
     function showTab(id, btn) {
+        limparEstadoTeclado();
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         if (btn) btn.classList.add('active');
+        syncMapasAbas(id);
         // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
         // (ela pode ter sido parada ao entrar numa viagem).
         // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
@@ -2263,6 +2300,7 @@
         document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
+        syncMapasAbas('tabViagem');
 
         document.getElementById('viagemSelfie').style.display = 'none';
         document.getElementById('viagemFase').textContent = 'Carona em rota';
@@ -2645,6 +2683,7 @@
         // Mostra a aba da viagem e encerra loops de outras telas (sem marcadores órfãos).
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
+        syncMapasAbas('tabViagem');
         document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
