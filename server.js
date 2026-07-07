@@ -36,6 +36,8 @@ const RAIO_ONLINE_KM = Number(process.env.RAIO_ONLINE_KM || 0.6);
 const RAIO_ROTA_KM = Number(process.env.RAIO_ROTA_KM || 1.5);
 // Mesmo ponto de destino (não confundir com RAIO_VISIVEL_KM de 10 km).
 const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
+// Campus / POIs próximos (ex.: Portaria ↔ Central ~3,2 km no S11D).
+const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
 const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
@@ -278,6 +280,7 @@ async function garantirColunasContatosMotorista() {
     "destino_lng NUMERIC(10,6)",
     "destino_texto TEXT",
     "pessoas INTEGER DEFAULT 1",
+    "compat_rota VARCHAR(10)",
   ];
   for (const col of colunas) {
     try {
@@ -780,6 +783,22 @@ function sqlPedidoCombinaComCaronaParcial(pOrigLat, pOrigLng, pDestLat, pDestLng
   return `(${destParcial} AND ${origCor.noSegmento})`;
 }
 
+// Próximo: destino do passageiro perto do destino da carona ou do corredor, mas não total/parcial.
+function sqlDestinoProximoCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const total = sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const parcial = sqlDestinoPassageiroAlemCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const pertoDest = `${haversine(carDestLat, carDestLng, pDestLat, pDestLng)} <= ${RAIO_PROXIMO_KM}`;
+  const corPax = sqlCorredorSegmento(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_PROXIMO_KM);
+  const pertoCorredor = `(${corPax.dist} <= ${RAIO_PROXIMO_KM})`;
+  return `(NOT (${total}) AND NOT (${parcial}) AND (${pertoDest} OR ${pertoCorredor}))`;
+}
+
+function sqlPedidoCombinaComCaronaProximo(pOrigLat, pOrigLng, pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const destProx = sqlDestinoProximoCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const origCor = sqlCorredorSegmento(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return `(${destProx} AND ${origCor.noSegmento})`;
+}
+
 // Motorista "na pista": GPS na faixa da rota do passageiro OU carona publicada compatível.
 function sqlMotoristaNaRotaPassageiro(pOrigLat, pOrigLng, pDestLat, pDestLng, gpsLatCol, gpsLngCol, motoristaIdCol) {
   const gpsNaFaixa = `${distanciaSegmentoKm(gpsLatCol, gpsLngCol, pOrigLat, pOrigLng, pDestLat, pDestLng)} <= ${RAIO_ROTA_KM}`;
@@ -791,9 +810,42 @@ function sqlMotoristaNaRotaPassageiro(pOrigLat, pOrigLng, pDestLat, pDestLng, gp
       AND (
         ${sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
         OR ${sqlPedidoCombinaComCaronaParcial(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+        OR ${sqlPedidoCombinaComCaronaProximo(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
       )
   )`;
   return `(${gpsNaFaixa} OR ${caronaCompat})`;
+}
+
+function corredorSegmentoKm(lat, lng, aLat, aLng, bLat, bLng) {
+  const px = (lng - aLng) * 111.320 * Math.cos((aLat * Math.PI) / 180);
+  const py = (lat - aLat) * 110.574;
+  const bx = (bLng - aLng) * 111.320 * Math.cos((aLat * Math.PI) / 180);
+  const by = (bLat - aLat) * 110.574;
+  const denom = bx * bx + by * by;
+  const tRaw = denom > 0 ? (px * bx + py * by) / denom : 0;
+  const t = Math.min(1, Math.max(0, tRaw));
+  const dist = Math.sqrt((px - t * bx) ** 2 + (py - t * by) ** 2);
+  return { t: tRaw, dist };
+}
+
+function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const dl = Number(pDestLat);
+  const dg = Number(pDestLng);
+  const oLat = Number(carOrigLat);
+  const oLng = Number(carOrigLng);
+  const dLat = Number(carDestLat);
+  const dLng = Number(carDestLng);
+  if (![dl, dg, oLat, oLng, dLat, dLng].every(Number.isFinite)) return "none";
+
+  const mesmo = haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_MESMO_DEST_KM;
+  const cor = corredorSegmentoKm(dl, dg, oLat, oLng, dLat, dLng);
+  if (mesmo || (cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1)) return "total";
+  if (cor.dist <= RAIO_ROTA_KM && cor.t > 1) return "parcial";
+
+  const pertoDest = haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_PROXIMO_KM;
+  const pertoCor = cor.dist <= RAIO_PROXIMO_KM;
+  if (pertoDest || pertoCor) return "proximo";
+  return "none";
 }
 
 function haversineKmCoord(lat1, lng1, lat2, lng2) {
@@ -1676,8 +1728,9 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       const mesmoDest = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_MESMO_DEST_KM}`;
       const compatTotal = `(${mesmoDest} OR ${corPax.noSegmento})`;
       const compatParcial = corPax.alemDestino;
-      destFiltro = `AND (${compatTotal} OR ${compatParcial}) AND c.vagas > 0`;
-      compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' ELSE 'none' END AS compat_rota`;
+      const compatProximo = sqlDestinoProximoCarona(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng");
+      destFiltro = `AND (${compatTotal} OR ${compatParcial} OR ${compatProximo}) AND c.vagas > 0`;
+      compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' WHEN ${compatProximo} THEN 'proximo' ELSE 'none' END AS compat_rota`;
     } else if (temPos) {
       params.push(RAIO_VISIVEL_KM);
       origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
@@ -1826,7 +1879,26 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
          LIMIT 60`,
         params
       );
-      return res.json(rows);
+      const caronaMot = (await pool.query(
+        `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto
+         FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
+         ORDER BY created_at DESC LIMIT 1`,
+        [req.user.id]
+      )).rows[0];
+      const enriquecido = rows.map((p) => {
+        if (!caronaMot?.destino_lat || p.destino_lat == null) return p;
+        const compat = compatRotaPassageiro(
+          p.destino_lat, p.destino_lng,
+          caronaMot.origem_lat, caronaMot.origem_lng,
+          caronaMot.destino_lat, caronaMot.destino_lng
+        );
+        return {
+          ...p,
+          compat_rota: compat,
+          destino_motorista_texto: caronaMot.destino_texto,
+        };
+      });
+      return res.json(enriquecido);
     }
 
     const pid = await projetoDoUsuario(req.user.id);
@@ -2743,7 +2815,7 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
       [motoristaId]
     )).rows[0];
     const caronaAtiva = (await pool.query(
-      `SELECT id, destino_texto, vagas FROM caronas
+      `SELECT id, destino_texto, destino_lat, destino_lng, origem_lat, origem_lng, vagas FROM caronas
        WHERE motorista_id = $1 AND status = 'ativa' AND vagas > 0
        ORDER BY created_at DESC LIMIT 1`,
       [motoristaId]
@@ -2768,6 +2840,21 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
 
     const destinoPax = destino_texto ? String(destino_texto).trim() : null;
     const destinoCarona = loc?.destino_texto || caronaAtiva?.destino_texto;
+
+    let compatContato = "none";
+    if (caronaAtiva?.destino_lat != null && destino_lat != null && destino_lng != null) {
+      compatContato = compatRotaPassageiro(
+        destino_lat, destino_lng,
+        caronaAtiva.origem_lat, caronaAtiva.origem_lng,
+        caronaAtiva.destino_lat, caronaAtiva.destino_lng
+      );
+      if (compatContato === "total") {
+        return res.status(400).json({
+          error: "Use Solicitar vaga — vocês vão para o mesmo destino. A buzina não é necessária.",
+        });
+      }
+    }
+
     const mensagem = destinoPax
       ? `Olá! Quero ir para ${destinoPax}${npessoas > 1 ? ` (${npessoas} pessoas)` : ''}. Posso ir com você?`
       : (destinoCarona
@@ -2790,6 +2877,7 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
       destino_lng != null ? +destino_lng : null,
       destinoPax,
       npessoas,
+      compatContato !== "none" ? compatContato : null,
     ];
 
     let contatoRow;
@@ -2798,8 +2886,8 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         `UPDATE contatos_motorista SET
            mensagem = $1, origem_lat = $2, origem_lng = $3, origem_texto = $4,
            destino_lat = $5, destino_lng = $6, destino_texto = $7, pessoas = $8,
-           created_at = NOW(), lido = FALSE
-         WHERE id = $9 RETURNING id`,
+           compat_rota = $9, created_at = NOW(), lido = FALSE
+         WHERE id = $10 RETURNING id`,
         [...vals, prev.id]
       )).rows[0];
       await pool.query(
@@ -2812,8 +2900,8 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         `INSERT INTO contatos_motorista
            (motorista_id, passageiro_id, mensagem,
             origem_lat, origem_lng, origem_texto,
-            destino_lat, destino_lng, destino_texto, pessoas)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+            destino_lat, destino_lng, destino_texto, pessoas, compat_rota)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
         [motoristaId, req.user.id, ...vals]
       )).rows[0];
     }
@@ -2869,15 +2957,27 @@ app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
       `SELECT DISTINCT ON (c.passageiro_id)
               c.id, c.passageiro_id, c.mensagem, c.created_at,
               c.origem_lat, c.origem_lng, c.origem_texto,
-              c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas,
+              c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas, c.compat_rota,
+              ca.destino_texto AS destino_motorista_texto,
+              ${haversine("ca.destino_lat", "ca.destino_lng", "c.destino_lat", "c.destino_lng")} AS dist_dest_km,
               u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo
        FROM contatos_motorista c
        JOIN usuarios u ON u.id = c.passageiro_id
+       LEFT JOIN LATERAL (
+         SELECT destino_lat, destino_lng, destino_texto
+         FROM caronas
+         WHERE motorista_id = c.motorista_id AND status = 'ativa'
+         ORDER BY created_at DESC LIMIT 1
+       ) ca ON TRUE
        WHERE c.motorista_id = $1
          AND c.lido = FALSE
          AND c.origem_lat IS NOT NULL
          AND c.origem_lng IS NOT NULL
          AND c.created_at > NOW() - INTERVAL '30 minutes'
+         AND NOT (
+           ca.destino_lat IS NOT NULL AND c.destino_lat IS NOT NULL
+           AND ${haversine("ca.destino_lat", "ca.destino_lng", "c.destino_lat", "c.destino_lng")} <= ${RAIO_MESMO_DEST_KM}
+         )
        ORDER BY c.passageiro_id, c.created_at DESC
        LIMIT 30`,
       [req.user.id]

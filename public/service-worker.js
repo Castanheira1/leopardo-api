@@ -2,7 +2,7 @@
 // Objetivo: o app NÃO é offline, mas não pode quebrar sem internet — ele abre e
 // mostra a última versão carregada. O cache é FIXO (só o "esqueleto" do app),
 // sobrescreve em vez de acumular, e os dados de API nunca são cacheados.
-const VERSION = "v168";
+const VERSION = "v169";
 const CACHE = `vagao-shell-${VERSION}`;
 
 // Lista fixa de arquivos do app (o cache nunca cresce além disto).
@@ -58,8 +58,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       const clientes = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      if (data.action === "contato_whatsapp") {
-        clientes.forEach((c) => c.postMessage({ action: "contato_whatsapp", contato_id: data.contato_id || null }));
+      if (data.action === "contato_whatsapp" || data.action === "contato_mapa") {
+        clientes.forEach((c) => c.postMessage({ action: data.action, contato_id: data.contato_id || null }));
       }
       if (data.action === "nova_oferta_fila") {
         clientes.forEach((c) => c.postMessage({ action: "nova_oferta_fila" }));

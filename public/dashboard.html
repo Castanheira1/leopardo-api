@@ -1794,9 +1794,18 @@
         );
     }
 
+    function confirmarRotaProximo(destinoMotorista) {
+        const destPax = selPed?.getDestino?.()?.texto || 'seu destino';
+        return confirm(
+            `Motorista vai até ${destinoMotorista || 'o destino dele'} — passa perto de ${destPax}.\n\n`
+            + 'Ele NÃO é obrigado a levar até lá. Combinar mesmo assim?'
+        );
+    }
+
     async function contatoMotorista(id, opts) {
         if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
         if (opts?.parcial && !confirmarRotaParcial(opts.destinoMotorista)) return null;
+        if (opts?.proximo && !confirmarRotaProximo(opts.destinoMotorista)) return null;
         const dest = selPed?.getDestino?.();
         if (!dest) {
             msg('Escolha um destino no mapa para o motorista ver sua rota.', 'error');
@@ -1827,31 +1836,38 @@
             return null;
         }
     }
-    async function buzinarMotorista(id, destinoMotorista) {
-        const parcial = !!destinoMotorista;
-        const d = await contatoMotorista(id, parcial ? { parcial: true, destinoMotorista } : null);
+    async function buzinarMotorista(id, destinoMotorista, modoCompat) {
+        const opts = modoCompat === 'parcial'
+            ? { parcial: true, destinoMotorista }
+            : (modoCompat === 'proximo' ? { proximo: true, destinoMotorista } : null);
+        const d = await contatoMotorista(id, opts);
         if (d) msg('Motorista avisado! Você aparece no mapa dele com seu destino.');
     }
-    async function ligarMotorista(id, destinoMotorista) {
-        const parcial = !!destinoMotorista;
-        const d = await contatoMotorista(id, parcial ? { parcial: true, destinoMotorista } : null);
+    async function ligarMotorista(id, destinoMotorista, modoCompat) {
+        const opts = modoCompat === 'parcial'
+            ? { parcial: true, destinoMotorista }
+            : (modoCompat === 'proximo' ? { proximo: true, destinoMotorista } : null);
+        const d = await contatoMotorista(id, opts);
         if (d && d.telefone) window.location.href = 'tel:' + d.telefone.replace(/\D/g, '');
     }
-    async function whatsappMotorista(id, destinoMotorista) {
-        const parcial = !!destinoMotorista;
-        const d = await contatoMotorista(id, parcial ? { parcial: true, destinoMotorista } : null);
+    async function whatsappMotorista(id, destinoMotorista, modoCompat) {
+        const opts = modoCompat === 'parcial'
+            ? { parcial: true, destinoMotorista }
+            : (modoCompat === 'proximo' ? { proximo: true, destinoMotorista } : null);
+        const d = await contatoMotorista(id, opts);
         if (d && d.telefone) {
             abrirWhatsApp(d.telefone, d.mensagem);
             msg('WhatsApp aberto — combine com o motorista.');
         }
     }
-    function botoesContato(id, compacto, destinoMotoristaParcial) {
+    function botoesContato(id, compacto, destinoMotoristaParcial, modoCompat) {
         const dm = destinoMotoristaParcial ? `'${String(destinoMotoristaParcial).replace(/'/g, "\\'")}'` : 'null';
+        const mc = modoCompat ? `'${modoCompat}'` : 'null';
         const cls = compacto ? 'ride-icon-btn' : 'btn btn-secondary btn-sm';
         return `<div class="ride-contatos" role="group" aria-label="Falar com motorista">
-            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id}, ${dm})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
-            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id}, ${dm})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
-            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id}, ${dm})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
+            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id}, ${dm}, ${mc})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
+            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id}, ${dm}, ${mc})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
+            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id}, ${dm}, ${mc})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
         </div>`;
     }
 
@@ -1862,16 +1878,22 @@
         const posicao = it.caronaId && it.ordem != null
             ? `<span class="ride-posicao">#${it.ordem + 1} na fila</span>` : '';
         const parcial = it.compatRota === 'parcial';
+        const proximo = it.compatRota === 'proximo';
         const destMot = esc(it.destinoMotorista || it.destino || 'destino do motorista');
         const avisoParcial = parcial
             ? `<p class="ride-aviso-parcial">Motorista vai só até <strong>${destMot}</strong> — seu destino é mais longe.</p>`
+            : '';
+        const avisoProximo = proximo
+            ? `<p class="ride-aviso-proximo">Passa perto — motorista vai até <strong>${destMot}</strong>. Não é obrigado a levar até o seu destino.</p>`
             : '';
         const aoVivo = it.online
             ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
             : (it.caronaId
                 ? (parcial
                     ? `<span class="ride-badge ride-badge--parcial">Só até ${destMot}</span>`
-                    : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')
+                    : (proximo
+                        ? `<span class="ride-badge ride-badge--proximo">Passa perto</span>`
+                        : '<span class="ride-badge ride-badge--rota">Rota publicada</span>'))
                 : '');
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
@@ -1883,14 +1905,20 @@
         const vagasDisp = it.vagas || 1;
         const vagasOk = !it.caronaId || pessoas <= vagasDisp;
         const destParcialJs = parcial ? (it.destinoMotorista || it.destino || '').replace(/'/g, "\\'") : '';
+        const destProximoJs = proximo ? (it.destinoMotorista || it.destino || '').replace(/'/g, "\\'") : '';
+        const modoContato = parcial ? 'parcial' : (proximo ? 'proximo' : null);
+        const destContato = modoContato ? (it.destinoMotorista || it.destino) : null;
         const acaoPrincipal = it.caronaId
             ? (vagasOk
                 ? (parcial
                     ? `<button type="button" class="btn btn-secondary btn-block ride-card__cta" onclick="pedirVagaParcial(${it.caronaId}, ${vagasDisp}, '${destParcialJs}')">Pedir até ${destMot}</button>`
-                    : `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`)
+                    : (proximo
+                        ? `<p class="ride-hint-proximo">Combine pelo WhatsApp ou buzina — embarque só se o motorista concordar.</p>`
+                        : `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`))
                 : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
             : '';
-        return `<article class="ride-card${parcial ? ' ride-card--parcial' : ''}">
+        const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
+        return `<article class="ride-card${cardMod}">
             <div class="ride-card__head">
                 ${foto}
                 <div class="ride-card__body">
@@ -1898,11 +1926,12 @@
                     <div class="ride-card__sub">${carro}</div>
                     <div class="ride-card__route">${linha}</div>
                     ${avisoParcial}
+                    ${avisoProximo}
                     ${km ? `<div class="ride-card__dist">${km} de você</div>` : ''}
                 </div>
             </div>
             ${acaoPrincipal}
-            ${botoesContato(it.id, true, parcial ? (it.destinoMotorista || it.destino) : null)}
+            ${botoesContato(it.id, true, destContato, modoContato)}
         </article>`;
     }
 
@@ -1982,7 +2011,10 @@
                 });
             });
             indoDestino.sort((a, b) => {
-                if (a.compatRota !== b.compatRota) return a.compatRota === 'parcial' ? 1 : -1;
+                const ordem = { total: 0, proximo: 1, parcial: 2 };
+                const oa = ordem[a.compatRota] ?? 3;
+                const ob = ordem[b.compatRota] ?? 3;
+                if (oa !== ob) return oa - ob;
                 return a.dist - b.dist;
             });
             sincronizarModalCarroLista(indoDestino);
@@ -3373,6 +3405,19 @@
         return o;
     }
 
+    function rotuloPulsoPedido(p) {
+        const destPax = p.destino_texto || 'destino no mapa';
+        if (p.compat_rota === 'proximo' || p.compat_rota === 'parcial') {
+            const dm = p.destino_motorista_texto || 'seu destino';
+            return `→ ${destPax} (você vai até ${dm})`;
+        }
+        return '→ ' + destPax;
+    }
+
+    function passageiroIdEmPedidoFleet(passageiroId) {
+        return Object.values(pedidoFleet.markers).some((mk) => mk._p?.passageiro_id === passageiroId);
+    }
+
     let pedidoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false };
     function iniciarPedidosAoVivo(map) {
         if (pedidoFleet.timer) clearInterval(pedidoFleet.timer);
@@ -3390,18 +3435,17 @@
                 lista.forEach((p) => {
                     vistos[p.id] = true;
                     const pos = { lat: +p.origem_lat, lng: +p.origem_lng };
+                    const rotulo = rotuloPulsoPedido(p);
                     if (pedidoFleet.markers[p.id]) {
                         pedidoFleet.markers[p.id].setPosition(pos);
                         pedidoFleet.markers[p.id]._p = p;
+                        atualizarRotuloPulso(pedidoFleet.markers[p.id], rotulo);
                     } else {
                         const titulo = (p.passageiro_nome || 'Passageiro') + ' — pedindo carona';
-                        // Rótulo com o destino: o motorista vê para onde a pessoa quer
-                        // ir sem precisar tocar no pulso.
-                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo,
-                            '→ ' + (p.destino_texto || 'destino no mapa'));
+                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo, rotulo);
                         mk._p = p;
                         pedidoFleet.markers[p.id] = mk;
-                        if (pedidoFleet.viuPrimeiraLeva) novos++;   // pedido chegando ao vivo
+                        if (pedidoFleet.viuPrimeiraLeva) novos++;
                     }
                 });
                 Object.keys(pedidoFleet.markers).forEach((id) => {
@@ -3472,8 +3516,15 @@
         desenharRotaMini('pedidoMapa', o, d);
     }
     function fecharPedido() {
+        if (contatoSel?.id) marcarContatoLido(contatoSel.id);
         document.getElementById('modalPedido').style.display = 'none';
         contatoSel = null;
+    }
+    async function marcarContatoLido(contatoId) {
+        if (!contatoId) return;
+        try {
+            await fetchWithAuth('/api/motorista/contatos/' + contatoId + '/lido', { method: 'POST' });
+        } catch (_) {}
     }
     async function oferecerAoPedido() {
         if (contatoSel) return oferecerAoContato();
@@ -3514,6 +3565,7 @@
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (navigator.vibrate) navigator.vibrate(80);
+        await marcarContatoLido(c.id);
         removerPulsoContato(c.passageiro_id);
         mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id });
     }
@@ -3582,6 +3634,20 @@
         }
     }
 
+    function rotuloPulsoContato(c) {
+        const destPax = c.destino_texto || 'destino no mapa';
+        if (c.compat_rota === 'proximo' || c.compat_rota === 'parcial') {
+            const dm = c.destino_motorista_texto || 'seu destino';
+            return `→ ${destPax} (você vai até ${dm})`;
+        }
+        return '→ ' + destPax;
+    }
+
+    let contatoTickFn = null;
+    function pollContatosMotoristaOnce() {
+        if (contatoTickFn) contatoTickFn();
+    }
+
     // Passageiro que buzina/liga/WhatsApp aparece no mapa do motorista (modo amarelo e rota).
     function iniciarContatosAoVivo(map) {
         if (contatoFleet.timer) clearInterval(contatoFleet.timer);
@@ -3596,10 +3662,11 @@
                 let novos = 0;
                 (Array.isArray(lista) ? lista : []).forEach((c) => {
                     if (c.origem_lat == null || c.origem_lng == null || !c.passageiro_id) return;
+                    if (passageiroIdEmPedidoFleet(c.passageiro_id)) return;
                     const key = chavePulsoContato(c.passageiro_id);
                     vistos[key] = true;
                     const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
-                    const rotulo = '→ ' + (c.destino_texto || 'destino no mapa');
+                    const rotulo = rotuloPulsoContato(c);
                     const existente = contatoFleet.markers[key];
                     if (existente) {
                         existente.setPosition(pos);
@@ -3627,12 +3694,14 @@
                 contatoFleet.viuPrimeiraLeva = true;
             } catch (_) {}
         }
+        contatoTickFn = tick;
         tick();
         contatoFleet.timer = setInterval(tick, 6000);
     }
 
     function pararContatosAoVivo() {
         if (contatoFleet.timer) { clearInterval(contatoFleet.timer); contatoFleet.timer = null; }
+        contatoTickFn = null;
         Object.values(contatoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
         contatoFleet.markers = {};
         contatoFleet.passageirosAtivos = new Set();
@@ -3785,7 +3854,7 @@
         });
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.addEventListener('message', (ev) => {
-                if (ev.data && ev.data.action === 'contato_whatsapp') {
+                if (ev.data && (ev.data.action === 'contato_whatsapp' || ev.data.action === 'contato_mapa')) {
                     buzinar();
                     pollContatosMotoristaOnce();
                 }

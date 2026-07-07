@@ -81,6 +81,7 @@ function bootServer() {
       RAIO_VISIVEL_KM: "10",
       RAIO_ONLINE_KM: "0.6",
       RAIO_ROTA_KM: "2",
+      RAIO_PROXIMO_KM: "4",
       FILA_OFERTA_TIMEOUT_S: "2", // curto de propósito, só pra testar o avanço por timeout
       FILA_TICK_MS: "500",
       AUTH_RATE_MAX: "30",        // teto conhecido p/ validar o anti-força-bruta no fim
@@ -803,6 +804,80 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
 
       r = await api("GET", "/api/perfil", { token: tokPax });
       eq(r.json.politica_pendente, false, "perfil deve refletir o aceite persistido");
+    });
+
+    /* =================== MATCH PRÓXIMO S11D (Portaria vs Central) =================== */
+    grupo("Match proximo S11D (Portaria vs Central)");
+    const PORTARIA_S11D = { lat: -6.454156, lng: -50.208344, texto: "Portaria S11D" };
+    const CENTRAL_S11D = { lat: -6.438503, lng: -50.232414, texto: "Central de Operações S11D" };
+    const ORIGEM_S11D = { lat: -6.449, lng: -50.24 };
+
+    await test("motorista publica carona para Portaria S11D", async () => {
+      const { status, json } = await api("POST", "/api/caronas", {
+        token: tokDriver,
+        body: {
+          origem_texto: "Usina", origem_lat: ORIGEM_S11D.lat, origem_lng: ORIGEM_S11D.lng,
+          destino_texto: PORTARIA_S11D.texto, destino_lat: PORTARIA_S11D.lat, destino_lng: PORTARIA_S11D.lng,
+          vagas: 2,
+        },
+      });
+      eq(status, 200, "status");
+      caronaId = json.id;
+    });
+    await test("GET /api/caronas?dest=Central marca proximo (Portaria ~3 km)", async () => {
+      const q = `?lat=${ORIGEM_S11D.lat}&lng=${ORIGEM_S11D.lng}&dest_lat=${CENTRAL_S11D.lat}&dest_lng=${CENTRAL_S11D.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status");
+      const c = json.find((x) => x.id === caronaId);
+      assert(c, "motorista com carona para Portaria deveria aparecer para Central");
+      eq(c.compat_rota, "proximo", "compat_rota");
+    });
+    await test("buzina com mesmo destino da carona → 400", async () => {
+      const { status, json } = await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
+        token: tokPax,
+        body: {
+          origem_lat: ORIGEM_S11D.lat, origem_lng: ORIGEM_S11D.lng,
+          destino_lat: PORTARIA_S11D.lat, destino_lng: PORTARIA_S11D.lng,
+          destino_texto: PORTARIA_S11D.texto,
+          pessoas: 1,
+        },
+      });
+      eq(status, 400, "status");
+      assert(String(json.error || "").includes("Solicitar vaga"), "mensagem");
+    });
+    await test("buzina para Central cria contato proximo visível no mapa", async () => {
+      const { status, json } = await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
+        token: tokPax,
+        body: {
+          origem_lat: ORIGEM_S11D.lat, origem_lng: ORIGEM_S11D.lng,
+          destino_lat: CENTRAL_S11D.lat, destino_lng: CENTRAL_S11D.lng,
+          destino_texto: CENTRAL_S11D.texto,
+          pessoas: 1,
+        },
+      });
+      eq(status, 200, "status");
+      assert(json.contato_id, "contato_id");
+      const { status: s2, json: mapa } = await api("GET", "/api/motorista/contatos/mapa", { token: tokDriver });
+      eq(s2, 200, "status mapa");
+      const c = mapa.find((x) => x.id === json.contato_id);
+      assert(c, "contato no mapa");
+      eq(c.compat_rota, "proximo", "compat_rota contato");
+      eq(c.destino_texto, CENTRAL_S11D.texto, "destino passageiro");
+      assert(c.destino_motorista_texto, "destino motorista");
+    });
+    await test("contatos/mapa não mostra buzina redundante (mesmo destino da carona)", async () => {
+      await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
+        token: tokPax,
+        body: {
+          origem_lat: ORIGEM_S11D.lat, origem_lng: ORIGEM_S11D.lng,
+          destino_lat: PORTARIA_S11D.lat, destino_lng: PORTARIA_S11D.lng,
+          destino_texto: PORTARIA_S11D.texto,
+          pessoas: 1,
+        },
+      });
+      const { status, json } = await api("GET", "/api/motorista/contatos/mapa", { token: tokDriver });
+      eq(status, 200, "status");
+      assert(!json.some((x) => x.destino_texto === PORTARIA_S11D.texto), "pulso fantasma mesmo destino");
     });
 
     /* =================== ANTI-FORÇA-BRUTA (rate limit) =================== */
