@@ -620,12 +620,27 @@ function filtroProjetoMotorista(projetoId, alias = "m") {
   return { sql: `${alias}.projeto_id = $1`, params: [projetoId] };
 }
 
+// Projeto do usuário: cache em memória (TTL 60 s) — endpoints quentes (mapa,
+// polling 2–3 s) não precisam bater no banco a cada tick.
+const _projetoCache = new Map();   // userId -> { pid, exp }
+const PROJETO_CACHE_MS = 60000;
+
+function invalidarProjetoCache(userId) {
+  if (userId != null) _projetoCache.delete(Number(userId));
+  else _projetoCache.clear();
+}
+
 async function projetoDoUsuario(userId) {
+  const key = Number(userId);
+  const hit = _projetoCache.get(key);
+  if (hit && hit.exp > Date.now()) return hit.pid;
   const { rows } = await pool.query(
     "SELECT projeto_id FROM usuarios WHERE id = $1 AND COALESCE(ativo, TRUE) = TRUE",
     [userId]
   );
-  return rows[0]?.projeto_id ?? null;
+  const pid = rows[0]?.projeto_id ?? null;
+  _projetoCache.set(key, { pid, exp: Date.now() + PROJETO_CACHE_MS });
+  return pid;
 }
 
 const SQL_USUARIO_FRONT = `
@@ -1435,6 +1450,7 @@ app.patch("/api/perfil", verificarAuth, async (req, res) => {
         empresa_nome || null, centro_custo ?? null, pid, emailNovo, req.user.id,
       ]
     );
+    invalidarProjetoCache(req.user.id);
     const userFront = await buscarUsuarioFront(req.user.id);
     res.json(userFront);
   } catch (err) {
@@ -3999,6 +4015,7 @@ app.post("/api/admin/usuarios/:matricula/desativar", verificarAuth, carregarAdmi
     if (alvo.is_admin) return res.status(400).json({ error: "Não é possível desativar administrador" });
 
     await pool.query("UPDATE usuarios SET ativo = FALSE WHERE id = $1", [alvo.id]);
+    invalidarProjetoCache(alvo.id);
     await pool.query(
       `INSERT INTO matriculas_bloqueadas (matricula, motivo, bloqueada_por)
        VALUES ($1, $2, $3)
@@ -4035,6 +4052,7 @@ app.post("/api/admin/usuarios/:matricula/reativar", verificarAuth, carregarAdmin
     if (!alvo) return res.status(404).json({ error: "Usuário não encontrado neste projeto" });
 
     await pool.query("UPDATE usuarios SET ativo = TRUE WHERE id = $1", [alvo.id]);
+    invalidarProjetoCache(alvo.id);
     await pool.query("DELETE FROM matriculas_bloqueadas WHERE matricula = $1", [matricula]);
     res.json({
       success: true,

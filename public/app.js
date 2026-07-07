@@ -238,8 +238,6 @@ let _RouteClass = null;
 let _AdvancedMarkerElement = null;
 let _PinElement = null;
 
-function mapIdAtual() { return _mapId; }
-
 function opcoesMapa(opts = {}) {
     const o = { mapId: _mapId, ...opts };
     // Vector + DEMO_MAP_ID dispara RPC interno GetViewportInfo (502/CORS intermitente).
@@ -395,13 +393,6 @@ function carSvgPaths(variant = 'white') {
 
 function htmlSvgCarro(variant, w, h) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="${w}" height="${h}" style="display:block;pointer-events:none">${carSvgPaths(variant)}</svg>`;
-}
-
-// Data-URL só para referência/legado; marcadores usam SVG inline no DOM.
-function svgCarroTopoUrl(variant = 'white') {
-    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="30" height="40">${carSvgPaths(variant)}</svg>`
-    );
 }
 
 function montarNoCarro(variant, w, h) {
