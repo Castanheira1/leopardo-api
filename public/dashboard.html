@@ -1885,6 +1885,8 @@
                 : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
             : '';
         const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
+        // Mesmo destino → só "Solicitar vaga". Buzina/WhatsApp só em passa perto ou parcial.
+        const mostrarContato = !it.caronaId || proximo || parcial;
         return `<article class="ride-card${cardMod}">
             <div class="ride-card__head">
                 ${foto}
@@ -1898,7 +1900,7 @@
                 </div>
             </div>
             ${acaoPrincipal}
-            ${botoesContato(it.id, true)}
+            ${mostrarContato ? botoesContato(it.id, true) : ''}
         </article>`;
     }
 
@@ -2159,8 +2161,8 @@
         if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
         if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
-        // Buzina/Ligar/WhatsApp sempre disponíveis, carona publicada ou modo amarelo.
-        document.getElementById('carroContatos').innerHTML = botoesContato(m.id);
+        // Carona publicada = pedir vaga direto; buzina só para motorista online sem rota.
+        document.getElementById('carroContatos').innerHTML = temRota ? '' : botoesContato(m.id);
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
         const d = destinoPublicadoCarro(m);
