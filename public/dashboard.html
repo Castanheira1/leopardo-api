@@ -1800,27 +1800,38 @@
 
     // Três jeitos de falar com um motorista disponível na rota (buzina, ligação,
     // WhatsApp). Envia GPS + destino para o motorista ver o pulso no mapa.
-    async function contatoMotorista(id) {
+    // modoAmarelo = carro dourado sem rota publicada: pode buzinar antes de
+    // escolher destino (combina no WhatsApp / buzina).
+    async function contatoMotorista(id, { modoAmarelo = false } = {}) {
         if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
-        const dest = selPed?.getDestino?.();
-        if (!dest) {
+        if (!selPed?.getOrigem) { msg('Abra o mapa de pedir carona e tente de novo.', 'error'); return null; }
+        const dest = selPed.getDestino();
+        if (!dest && !modoAmarelo) {
             msg('Escolha um destino no mapa para o motorista ver sua rota.', 'error');
             return null;
         }
-        if (!selPed?.origemConfiavel?.()) {
-            selPed?.recentrar?.();
+        if (!modoAmarelo && !selPed.origemConfiavel()) {
+            selPed.recentrar?.();
             msg('Ative sua localização (GPS) para aparecer no mapa do motorista.', 'error');
             return null;
         }
+        if (modoAmarelo && !selPed.origemConfiavel()) {
+            try { await selPed.recentrar?.(); } catch (_) { /* usa posição do mapa */ }
+        }
         const origem = selPed.getOrigem();
+        if (origem?.lat == null || origem?.lng == null) {
+            msg('Não foi possível obter sua posição. Ative o GPS e tente de novo.', 'error');
+            return null;
+        }
         const pessoas = lerPessoasPed();
         try {
             const r = await fetchWithAuth('/api/motoristas-online/' + id + '/contato', {
                 method: 'POST',
                 body: JSON.stringify({
                     origem_lat: origem.lat, origem_lng: origem.lng,
-                    destino_lat: dest.lat, destino_lng: dest.lng,
-                    destino_texto: dest.texto || null,
+                    destino_lat: dest?.lat ?? null,
+                    destino_lng: dest?.lng ?? null,
+                    destino_texto: dest?.texto || null,
                     pessoas,
                 }),
             });
@@ -1832,27 +1843,28 @@
             return null;
         }
     }
-    async function buzinarMotorista(id) {
-        const d = await contatoMotorista(id);
-        if (d) msg('Motorista avisado! Você aparece no mapa dele com seu destino.');
+    async function buzinarMotorista(id, modoAmarelo) {
+        const d = await contatoMotorista(id, { modoAmarelo: !!modoAmarelo });
+        if (d) msg(modoAmarelo ? 'Motorista avisado! Combine o destino com ele.' : 'Motorista avisado! Você aparece no mapa dele com seu destino.');
     }
-    async function ligarMotorista(id) {
-        const d = await contatoMotorista(id);
+    async function ligarMotorista(id, modoAmarelo) {
+        const d = await contatoMotorista(id, { modoAmarelo: !!modoAmarelo });
         if (d && d.telefone) window.location.href = 'tel:' + d.telefone.replace(/\D/g, '');
     }
-    async function whatsappMotorista(id) {
-        const d = await contatoMotorista(id);
+    async function whatsappMotorista(id, modoAmarelo) {
+        const d = await contatoMotorista(id, { modoAmarelo: !!modoAmarelo });
         if (d && d.telefone) {
             abrirWhatsApp(d.telefone, d.mensagem);
             msg('WhatsApp aberto — combine com o motorista.');
         }
     }
-    function botoesContato(id, compacto) {
+    function botoesContato(id, compacto, modoAmarelo) {
         const cls = compacto ? 'ride-icon-btn' : 'btn btn-secondary btn-sm';
+        const ma = modoAmarelo ? 'true' : 'false';
         return `<div class="ride-contatos" role="group" aria-label="Falar com motorista">
-            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
-            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
-            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
+            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id}, ${ma})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
+            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id}, ${ma})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
+            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id}, ${ma})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
         </div>`;
     }
 
@@ -1915,7 +1927,7 @@
                 </div>
             </div>
             ${acaoPrincipal}
-            ${mostrarContato ? botoesContato(it.id, true) : ''}
+            ${mostrarContato ? botoesContato(it.id, true, !it.caronaId) : ''}
         </article>`;
     }
 
@@ -2164,7 +2176,7 @@
         document.getElementById('carroRota').innerHTML = temRota
             ? `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(m.origem_texto || 'Local do motorista')}</div>`
               + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(m.destino_texto || 'Destino no mapa')}</div>`
-            : `<div style="color:#cfd2d6;">Motorista disponível na sua região. Toque abaixo para combinar destino no WhatsApp.</div>`;
+            : `<div style="color:#cfd2d6;">Motorista disponível na sua região. Buzine, ligue ou use WhatsApp — não precisa escolher destino antes.</div>`;
         const placa = document.getElementById('carroPlaca');
         placa.textContent = m.placa || '';
         placa.style.display = m.placa ? 'inline-block' : 'none';
@@ -2174,7 +2186,7 @@
         if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
         // No carro branco com rota publicada, passageiro pede vaga. No carro
         // amarelo (sem rota), buzina/ligação/WhatsApp combinam o destino.
-        document.getElementById('carroContatos').innerHTML = temRota ? '' : botoesContato(m.id);
+        document.getElementById('carroContatos').innerHTML = temRota ? '' : botoesContato(m.id, true, true);
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
         const d = destinoPublicadoCarro(m);
