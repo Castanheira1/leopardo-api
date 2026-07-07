@@ -1785,8 +1785,18 @@
     // WhatsApp) — vale tanto pro modo amarelo quanto pra carona publicada. Cada
     // toque avisa o motorista (push) e revela o telefone pra essa ação.
     // Envia GPS + destino para o motorista ver o pulso no mapa.
-    async function contatoMotorista(id) {
+    function confirmarRotaParcial(destinoMotorista) {
+        const destPax = selPed?.getDestino?.()?.texto || 'seu destino';
+        return confirm(
+            `Este motorista só vai até ${destinoMotorista || 'o destino dele'}.\n`
+            + `Você pediu ${destPax} (mais longe).\n\n`
+            + 'Pedir assim mesmo e embarcar só até lá?'
+        );
+    }
+
+    async function contatoMotorista(id, opts) {
         if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
+        if (opts?.parcial && !confirmarRotaParcial(opts.destinoMotorista)) return null;
         const dest = selPed?.getDestino?.();
         if (!dest) {
             msg('Escolha um destino no mapa para o motorista ver sua rota.', 'error');
@@ -1817,27 +1827,31 @@
             return null;
         }
     }
-    async function buzinarMotorista(id) {
-        const d = await contatoMotorista(id);
+    async function buzinarMotorista(id, destinoMotorista) {
+        const parcial = !!destinoMotorista;
+        const d = await contatoMotorista(id, parcial ? { parcial: true, destinoMotorista } : null);
         if (d) msg('Motorista avisado! Você aparece no mapa dele com seu destino.');
     }
-    async function ligarMotorista(id) {
-        const d = await contatoMotorista(id);
+    async function ligarMotorista(id, destinoMotorista) {
+        const parcial = !!destinoMotorista;
+        const d = await contatoMotorista(id, parcial ? { parcial: true, destinoMotorista } : null);
         if (d && d.telefone) window.location.href = 'tel:' + d.telefone.replace(/\D/g, '');
     }
-    async function whatsappMotorista(id) {
-        const d = await contatoMotorista(id);
+    async function whatsappMotorista(id, destinoMotorista) {
+        const parcial = !!destinoMotorista;
+        const d = await contatoMotorista(id, parcial ? { parcial: true, destinoMotorista } : null);
         if (d && d.telefone) {
             abrirWhatsApp(d.telefone, d.mensagem);
             msg('WhatsApp aberto — combine com o motorista.');
         }
     }
-    function botoesContato(id, compacto) {
+    function botoesContato(id, compacto, destinoMotoristaParcial) {
+        const dm = destinoMotoristaParcial ? `'${String(destinoMotoristaParcial).replace(/'/g, "\\'")}'` : 'null';
         const cls = compacto ? 'ride-icon-btn' : 'btn btn-secondary btn-sm';
         return `<div class="ride-contatos" role="group" aria-label="Falar com motorista">
-            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
-            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
-            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
+            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id}, ${dm})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
+            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id}, ${dm})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
+            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id}, ${dm})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
         </div>`;
     }
 
@@ -1847,9 +1861,18 @@
         const empresa = esc(it.nome || 'Motorista');
         const posicao = it.caronaId && it.ordem != null
             ? `<span class="ride-posicao">#${it.ordem + 1} na fila</span>` : '';
+        const parcial = it.compatRota === 'parcial';
+        const destMot = esc(it.destinoMotorista || it.destino || 'destino do motorista');
+        const avisoParcial = parcial
+            ? `<p class="ride-aviso-parcial">Motorista vai só até <strong>${destMot}</strong> — seu destino é mais longe.</p>`
+            : '';
         const aoVivo = it.online
             ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
-            : (it.caronaId ? '<span class="ride-badge ride-badge--rota">Rota publicada</span>' : '');
+            : (it.caronaId
+                ? (parcial
+                    ? `<span class="ride-badge ride-badge--parcial">Só até ${destMot}</span>`
+                    : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')
+                : '');
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
             : `${ICN.car} Disponível por perto — combine o destino`;
@@ -1859,23 +1882,27 @@
         const pessoas = lerPessoasPed();
         const vagasDisp = it.vagas || 1;
         const vagasOk = !it.caronaId || pessoas <= vagasDisp;
+        const destParcialJs = parcial ? (it.destinoMotorista || it.destino || '').replace(/'/g, "\\'") : '';
         const acaoPrincipal = it.caronaId
             ? (vagasOk
-                ? `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`
+                ? (parcial
+                    ? `<button type="button" class="btn btn-secondary btn-block ride-card__cta" onclick="pedirVagaParcial(${it.caronaId}, ${vagasDisp}, '${destParcialJs}')">Pedir até ${destMot}</button>`
+                    : `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`)
                 : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
             : '';
-        return `<article class="ride-card">
+        return `<article class="ride-card${parcial ? ' ride-card--parcial' : ''}">
             <div class="ride-card__head">
                 ${foto}
                 <div class="ride-card__body">
                     <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
                     <div class="ride-card__sub">${carro}</div>
                     <div class="ride-card__route">${linha}</div>
+                    ${avisoParcial}
                     ${km ? `<div class="ride-card__dist">${km} de você</div>` : ''}
                 </div>
             </div>
             ${acaoPrincipal}
-            ${botoesContato(it.id, true)}
+            ${botoesContato(it.id, true, parcial ? (it.destinoMotorista || it.destino) : null)}
         </article>`;
     }
 
@@ -1935,6 +1962,8 @@
                     dist: c.dist_origem != null ? Number(c.dist_origem) : Infinity,
                     ordem: ordemPorId.has(c.motorista_id) ? ordemPorId.get(c.motorista_id) : null,
                     online: !!c.motorista_online,
+                    compatRota: c.compat_rota || 'total',
+                    destinoMotorista: c.destino_texto,
                 });
             });
             const idsIndo = new Set(indoDestino.map((it) => it.id));
@@ -1945,9 +1974,13 @@
                     id: m.id, caronaId: null,
                     nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
                     vagas: m.vagas || 1, destino: null, dist, ordem: null, online: true,
+                    compatRota: 'total', destinoMotorista: null,
                 });
             });
-            indoDestino.sort((a, b) => a.dist - b.dist);
+            indoDestino.sort((a, b) => {
+                if (a.compatRota !== b.compatRota) return a.compatRota === 'parcial' ? 1 : -1;
+                return a.dist - b.dist;
+            });
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
@@ -1956,7 +1989,7 @@
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
             }
-            atualizarFormPedidoRota(indoDestino.length > 0);
+            atualizarFormPedidoRota(indoDestino.some((it) => it.compatRota === 'total'));
             if (!listaMotoristasTimer) {
                 listaMotoristasTimer = setInterval(() => {
                     const d = selPed?.getDestino?.();
@@ -1969,6 +2002,11 @@
             listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
             atualizarFormPedidoRota(false);
         }
+    }
+
+    async function pedirVagaParcial(caronaId, vagasDisp, destinoMotorista) {
+        if (!confirmarRotaParcial(destinoMotorista)) return;
+        await pedirVaga(caronaId, vagasDisp);
     }
 
     async function pedirVaga(caronaId, vagasDisp) {
@@ -2127,7 +2165,7 @@
         const m = carroSel;
         fecharCarro();
         if (!m || !m.carona_id) return msg('Essa carona não está mais disponível.', 'error');
-        await pedirVaga(m.carona_id);
+        await pedirVaga(m.carona_id, m.carona_vagas || m.vagas || 1);
     }
 
     /* -------- modo motorista online (sem destino obrigatório) -------- */

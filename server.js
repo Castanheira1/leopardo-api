@@ -34,6 +34,8 @@ const RAIO_ONLINE_KM = Number(process.env.RAIO_ONLINE_KM || 0.6);
 // pelo passageiro: motorista "na pista" entra na fila se estiver a até esta
 // distância do trajeto (não só perto da origem).
 const RAIO_ROTA_KM = Number(process.env.RAIO_ROTA_KM || 1.5);
+// Mesmo ponto de destino (não confundir com RAIO_VISIVEL_KM de 10 km).
+const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
 const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
@@ -674,33 +676,65 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
     + sin(radians(${pLat})) * sin(radians(${latCol}))
   ))))`;
 
-// Distância (km) de um ponto (latCol/lngCol) até o SEGMENTO de reta entre
-// A (aLat/aLng) e B (bLat/bLng) — não até uma reta infinita nem só até os
-// dois extremos. Projeção equirretangular local (plano, em km, com A como
-// referência de latitude): ótima para segmentos curtos como os do S11D.
-// Usada para decidir quem está "na pista" da rota escolhida pelo passageiro.
-function distanciaSegmentoKm(latCol, lngCol, aLat, aLng, bLat, bLng) {
+// Distância (km) de um ponto até o SEGMENTO A→B (projeção equirretangular local).
+function sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng) {
   const px = `((${lngCol}) - (${aLng})) * 111.320 * cos(radians(${aLat}))`;
   const py = `((${latCol}) - (${aLat})) * 110.574`;
   const bx = `((${bLng}) - (${aLng})) * 111.320 * cos(radians(${aLat}))`;
   const by = `((${bLat}) - (${aLat})) * 110.574`;
   const denom = `NULLIF((${bx})*(${bx}) + (${by})*(${by}), 0)`;
+  return { px, py, bx, by, denom };
+}
+
+function sqlParametroSegmento(latCol, lngCol, aLat, aLng, bLat, bLng) {
+  const { px, py, bx, by, denom } = sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng);
+  return `COALESCE((( ${px} )*(${bx}) + ( ${py} )*(${by})) / ${denom}, 0)`;
+}
+
+function distanciaSegmentoKm(latCol, lngCol, aLat, aLng, bLat, bLng) {
+  const { px, py, bx, by, denom } = sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng);
   const t = `LEAST(1, GREATEST(0, COALESCE((( ${px} )*(${bx}) + ( ${py} )*(${by})) / ${denom}, 0)))`;
   return `sqrt(POWER((${px}) - (${t})*(${bx}), 2) + POWER((${py}) - (${t})*(${by}), 2))`;
 }
 
-// Destino do passageiro compatível com carona: mesmo lugar OU no segmento origem→destino.
-function sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
-  const mesmo = `${haversine(carDestLat, carDestLng, pDestLat, pDestLng)} <= ${RAIO_VISIVEL_KM}`;
-  const noTrajeto = `${distanciaSegmentoKm(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng)} <= ${RAIO_ROTA_KM}`;
-  return `(${mesmo} OR ${noTrajeto})`;
+function sqlCorredorSegmento(latCol, lngCol, aLat, aLng, bLat, bLng, raioKm) {
+  const { px, py, bx, by, denom } = sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng);
+  const tRaw = sqlParametroSegmento(latCol, lngCol, aLat, aLng, bLat, bLng);
+  const tClamp = `LEAST(1, GREATEST(0, ${tRaw}))`;
+  const dist = `sqrt(POWER((${px}) - (${tClamp})*(${bx}), 2) + POWER((${py}) - (${tClamp})*(${by}), 2))`;
+  return {
+    t: tRaw,
+    dist,
+    noSegmento: `(${dist} <= ${raioKm} AND ${tRaw} >= 0 AND ${tRaw} <= 1)`,
+    alemDestino: `(${dist} <= ${raioKm} AND ${tRaw} > 1)`,
+  };
 }
 
-// Pedido combina com carona se embarque OU destino ficam no trajeto publicado.
+// Destino do passageiro no trajeto publicado: mesmo ponto OU entre origem e destino.
+function sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const cor = sqlCorredorSegmento(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  const mesmo = `${haversine(carDestLat, carDestLng, pDestLat, pDestLng)} <= ${RAIO_MESMO_DEST_KM}`;
+  return `(${mesmo} OR ${cor.noSegmento})`;
+}
+
+// Destino do passageiro além do fim da carona (mesma pista, motorista não vai até lá).
+function sqlDestinoPassageiroAlemCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const cor = sqlCorredorSegmento(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return cor.alemDestino;
+}
+
+// Compatibilidade total: embarque E desembarque dentro do segmento publicado.
 function sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
-  const origNoTrajeto = `${distanciaSegmentoKm(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng)} <= ${RAIO_ROTA_KM}`;
-  const destCompat = sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
-  return `(${destCompat} OR ${origNoTrajeto})`;
+  const destOk = sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const origCor = sqlCorredorSegmento(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return `(${destOk} AND ${origCor.noSegmento})`;
+}
+
+// Parcial: passageiro quer ir além — só até o destino do motorista.
+function sqlPedidoCombinaComCaronaParcial(pOrigLat, pOrigLng, pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const destParcial = sqlDestinoPassageiroAlemCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const origCor = sqlCorredorSegmento(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return `(${destParcial} AND ${origCor.noSegmento})`;
 }
 
 // Motorista "na pista": GPS na faixa da rota do passageiro OU carona publicada compatível.
@@ -711,7 +745,10 @@ function sqlMotoristaNaRotaPassageiro(pOrigLat, pOrigLng, pDestLat, pDestLng, gp
     WHERE ca.motorista_id = ${motoristaIdCol}
       AND ca.status = 'ativa' AND ca.vagas > 0
       AND ca.origem_lat IS NOT NULL AND ca.destino_lat IS NOT NULL
-      AND ${sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+      AND (
+        ${sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+        OR ${sqlPedidoCombinaComCaronaParcial(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+      )
   )`;
   return `(${gpsNaFaixa} OR ${caronaCompat})`;
 }
@@ -1583,19 +1620,16 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
 
     // Modo "indo para este local": filtra caronas cujo DESTINO é ~o local escolhido
     // e que ainda têm vaga. Sem destino, mantém o comportamento antigo (raio na origem).
-    let destFiltro = "", origemRaio = "";
+    let destFiltro = "", origemRaio = "", compatSel = "";
     if (temDest) {
       params.push(dest_lat, dest_lng);
       const dl = `$${params.length - 1}`, dg = `$${params.length}`;
-      // Casa em DOIS jeitos (com vaga):
-      //  1) mesmo destino: o destino do motorista está a até RAIO_VISIVEL_KM do
-      //     destino do passageiro;
-      //  2) no caminho (corredor): o destino do passageiro fica a até RAIO_ROTA_KM
-      //     do TRAJETO do motorista (origem->destino) — ele passa pelo local do
-      //     passageiro sem desviar da rota, mesmo indo para outro lugar.
-      const mesmoDestino = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_VISIVEL_KM}`;
-      const noCaminho = `${distanciaSegmentoKm(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng")} <= ${RAIO_ROTA_KM}`;
-      destFiltro = `AND (${mesmoDestino} OR ${noCaminho}) AND c.vagas > 0`;
+      const corPax = sqlCorredorSegmento(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng", RAIO_ROTA_KM);
+      const mesmoDest = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_MESMO_DEST_KM}`;
+      const compatTotal = `(${mesmoDest} OR ${corPax.noSegmento})`;
+      const compatParcial = corPax.alemDestino;
+      destFiltro = `AND (${compatTotal} OR ${compatParcial}) AND c.vagas > 0`;
+      compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' ELSE 'none' END AS compat_rota`;
     } else if (temPos) {
       params.push(RAIO_VISIVEL_KM);
       origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
@@ -1608,7 +1642,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.*, u.nome AS motorista_nome, u.empresa_nome AS motorista_empresa,
               h.placa, h.tag, h.foto_carro_url,
-              (lo.disponivel = TRUE) AS motorista_online ${distSel}
+              (lo.disponivel = TRUE) AS motorista_online ${distSel}${compatSel}
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id

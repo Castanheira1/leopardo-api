@@ -1198,6 +1198,18 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 }
 .ride-badge--live { color: #7fd4a0; background: rgba(34, 197, 94, 0.15); }
 .ride-badge--rota { color: #EAD298; background: rgba(234, 210, 152, 0.12); }
+.ride-badge--parcial { color: #fbbf24; background: rgba(251, 191, 36, 0.15); }
+.ride-aviso-parcial {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    color: #fde68a;
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+.ride-card--parcial { border-color: rgba(251, 191, 36, 0.35); }
 .theme-dark .ride-card { background: #161719; border-color: #25262a; }
 
 /* Texto auxiliar */
