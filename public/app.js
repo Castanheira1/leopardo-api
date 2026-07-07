@@ -318,13 +318,11 @@ function svgCarroTopoUrl(heading = 0, variant = 'white') {
     const stroke = variant === 'gold' ? '#b78d1a' : '#c9ccd2';
     const glass = '#2b333b';
     const h = Number(heading) || 0;
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 120" width="34" height="64">'
-        + `<g transform="rotate(${h} 32 60)">`
-        + `<path d="M32 6 C22 6 16.5 13 15.5 24 L14.5 90 C14.5 104 22 112 32 112 C42 112 49.5 104 49.5 90 L48.5 24 C47.5 13 42 6 32 6Z" fill="${body}" stroke="${stroke}" stroke-width="1.5"/>`
-        + `<path d="M15.3 34 L10 36 C9 36.3 9 39.7 10 40 L15.3 40.5Z" fill="${body}" stroke="${stroke}" stroke-width="1"/>`
-        + `<path d="M48.7 34 L54 36 C55 36.3 55 39.7 54 40 L48.7 40.5Z" fill="${body}" stroke="${stroke}" stroke-width="1"/>`
-        + `<path d="M20 30 C24 25 40 25 44 30 L46 44 C40 40.5 24 40.5 18 44Z" fill="${glass}"/>`
-        + `<path d="M19 74 C25 70.5 39 70.5 45 74 L43 88 C39 91.5 25 91.5 21 88Z" fill="${glass}"/>`
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 48" width="28" height="34">'
+        + `<g transform="rotate(${h} 20 24)">`
+        + `<rect x="11" y="4" width="18" height="40" rx="9" fill="${body}" stroke="${stroke}" stroke-width="1.2"/>`
+        + `<rect x="14" y="9" width="12" height="8" rx="2.5" fill="${glass}"/>`
+        + `<rect x="14" y="31" width="12" height="8" rx="2.5" fill="${glass}"/>`
         + '</g></svg>';
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -352,12 +350,48 @@ function atualizarPosicaoCarro(mk, pos, posAnterior) {
     }
 }
 
+// Marcadores de carro redimensionam conforme o zoom do mapa (como Uber/Maps).
+const _regZoomCar = new WeakMap();
+
+function tamanhoCarroPorZoom(zoom) {
+    const z = Math.max(10, Math.min(20, Number(zoom) || 15));
+    const f = Math.pow(1.12, z - 15);   // zoom 15 = 28×34 px (referência)
+    return { w: Math.round(28 * f), h: Math.round(34 * f) };
+}
+
+function vincularZoomCarros(map) {
+    if (!map || _regZoomCar.has(map)) return;
+    const set = new Set();
+    _regZoomCar.set(map, set);
+    const aplicar = () => {
+        const tam = tamanhoCarroPorZoom(map.getZoom());
+        set.forEach((mk) => { if (mk.setIconSize) mk.setIconSize(tam.w, tam.h); });
+    };
+    map.addListener('zoom_changed', aplicar);
+    aplicar();
+}
+
+function registrarMarcadorCarro(map, marker) {
+    if (!map || !marker?.setIconSize) return;
+    vincularZoomCarros(map);
+    _regZoomCar.get(map).add(marker);
+    const tam = tamanhoCarroPorZoom(map.getZoom());
+    marker.setIconSize(tam.w, tam.h);
+}
+
+function removerMarcadorCarro(map, marker) {
+    const set = map && _regZoomCar.get(map);
+    if (set) set.delete(marker);
+}
+
 // Marcador moderno (AdvancedMarkerElement) com API parecida com o Marker legado.
 function criarMarcador(opts = {}) {
     const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading, iconVariant } = opts;
     let pinEl = null;
     let content = null;
     let imgEl = null;
+    let wrapEl = null;
+    let mapRef = map || null;
     if (invisivel) {
         const d = document.createElement('div');
         d.style.cssText = 'width:36px;height:36px;opacity:0.001;';
@@ -387,8 +421,10 @@ function criarMarcador(opts = {}) {
             wrap.appendChild(img);
             wrap.appendChild(sel);
             content = wrap;
+            wrapEl = wrap;
         } else {
             content = img;
+            wrapEl = img;
         }
     } else if (label || cor) {
         const pinOpts = {
@@ -408,10 +444,17 @@ function criarMarcador(opts = {}) {
         zIndex,
     });
     if (pinEl) mk.append(pinEl);
-    return {
+    const api = {
         setPosition(p) { mk.position = normalizarLatLng(p); },
         getPosition() { return posicaoLegada(mk); },
-        setMap(m) { mk.map = m; },
+        setMap(m) {
+            if (!m && mapRef && iconVariant) removerMarcadorCarro(mapRef, api);
+            mk.map = m;
+            if (m) {
+                mapRef = m;
+                if (iconVariant) registrarMarcadorCarro(m, api);
+            }
+        },
         setTitle(t) { mk.title = t || ''; },
         setHeading(h) {
             if (!imgEl) return;
@@ -419,8 +462,19 @@ function criarMarcador(opts = {}) {
             if (iconVariant) imgEl.src = svgCarroTopoUrl(headingAtual, iconVariant);
             else imgEl.style.transform = `rotate(${headingAtual}deg)`;
         },
+        setIconSize(w, h) {
+            if (!imgEl) return;
+            imgEl.style.width = w + 'px';
+            imgEl.style.height = h + 'px';
+            if (wrapEl && wrapEl !== imgEl) {
+                wrapEl.style.width = w + 'px';
+                wrapEl.style.height = h + 'px';
+            }
+        },
         addListener(ev, fn) { return mk.addListener(ev, fn); },
     };
+    if (mapRef && iconVariant) registrarMarcadorCarro(mapRef, api);
+    return api;
 }
 
 // Rotas: Route.computeRoutes (novo) com fallback para DirectionsService (legado).

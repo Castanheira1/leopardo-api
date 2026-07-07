@@ -1212,6 +1212,7 @@
             rotulo();
         };
         map.controls[g.maps.ControlPosition.LEFT_BOTTOM].push(b);
+        vincularZoomCarros(map);
         return map;
     }
 
@@ -1236,7 +1237,7 @@
         } catch (_) { iconeUser = null; }
         const mkOrigem = criarMarcador({
             position: origem, map, icon: iconeUser, invisivel: !comoCarro,
-            iconW: comoCarro ? 34 : undefined, iconH: comoCarro ? 64 : undefined,
+            iconW: comoCarro ? 28 : undefined, iconH: comoCarro ? 34 : undefined,
             iconVariant: comoCarro ? 'white' : undefined,
             title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
         });
@@ -2701,7 +2702,7 @@
             } else {
                 vv.carMarker = criarMarcador({
                     position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL,
-                    iconW: 34, iconH: 64, iconVariant: 'white', title: 'Motorista', zIndex: 999,
+                    iconW: 28, iconH: 34, iconVariant: 'white', title: 'Motorista', zIndex: 999,
                 });
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
@@ -2941,7 +2942,7 @@
                         const iconVariant = m.carona_id ? 'white' : 'gold';
                         const car = criarMarcador({
                             position: pos, map, icon,
-                            iconW: 34, iconH: 64, iconVariant,
+                            iconW: 28, iconH: 34, iconVariant,
                             badge: m.ordem != null ? m.ordem + 1 : undefined,
                             title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
@@ -3150,7 +3151,7 @@
                 } else {
                     selfCar.marker = criarMarcador({
                         position: pos, map, icon: CAR_ICON_URL,
-                        iconW: 34, iconH: 64, iconVariant: 'white', title: 'Você', zIndex: 999,
+                        iconW: 28, iconH: 34, iconVariant: 'white', title: 'Você', zIndex: 999,
                     });
                 }
                 selfCar.lastPos = pos;
