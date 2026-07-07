@@ -115,12 +115,12 @@
             </div>
 
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
-            <div id="tabPedir" class="tab-content active">
+            <div id="tabPedir" class="tab-content">
                 <div class="map-stage">
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
-                        <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
+                        <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span><button type="button" id="btnLimparPed" class="btn-limpar-dest" style="display:none;" onclick="limparDestinoPassageiro()">Cancelar destino</button></div>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
                                 <label>Quando?</label>
@@ -134,7 +134,7 @@
                         <p id="hintPedidoImediato" class="cam-hint" style="display:none;margin:0 0 8px;">
                             Motorista na rota — pedido imediato, sem agendamento.
                         </p>
-                        <div id="motoristasDestinoWrap" style="display:none;max-height:36vh;overflow-y:auto;margin-bottom:10px;">
+                        <div id="motoristasDestinoWrap" class="motoristas-destino-wrap" style="display:none;">
                             <div id="motoristasIndoDestino">
                                 <strong class="painel-tit">Motoristas indo para lá</strong>
                                 <div id="listaIndoDestino"></div>
@@ -495,6 +495,43 @@
             _kbdAnt = inset;
         }
     }
+    function rolarCampoNoSheet(sheet, el) {
+        if (!sheet || !el) return;
+        const sheetRect = sheet.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const margem = 16;
+        if (elRect.bottom > sheetRect.bottom - margem) {
+            sheet.scrollTop += elRect.bottom - sheetRect.bottom + margem;
+        } else if (elRect.top < sheetRect.top + margem) {
+            sheet.scrollTop -= sheetRect.top + margem - elRect.top;
+        }
+    }
+    function limparEstadoTeclado() {
+        document.documentElement.style.setProperty('--sheet-kbd', '0px');
+        document.documentElement.classList.remove('teclado-aberto');
+        document.querySelectorAll('.acao-sheet.teclado-aberto, .viagem-sheet.teclado-aberto')
+            .forEach((s) => s.classList.remove('teclado-aberto'));
+        _kbdAnt = 0;
+    }
+    function syncMapasAbas(abaAtiva) {
+        [
+            ['tabPedir', () => selPed?.map],
+            ['tabOferecer', () => selOfe?.map],
+            ['tabViagem', () => viagemView?.map],
+        ].forEach(([id, getMap]) => {
+            const tab = document.getElementById(id);
+            if (!tab) return;
+            const on = id === abaAtiva;
+            tab.querySelectorAll('.map-stage-map, .viagem-map, .map-search-wrap').forEach((el) => {
+                el.style.visibility = on ? '' : 'hidden';
+                el.style.pointerEvents = on ? '' : 'none';
+            });
+            if (on) {
+                const map = getMap();
+                if (map && g?.maps) setTimeout(() => g.maps.event.trigger(map, 'resize'), 80);
+            }
+        });
+    }
     function ajustarAltura() { compensarTeclado(); }
     ajustarAltura();
     window.addEventListener('resize', ajustarAltura);
@@ -525,9 +562,7 @@
         sheet.classList.remove('collapsed');
         sheet.classList.add('teclado-aberto');
         compensarTeclado();
-        requestAnimationFrame(() => {
-            try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
-        });
+        requestAnimationFrame(() => rolarCampoNoSheet(sheet, e.target));
     });
     document.addEventListener('focusout', (e) => {
         if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
@@ -590,10 +625,12 @@
         setTimeout(() => { m.style.display = 'none'; }, 5000);
     }
     function showTab(id, btn) {
+        limparEstadoTeclado();
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         if (btn) btn.classList.add('active');
+        syncMapasAbas(id);
         // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
         // (ela pode ter sido parada ao entrar numa viagem).
         // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
@@ -939,6 +976,12 @@
     function limparDestino(mapId) {
         const sel = mapId === 'mapPed' ? selPed : selOfe;
         if (sel && sel.limparRota) sel.limparRota();
+    }
+    function limparDestinoPassageiro() {
+        const inp = document.getElementById('destPedInput');
+        if (inp) inp.value = '';
+        limparDestino('mapPed');
+        if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
     }
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
@@ -1749,46 +1792,49 @@
             msg('WhatsApp aberto — combine com o motorista.');
         }
     }
-    function botoesContato(id) {
-        return `<div class="ride-contatos">
-            <button type="button" class="btn btn-secondary btn-sm" title="Buzinar (avisar o motorista)" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
-            <button type="button" class="btn btn-secondary btn-sm" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
-            <button type="button" class="btn btn-secondary btn-sm" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+    function botoesContato(id, compacto) {
+        const cls = compacto ? 'ride-icon-btn' : 'btn btn-secondary btn-sm';
+        return `<div class="ride-contatos" role="group" aria-label="Falar com motorista">
+            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
+            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
+            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
         </div>`;
     }
 
-    // Card estilo lista (sem preço): empresa/nome do motorista + marca/modelo (TAG) +
-    // placa, com a distância em km da minha posição e a posição na fila (quando a
-    // busca é por rota). Dois tipos:
-    //   - carona (caronaId): motorista indo para o meu destino -> "Solicitar" (pedirVaga).
-    //   - online geral (sem carona): motorista disponível por perto.
-    // Em ambos, sempre dá pra buzinar/ligar/chamar no WhatsApp direto da lista.
     function cardMotoristaDisponivel(it) {
-        // Só mostra a distância quando é confiável (>= 0,1 km). Abaixo disso o GPS
-        // do motorista costuma estar defasado e "0.0 km" passava informação falsa.
         const km = it.dist != null && isFinite(it.dist) && it.dist >= 0.1 ? `${Number(it.dist).toFixed(1)} km` : '';
         const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
         const empresa = esc(it.nome || 'Motorista');
-        const posicao = it.caronaId && it.ordem != null ? `<span class="ride-posicao">Nº ${it.ordem + 1} na fila</span>` : '';
+        const posicao = it.caronaId && it.ordem != null
+            ? `<span class="ride-posicao">#${it.ordem + 1} na fila</span>` : '';
+        const aoVivo = it.online
+            ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
+            : (it.caronaId ? '<span class="ride-badge ride-badge--rota">Rota publicada</span>' : '');
         const linha = it.caronaId
-            ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} • ${it.vagas || 1} vaga(s)`
-            : `${ICN.car} Disponível agora — combine o destino`;
-        const botao = it.caronaId ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${it.caronaId})">Solicitar</button>` : '';
-        return `<div class="ride-item">
-            ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb" loading="lazy" onerror="this.remove()">` : ''}
-            <div class="ride-info">
-                <strong>${empresa}</strong> ${posicao}<br>
-                <small>${carro}</small><br>
-                <small>${linha}</small>
-                ${botoesContato(it.id)}
+            ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
+            : `${ICN.car} Disponível por perto — combine o destino`;
+        const foto = it.foto
+            ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
+            : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
+        const acaoPrincipal = it.caronaId
+            ? `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId})">Solicitar vaga</button>`
+            : '';
+        return `<article class="ride-card">
+            <div class="ride-card__head">
+                ${foto}
+                <div class="ride-card__body">
+                    <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
+                    <div class="ride-card__sub">${carro}</div>
+                    <div class="ride-card__route">${linha}</div>
+                    ${km ? `<div class="ride-card__dist">${km} de você</div>` : ''}
+                </div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto;">
-                ${km ? `<div style="font-weight:700;white-space:nowrap;">${km}</div>` : ''}
-                ${botao}
-            </div>
-        </div>`;
+            ${acaoPrincipal}
+            ${botoesContato(it.id, true)}
+        </article>`;
     }
 
+    let listaMotoristasTimer = null;
     // Ao escolher um local no mapa, monta a lista (estilo Uber):
     //   1) caronas indo para o destino escolhido (com vaga) — seção "indo para lá";
     //   2) motoristas online por perto no modo amarelo — seção separada, sem fila.
@@ -1802,6 +1848,9 @@
         if (!wrap || !listaIndo || !listaPerto) return;
         if (!dest) {
             if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
+            if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+            const btnLimpar = document.getElementById('btnLimparPed');
+            if (btnLimpar) btnLimpar.style.display = 'none';
             wrap.style.display = 'none';
             listaIndo.innerHTML = '';
             listaPerto.innerHTML = '';
@@ -1810,8 +1859,10 @@
             return;
         }
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
-        const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
+        const btnLimpar = document.getElementById('btnLimparPed');
+        if (btnLimpar) btnLimpar.style.display = '';
         wrap.style.display = 'block';
+        const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
         listaIndo.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
         listaPerto.innerHTML = '';
         if (contPerto) contPerto.style.display = 'none';
@@ -1840,6 +1891,7 @@
                     foto: c.foto_carro_url, vagas: c.vagas, destino: c.destino_texto,
                     dist: c.dist_origem != null ? Number(c.dist_origem) : Infinity,
                     ordem: ordemPorId.has(c.motorista_id) ? ordemPorId.get(c.motorista_id) : null,
+                    online: !!c.motorista_online,
                 });
             });
             const idsIndo = new Set(indoDestino.map((it) => it.id));
@@ -1849,19 +1901,27 @@
                 porPerto.push({
                     id: m.id, caronaId: null,
                     nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
-                    vagas: m.vagas || 1, destino: null, dist, ordem: null,
+                    vagas: m.vagas || 1, destino: null, dist, ordem: null, online: true,
                 });
             });
             indoDestino.sort((a, b) => a.dist - b.dist);
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
-                : '<p class="cam-hint">Ninguém indo para esse local agora. Você pode pedir a carona — avisamos motoristas na sua rota.</p>';
+                : '<p class="cam-hint">Ninguém indo para esse local agora. Toque em <strong>Pedir agora</strong> — avisamos motoristas na rota.</p>';
             if (porPerto.length) {
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
             }
             atualizarFormPedidoRota(indoDestino.length > 0);
+            if (!listaMotoristasTimer) {
+                listaMotoristasTimer = setInterval(() => {
+                    const d = selPed?.getDestino?.();
+                    if (d && document.getElementById('tabPedir')?.classList.contains('active') && !document.hidden) {
+                        carregarCaronasDestino(d);
+                    }
+                }, 12000);
+            }
         } catch (_) {
             listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
             atualizarFormPedidoRota(false);
@@ -2263,6 +2323,7 @@
         document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
+        syncMapasAbas('tabViagem');
 
         document.getElementById('viagemSelfie').style.display = 'none';
         document.getElementById('viagemFase').textContent = 'Carona em rota';
@@ -2645,6 +2706,7 @@
         // Mostra a aba da viagem e encerra loops de outras telas (sem marcadores órfãos).
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.getElementById('tabViagem').classList.add('active');
+        syncMapasAbas('tabViagem');
         document.getElementById('btnViagemAndamento').style.display = 'inline-block';
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }

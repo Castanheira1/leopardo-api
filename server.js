@@ -1588,10 +1588,12 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT c.*, u.nome AS motorista_nome, u.empresa_nome AS motorista_empresa,
-              h.placa, h.tag, h.foto_carro_url ${distSel}
+              h.placa, h.tag, h.foto_carro_url,
+              (lo.disponivel = TRUE) AS motorista_online ${distSel}
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+       LEFT JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
        ${filtroProj}
        ${origemRaio}
@@ -2602,7 +2604,14 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
        FROM localizacoes_online l WHERE l.usuario_id = $1`,
       [motoristaId]
     )).rows[0];
-    if (!loc?.disponivel) {
+    const caronaAtiva = (await pool.query(
+      `SELECT id, destino_texto, vagas FROM caronas
+       WHERE motorista_id = $1 AND status = 'ativa' AND vagas > 0
+       ORDER BY created_at DESC LIMIT 1`,
+      [motoristaId]
+    )).rows[0];
+    // Lista caronas publicadas ≠ GPS ao vivo: contato vale se online OU carona ativa.
+    if (!loc?.disponivel && !caronaAtiva) {
       return res.status(404).json({ error: "Motorista não está disponível agora" });
     }
 
@@ -2612,8 +2621,9 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
     )).rows[0];
     if (!mot?.telefone) return res.status(400).json({ error: "Motorista sem WhatsApp cadastrado" });
 
-    const mensagem = loc.destino_texto
-      ? `Olá! Vi que você está indo para ${loc.destino_texto}. Posso ir com você?`
+    const destinoCarona = loc?.destino_texto || caronaAtiva?.destino_texto;
+    const mensagem = destinoCarona
+      ? `Olá! Vi que você está indo para ${destinoCarona}. Posso ir com você?`
       : "Olá, qual é o seu destino agora?";
     const { rows } = await pool.query(
       `INSERT INTO contatos_motorista (motorista_id, passageiro_id, mensagem)

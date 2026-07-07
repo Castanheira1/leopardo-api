@@ -194,6 +194,11 @@ body {
     min-height: 60vh;
 }
 
+.tab-content:not(.active) {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .tab-content.active {
     display: block;
 }
@@ -361,6 +366,9 @@ body {
     font-size: 0.88rem;
     margin: 0 0 10px;
     line-height: 1.35;
+}
+.acao-sheet .form-group {
+    margin-bottom: 12px;
 }
 .acao-sheet .form-group input,
 .acao-sheet .form-group select,
@@ -569,7 +577,7 @@ a.btn { display: inline-block; text-align: center; }
     width: calc(100% - 44px);
     max-width: none;
     height: 46px;
-    z-index: 40;
+    z-index: 12;
     border-radius: 999px;
     border: 1.5px solid #EAD298;
     overflow: visible;
@@ -601,14 +609,34 @@ gmp-place-autocomplete.map-search-float {
     min-height: 440px;
     overflow: hidden;
     background: #1b1b1b;
+    isolation: isolate;
 }
-.map-stage-map { position: absolute; inset: 0; }
+.map-stage-map { position: absolute; inset: 0; z-index: 0; }
+/* Cobre o mapa na faixa do teclado — evita “vazar” outra aba/camada por trás do sheet */
+.map-stage::after {
+    content: '';
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--sheet-kbd, 0);
+    background: #161719;
+    z-index: 16;
+    pointer-events: none;
+}
+html.teclado-aberto .tab-content.active .map-stage::after {
+    display: block;
+}
+html.teclado-aberto {
+    overflow: hidden;
+}
 .acao-sheet {
     position: absolute;
     left: 0;
     right: 0;
     bottom: var(--sheet-kbd, 0px);   /* sobe quando o teclado virtual aparece (JS) */
-    z-index: 6;
+    z-index: 18;
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
@@ -651,7 +679,16 @@ gmp-place-autocomplete.map-search-float {
     box-shadow: none;
     display: block;
 }
-.acao-titulo { color: #fff; font-weight: 700; font-size: 1rem; letter-spacing: 0.3px; }
+.acao-titulo {
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.3px;
+    width: 100%;
+    text-align: center;
+    padding: 0 96px;
+    box-sizing: border-box;
+}
 .btn-limpar-dest {
     position: absolute;
     right: 12px;
@@ -780,8 +817,34 @@ body.theme-dark {
 
 /* ===== Viagem em andamento estilo Uber (mapa cheio + sheet arrastável) ===== */
 #tabViagem.tab-content { padding: 10px 8px; }
-.viagem-wrap { position: relative; height: 74vh; min-height: 460px; border-radius: 14px; overflow: hidden; background: #161719; }
-.viagem-map { position: absolute; inset: 0; }
+#tabViagem .viagem-wrap::after {
+    background: #121316;
+}
+.viagem-wrap {
+    position: relative;
+    height: 74vh;
+    min-height: 460px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #161719;
+    isolation: isolate;
+}
+.viagem-wrap::after {
+    content: '';
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--sheet-kbd, 0);
+    background: #121316;
+    z-index: 16;
+    pointer-events: none;
+}
+html.teclado-aberto #tabViagem.active .viagem-wrap::after {
+    display: block;
+}
+.viagem-map { position: absolute; inset: 0; z-index: 0; }
 /* Tela "Chamando…" — pulso radar enquanto espera o outro aceitar */
 .cam-overlay.chamando-overlay {
     flex-direction: column;
@@ -881,7 +944,7 @@ body.theme-dark {
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
     border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
-.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); background: #121316; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.55); padding: 2px 16px calc(18px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); z-index: 18; background: #121316; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.55); padding: 2px 16px calc(18px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; touch-action: none; }
@@ -1020,8 +1083,103 @@ body.theme-dark {
     vertical-align: middle;
 }
 .theme-dark .ride-posicao { color: #EAD298; background: #3a3115; }
-.ride-contatos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.ride-contatos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 0; justify-content: stretch; }
 .ride-contatos .btn { padding: 4px 10px; font-size: 0.78rem; }
+.ride-icon-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(234, 210, 152, 0.35);
+    background: rgba(255, 255, 255, 0.04);
+    color: #e8eaed;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.ride-icon-btn:active { background: rgba(234, 210, 152, 0.12); }
+
+/* Lista de motoristas no sheet do passageiro */
+.motoristas-destino-wrap {
+    max-height: min(36vh, calc(var(--appvh, 1vh) * 36));
+    overflow-y: auto;
+    margin-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+}
+.motoristas-destino-wrap .painel-tit {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.ride-card {
+    background: #1a1b1e;
+    border: 1px solid #2a2b2f;
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ride-card__head {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+.ride-card__thumb {
+    width: 72px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #2c2d31;
+    flex-shrink: 0;
+}
+.ride-card__ph {
+    width: 72px;
+    height: 56px;
+    border-radius: 10px;
+    background: #25262a;
+    border: 1px solid #2c2d31;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9aa0a6;
+    flex-shrink: 0;
+}
+.ride-card__body { flex: 1; min-width: 0; }
+.ride-card__title {
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: #fff;
+    line-height: 1.3;
+    margin-bottom: 2px;
+}
+.ride-card__sub { font-size: 0.82rem; color: #9aa0a6; margin-bottom: 4px; }
+.ride-card__route { font-size: 0.84rem; color: #cfd2d6; line-height: 1.35; }
+.ride-card__dist { font-size: 0.78rem; color: #EAD298; font-weight: 600; margin-top: 4px; }
+.ride-card__cta { margin-top: 2px; }
+.ride-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    padding: 2px 7px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.ride-badge--live { color: #7fd4a0; background: rgba(34, 197, 94, 0.15); }
+.ride-badge--rota { color: #EAD298; background: rgba(234, 210, 152, 0.12); }
+.theme-dark .ride-card { background: #161719; border-color: #25262a; }
 
 /* Texto auxiliar */
 .cam-hint { color: #64748b; font-size: 0.85rem; margin: 6px 0; }
