@@ -2117,6 +2117,7 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
         ? `${deNome} ofereceu uma carona para você.`
         : (carona_id ? `${deNome} pediu uma vaga na sua carona.` : `${deNome} ofereceu uma carona para você.`),
       url: "/dashboard.html",
+      action: "nova_solicitacao",
     });
   } catch (err) {
     console.error(err);
@@ -2868,11 +2869,6 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         caronaContato.origem_lat, caronaContato.origem_lng,
         caronaContato.destino_lat, caronaContato.destino_lng
       );
-      if (compatContato === "total") {
-        return res.status(400).json({
-          error: "Use Solicitar vaga — vocês vão para o mesmo destino. A buzina não é necessária.",
-        });
-      }
     }
 
     const mensagem = destinoPax
@@ -2994,10 +2990,6 @@ app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
          AND c.origem_lat IS NOT NULL
          AND c.origem_lng IS NOT NULL
          AND c.created_at > NOW() - INTERVAL '30 minutes'
-         AND NOT (
-           ca.destino_lat IS NOT NULL AND c.destino_lat IS NOT NULL
-           AND ${haversine("ca.destino_lat", "ca.destino_lng", "c.destino_lat", "c.destino_lng")} <= ${RAIO_MESMO_DEST_KM}
-         )
        ORDER BY c.passageiro_id, c.created_at DESC
        LIMIT 30`,
       [req.user.id]

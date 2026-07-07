@@ -832,7 +832,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(c, "motorista com carona para Portaria deveria aparecer para Central");
       eq(c.compat_rota, "proximo", "compat_rota");
     });
-    await test("buzina com mesmo destino da carona → 400", async () => {
+    await test("buzina com mesmo destino da carona → 200 (avisa motorista)", async () => {
       const { status, json } = await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
         token: tokPax,
         body: {
@@ -842,8 +842,8 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
           pessoas: 1,
         },
       });
-      eq(status, 400, "status");
-      assert(String(json.error || "").includes("Solicitar vaga"), "mensagem");
+      eq(status, 200, "status");
+      assert(json.contato_id, "contato_id");
     });
     await test("buzina para Central cria contato proximo visível no mapa", async () => {
       const { status, json } = await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
@@ -865,7 +865,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(c.destino_texto, CENTRAL_S11D.texto, "destino passageiro");
       assert(c.destino_motorista_texto, "destino motorista");
     });
-    await test("contatos/mapa não mostra buzina redundante (mesmo destino da carona)", async () => {
+    await test("contatos/mapa mostra buzina mesmo destino (motorista vê pulso)", async () => {
       await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
         token: tokPax,
         body: {
@@ -877,7 +877,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       });
       const { status, json } = await api("GET", "/api/motorista/contatos/mapa", { token: tokDriver });
       eq(status, 200, "status");
-      assert(!json.some((x) => x.destino_texto === PORTARIA_S11D.texto), "pulso fantasma mesmo destino");
+      assert(json.some((x) => x.destino_texto === PORTARIA_S11D.texto), "pulso no mapa mesmo destino");
     });
 
     /* =================== ANTI-FORÇA-BRUTA (rate limit) =================== */

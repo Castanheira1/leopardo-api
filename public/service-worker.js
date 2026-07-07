@@ -61,6 +61,9 @@ self.addEventListener("push", (event) => {
       if (data.action === "contato_whatsapp" || data.action === "contato_mapa") {
         clientes.forEach((c) => c.postMessage({ action: data.action, contato_id: data.contato_id || null }));
       }
+      if (data.action === "nova_solicitacao") {
+        clientes.forEach((c) => c.postMessage({ action: "nova_solicitacao" }));
+      }
       if (data.action === "nova_oferta_fila") {
         clientes.forEach((c) => c.postMessage({ action: "nova_oferta_fila" }));
       }
