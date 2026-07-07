@@ -3465,7 +3465,7 @@
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (navigator.vibrate) navigator.vibrate(80);
-        removerPulsoContato(c.id);
+        removerPulsoContato(c.passageiro_id);
         mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id });
     }
 
@@ -3499,11 +3499,38 @@
         selfCar.timer = setInterval(upd, 5000);
     }
 
-    let contatoFleet = { markers: {}, timer: null, ultimoId: 0, viuPrimeiraLeva: false };
+    let contatoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false, passageirosAtivos: new Set() };
 
-    function removerPulsoContato(contatoId) {
-        const mk = contatoFleet.markers['c' + contatoId];
-        if (mk) { mk.setMap(null); delete contatoFleet.markers['c' + contatoId]; }
+    function chavePulsoContato(passageiroId) {
+        return 'p' + passageiroId;
+    }
+
+    function removerPulsoContato(passageiroId) {
+        const key = chavePulsoContato(passageiroId);
+        const mk = contatoFleet.markers[key];
+        if (mk) { mk.setMap(null); delete contatoFleet.markers[key]; }
+        contatoFleet.passageirosAtivos.delete(passageiroId);
+    }
+
+    function limparPulsosContatoLegados() {
+        Object.keys(contatoFleet.markers).forEach((k) => {
+            if (k.startsWith('c')) {
+                contatoFleet.markers[k].setMap(null);
+                delete contatoFleet.markers[k];
+            }
+        });
+    }
+
+    function atualizarRotuloPulso(mk, rotulo) {
+        if (!mk?.div) return;
+        const el = mk.div.querySelector('.mp-rotulo');
+        if (el) el.textContent = rotulo;
+        else if (rotulo) {
+            const r = document.createElement('span');
+            r.className = 'mp-rotulo';
+            r.textContent = rotulo;
+            mk.div.appendChild(r);
+        }
     }
 
     // Passageiro que buzina/liga/WhatsApp aparece no mapa do motorista (modo amarelo e rota).
@@ -3518,25 +3545,30 @@
                 const vistos = {};
                 let novos = 0;
                 (Array.isArray(lista) ? lista : []).forEach((c) => {
-                    if (c.origem_lat == null || c.origem_lng == null) return;
-                    const key = 'c' + c.id;
+                    if (c.origem_lat == null || c.origem_lng == null || !c.passageiro_id) return;
+                    const key = chavePulsoContato(c.passageiro_id);
                     vistos[key] = true;
                     const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
-                    if (contatoFleet.markers[key]) {
-                        contatoFleet.markers[key].setPosition(pos);
-                        contatoFleet.markers[key]._c = c;
+                    const rotulo = '→ ' + (c.destino_texto || 'destino no mapa');
+                    const existente = contatoFleet.markers[key];
+                    if (existente) {
+                        existente.setPosition(pos);
+                        existente._c = c;
+                        atualizarRotuloPulso(existente, rotulo);
                     } else {
-                        if (contatoFleet.viuPrimeiraLeva && c.id > contatoFleet.ultimoId) novos++;
+                        if (contatoFleet.viuPrimeiraLeva && !contatoFleet.passageirosAtivos.has(c.passageiro_id)) novos++;
                         const titulo = (c.passageiro_nome || 'Passageiro') + ' — quer carona';
-                        const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo,
-                            '→ ' + (c.destino_texto || 'destino no mapa'));
+                        const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo, rotulo);
                         mk._c = c;
                         contatoFleet.markers[key] = mk;
                     }
-                    contatoFleet.ultimoId = Math.max(contatoFleet.ultimoId, c.id);
+                    contatoFleet.passageirosAtivos.add(c.passageiro_id);
                 });
                 Object.keys(contatoFleet.markers).forEach((key) => {
-                    if (!vistos[key]) { contatoFleet.markers[key].setMap(null); delete contatoFleet.markers[key]; }
+                    if (!vistos[key]) {
+                        contatoFleet.markers[key].setMap(null);
+                        delete contatoFleet.markers[key];
+                    }
                 });
                 if (novos) {
                     buzinar();
@@ -3553,7 +3585,7 @@
         if (contatoFleet.timer) { clearInterval(contatoFleet.timer); contatoFleet.timer = null; }
         Object.values(contatoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
         contatoFleet.markers = {};
-        contatoFleet.ultimoId = 0;
+        contatoFleet.passageirosAtivos = new Set();
         contatoFleet.viuPrimeiraLeva = false;
     }
 

@@ -1933,6 +1933,11 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       if (!(await validarMesmoProjeto(req.user.id, cont.passageiro_id, res))) return;
       para_usuario_id = cont.passageiro_id;
       await pool.query("UPDATE contatos_motorista SET lido = TRUE WHERE id = $1", [contato_id]);
+      await pool.query(
+        `UPDATE contatos_motorista SET lido = TRUE
+         WHERE motorista_id = $1 AND passageiro_id = $2 AND lido = FALSE`,
+        [req.user.id, cont.passageiro_id]
+      );
     } else {
       // Motorista oferecendo carona a um pedido -> precisa de habilitação ativa
       const hab = await habilitacaoAtiva(req.user.id);
@@ -2715,23 +2720,50 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
       : (destinoCarona
         ? `Olá! Vi que você está indo para ${destinoCarona}. Posso ir com você?`
         : "Olá, qual é o seu destino agora?");
-    const { rows } = await pool.query(
-      `INSERT INTO contatos_motorista
-         (motorista_id, passageiro_id, mensagem,
-          origem_lat, origem_lng, origem_texto,
-          destino_lat, destino_lng, destino_texto, pessoas)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-      [
-        motoristaId, req.user.id, mensagem,
-        origem_lat != null ? +origem_lat : null,
-        origem_lng != null ? +origem_lng : null,
-        origem_texto || null,
-        destino_lat != null ? +destino_lat : null,
-        destino_lng != null ? +destino_lng : null,
-        destinoPax,
-        npessoas,
-      ]
-    );
+
+    const prev = (await pool.query(
+      `SELECT id FROM contatos_motorista
+       WHERE motorista_id = $1 AND passageiro_id = $2 AND lido = FALSE
+       ORDER BY created_at DESC LIMIT 1`,
+      [motoristaId, req.user.id]
+    )).rows[0];
+
+    const vals = [
+      mensagem,
+      origem_lat != null ? +origem_lat : null,
+      origem_lng != null ? +origem_lng : null,
+      origem_texto || null,
+      destino_lat != null ? +destino_lat : null,
+      destino_lng != null ? +destino_lng : null,
+      destinoPax,
+      npessoas,
+    ];
+
+    let contatoRow;
+    if (prev) {
+      contatoRow = (await pool.query(
+        `UPDATE contatos_motorista SET
+           mensagem = $1, origem_lat = $2, origem_lng = $3, origem_texto = $4,
+           destino_lat = $5, destino_lng = $6, destino_texto = $7, pessoas = $8,
+           created_at = NOW(), lido = FALSE
+         WHERE id = $9 RETURNING id`,
+        [...vals, prev.id]
+      )).rows[0];
+      await pool.query(
+        `UPDATE contatos_motorista SET lido = TRUE
+         WHERE motorista_id = $1 AND passageiro_id = $2 AND lido = FALSE AND id <> $3`,
+        [motoristaId, req.user.id, prev.id]
+      );
+    } else {
+      contatoRow = (await pool.query(
+        `INSERT INTO contatos_motorista
+           (motorista_id, passageiro_id, mensagem,
+            origem_lat, origem_lng, origem_texto,
+            destino_lat, destino_lng, destino_texto, pessoas)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+        [motoristaId, req.user.id, ...vals]
+      )).rows[0];
+    }
 
     const pax = (await pool.query("SELECT nome, telefone FROM usuarios WHERE id = $1", [req.user.id])).rows[0];
     await registrarEventoUso(req.user.id, "contato_motorista_geral", { motorista_id: motoristaId });
@@ -2745,10 +2777,10 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         : `${pax?.nome || "Um passageiro"} quer combinar destino no WhatsApp.`,
       url: "/dashboard.html",
       action: "contato_mapa",
-      contato_id: rows[0].id,
+      contato_id: contatoRow.id,
     });
 
-    res.json({ telefone: mot.telefone, mensagem, contato_id: rows[0].id });
+    res.json({ telefone: mot.telefone, mensagem, contato_id: contatoRow.id, atualizado: !!prev });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao solicitar contato" });
@@ -2781,7 +2813,8 @@ app.get("/api/motorista/contatos/novos", verificarAuth, async (req, res) => {
 app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT c.id, c.mensagem, c.created_at,
+      `SELECT DISTINCT ON (c.passageiro_id)
+              c.id, c.passageiro_id, c.mensagem, c.created_at,
               c.origem_lat, c.origem_lng, c.origem_texto,
               c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas,
               u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo
@@ -2792,7 +2825,7 @@ app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
          AND c.origem_lat IS NOT NULL
          AND c.origem_lng IS NOT NULL
          AND c.created_at > NOW() - INTERVAL '30 minutes'
-       ORDER BY c.created_at DESC
+       ORDER BY c.passageiro_id, c.created_at DESC
        LIMIT 30`,
       [req.user.id]
     );
