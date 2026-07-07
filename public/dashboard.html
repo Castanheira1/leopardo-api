@@ -591,31 +591,41 @@
     // só toca depois de um gesto do usuário (política de autoplay dos navegadores):
     // destrava no primeiro toque em qualquer lugar da página.
     let _audioCtx = null;
-    document.addEventListener('pointerdown', () => {
+    function destravarAudioBuzina() {
         try {
             if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (_audioCtx.state === 'suspended') _audioCtx.resume();
         } catch (_) {}
-    });
+    }
+    document.addEventListener('pointerdown', destravarAudioBuzina);
     function buzinar() {
         try { if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]); } catch (_) {}
+        try { if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
         const ctx = _audioCtx;
-        if (!ctx || ctx.state !== 'running') return;   // sem gesto ainda: só vibra
-        const toque = (t) => {
-            [440, 554].forEach((f) => {   // duas notas juntas = timbre de buzina
-                const o = ctx.createOscillator(), gn = ctx.createGain();
-                o.type = 'sawtooth';
-                o.frequency.value = f;
-                gn.gain.setValueAtTime(0.0001, t);
-                gn.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
-                gn.gain.setValueAtTime(0.15, t + 0.16);
-                gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.23);
-                o.connect(gn).connect(ctx.destination);
-                o.start(t); o.stop(t + 0.26);
-            });
+        if (!ctx) return;   // sem suporte/gesto ainda: só vibra
+        const tocar = () => {
+            if (ctx.state !== 'running') return;
+            const toque = (t) => {
+                [440, 554].forEach((f) => {   // duas notas juntas = timbre de buzina
+                    const o = ctx.createOscillator(), gn = ctx.createGain();
+                    o.type = 'sawtooth';
+                    o.frequency.value = f;
+                    gn.gain.setValueAtTime(0.0001, t);
+                    gn.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
+                    gn.gain.setValueAtTime(0.15, t + 0.16);
+                    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.23);
+                    o.connect(gn).connect(ctx.destination);
+                    o.start(t); o.stop(t + 0.26);
+                });
+            };
+            const t0 = ctx.currentTime + 0.01;
+            toque(t0); toque(t0 + 0.34); toque(t0 + 0.68);   // bi-bi-bi (3x)
         };
-        const t0 = ctx.currentTime + 0.01;
-        toque(t0); toque(t0 + 0.34); toque(t0 + 0.68);   // bi-bi-bi (3x)
+        if (ctx.state === 'suspended') {
+            ctx.resume().then(tocar).catch(() => {});
+            return;
+        }
+        tocar();
     }
 
     /* -------- util -------- */
@@ -1889,6 +1899,9 @@
                 : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
             : '';
         const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
+        // Mesmo destino/rota publicada: o caminho correto é "Solicitar vaga".
+        // Buzina/WhatsApp ficam para carro amarelo, passa-perto ou parcial.
+        const mostrarContato = !it.caronaId || proximo || parcial;
         return `<article class="ride-card${cardMod}">
             <div class="ride-card__head">
                 ${foto}
@@ -1902,7 +1915,7 @@
                 </div>
             </div>
             ${acaoPrincipal}
-            ${botoesContato(it.id, true)}
+            ${mostrarContato ? botoesContato(it.id, true) : ''}
         </article>`;
     }
 
@@ -2159,7 +2172,9 @@
         if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
         if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
-        document.getElementById('carroContatos').innerHTML = botoesContato(m.id);
+        // No carro branco com rota publicada, passageiro pede vaga. No carro
+        // amarelo (sem rota), buzina/ligação/WhatsApp combinam o destino.
+        document.getElementById('carroContatos').innerHTML = temRota ? '' : botoesContato(m.id);
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
         const d = destinoPublicadoCarro(m);
@@ -3552,22 +3567,23 @@
         );
     }
 
-    let contatoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false, passageirosAtivos: new Set(), buzinados: new Set() };
+    let contatoFleet = {
+        markers: {},
+        timer: null,
+        viuPrimeiraLeva: false,
+        passageirosAtivos: new Set(),
+        ultimoContatoTs: new Map(),
+    };
 
-    function chaveBuzinaContato(c) {
+    // Usa a mudança real do contato em vez do relógio do celular. Assim a buzina
+    // toca também quando o mesmo passageiro aperta de novo no carro amarelo.
+    function contatoFoiAtualizado(c) {
         const ts = c.created_at ? new Date(c.created_at).getTime() : 0;
-        return `${c.passageiro_id}:${ts}`;
-    }
-
-    // Buzina quando o passageiro acabou de tocar (created_at recente), inclusive
-    // re-buzina no mesmo contato — a lógica antiga só tocava em pulso novo.
-    function deveBuzinarContato(c) {
-        const ts = c.created_at ? new Date(c.created_at).getTime() : 0;
-        if (!ts || Date.now() - ts > 15000) return false;
-        const key = chaveBuzinaContato(c);
-        if (contatoFleet.buzinados.has(key)) return false;
-        contatoFleet.buzinados.add(key);
-        return true;
+        if (!ts || !c.passageiro_id) return false;
+        const key = chavePulsoContato(c.passageiro_id);
+        const anterior = contatoFleet.ultimoContatoTs.get(key) || 0;
+        contatoFleet.ultimoContatoTs.set(key, Math.max(anterior, ts));
+        return contatoFleet.viuPrimeiraLeva && ts > anterior;
     }
 
     function chavePulsoContato(passageiroId) {
@@ -3630,13 +3646,13 @@
                 let novos = 0;
                 (Array.isArray(lista) ? lista : []).forEach((c) => {
                     if (c.origem_lat == null || c.origem_lng == null || !c.passageiro_id) return;
-                    if (passageiroIdEmPedidoFleet(c.passageiro_id)) return;
                     const key = chavePulsoContato(c.passageiro_id);
+                    if (contatoFoiAtualizado(c)) novos++;
+                    if (passageiroIdEmPedidoFleet(c.passageiro_id)) return;
                     vistos[key] = true;
                     const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
                     const rotulo = rotuloPulsoContato(c);
                     const existente = contatoFleet.markers[key];
-                    if (deveBuzinarContato(c)) novos++;
                     if (existente) {
                         existente.setPosition(pos);
                         existente._c = c;
@@ -3674,7 +3690,7 @@
         contatoFleet.markers = {};
         contatoFleet.passageirosAtivos = new Set();
         contatoFleet.viuPrimeiraLeva = false;
-        contatoFleet.buzinados = new Set();
+        contatoFleet.ultimoContatoTs = new Map();
     }
 
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
