@@ -2869,6 +2869,11 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         caronaContato.origem_lat, caronaContato.origem_lng,
         caronaContato.destino_lat, caronaContato.destino_lng
       );
+      if (compatContato === "total") {
+        return res.status(400).json({
+          error: "Use Solicitar vaga — vocês vão para o mesmo destino. A buzina não é necessária.",
+        });
+      }
     }
 
     const mensagem = destinoPax
