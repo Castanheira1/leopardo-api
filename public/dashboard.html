@@ -1880,11 +1880,10 @@
         const pessoas = lerPessoasPed();
         const vagasDisp = it.vagas || 1;
         const vagasOk = !it.caronaId || pessoas <= vagasDisp;
-        const destParcialJs = parcial ? (it.destinoMotorista || it.destino || '').replace(/'/g, "\\'") : '';
         const acaoPrincipal = it.caronaId
             ? (vagasOk
                 ? (parcial
-                    ? `<button type="button" class="btn btn-secondary btn-block ride-card__cta" onclick="pedirVagaParcial(${it.caronaId}, ${vagasDisp}, '${destParcialJs}')">Pedir até ${destMot}</button>`
+                    ? `<button type="button" class="btn btn-secondary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Pedir até ${destMot}</button>`
                     : (proximo
                         ? `<p class="ride-hint-proximo">Combine pelo WhatsApp ou buzina — embarque só se o motorista concordar.</p>`
                         : `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`))
@@ -2017,10 +2016,6 @@
             listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
             atualizarFormPedidoRota(false, false);
         }
-    }
-
-    async function pedirVagaParcial(caronaId, vagasDisp) {
-        await pedirVaga(caronaId, vagasDisp);
     }
 
     async function pedirVaga(caronaId, vagasDisp) {
@@ -2458,48 +2453,6 @@
         } catch (_) {}
     }
 
-    // Modo trajeto do motorista (estilo Uber): rota publicada + posição ao vivo.
-    async function abrirTrajeto(c) {
-        document.getElementById('btnViagemAndamento').style.display = 'inline-block';
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.getElementById('tabViagem').classList.add('active');
-        syncMapasAbas('tabViagem');
-
-        document.getElementById('viagemSelfie').style.display = 'none';
-        document.getElementById('viagemFase').textContent = 'Carona em rota';
-        document.getElementById('viagemNome').textContent = 'Sua carona publicada';
-        document.getElementById('viagemCarro').textContent = c.destino_texto ? ('Destino: ' + c.destino_texto) : 'Sem destino definido';
-        const pl = document.getElementById('viagemPlaca');
-        pl.textContent = (habHoje && habHoje.placa) ? habHoje.placa : '';
-        pl.style.display = (habHoje && habHoje.placa) ? 'inline-block' : 'none';
-        const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
-        const rec0 = document.getElementById('btnRecentrar'); if (rec0) rec0.style.display = 'none';
-
-        g = await carregarMaps();
-        const origem = { lat: +c.origem_lat, lng: +c.origem_lng };
-        const destino = c.destino_lat ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
-        const map = novoMapa('mapViagem', { center: origem, zoom: 16 });
-        if (destino) {
-            const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 });
-            try {
-                const resp = await rotaCtrl.calcular(origem, destino);
-                const leg = resp.routes[0].legs[0];
-                eta.style.display = 'inline'; eta.textContent = `${leg.distance.text} • ${leg.duration.text}`;
-            } catch (_) { /* sem rota: segue só com a posição ao vivo */ }
-        }
-        acompanharProprioCarro(map);   // transmite a posição ao vivo (passageiros veem o carro)
-        document.getElementById('viagemControles').innerHTML =
-            `<button class="btn btn-danger" onclick="encerrarCarona(${c.id})">Encerrar carona</button>`;
-        initSheetDrag();
-    }
-    async function encerrarCarona(caronaId) {
-        await fetchWithAuth('/api/caronas/' + caronaId, { method: 'DELETE' });
-        document.getElementById('btnViagemAndamento').style.display = 'none';
-        msg('Carona encerrada.');
-        if (selOfe) selOfe.limparRota();   // a rota publicada não fica presa no mapa
-        escolherPapel('motorista');
-    }
-
     /* -------- propostas -------- */
     const ehMotorista = (p) => (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
     async function loadPropostas() {
@@ -2886,7 +2839,7 @@
         viagemView = {
             id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
             embarque, destino, map, rotaCtrl,
-            motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
+            passageiroSexo: v.passageiro_sexo,
             posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
             rotaUltimaPos: null, rotaUltimaEm: 0,
@@ -2953,15 +2906,6 @@
         if (!vv) return null;
         if (vv.ehMotorista) return vv.posMotorista;
         return vv.posMotorista || vv.embarque || vv.destino;
-    }
-    // Centraliza o mapa na posição atual (modo condução — só motorista).
-    function navegarApp() {
-        const vv = viagemView; if (!vv || !vv.map || !vv.ehMotorista) return;
-        vv.seguir = true;
-        const alvo = focoMapaViagem(vv);
-        if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(18); }
-        vv.ultimaRota = 0;
-        renderViagem();
     }
     // Alvo atual da rota: na fase "encontro" o carro vai até o passageiro (posição
     // ao vivo, ou o ponto de embarque); na fase "destino" vai até o destino.
@@ -3214,7 +3158,7 @@
     };
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
-    let fleet = { markers: {}, timer: null, map: null };
+    let fleet = { markers: {}, timer: null, map: null, naRota: [], naRotaEm: 0 };
     let atualizarFrotaAoVivo = null;
     function limparFrotaAoVivo() {
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
@@ -3225,19 +3169,12 @@
             if (it.destinoMk) it.destinoMk.setMap(null);
         });
         fleet.markers = {};
-    }
-    function origemPublicadaCarro(m) {
-        return m && m.carona_id && m.origem_lat != null
-            ? { lat: +m.origem_lat, lng: +m.origem_lng } : null;
+        fleet.naRota = [];
+        fleet.naRotaEm = 0;
     }
     function destinoPublicadoCarro(m) {
         return m && m.carona_id && m.destino_lat != null
             ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
-    }
-    function chaveRotaCarona(m) {
-        const o = origemPublicadaCarro(m);
-        const d = destinoPublicadoCarro(m);
-        return o && d ? `${o.lat},${o.lng}|${d.lat},${d.lng}` : null;
     }
     const FLEET_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
     const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
@@ -3288,10 +3225,16 @@
                 if (!r.ok) return;
                 const lista = await r.json();
                 if (o && dest) {
-                    const qRota = '?' + new URLSearchParams({
-                        origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
-                    }).toString();
-                    const naRota = await fetchWithAuth('/api/motoristas-rota' + qRota).then((rr) => rr.ok ? rr.json() : []).catch(() => []);
+                    // Fila/ordem muda devagar: consulta a rota a cada ~9 s e reusa entre ticks.
+                    const agora = Date.now();
+                    if (!fleet.naRotaEm || agora - fleet.naRotaEm > 9000) {
+                        const qRota = '?' + new URLSearchParams({
+                            origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
+                        }).toString();
+                        fleet.naRota = await fetchWithAuth('/api/motoristas-rota' + qRota).then((rr) => rr.ok ? rr.json() : []).catch(() => []);
+                        fleet.naRotaEm = agora;
+                    }
+                    const naRota = fleet.naRota;
                     const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
                         .filter((m) => m.carona_id)
                         .map((m) => [m.id, m.ordem]));
