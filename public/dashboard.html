@@ -179,7 +179,10 @@
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
-                        <p id="statusMotoristaOnline" class="online-status" style="display:none;"></p>
+                        <div id="statusMotoristaOnline" class="ios-banner" style="display:none;" role="status" aria-live="polite">
+                            <span class="ios-banner__icon" aria-hidden="true">VAP</span>
+                            <span class="ios-banner__text"></span>
+                        </div>
                         </div>
                         <div class="acao-sheet-footer">
                             <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="toggleModoMotoristaOnline()">Oferecer carona</button>
@@ -2392,18 +2395,19 @@
         if (vagasWrap) vagasWrap.style.display = motoristaOnlineModo ? 'none' : '';
         if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
         if (st) {
+            const txt = st.querySelector('.ios-banner__text');
+            const dest = selOfe && selOfe.getDestino ? selOfe.getDestino() : null;
             if (!motoristaOnlineModo) {
                 st.style.display = 'none';
             } else {
-                st.style.display = 'block';
-                const dest = selOfe && selOfe.getDestino ? selOfe.getDestino() : null;
-                if (motoristaModoDestino) {
-                    st.textContent = dest?.texto
+                st.style.display = 'flex';
+                st.classList.toggle('ios-banner--destino', !!motoristaModoDestino);
+                const msg = motoristaModoDestino
+                    ? (dest?.texto
                         ? ('Indo para ' + dest.texto + ' — visível em 10 km')
-                        : 'Rota publicada — visível em 10 km';
-                } else {
-                    st.textContent = 'Você está online — pedidos em 600 m';
-                }
+                        : 'Rota publicada — visível em 10 km')
+                    : 'Você está online — pedidos em 600 m';
+                if (txt) txt.textContent = msg;
             }
         }
         atualizarIndicadorModoOperante();
@@ -2465,7 +2469,6 @@
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
-            msg('Você está online — pedidos em 600 m.');
         } catch (_) {
             msg('Erro de conexão. Tente novamente.', 'error');
         } finally {
