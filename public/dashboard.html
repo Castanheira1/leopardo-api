@@ -120,7 +120,10 @@
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
-                        <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span><button type="button" id="btnLimparPed" class="btn-limpar-dest" style="display:none;" onclick="limparDestinoPassageiro()">Cancelar destino</button></div>
+                        <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
+                        <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
+                            <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota" onclick="limparDestinoPassageiro()">Limpar rota</button>
+                        </div>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
                                 <label>Quando?</label>
@@ -977,6 +980,10 @@
         const sel = mapId === 'mapPed' ? selPed : selOfe;
         if (sel && sel.limparRota) sel.limparRota();
     }
+    function atualizarBtnLimparPed(visivel) {
+        const wrap = document.getElementById('limparRotaPedWrap');
+        if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+    }
     function limparDestinoPassageiro() {
         const inp = document.getElementById('destPedInput');
         if (inp) inp.value = '';
@@ -1401,8 +1408,11 @@
         const btnLimpar = document.getElementById(mapId === 'mapPed' ? 'btnLimparPed' : 'btnLimparOfe');
         // O botão fica na alça de arrastar (grip): sem isto o toque vira "arraste"
         // e o clique é engolido — daí "não limpava". Barra o gesto de arraste.
-        if (btnLimpar) ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
-        function mostrarBtnLimpar(v) { if (btnLimpar) btnLimpar.style.display = v ? 'inline-block' : 'none'; }
+        if (btnLimpar && mapId !== 'mapPed') ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
+        function mostrarBtnLimpar(v) {
+            if (mapId === 'mapPed') atualizarBtnLimparPed(v);
+            else if (btnLimpar) btnLimpar.style.display = v ? 'inline-block' : 'none';
+        }
         function limparRota() {
             destino = null;
             previewSeq++;
@@ -1849,8 +1859,7 @@
         if (!dest) {
             if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
             if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
-            const btnLimpar = document.getElementById('btnLimparPed');
-            if (btnLimpar) btnLimpar.style.display = 'none';
+            atualizarBtnLimparPed(false);
             wrap.style.display = 'none';
             listaIndo.innerHTML = '';
             listaPerto.innerHTML = '';
@@ -1859,8 +1868,7 @@
             return;
         }
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
-        const btnLimpar = document.getElementById('btnLimparPed');
-        if (btnLimpar) btnLimpar.style.display = '';
+        atualizarBtnLimparPed(true);
         wrap.style.display = 'block';
         const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
         listaIndo.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';

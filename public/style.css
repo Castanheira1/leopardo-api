@@ -679,15 +679,23 @@ html.teclado-aberto {
     box-shadow: none;
     display: block;
 }
+.limpar-rota-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 12px;
+}
+.btn-limpar-rota {
+    font-size: 0.84rem;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 999px;
+    touch-action: manipulation;
+}
 .acao-titulo {
     color: #fff;
     font-weight: 700;
     font-size: 1rem;
     letter-spacing: 0.3px;
-    width: 100%;
-    text-align: center;
-    padding: 0 96px;
-    box-sizing: border-box;
 }
 .btn-limpar-dest {
     position: absolute;
