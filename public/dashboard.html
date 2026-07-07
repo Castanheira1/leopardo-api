@@ -475,26 +475,27 @@
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
 
-    /* -------- bottom sheet: peek (altura visível quando colapsado) -------- */
-    const SHEET_PEEK_MIN = 132;
-    function medirPeekSheet(sheet) {
-        if (!sheet) return SHEET_PEEK_MIN;
-        const grip = sheet.querySelector('.acao-grip');
-        const limparBar = sheet.querySelector('.limpar-rota-bar');
-        const foot = sheet.querySelector('.acao-sheet-footer');
-        let h = 0;
-        if (grip) h += grip.getBoundingClientRect().height;
-        if (limparBar && limparBar.style.display !== 'none' && getComputedStyle(limparBar).display !== 'none') {
-            h += limparBar.getBoundingClientRect().height;
-        }
-        if (foot) h += foot.getBoundingClientRect().height;
-        return Math.max(SHEET_PEEK_MIN, Math.ceil(h + 6));
-    }
-    function sincronizarPeekSheet(sheet) {
-        if (!sheet) return;
-        const peek = medirPeekSheet(sheet);
-        sheet.style.setProperty('--sheet-peek', peek + 'px');
-        sheet._peekVis = peek;
+    /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
+    function tornarSheetAcaoArrastavel(sheet, grip) {
+        if (!sheet || !grip || sheet._acaoDragReady) return;
+        sheet._acaoDragReady = true;
+        let startY = 0, moved = 0, dragging = false;
+        const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
+        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); };
+        const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; };
+        const up = () => {
+            if (!dragging) return;
+            dragging = false;
+            if (Math.abs(moved) < 10) sheet.classList.toggle('collapsed');
+            else if (moved > 28) sheet.classList.add('collapsed');
+            else if (moved < -28) sheet.classList.remove('collapsed');
+        };
+        grip.addEventListener('mousedown', down);
+        grip.addEventListener('touchstart', down, { passive: true });
+        window.addEventListener('mousemove', move);
+        window.addEventListener('touchmove', move, { passive: true });
+        window.addEventListener('mouseup', up);
+        window.addEventListener('touchend', up);
     }
 
     /* -------- altura real da tela + compensação do teclado virtual -------- */
@@ -534,8 +535,6 @@
             document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
             document.documentElement.classList.toggle('teclado-aberto', inset > 80);
             _kbdAnt = inset;
-            sincronizarPeekSheet(document.getElementById('acaoSheetPed'));
-            sincronizarPeekSheet(document.getElementById('acaoSheetOfe'));
         }
     }
     function rolarCampoNoSheet(sheet, el) {
@@ -1068,12 +1067,10 @@
     function atualizarBtnLimparPed(visivel) {
         const wrap = document.getElementById('limparRotaPedWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
-        sincronizarPeekSheet(document.getElementById('acaoSheetPed'));
     }
     function atualizarBtnLimparOfe(visivel) {
         const wrap = document.getElementById('limparRotaOfeWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
-        sincronizarPeekSheet(document.getElementById('acaoSheetOfe'));
     }
     function limparDestinoPassageiro() {
         if (carroSel) fecharCarro();
@@ -1655,17 +1652,8 @@
             atualizarHintDestinoPed();
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
-            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 140);
-            const sheetPed = document.getElementById('acaoSheetPed');
-            sheetPed?.classList.remove('collapsed');
-            requestAnimationFrame(() => {
-                sincronizarPeekSheet(sheetPed);
-                requestAnimationFrame(() => sincronizarPeekSheet(sheetPed));
-            });
-            window.addEventListener('resize', () => {
-                sincronizarPeekSheet(document.getElementById('acaoSheetPed'));
-                sincronizarPeekSheet(document.getElementById('acaoSheetOfe'));
-            });
+            tornarSheetAcaoArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+            document.getElementById('acaoSheetPed')?.classList.remove('collapsed');
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1676,13 +1664,8 @@
         if (initOfePromise) return initOfePromise;
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
-            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'), 140);
-            const sheetOfe = document.getElementById('acaoSheetOfe');
-            sheetOfe?.classList.remove('collapsed');
-            requestAnimationFrame(() => {
-                sincronizarPeekSheet(sheetOfe);
-                requestAnimationFrame(() => sincronizarPeekSheet(sheetOfe));
-            });
+            tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+            document.getElementById('acaoSheetOfe')?.classList.remove('collapsed');
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
