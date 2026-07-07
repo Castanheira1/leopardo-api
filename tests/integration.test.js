@@ -534,13 +534,14 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     /* =================== VIAGEM (rota + finalização) =================== */
     grupo("Viagem: rota GPS e finalização");
     await test("motorista grava pontos GPS da viagem", async () => {
+      await api("POST", `/api/viagens/${viagemId}/iniciar`, { token: tokDriver });
       const { status, json } = await api("POST", `/api/viagens/${viagemId}/pontos`, {
         token: tokDriver,
         body: { pontos: [
-          { lat: -1.4500, lng: -48.4800 },
-          { lat: -1.4450, lng: -48.4600 },
-          { lat: -1.4200, lng: -48.4500 },
-          { lat: -1.4000, lng: -48.4400 },
+          { lat: -1.4500, lng: -48.4800, em: Date.now() - 90000 },
+          { lat: -1.4450, lng: -48.4600, em: Date.now() - 60000 },
+          { lat: -1.4200, lng: -48.4500, em: Date.now() - 30000 },
+          { lat: -1.4000, lng: -48.4400, em: Date.now() },
         ] },
       });
       eq(status, 200, "status");

@@ -443,6 +443,10 @@ async function garantirColunasViagens() {
   try {
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS fase TEXT DEFAULT 'encontro'");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS deslocamento_valido BOOLEAN DEFAULT FALSE");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS embarque_em TIMESTAMP");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_maps NUMERIC(10,2)");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_tela NUMERIC(10,2)");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_fonte VARCHAR(20)");
   } catch (e) {
     console.warn("garantirColunasViagens:", e.message);
   }
@@ -910,13 +914,95 @@ function calcularKmGpsFromPontos(pontos) {
   };
 }
 
-async function calcularKmGpsViagem(viagemId) {
-  const { rows } = await pool.query(
-    `SELECT lat::float8 AS lat, lng::float8 AS lng, registrado_em
-     FROM viagem_pontos WHERE viagem_id = $1 ORDER BY registrado_em`,
-    [viagemId]
-  );
+async function calcularKmGpsViagem(viagemId, opts = {}) {
+  let sql = `SELECT lat::float8 AS lat, lng::float8 AS lng, registrado_em
+     FROM viagem_pontos WHERE viagem_id = $1`;
+  const params = [viagemId];
+  if (opts.desde) {
+    sql += ` AND registrado_em >= $2::timestamptz`;
+    params.push(opts.desde);
+  }
+  sql += ` ORDER BY registrado_em`;
+  const { rows } = await pool.query(sql, params);
   return calcularKmGpsFromPontos(rows);
+}
+
+function arredondarKm(km) {
+  const n = Number(km);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function parseKmMedicao(val) {
+  const n = Number(val);
+  if (!Number.isFinite(n) || n <= 0 || n > 2000) return 0;
+  return n;
+}
+
+// Escolhe a melhor medição disponível (GPS pós-embarque, Maps ou km acumulado na tela).
+function resolverKmMedicaoViagem(viagem, calcGps, kmMapsBody, kmTelaBody) {
+  const maps = parseKmMedicao(kmMapsBody);
+  const tela = parseKmMedicao(kmTelaBody);
+  const candidatos = [];
+
+  if (calcGps.kmBruto > 0) {
+    candidatos.push({
+      km: calcGps.valido ? calcGps.km : calcGps.kmBruto,
+      valido: calcGps.valido,
+      prio: 3,
+      fonte: "gps",
+    });
+  }
+  if (tela >= KM_MINIMO_VIAGEM) {
+    candidatos.push({ km: tela, valido: true, prio: 2, fonte: "tela" });
+  } else if (tela > 0) {
+    candidatos.push({ km: tela, valido: false, prio: 1, fonte: "tela" });
+  }
+  if (maps >= KM_MINIMO_VIAGEM) {
+    candidatos.push({ km: maps, valido: true, prio: 2, fonte: "maps" });
+  } else if (maps > 0) {
+    candidatos.push({ km: maps, valido: false, prio: 1, fonte: "maps" });
+  }
+
+  const valido = candidatos.filter((c) => c.valido).sort((a, b) => b.prio - a.prio)[0];
+  if (valido) {
+    return {
+      km: arredondarKm(valido.km),
+      valido: true,
+      fonte: valido.fonte,
+      km_maps: maps || null,
+      km_tela: tela || null,
+    };
+  }
+
+  const maior = [...candidatos].sort((a, b) => b.km - a.km)[0];
+  if (maior && maior.km >= KM_MINIMO_VIAGEM * 0.4) {
+    return {
+      km: arredondarKm(maior.km),
+      valido: maior.km >= KM_MINIMO_VIAGEM,
+      fonte: maior.fonte,
+      km_maps: maps || null,
+      km_tela: tela || null,
+    };
+  }
+
+  if (viagem?.embarque_em && viagem.destino_lat != null && viagem.origem_lat != null) {
+    const linha = haversineKmCoord(
+      +viagem.origem_lat, +viagem.origem_lng,
+      +viagem.destino_lat, +viagem.destino_lng
+    );
+    if (linha >= KM_MINIMO_VIAGEM * 0.6) {
+      return {
+        km: arredondarKm(linha),
+        valido: linha >= KM_MINIMO_VIAGEM,
+        fonte: "linha",
+        km_maps: maps || null,
+        km_tela: tela || null,
+      };
+    }
+  }
+
+  return { km: 0, valido: false, fonte: null, km_maps: maps || null, km_tela: tela || null };
 }
 
 const sqlViagemKmValido = (alias = "v") => `${alias}.deslocamento_valido = TRUE`;
@@ -2556,14 +2642,24 @@ app.post("/api/viagens/:id/pontos", verificarAuth, async (req, res) => {
 
     const values = [];
     const params = [];
+    const agora = Date.now();
     pontos.slice(0, 500).forEach((p, i) => {
-      const base = i * 3;
-      values.push(`($${base + 1}, $${base + 2}, $${base + 3})`);
+      const base = i * 4;
+      values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
       params.push(req.params.id, p.lat, p.lng);
+      const emMs = Number(p.em);
+      let em = new Date();
+      if (Number.isFinite(emMs) && emMs > 0) {
+        const candidato = new Date(emMs);
+        if (candidato.getTime() <= agora + 60000 && candidato.getTime() >= agora - 86400000) {
+          em = candidato;
+        }
+      }
+      params.push(em);
     });
 
     await pool.query(
-      `INSERT INTO viagem_pontos (viagem_id, lat, lng) VALUES ${values.join(",")}`,
+      `INSERT INTO viagem_pontos (viagem_id, lat, lng, registrado_em) VALUES ${values.join(",")}`,
       params
     );
     res.json({ success: true, gravados: Math.min(pontos.length, 500) });
@@ -3069,12 +3165,18 @@ app.get("/api/viagens/:id/localizacao", verificarAuth, async (req, res) => {
 app.post("/api/viagens/:id/iniciar", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `UPDATE viagens SET fase = 'destino'
+      `UPDATE viagens SET fase = 'destino', embarque_em = COALESCE(embarque_em, NOW())
        WHERE id = $1 AND motorista_id = $2 AND status = 'em_andamento'
        RETURNING *`,
       [req.params.id, req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: "Viagem não encontrada" });
+    await pool.query(
+      `DELETE FROM viagem_pontos vp
+       WHERE vp.viagem_id = $1
+         AND vp.registrado_em < (SELECT embarque_em FROM viagens WHERE id = $1)`,
+      [req.params.id]
+    );
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -3088,14 +3190,23 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
     if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
     if (req.user.id !== v.motorista_id) return res.status(403).json({ error: "Apenas o motorista finaliza" });
 
-    const calc = await calcularKmGpsViagem(req.params.id);
+    const calc = await calcularKmGpsViagem(req.params.id, {
+      desde: v.embarque_em || undefined,
+    });
+    const med = resolverKmMedicaoViagem(v, calc, req.body?.km_maps, req.body?.km_tela);
     const { rows } = await pool.query(
       `UPDATE viagens SET status = 'concluida', finalizada_em = NOW(),
-              distancia_km = $2, deslocamento_valido = $3
+              distancia_km = $2, deslocamento_valido = $3,
+              km_maps = $4, km_tela = $5, km_fonte = $6
        WHERE id = $1 RETURNING *`,
-      [req.params.id, calc.km, calc.valido]
+      [req.params.id, med.km, med.valido, med.km_maps, med.km_tela, med.fonte]
     );
-    res.json({ ...rows[0], deslocamento_valido: calc.valido, km_bruto: calc.kmBruto });
+    res.json({
+      ...rows[0],
+      deslocamento_valido: med.valido,
+      km_bruto: calc.kmBruto,
+      km_fonte: med.fonte,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao finalizar viagem" });

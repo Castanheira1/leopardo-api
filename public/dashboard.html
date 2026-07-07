@@ -3024,9 +3024,21 @@
                         vv.rotaUltimaPos = { ...vv.posMotorista };
                         vv.rotaUltimaEm = Date.now();
                         const leg = resp.routes[0].legs[0];
+                        const kmRota = resp.km || 0;
+                        if (vv.fase === 'destino' && kmRota > 0) {
+                            if (vv.kmMapsRestante != null && kmRota < vv.kmMapsRestante) {
+                                vv.kmMapsPercorrido = (vv.kmMapsPercorrido || 0) + (vv.kmMapsRestante - kmRota);
+                            }
+                            vv.kmMapsRestante = kmRota;
+                            if (!vv.kmMapsRota) vv.kmMapsRota = kmRota;
+                        }
                         if (eta) {
                             eta.style.display = 'block';
-                            eta.textContent = `~${leg.duration.text} · ${leg.distance.text}`;
+                            const kmTela = trackState?.kmTela || 0;
+                            const kmMostrar = vv.fase === 'destino' && kmTela >= 0.1
+                                ? ` · ${kmTela.toFixed(1)} km percorridos`
+                                : '';
+                            eta.textContent = `~${leg.duration.text} · ${leg.distance.text}${kmMostrar}`;
                         }
                     } catch (_) { /* sem rota: segue só com os marcadores */ }
                 }
@@ -3041,7 +3053,9 @@
                         ? rotuloProximidadeMotorista(distKmGps(ref, vv.posMotorista))
                         : 'Motorista a caminho';
                 } else {
-                    eta.textContent = 'A caminho do destino';
+                    eta.textContent = vv.fase === 'destino' && (trackState?.kmTela || 0) >= 0.1
+                        ? `A caminho do destino · ${trackState.kmTela.toFixed(1)} km percorridos`
+                        : 'A caminho do destino';
                 }
             }
         }
@@ -3096,19 +3110,24 @@
         const vv = viagemView;
         if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
         if (acompTimer) clearInterval(acompTimer);
-        trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null };
+        trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null, kmTela: 0 };
         localStorage.setItem('viagemAtiva', vv.id);
 
-        // 1) GPS próprio → grava trajeto só com deslocamento real (>= 25 m).
+        // 1) GPS próprio → grava trajeto só após embarque (fase destino), >= 25 m.
         let ultimoEnvioLoc = 0;
         trackState.watchId = navigator.geolocation.watchPosition((pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             if (vv.ehMotorista) {
                 vv.posMotorista = pt;
-                const mover = !trackState.ultimoPonto || distKmGps(trackState.ultimoPonto, pt) >= 0.025;
-                if (mover) {
-                    trackState.buffer.push(pt);
-                    trackState.ultimoPonto = pt;
+                if (vv.fase === 'destino') {
+                    const mover = !trackState.ultimoPonto || distKmGps(trackState.ultimoPonto, pt) >= 0.025;
+                    if (mover) {
+                        if (trackState.ultimoPonto) {
+                            trackState.kmTela += distKmGps(trackState.ultimoPonto, pt);
+                        }
+                        trackState.buffer.push({ lat: pt.lat, lng: pt.lng, em: Date.now() });
+                        trackState.ultimoPonto = pt;
+                    }
                 }
             } else vv.posPassageiro = pt;
             renderViagem();
@@ -3149,13 +3168,36 @@
         acompTimer = setInterval(tick, VIAGEM_POLL_MS);
         if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
     }
-    // Motorista chegou ao passageiro: muda para a fase de destino.
+    // Motorista chegou ao passageiro: muda para a fase de destino e reinicia medição de km.
     async function cheguei(viagemId) {
+        await enviarPontos();
         const r = await fetchWithAuth('/api/viagens/' + viagemId + '/iniciar', { method: 'POST' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
-        if (viagemView) { viagemView.fase = 'destino'; viagemView.ultimaRota = 0; atualizarCabecalhoViagem(); }
-        msg('Passageiro embarcado — seguindo para o destino.');
+        if (viagemView) {
+            viagemView.fase = 'destino';
+            viagemView.ultimaRota = 0;
+            viagemView.kmMapsRota = null;
+            viagemView.kmMapsRestante = null;
+            viagemView.kmMapsPercorrido = 0;
+            if (trackState) {
+                trackState.buffer = [];
+                trackState.kmTela = 0;
+                trackState.ultimoPonto = viagemView.posMotorista ? { ...viagemView.posMotorista } : null;
+                if (trackState.ultimoPonto) {
+                    trackState.buffer.push({ ...trackState.ultimoPonto, em: Date.now() });
+                }
+            }
+            if (viagemView.destino && viagemView.posMotorista && viagemView.rotaCtrl) {
+                try {
+                    const resp = await viagemView.rotaCtrl.calcular(viagemView.posMotorista, viagemView.destino);
+                    viagemView.kmMapsRota = resp.km || 0;
+                    viagemView.kmMapsRestante = viagemView.kmMapsRota;
+                } catch (_) { /* sem rota: segue com GPS/tela */ }
+            }
+            atualizarCabecalhoViagem();
+        }
+        msg('Passageiro embarcado — km passam a contar para o destino.');
     }
     async function enviarPontos() {
         if (!trackState || !trackState.buffer.length) return;
@@ -3170,14 +3212,26 @@
         }
         if (acompTimer) clearInterval(acompTimer);
         localStorage.removeItem('viagemAtiva');
-        const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', { method: 'POST' });
+        const km_maps = Math.max(viagemView?.kmMapsPercorrido || 0, viagemView?.kmMapsRota || 0);
+        const km_tela = Math.round((trackState?.kmTela || 0) * 100) / 100;
+        const body = {};
+        if (km_maps > 0) body.km_maps = Math.round(km_maps * 100) / 100;
+        if (km_tela > 0) body.km_tela = km_tela;
+        const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
         const d = await r.json();
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); limparRotaViagem(); }
         if (d.deslocamento_valido) {
-            msg(`Viagem concluída • ${d.distancia_km || 0} km percorridos (GPS).`);
+            const fonte = d.km_fonte === 'maps' ? 'Google Maps'
+                : d.km_fonte === 'tela' ? 'GPS na tela'
+                : d.km_fonte === 'gps' ? 'GPS'
+                : 'medição';
+            msg(`Viagem concluída • ${d.distancia_km || 0} km (${fonte}) — contabilizado no relatório.`);
         } else {
-            msg('Viagem encerrada sem deslocamento GPS suficiente — não entra no rateio/admin.', 'error');
+            msg('Viagem encerrada sem km suficientes — não entra no rateio/admin.', 'error');
         }
     }
     // Sai da tela de viagem (concluída) e volta ao mapa do papel atual.
