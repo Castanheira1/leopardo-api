@@ -34,6 +34,8 @@ const RAIO_ONLINE_KM = Number(process.env.RAIO_ONLINE_KM || 0.6);
 // pelo passageiro: motorista "na pista" entra na fila se estiver a até esta
 // distância do trajeto (não só perto da origem).
 const RAIO_ROTA_KM = Number(process.env.RAIO_ROTA_KM || 1.5);
+// Mesmo ponto de destino (não confundir com RAIO_VISIVEL_KM de 10 km).
+const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
 const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
@@ -95,7 +97,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirColunasContatosMotorista(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -264,6 +266,25 @@ async function garantirTabelaEventosUso() {
     await pool.query("CREATE INDEX IF NOT EXISTS idx_eventos_uso_usuario ON eventos_uso (usuario_id, created_at DESC)");
   } catch (e) {
     console.warn("garantirTabelaEventosUso:", e.message);
+  }
+}
+
+async function garantirColunasContatosMotorista() {
+  const colunas = [
+    "origem_lat NUMERIC(10,6)",
+    "origem_lng NUMERIC(10,6)",
+    "origem_texto TEXT",
+    "destino_lat NUMERIC(10,6)",
+    "destino_lng NUMERIC(10,6)",
+    "destino_texto TEXT",
+    "pessoas INTEGER DEFAULT 1",
+  ];
+  for (const col of colunas) {
+    try {
+      await pool.query(`ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS ${col}`);
+    } catch (e) {
+      console.warn("garantirColunasContatosMotorista:", e.message);
+    }
   }
 }
 
@@ -655,33 +676,65 @@ const haversine = (latCol, lngCol, pLat, pLng) => `
     + sin(radians(${pLat})) * sin(radians(${latCol}))
   ))))`;
 
-// Distância (km) de um ponto (latCol/lngCol) até o SEGMENTO de reta entre
-// A (aLat/aLng) e B (bLat/bLng) — não até uma reta infinita nem só até os
-// dois extremos. Projeção equirretangular local (plano, em km, com A como
-// referência de latitude): ótima para segmentos curtos como os do S11D.
-// Usada para decidir quem está "na pista" da rota escolhida pelo passageiro.
-function distanciaSegmentoKm(latCol, lngCol, aLat, aLng, bLat, bLng) {
+// Distância (km) de um ponto até o SEGMENTO A→B (projeção equirretangular local).
+function sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng) {
   const px = `((${lngCol}) - (${aLng})) * 111.320 * cos(radians(${aLat}))`;
   const py = `((${latCol}) - (${aLat})) * 110.574`;
   const bx = `((${bLng}) - (${aLng})) * 111.320 * cos(radians(${aLat}))`;
   const by = `((${bLat}) - (${aLat})) * 110.574`;
   const denom = `NULLIF((${bx})*(${bx}) + (${by})*(${by}), 0)`;
+  return { px, py, bx, by, denom };
+}
+
+function sqlParametroSegmento(latCol, lngCol, aLat, aLng, bLat, bLng) {
+  const { px, py, bx, by, denom } = sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng);
+  return `COALESCE((( ${px} )*(${bx}) + ( ${py} )*(${by})) / ${denom}, 0)`;
+}
+
+function distanciaSegmentoKm(latCol, lngCol, aLat, aLng, bLat, bLng) {
+  const { px, py, bx, by, denom } = sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng);
   const t = `LEAST(1, GREATEST(0, COALESCE((( ${px} )*(${bx}) + ( ${py} )*(${by})) / ${denom}, 0)))`;
   return `sqrt(POWER((${px}) - (${t})*(${bx}), 2) + POWER((${py}) - (${t})*(${by}), 2))`;
 }
 
-// Destino do passageiro compatível com carona: mesmo lugar OU no segmento origem→destino.
-function sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
-  const mesmo = `${haversine(carDestLat, carDestLng, pDestLat, pDestLng)} <= ${RAIO_VISIVEL_KM}`;
-  const noTrajeto = `${distanciaSegmentoKm(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng)} <= ${RAIO_ROTA_KM}`;
-  return `(${mesmo} OR ${noTrajeto})`;
+function sqlCorredorSegmento(latCol, lngCol, aLat, aLng, bLat, bLng, raioKm) {
+  const { px, py, bx, by, denom } = sqlSegmentoBase(latCol, lngCol, aLat, aLng, bLat, bLng);
+  const tRaw = sqlParametroSegmento(latCol, lngCol, aLat, aLng, bLat, bLng);
+  const tClamp = `LEAST(1, GREATEST(0, ${tRaw}))`;
+  const dist = `sqrt(POWER((${px}) - (${tClamp})*(${bx}), 2) + POWER((${py}) - (${tClamp})*(${by}), 2))`;
+  return {
+    t: tRaw,
+    dist,
+    noSegmento: `(${dist} <= ${raioKm} AND ${tRaw} >= 0 AND ${tRaw} <= 1)`,
+    alemDestino: `(${dist} <= ${raioKm} AND ${tRaw} > 1)`,
+  };
 }
 
-// Pedido combina com carona se embarque OU destino ficam no trajeto publicado.
+// Destino do passageiro no trajeto publicado: mesmo ponto OU entre origem e destino.
+function sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const cor = sqlCorredorSegmento(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  const mesmo = `${haversine(carDestLat, carDestLng, pDestLat, pDestLng)} <= ${RAIO_MESMO_DEST_KM}`;
+  return `(${mesmo} OR ${cor.noSegmento})`;
+}
+
+// Destino do passageiro além do fim da carona (mesma pista, motorista não vai até lá).
+function sqlDestinoPassageiroAlemCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const cor = sqlCorredorSegmento(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return cor.alemDestino;
+}
+
+// Compatibilidade total: embarque E desembarque dentro do segmento publicado.
 function sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
-  const origNoTrajeto = `${distanciaSegmentoKm(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng)} <= ${RAIO_ROTA_KM}`;
-  const destCompat = sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
-  return `(${destCompat} OR ${origNoTrajeto})`;
+  const destOk = sqlDestinoPassageiroNaCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const origCor = sqlCorredorSegmento(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return `(${destOk} AND ${origCor.noSegmento})`;
+}
+
+// Parcial: passageiro quer ir além — só até o destino do motorista.
+function sqlPedidoCombinaComCaronaParcial(pOrigLat, pOrigLng, pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+  const destParcial = sqlDestinoPassageiroAlemCarona(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng);
+  const origCor = sqlCorredorSegmento(pOrigLat, pOrigLng, carOrigLat, carOrigLng, carDestLat, carDestLng, RAIO_ROTA_KM);
+  return `(${destParcial} AND ${origCor.noSegmento})`;
 }
 
 // Motorista "na pista": GPS na faixa da rota do passageiro OU carona publicada compatível.
@@ -692,7 +745,10 @@ function sqlMotoristaNaRotaPassageiro(pOrigLat, pOrigLng, pDestLat, pDestLng, gp
     WHERE ca.motorista_id = ${motoristaIdCol}
       AND ca.status = 'ativa' AND ca.vagas > 0
       AND ca.origem_lat IS NOT NULL AND ca.destino_lat IS NOT NULL
-      AND ${sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+      AND (
+        ${sqlPedidoCombinaComCarona(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+        OR ${sqlPedidoCombinaComCaronaParcial(pOrigLat, pOrigLng, pDestLat, pDestLng, "ca.origem_lat", "ca.origem_lng", "ca.destino_lat", "ca.destino_lng")}
+      )
   )`;
   return `(${gpsNaFaixa} OR ${caronaCompat})`;
 }
@@ -1564,19 +1620,16 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
 
     // Modo "indo para este local": filtra caronas cujo DESTINO é ~o local escolhido
     // e que ainda têm vaga. Sem destino, mantém o comportamento antigo (raio na origem).
-    let destFiltro = "", origemRaio = "";
+    let destFiltro = "", origemRaio = "", compatSel = "";
     if (temDest) {
       params.push(dest_lat, dest_lng);
       const dl = `$${params.length - 1}`, dg = `$${params.length}`;
-      // Casa em DOIS jeitos (com vaga):
-      //  1) mesmo destino: o destino do motorista está a até RAIO_VISIVEL_KM do
-      //     destino do passageiro;
-      //  2) no caminho (corredor): o destino do passageiro fica a até RAIO_ROTA_KM
-      //     do TRAJETO do motorista (origem->destino) — ele passa pelo local do
-      //     passageiro sem desviar da rota, mesmo indo para outro lugar.
-      const mesmoDestino = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_VISIVEL_KM}`;
-      const noCaminho = `${distanciaSegmentoKm(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng")} <= ${RAIO_ROTA_KM}`;
-      destFiltro = `AND (${mesmoDestino} OR ${noCaminho}) AND c.vagas > 0`;
+      const corPax = sqlCorredorSegmento(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng", RAIO_ROTA_KM);
+      const mesmoDest = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_MESMO_DEST_KM}`;
+      const compatTotal = `(${mesmoDest} OR ${corPax.noSegmento})`;
+      const compatParcial = corPax.alemDestino;
+      destFiltro = `AND (${compatTotal} OR ${compatParcial}) AND c.vagas > 0`;
+      compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' ELSE 'none' END AS compat_rota`;
     } else if (temPos) {
       params.push(RAIO_VISIVEL_KM);
       origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
@@ -1589,7 +1642,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.*, u.nome AS motorista_nome, u.empresa_nome AS motorista_empresa,
               h.placa, h.tag, h.foto_carro_url,
-              (lo.disponivel = TRUE) AS motorista_online ${distSel}
+              (lo.disponivel = TRUE) AS motorista_online ${distSel}${compatSel}
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
@@ -1846,11 +1899,12 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
 
 /* ============================ PROPOSTAS ============================ */
 app.post("/api/propostas", verificarAuth, async (req, res) => {
-  const { carona_id, pedido_id, mensagem, selfie_url, selfie_lat, selfie_lng, selfie_em } = req.body;
-  if (!carona_id && !pedido_id) return res.status(400).json({ error: "Informe carona_id ou pedido_id" });
+  const { carona_id, pedido_id, contato_id, mensagem, selfie_url, selfie_lat, selfie_lng, selfie_em, pessoas } = req.body;
+  if (!carona_id && !pedido_id && !contato_id) return res.status(400).json({ error: "Informe carona_id, pedido_id ou contato_id" });
 
   try {
     let para_usuario_id, dadosSelfie = {};
+    const npessoas = Math.min(6, Math.max(parseInt(pessoas, 10) || 1, 1));
 
     if (carona_id) {
       // Passageiro pedindo uma vaga numa carona -> precisa de selfie
@@ -1859,8 +1913,26 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       if (!car) return res.status(404).json({ error: "Carona indisponível" });
       if (car.motorista_id === req.user.id) return res.status(400).json({ error: "Você é o motorista desta carona" });
       if (!(await validarMesmoProjeto(req.user.id, car.motorista_id, res))) return;
+      if ((car.vagas || 0) < npessoas) {
+        return res.status(400).json({
+          error: npessoas === 1
+            ? "Não há vagas disponíveis nesta carona"
+            : `Só há ${car.vagas} vaga(s) — você pediu ${npessoas}.`,
+        });
+      }
       para_usuario_id = car.motorista_id;
       dadosSelfie = { selfie_url, selfie_lat, selfie_lng, selfie_em: selfie_em || new Date() };
+    } else if (contato_id) {
+      const hab = await habilitacaoAtiva(req.user.id);
+      if (!hab) return res.status(403).json({ error: "Ative o modo motorista antes de oferecer carona" });
+      const cont = (await pool.query(
+        "SELECT * FROM contatos_motorista WHERE id = $1 AND motorista_id = $2",
+        [contato_id, req.user.id]
+      )).rows[0];
+      if (!cont) return res.status(404).json({ error: "Contato indisponível" });
+      if (!(await validarMesmoProjeto(req.user.id, cont.passageiro_id, res))) return;
+      para_usuario_id = cont.passageiro_id;
+      await pool.query("UPDATE contatos_motorista SET lido = TRUE WHERE id = $1", [contato_id]);
     } else {
       // Motorista oferecendo carona a um pedido -> precisa de habilitação ativa
       const hab = await habilitacaoAtiva(req.user.id);
@@ -1895,7 +1967,9 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
     const deNome = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [req.user.id])).rows[0]?.nome || "Um colega";
     enviarPush(para_usuario_id, {
       title: "Nova solicitação de carona",
-      body: carona_id ? `${deNome} pediu uma vaga na sua carona.` : `${deNome} ofereceu uma carona para você.`,
+      body: contato_id
+        ? `${deNome} ofereceu uma carona para você.`
+        : (carona_id ? `${deNome} pediu uma vaga na sua carona.` : `${deNome} ofereceu uma carona para você.`),
       url: "/dashboard.html",
     });
   } catch (err) {
@@ -2592,6 +2666,12 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
 app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) => {
   const motoristaId = parseInt(req.params.id, 10);
   if (!motoristaId) return res.status(400).json({ error: "Motorista inválido" });
+  const {
+    origem_lat, origem_lng, origem_texto,
+    destino_lat, destino_lng, destino_texto,
+    pessoas,
+  } = req.body || {};
+  const npessoas = Math.min(6, Math.max(parseInt(pessoas, 10) || 1, 1));
   try {
     if (!(await validarMesmoProjeto(req.user.id, motoristaId, res))) return;
 
@@ -2614,6 +2694,13 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
     if (!loc?.disponivel && !caronaAtiva) {
       return res.status(404).json({ error: "Motorista não está disponível agora" });
     }
+    if (caronaAtiva && caronaAtiva.vagas < npessoas) {
+      return res.status(400).json({
+        error: npessoas === 1
+          ? "Não há vagas disponíveis nesta carona"
+          : `Só há ${caronaAtiva.vagas} vaga(s) — você pediu ${npessoas}.`,
+      });
+    }
 
     const mot = (await pool.query(
       "SELECT nome, telefone FROM usuarios WHERE id = $1",
@@ -2621,25 +2708,43 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
     )).rows[0];
     if (!mot?.telefone) return res.status(400).json({ error: "Motorista sem WhatsApp cadastrado" });
 
+    const destinoPax = destino_texto ? String(destino_texto).trim() : null;
     const destinoCarona = loc?.destino_texto || caronaAtiva?.destino_texto;
-    const mensagem = destinoCarona
-      ? `Olá! Vi que você está indo para ${destinoCarona}. Posso ir com você?`
-      : "Olá, qual é o seu destino agora?";
+    const mensagem = destinoPax
+      ? `Olá! Quero ir para ${destinoPax}${npessoas > 1 ? ` (${npessoas} pessoas)` : ''}. Posso ir com você?`
+      : (destinoCarona
+        ? `Olá! Vi que você está indo para ${destinoCarona}. Posso ir com você?`
+        : "Olá, qual é o seu destino agora?");
     const { rows } = await pool.query(
-      `INSERT INTO contatos_motorista (motorista_id, passageiro_id, mensagem)
-       VALUES ($1, $2, $3) RETURNING id`,
-      [motoristaId, req.user.id, mensagem]
+      `INSERT INTO contatos_motorista
+         (motorista_id, passageiro_id, mensagem,
+          origem_lat, origem_lng, origem_texto,
+          destino_lat, destino_lng, destino_texto, pessoas)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+      [
+        motoristaId, req.user.id, mensagem,
+        origem_lat != null ? +origem_lat : null,
+        origem_lng != null ? +origem_lng : null,
+        origem_texto || null,
+        destino_lat != null ? +destino_lat : null,
+        destino_lng != null ? +destino_lng : null,
+        destinoPax,
+        npessoas,
+      ]
     );
 
     const pax = (await pool.query("SELECT nome, telefone FROM usuarios WHERE id = $1", [req.user.id])).rows[0];
     await registrarEventoUso(req.user.id, "contato_motorista_geral", { motorista_id: motoristaId });
     await registrarEventoUso(motoristaId, "contato_recebido_geral", { passageiro_id: req.user.id });
 
+    const destinoPush = destinoPax || destinoCarona;
     enviarPush(motoristaId, {
-      title: "Alguém quer falar com você",
-      body: `${pax?.nome || "Um passageiro"} quer combinar destino no WhatsApp.`,
+      title: destinoPush ? `${pax?.nome || "Passageiro"} quer ir para ${destinoPush}` : "Alguém quer falar com você",
+      body: destinoPush
+        ? `${npessoas} pessoa(s) — veja no mapa.`
+        : `${pax?.nome || "Um passageiro"} quer combinar destino no WhatsApp.`,
       url: "/dashboard.html",
-      action: "contato_whatsapp",
+      action: "contato_mapa",
       contato_id: rows[0].id,
     });
 
@@ -2654,7 +2759,10 @@ app.get("/api/motorista/contatos/novos", verificarAuth, async (req, res) => {
   const desde = parseInt(req.query.desde, 10) || 0;
   try {
     const { rows } = await pool.query(
-      `SELECT c.id, c.mensagem, c.created_at, u.nome AS passageiro_nome, u.telefone AS passageiro_telefone
+      `SELECT c.id, c.mensagem, c.created_at,
+              c.origem_lat, c.origem_lng, c.origem_texto,
+              c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas,
+              u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo
        FROM contatos_motorista c
        JOIN usuarios u ON u.id = c.passageiro_id
        WHERE c.motorista_id = $1 AND c.lido = FALSE AND c.id > $2
@@ -2666,6 +2774,32 @@ app.get("/api/motorista/contatos/novos", verificarAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar contatos" });
+  }
+});
+
+// Contatos recentes com localização — pulso no mapa do motorista (modo amarelo e rota).
+app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.mensagem, c.created_at,
+              c.origem_lat, c.origem_lng, c.origem_texto,
+              c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas,
+              u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo
+       FROM contatos_motorista c
+       JOIN usuarios u ON u.id = c.passageiro_id
+       WHERE c.motorista_id = $1
+         AND c.lido = FALSE
+         AND c.origem_lat IS NOT NULL
+         AND c.origem_lng IS NOT NULL
+         AND c.created_at > NOW() - INTERVAL '30 minutes'
+       ORDER BY c.created_at DESC
+       LIMIT 30`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao listar contatos no mapa" });
   }
 });
 

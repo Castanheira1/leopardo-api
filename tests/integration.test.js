@@ -388,7 +388,30 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${parada.lat}&dest_lng=${parada.lng}`;
       const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
       eq(status, 200, "status");
-      assert(json.some((x) => x.id === caronaId), "carona deveria aparecer — parada no trajeto publicado");
+      const c = json.find((x) => x.id === caronaId);
+      assert(c, "carona deveria aparecer — parada no trajeto publicado");
+      assert(c.compat_rota === "total", "parada no meio deve ser compat total");
+    });
+    await test("GET /api/caronas?dest não casa destino além do fim da rota (longe)", async () => {
+      const alemLonge = {
+        lat: DESTINO.lat + (DESTINO.lat - ORIGEM.lat) * 0.8,
+        lng: DESTINO.lng + (DESTINO.lng - ORIGEM.lng) * 0.8,
+      };
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${alemLonge.lat}&dest_lng=${alemLonge.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status");
+      assert(!json.some((x) => x.id === caronaId), "destino muito além do fim não deve casar");
+    });
+    await test("GET /api/caronas?dest marca parcial quando destino só um pouco além", async () => {
+      const alemPerto = {
+        lat: DESTINO.lat + (DESTINO.lat - ORIGEM.lat) * 0.02,
+        lng: DESTINO.lng + (DESTINO.lng - ORIGEM.lng) * 0.02,
+      };
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${alemPerto.lat}&dest_lng=${alemPerto.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
+      eq(status, 200, "status");
+      const c = json.find((x) => x.id === caronaId);
+      if (c) assert(c.compat_rota === "parcial", "destino logo após o fim deve ser parcial, não total");
     });
 
     /* =================== PEDIDOS =================== */
