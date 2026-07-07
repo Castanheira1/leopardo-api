@@ -131,9 +131,15 @@
                                 <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
-                        <div id="motoristasDestino" style="display:none;max-height:36vh;overflow-y:auto;margin-bottom:10px;">
-                            <strong class="painel-tit">Motoristas indo para lá</strong>
-                            <div id="listaMotoristasDestino"></div>
+                        <div id="motoristasDestinoWrap" style="display:none;max-height:36vh;overflow-y:auto;margin-bottom:10px;">
+                            <div id="motoristasIndoDestino">
+                                <strong class="painel-tit">Motoristas indo para lá</strong>
+                                <div id="listaIndoDestino"></div>
+                            </div>
+                            <div id="motoristasPorPerto" style="display:none;margin-top:10px;">
+                                <strong class="painel-tit">Por perto (sem rota publicada)</strong>
+                                <div id="listaPorPerto"></div>
+                            </div>
                         </div>
                         <button id="btnCtaPedir" class="btn btn-primary btn-block" onclick="pedirCarona()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pedir carona</button>
                     </div>
@@ -1729,23 +1735,31 @@
         </div>`;
     }
 
-    // Ao escolher um local no mapa, monta a lista (estilo Uber) de motoristas para lá,
-    // do mais perto ao mais longe. Junta DUAS fontes para nunca vir vazia à toa:
-    //   1) caronas indo para o destino escolhido (com vaga);
-    //   2) motoristas online por perto no modo amarelo (sem destino publicado).
+    // Ao escolher um local no mapa, monta a lista (estilo Uber):
+    //   1) caronas indo para o destino escolhido (com vaga) — seção "indo para lá";
+    //   2) motoristas online por perto no modo amarelo — seção separada, sem fila.
     // dest = null -> esconde a lista.
     async function carregarCaronasDestino(dest) {
-        const cont = document.getElementById('motoristasDestino');
-        const lista = document.getElementById('listaMotoristasDestino');
-        if (!cont || !lista) return;
+        const wrap = document.getElementById('motoristasDestinoWrap');
+        const contIndo = document.getElementById('motoristasIndoDestino');
+        const contPerto = document.getElementById('motoristasPorPerto');
+        const listaIndo = document.getElementById('listaIndoDestino');
+        const listaPerto = document.getElementById('listaPorPerto');
+        if (!wrap || !listaIndo || !listaPerto) return;
         if (!dest) {
             if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
-            cont.style.display = 'none'; lista.innerHTML = ''; return;
+            wrap.style.display = 'none';
+            listaIndo.innerHTML = '';
+            listaPerto.innerHTML = '';
+            if (contPerto) contPerto.style.display = 'none';
+            return;
         }
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
-        cont.style.display = 'block';
-        lista.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
+        wrap.style.display = 'block';
+        listaIndo.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
+        listaPerto.innerHTML = '';
+        if (contPerto) contPerto.style.display = 'none';
         try {
             const qCaronas = new URLSearchParams();
             if (o) { qCaronas.set('lat', o.lat); qCaronas.set('lng', o.lng); }
@@ -1759,15 +1773,13 @@
                 o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
                 o ? fetchWithAuth('/api/motoristas-rota' + qRota).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
             ]);
-            // Posição na fila (mais perto->mais longe ao longo da rota escolhida) — só
-            // decoração da lista/mapa; quem decide a ordem de chamada é o backend.
             const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
                 .filter((m) => m.carona_id)
                 .map((m) => [m.id, m.ordem]));
-            // Chave por motorista: a carona (indo ao destino) tem prioridade sobre o modo geral.
-            const porMotorista = new Map();
+            const indoDestino = [];
+            const porPerto = [];
             (Array.isArray(caronas) ? caronas : []).forEach((c) => {
-                porMotorista.set(c.motorista_id, {
+                indoDestino.push({
                     id: c.motorista_id, caronaId: c.id,
                     nome: c.motorista_empresa || c.motorista_nome, placa: c.placa, tag: c.tag,
                     foto: c.foto_carro_url, vagas: c.vagas, destino: c.destino_texto,
@@ -1775,23 +1787,27 @@
                     ordem: ordemPorId.has(c.motorista_id) ? ordemPorId.get(c.motorista_id) : null,
                 });
             });
+            const idsIndo = new Set(indoDestino.map((it) => it.id));
             (Array.isArray(online) ? online : []).forEach((m) => {
-                if (m.carona_id) return;              // com carona: só entra se casar com o destino (já veio acima)
-                if (porMotorista.has(m.id)) return;   // já listado
+                if (m.carona_id || idsIndo.has(m.id)) return;
                 const dist = (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity;
-                porMotorista.set(m.id, {
+                porPerto.push({
                     id: m.id, caronaId: null,
                     nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
-                    vagas: m.vagas || 1, destino: null, dist,
-                    ordem: null,   // modo amarelo: perto, mas sem rota publicada
+                    vagas: m.vagas || 1, destino: null, dist, ordem: null,
                 });
             });
-            const itens = [...porMotorista.values()].sort((a, b) => a.dist - b.dist);
-            lista.innerHTML = itens.length
-                ? itens.map(cardMotoristaDisponivel).join('')
-                : '<p class="cam-hint">Nenhum motorista por perto agora. Você pode pedir a carona mesmo assim — avisamos os motoristas na sua rota.</p>';
+            indoDestino.sort((a, b) => a.dist - b.dist);
+            porPerto.sort((a, b) => a.dist - b.dist);
+            listaIndo.innerHTML = indoDestino.length
+                ? indoDestino.map(cardMotoristaDisponivel).join('')
+                : '<p class="cam-hint">Ninguém indo para esse local agora. Você pode pedir a carona — avisamos motoristas na sua rota.</p>';
+            if (porPerto.length) {
+                if (contPerto) contPerto.style.display = 'block';
+                listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
+            }
         } catch (_) {
-            lista.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
+            listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
         }
     }
 
