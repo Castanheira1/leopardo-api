@@ -2901,9 +2901,21 @@
     };
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
-    let fleet = { markers: {}, timer: null };
+    let fleet = { markers: {}, timer: null, map: null };
+    function limparFrotaAoVivo() {
+        if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+        Object.keys(fleet.markers).forEach((id) => {
+            const it = fleet.markers[id];
+            if (it.car) it.car.setMap(null);
+            if (it.linha) it.linha.setMap(null);
+            if (it.destinoMk) it.destinoMk.setMap(null);
+        });
+        fleet.markers = {};
+    }
     function iniciarFrotaAoVivo(map) {
+        if (fleet.map && fleet.map !== map) limparFrotaAoVivo();
         if (fleet.timer) clearInterval(fleet.timer);
+        fleet.map = map;
         async function tick() {
             if (document.hidden) return;   // segundo plano: não polla
             try {
@@ -2933,7 +2945,7 @@
                     let item = fleet.markers[m.id];
                     if (item) {
                         item.m = m;
-                        const prev = item.lastPos || pos;
+                        const prev = item.lastPos;
                         atualizarPosicaoCarro(item.car, pos, prev);
                         item.lastPos = pos;
                         if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
