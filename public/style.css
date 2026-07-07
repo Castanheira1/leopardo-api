@@ -688,11 +688,11 @@ html.teclado-aberto {
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
-    padding: 0 16px calc(10px + env(safe-area-inset-bottom));
+    padding: 0 16px 0;
     transition: transform 0.22s ease, bottom 0.22s ease;
     touch-action: manipulation;
     overscroll-behavior: contain;
-    --sheet-peek: 118px;
+    --sheet-peek: 140px;
 }
 .acao-sheet-body {
     flex: 1 1 auto;
@@ -703,7 +703,8 @@ html.teclado-aberto {
 }
 .acao-sheet-footer {
     flex-shrink: 0;
-    padding-top: 10px;
+    padding-top: 8px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: #161719;
 }
@@ -739,7 +740,7 @@ html.teclado-aberto {
     display: none;
 }
 .acao-sheet.sem-cta-footer {
-    --sheet-peek: 58px;
+    --sheet-peek: calc(58px + env(safe-area-inset-bottom, 0px));
 }
 .acao-grip {
     position: relative;

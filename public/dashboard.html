@@ -1021,6 +1021,7 @@
     function atualizarBtnLimparPed(visivel) {
         const btn = document.getElementById('btnLimparPed');
         if (btn) btn.style.display = visivel ? 'inline-block' : 'none';
+        sincronizarPeekSheetPed();
     }
     function limparDestinoPassageiro() {
         const inp = document.getElementById('destPedInput');
@@ -1582,7 +1583,9 @@
             atualizarHintDestinoPed();
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
-            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 118);
+            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 140);
+            sincronizarPeekSheetPed();
+            window.addEventListener('resize', sincronizarPeekSheetPed);
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1640,6 +1643,7 @@
         const foot = sheet?.querySelector('.acao-sheet-footer');
         if (foot) foot.style.display = temMotoristasVisiveis ? 'none' : '';
         if (sheet) sheet.classList.toggle('sem-cta-footer', !!temMotoristasVisiveis);
+        sincronizarPeekSheetPed();
     }
 
     function parseDatetimeLocalValue(v) {
@@ -3185,21 +3189,46 @@
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
     // peek = quanto fica visível (a "abinha") quando colapsado.
+    function medirPeekSheet(sheet) {
+        if (!sheet) return 140;
+        const grip = sheet.querySelector('.acao-grip');
+        const foot = sheet.querySelector('.acao-sheet-footer');
+        let h = 0;
+        if (grip) h += grip.getBoundingClientRect().height;
+        if (foot && getComputedStyle(foot).display !== 'none') h += foot.getBoundingClientRect().height;
+        return Math.ceil(h + 4);
+    }
+    function sincronizarPeekSheetPed() {
+        const sheet = document.getElementById('acaoSheetPed');
+        if (!sheet) return;
+        const peek = medirPeekSheet(sheet);
+        sheet.style.setProperty('--sheet-peek', peek + 'px');
+        sheet._peekVis = peek;
+    }
     function tornarArrastavel(sheet, grip, peekVis = 44) {
         if (!sheet || !grip || sheet._dragReady) return;
         sheet._dragReady = true;
+        const peek = () => sheet._peekVis || peekVis;
         const curT = () => (new DOMMatrix(getComputedStyle(sheet).transform).m42 || 0);
         let startY = 0, startT = 0, dragging = false, moved = 0, limite = 0;
         const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
-        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); limite = sheet.offsetHeight - peekVis; sheet.style.transition = 'none'; startT = curT(); };
+        const down = (e) => {
+            dragging = true; moved = 0; startY = yOf(e);
+            const p = peek();
+            limite = sheet.offsetHeight - p;
+            sheet.style.setProperty('--sheet-peek', p + 'px');
+            sheet.style.transition = 'none'; startT = curT();
+        };
         const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; sheet.style.transform = `translateY(${Math.max(0, Math.min(limite, startT + moved))}px)`; };
         const up = () => {
             if (!dragging) return;
             dragging = false;
             const t = curT();
+            const p = peek();
             sheet.style.transition = '';
             sheet.style.transform = '';
-            const colapsar = Math.abs(moved) < 6 ? !sheet.classList.contains('collapsed') : t > (sheet.offsetHeight - peekVis) / 2;
+            sheet.style.setProperty('--sheet-peek', p + 'px');
+            const colapsar = Math.abs(moved) < 6 ? !sheet.classList.contains('collapsed') : t > (sheet.offsetHeight - p) / 2;
             sheet.classList.toggle('collapsed', colapsar);
         };
         grip.addEventListener('mousedown', down);
