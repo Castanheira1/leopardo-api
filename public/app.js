@@ -310,19 +310,27 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
-// Carro visto de cima (SVG) para marcadores no mapa. variant: 'white' | 'gold'.
-// Estilo limpo (frente para cima): carroceria clara, para-brisa e vidro traseiro
-// escuros, teto claro e retrovisores — como os ícones de carro dos apps de mapa.
+// Carro visto de cima em perspectiva 3/4 (estilo Uber/Google Maps).
+// variant: 'white' | 'gold'. Frente aponta para cima; gira com heading.
 function svgCarroTopoUrl(heading = 0, variant = 'white') {
     const body = variant === 'gold' ? '#EAD298' : '#ffffff';
-    const stroke = variant === 'gold' ? '#b78d1a' : '#c9ccd2';
-    const glass = '#2b333b';
+    const bodySide = variant === 'gold' ? '#d4bc7a' : '#eceff1';
+    const stroke = variant === 'gold' ? '#9a7514' : '#b0b8c0';
+    const hood = variant === 'gold' ? '#fff8dc' : '#ffffff';
+    const glass = '#2f3640';
+    const glassFront = '#455a64';
     const h = Number(heading) || 0;
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 48" width="28" height="34">'
-        + `<g transform="rotate(${h} 20 24)">`
-        + `<rect x="11" y="4" width="18" height="40" rx="9" fill="${body}" stroke="${stroke}" stroke-width="1.2"/>`
-        + `<rect x="14" y="9" width="12" height="8" rx="2.5" fill="${glass}"/>`
-        + `<rect x="14" y="31" width="12" height="8" rx="2.5" fill="${glass}"/>`
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="30" height="40">'
+        + `<g transform="rotate(${h} 24 32)">`
+        + `<path d="M24 5 C16 5 11 10 10 17 L9 45 C9 53 14 58 24 58 C34 58 39 53 39 45 L38 17 C37 10 32 5 24 5Z" fill="${body}" stroke="${stroke}" stroke-width="1.1"/>`
+        + `<path d="M10 17 L9 45 C9 53 14 58 24 58 L24 5 C16 5 11 10 10 17Z" fill="${bodySide}" opacity="0.6"/>`
+        + `<path d="M16 7 C20 5 28 5 32 7 L30 12 C27 10 21 10 18 12Z" fill="${hood}" opacity="0.95"/>`
+        + `<path d="M15 15 C18 12 30 12 33 15 L34 25 L14 25Z" fill="${glassFront}"/>`
+        + `<path d="M14 27 L34 27 L32 43 L16 43Z" fill="${glass}"/>`
+        + `<path d="M16 45 L32 45 L30 51 L18 51Z" fill="${glassFront}"/>`
+        + `<ellipse cx="10.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
+        + `<ellipse cx="37.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
+        + '<path d="M17 54 L31 54 L30 56.5 L18 56.5Z" fill="#e53935"/>'
         + '</g></svg>';
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -355,8 +363,8 @@ const _regZoomCar = new WeakMap();
 
 function tamanhoCarroPorZoom(zoom) {
     const z = Math.max(10, Math.min(20, Number(zoom) || 15));
-    const f = Math.pow(1.12, z - 15);   // zoom 15 = 28×34 px (referência)
-    return { w: Math.round(28 * f), h: Math.round(34 * f) };
+    const f = Math.pow(1.12, z - 15);   // zoom 15 = 30×40 px (referência)
+    return { w: Math.round(30 * f), h: Math.round(40 * f) };
 }
 
 function vincularZoomCarros(map) {
