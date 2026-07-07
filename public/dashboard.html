@@ -1272,12 +1272,8 @@
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
         // passageiro o marcador fica invisível (só serve de "pega" para arrastar) e o
         // pulso anda junto. Nunca deixa o ícone derrubar o mapa caso falhe.
-        let iconeUser;
-        try {
-            iconeUser = comoCarro ? CAR_ICON_URL : null;
-        } catch (_) { iconeUser = null; }
         const mkOrigem = criarMarcador({
-            position: origem, map, icon: iconeUser, invisivel: !comoCarro,
+            position: origem, map, invisivel: !comoCarro,
             iconW: comoCarro ? 30 : undefined, iconH: comoCarro ? 40 : undefined,
             iconVariant: comoCarro ? 'white' : undefined,
             title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
@@ -1454,6 +1450,7 @@
 
         return {
             map,
+            marcadorCarro: comoCarro ? mkOrigem : null,
             getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
             getDestino: () => destino,
             // Favoritos e afins: define o destino como se tivesse buscado na barra.
@@ -1490,7 +1487,7 @@
             tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'), 92);
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
-                acompanharProprioCarro(selOfe.map);
+                acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
                 iniciarPedidosAoVivo(selOfe.map);
             }
             return selOfe;
@@ -2136,7 +2133,7 @@
             motoristaOnlineModo = true;
             atualizarUiMotoristaOnline();
             iniciarBroadcastLocalizacao(true);
-            acompanharProprioCarro(selOfe.map);
+            acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
             iniciarPollContatosMotorista();
             await ativarWakeLock();
@@ -2208,7 +2205,7 @@
             motoristaOnlineModo = true;
             atualizarUiMotoristaOnline();
             iniciarBroadcastLocalizacao(true);
-            acompanharProprioCarro(selOfe.map);
+            acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
             iniciarPollContatosMotorista();
             await ativarWakeLock();
@@ -2244,7 +2241,7 @@
             }
             atualizarUiMotoristaOnline();
             iniciarBroadcastLocalizacao(true);
-            acompanharProprioCarro(selOfe.map);
+            acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
             if (!motoristaModoDestino) iniciarPollContatosMotorista();
             await ativarWakeLock();
@@ -2787,7 +2784,7 @@
                 vv.carPosAnterior = { ...vv.posMotorista };
             } else {
                 vv.carMarker = criarMarcador({
-                    position: vv.posMotorista, map: vv.map, icon: CAR_ICON_URL,
+                    position: vv.posMotorista, map: vv.map,
                     iconW: 30, iconH: 40, iconVariant: 'white', title: 'Motorista', zIndex: 999,
                 });
                 vv.carPosAnterior = { ...vv.posMotorista };
@@ -2971,10 +2968,6 @@
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
-    // Carro visto de cima: carroceria branca, vidro escuro, lanternas vermelhas.
-    const CAR_ICON_URL = svgCarroTopoUrl('white');
-    const CAR_ICON_GOLD_URL = svgCarroTopoUrl('gold');
-
     // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
     const ICN = {
         pin: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
@@ -3096,10 +3089,9 @@
                             item.rotaCalculando = null;
                         }
                     } else {
-                        const icon = m.carona_id ? CAR_ICON_URL : CAR_ICON_GOLD_URL;
                         const iconVariant = m.carona_id ? 'white' : 'gold';
                         const car = criarMarcador({
-                            position: pos, map, icon,
+                            position: pos, map,
                             iconW: 30, iconH: 40, iconVariant,
                             badge: seloFilaCarro(m),
                             title: m.nome + (m.placa ? ' • ' + m.placa : '')
@@ -3293,12 +3285,16 @@
         mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id });
     }
 
-    // Mostra o próprio carro do motorista no mapa de "Oferecer" (atualiza a cada 5s).
-    let selfCar = { marker: null, timer: null, lastPos: null };
-    function acompanharProprioCarro(map) {
+    // Mostra o próprio carro no mapa (atualiza a cada 5s). Se marcadorEmprestado for
+    // passado (ex.: mkOrigem do criarSeletor), reutiliza o mesmo ícone — evita dois
+    // carrinhos no mesmo GPS com rotações diferentes (efeito "hélice").
+    let selfCar = { marker: null, timer: null, lastPos: null, emprestado: false };
+    function acompanharProprioCarro(map, marcadorEmprestado) {
         if (selfCar.timer) clearInterval(selfCar.timer);
-        if (selfCar.marker) { selfCar.marker.setMap(null); selfCar.marker = null; }
-        selfCar.lastPos = null;
+        if (selfCar.marker && !selfCar.emprestado) selfCar.marker.setMap(null);
+        selfCar.marker = marcadorEmprestado || null;
+        selfCar.emprestado = !!marcadorEmprestado;
+        selfCar.lastPos = marcadorEmprestado ? null : selfCar.lastPos;
         async function upd() {
             try {
                 const p = await obterLocalizacao();
@@ -3307,9 +3303,10 @@
                     atualizarPosicaoCarro(selfCar.marker, pos, selfCar.lastPos);
                 } else {
                     selfCar.marker = criarMarcador({
-                        position: pos, map, icon: CAR_ICON_URL,
+                        position: pos, map,
                         iconW: 30, iconH: 40, iconVariant: 'white', title: 'Você', zIndex: 999,
                     });
+                    selfCar.emprestado = false;
                 }
                 selfCar.lastPos = pos;
             } catch (_) { /* sem GPS: ignora */ }
