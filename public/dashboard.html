@@ -1738,7 +1738,11 @@
         const cont = document.getElementById('motoristasDestino');
         const lista = document.getElementById('listaMotoristasDestino');
         if (!cont || !lista) return;
-        if (!dest) { cont.style.display = 'none'; lista.innerHTML = ''; return; }
+        if (!dest) {
+            if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
+            cont.style.display = 'none'; lista.innerHTML = ''; return;
+        }
+        if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
         cont.style.display = 'block';
         lista.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
@@ -2904,6 +2908,7 @@
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
     let fleet = { markers: {}, timer: null, map: null };
+    let atualizarFrotaAoVivo = null;
     function limparFrotaAoVivo() {
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
         Object.keys(fleet.markers).forEach((id) => {
@@ -3016,6 +3021,7 @@
             } catch (_) {}
         }
         tick();
+        atualizarFrotaAoVivo = tick;
         fleet.timer = setInterval(tick, 8000);   // equilíbrio tempo real × carga/bateria
     }
 
