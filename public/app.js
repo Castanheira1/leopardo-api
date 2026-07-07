@@ -269,15 +269,33 @@ function manobraLegada(m) {
     return String(m).toLowerCase().replace(/_/g, '-');
 }
 
+function formatarDuracaoMs(ms) {
+    const n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const min = Math.round(n / 60000);
+    if (min < 60) return min + ' min';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+function haversineKmApp(lat1, lng1, lat2, lng2) {
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) ** 2
+        + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function respostaRotaLegada(route) {
-    const leg = route.legs?.[0] || route;
-    const distText = leg.localizedValues?.distance?.text
-        || route.localizedValues?.distance?.text
-        || formatarMetros(route.distanceMeters ?? leg.distanceMeters);
-    const durText = leg.localizedValues?.duration?.text
-        || route.localizedValues?.duration?.text
-        || '';
-    const steps = (leg.steps || []).map((s) => ({
+    const leg = route.legs?.[0];
+    const distText = route.localizedValues?.distance?.text
+        || leg?.localizedValues?.distance?.text
+        || formatarMetros(route.distanceMeters ?? leg?.distanceMeters);
+    const durText = route.localizedValues?.duration?.text
+        || leg?.localizedValues?.duration?.text
+        || formatarDuracaoMs(route.durationMillis ?? leg?.durationMillis);
+    const steps = (leg?.steps || []).map((s) => ({
         distance: { text: s.localizedValues?.distance?.text || formatarMetros(s.distanceMeters) },
         maneuver: manobraLegada(s.navigationInstruction?.maneuver),
         instructions: s.navigationInstruction?.instructions || '',
@@ -285,6 +303,18 @@ function respostaRotaLegada(route) {
     return {
         routes: [{ legs: [{ distance: { text: distText }, duration: { text: durText }, steps }] }],
         _route: route,
+    };
+}
+
+function respostaRotaFallback(o, d) {
+    const distKm = haversineKmApp(o.lat, o.lng, d.lat, d.lng);
+    const distText = distKm >= 1
+        ? distKm.toFixed(1).replace('.', ',') + ' km'
+        : Math.round(distKm * 1000) + ' m';
+    const min = Math.max(1, Math.round((distKm / 35) * 60));
+    return {
+        routes: [{ legs: [{ distance: { text: distText }, duration: { text: min + ' min' }, steps: [] }] }],
+        _fallbackLine: [o, d],
     };
 }
 
@@ -584,35 +614,15 @@ function criarMarcador(opts = {}) {
     return api;
 }
 
-// Rotas: Route.computeRoutes (novo) com fallback para DirectionsService (legado).
+// Rotas via Route.computeRoutes (Routes API). Sem DirectionsService legado.
 function criarRotaControle(map, polylineOptions = {}) {
     const estilo = { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95, ...polylineOptions };
     let polylines = [];
-    let dirRenderer = null;
 
-    function calcularLegado(origem, destino) {
-        const ds = new google.maps.DirectionsService();
-        return new Promise((resolve, reject) => {
-            ds.route({
-                origin: normalizarLatLng(origem),
-                destination: normalizarLatLng(destino),
-                travelMode: google.maps.TravelMode.DRIVING,
-            }, (result, status) => {
-                if (status === google.maps.DirectionsStatus.OK) resolve(result);
-                else reject(new Error(String(status)));
-            });
-        });
-    }
-
-    function desenharLegado(resp) {
-        if (!map) return;
-        dirRenderer = dirRenderer || new google.maps.DirectionsRenderer({
-            suppressMarkers: true,
-            preserveViewport: true,
-            polylineOptions: estilo,
-        });
-        dirRenderer.setMap(map);
-        dirRenderer.setDirections(resp);
+    function desenharLinha(pontos) {
+        if (!map || !pontos?.length) return;
+        const pl = new google.maps.Polyline({ path: pontos, map, ...estilo });
+        polylines.push(pl);
     }
 
     const ctrl = {
@@ -620,34 +630,40 @@ function criarRotaControle(map, polylineOptions = {}) {
             ctrl.limpar();
             const o = normalizarLatLng(origem);
             const d = normalizarLatLng(destino);
+            if (!o || !d) throw new Error('coordenadas inválidas');
+            if (!_RouteClass) await carregarMaps();
+
             try {
                 const { routes } = await _RouteClass.computeRoutes({
                     origin: o,
                     destination: d,
                     travelMode: 'DRIVING',
-                    fields: ['path', 'distance', 'duration', 'legs'],
+                    fields: ['path', 'distanceMeters', 'durationMillis', 'localizedValues', 'legs'],
                 });
                 if (!routes?.length) throw new Error('sem rota');
                 const route = routes[0];
                 if (map) {
                     polylines = route.createPolylines() || [];
-                    if (!polylines.length) throw new Error('sem polyline');
-                    polylines.forEach((pl) => {
-                        if (pl.setOptions) pl.setOptions(estilo);
-                        pl.setMap(map);
-                    });
+                    if (!polylines.length && route.path?.length) {
+                        desenharLinha(route.path);
+                    } else {
+                        polylines.forEach((pl) => {
+                            if (pl.setOptions) pl.setOptions(estilo);
+                            pl.setMap(map);
+                        });
+                    }
                 }
                 return respostaRotaLegada(route);
-            } catch (_) {
-                const resp = await calcularLegado(o, d);
-                desenharLegado(resp);
+            } catch (err) {
+                console.warn('Route.computeRoutes indisponível — linha reta:', err?.message || err);
+                const resp = respostaRotaFallback(o, d);
+                if (map && resp._fallbackLine) desenharLinha(resp._fallbackLine);
                 return resp;
             }
         },
         limpar() {
             polylines.forEach((pl) => pl.setMap(null));
             polylines = [];
-            if (dirRenderer) dirRenderer.setMap(null);
         },
         setMap(m) {
             if (!m) ctrl.limpar();
@@ -661,8 +677,8 @@ function criarRotaControle(map, polylineOptions = {}) {
                     if (pl.setOptions) pl.setOptions(estilo);
                     pl.setMap(map);
                 });
-            } else if (resp?.routes?.length) {
-                desenharLegado(resp);
+            } else if (resp?._fallbackLine) {
+                desenharLinha(resp._fallbackLine);
             }
         },
     };
