@@ -1981,6 +1981,7 @@
                 if (a.compatRota !== b.compatRota) return a.compatRota === 'parcial' ? 1 : -1;
                 return a.dist - b.dist;
             });
+            sincronizarModalCarroLista(indoDestino);
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
@@ -2160,11 +2161,51 @@
         const d = destinoPublicadoCarro(m);
         desenharRotaMini('carroMapa', o, d);
     }
-    function fecharCarro() { document.getElementById('modalCarro').style.display = 'none'; }
+    function fecharCarro() {
+        document.getElementById('modalCarro').style.display = 'none';
+    }
+    function fecharCarroLimpo(aviso) {
+        fecharCarro();
+        carroSel = null;
+        if (aviso) msg(aviso);
+    }
+    // Modal do mapa: fecha se o motorista saiu ou cancelou a carona publicada.
+    function sincronizarModalCarroAoVivo(lista, idsRemovidos) {
+        const modal = document.getElementById('modalCarro');
+        if (!modal || modal.style.display !== 'flex' || !carroSel) return;
+        if (idsRemovidos && idsRemovidos.some((id) => +id === +carroSel.id)) {
+            fecharCarroLimpo('Este motorista não está mais disponível.');
+            const dest = selPed?.getDestino?.();
+            if (dest) carregarCaronasDestino(dest);
+            return;
+        }
+        const m = (Array.isArray(lista) ? lista : []).find((x) => +x.id === +carroSel.id);
+        if (!m) {
+            fecharCarroLimpo('Este motorista não está mais disponível.');
+            const dest = selPed?.getDestino?.();
+            if (dest) carregarCaronasDestino(dest);
+            return;
+        }
+        if (carroSel.carona_id && !m.carona_id) {
+            fecharCarroLimpo('Esta carona foi encerrada pelo motorista.');
+            const dest = selPed?.getDestino?.();
+            if (dest) carregarCaronasDestino(dest);
+        }
+    }
+    function sincronizarModalCarroLista(indoDestino) {
+        const modal = document.getElementById('modalCarro');
+        if (!modal || modal.style.display !== 'flex' || !carroSel?.carona_id) return;
+        const ainda = (Array.isArray(indoDestino) ? indoDestino : [])
+            .some((it) => +it.id === +carroSel.id && it.caronaId);
+        if (!ainda) fecharCarroLimpo('Esta carona foi encerrada pelo motorista.');
+    }
     async function pedirCaronaDoCarro() {
         const m = carroSel;
+        if (!m || !m.carona_id) {
+            fecharCarroLimpo('Essa carona não está mais disponível.');
+            return;
+        }
         fecharCarro();
-        if (!m || !m.carona_id) return msg('Essa carona não está mais disponível.', 'error');
         await pedirVaga(m.carona_id, m.carona_vagas || m.vagas || 1);
     }
 
@@ -3185,7 +3226,8 @@
         if (fleet.timer) clearInterval(fleet.timer);
         fleet.map = map;
         async function tick() {
-            if (document.hidden) return;   // segundo plano: não polla
+            const modalCarroAberto = carroSel && document.getElementById('modalCarro')?.style.display === 'flex';
+            if (document.hidden && !modalCarroAberto) return;
             try {
                 // Posição do passageiro: motoristas online num raio de 600 m. Com um
                 // destino escolhido, junta caronas publicadas na rota (fora do raio de
@@ -3262,8 +3304,10 @@
                         }
                     }
                 });
+                const removidos = [];
                 Object.keys(fleet.markers).forEach((id) => {
                     if (!vistos[id]) {
+                        removidos.push(id);
                         const it = fleet.markers[id];
                         it.car.setMap(null);
                         if (it.rotaCtrl) it.rotaCtrl.limpar();
@@ -3271,6 +3315,7 @@
                         delete fleet.markers[id];
                     }
                 });
+                sincronizarModalCarroAoVivo(lista, removidos);
             } catch (_) {}
         }
         tick();
@@ -3541,6 +3586,7 @@
             try {
                 const r = await fetchWithAuth('/api/motorista/contatos/mapa');
                 if (!r.ok) return;
+                limparPulsosContatoLegados();
                 const lista = await r.json();
                 const vistos = {};
                 let novos = 0;
