@@ -1736,7 +1736,9 @@
     //   - online geral (sem carona): motorista disponível por perto.
     // Em ambos, sempre dá pra buzinar/ligar/chamar no WhatsApp direto da lista.
     function cardMotoristaDisponivel(it) {
-        const km = it.dist != null && isFinite(it.dist) ? `${Number(it.dist).toFixed(1)} km` : '';
+        // Só mostra a distância quando é confiável (>= 0,1 km). Abaixo disso o GPS
+        // do motorista costuma estar defasado e "0.0 km" passava informação falsa.
+        const km = it.dist != null && isFinite(it.dist) && it.dist >= 0.1 ? `${Number(it.dist).toFixed(1)} km` : '';
         const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
         const empresa = esc(it.nome || 'Motorista');
         const posicao = it.caronaId && it.ordem != null ? `<span class="ride-posicao">Nº ${it.ordem + 1} na fila</span>` : '';
@@ -1745,7 +1747,7 @@
             : `${ICN.car} Disponível agora — combine o destino`;
         const botao = it.caronaId ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${it.caronaId})">Solicitar</button>` : '';
         return `<div class="ride-item">
-            ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb">` : ''}
+            ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb" loading="lazy" onerror="this.remove()">` : ''}
             <div class="ride-info">
                 <strong>${empresa}</strong> ${posicao}<br>
                 <small>${carro}</small><br>
