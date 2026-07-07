@@ -386,77 +386,25 @@ body {
     box-sizing: border-box;
 }
 .acao-sheet .cam-hint {
-    text-align: left;
-    color: #9aa0a6;
-    font-size: 0.88rem;
-    line-height: 1.4;
-}
-.acao-sheet-ped .acao-grip--minimal {
-    padding: 10px 0 6px;
-}
-.acao-sheet-ped .acao-grip--minimal .acao-titulo {
-    display: none;
-}
-.sheet-sec-tit {
-    display: block;
-    margin: 14px 0 8px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: #9aa0a6;
-}
-.sheet-hint-imediato,
-.sheet-empty-hint {
-    margin: 0 0 10px;
-    padding: 0;
-    text-align: left;
-    font-size: 0.88rem;
-    color: #9aa0a6;
-    line-height: 1.4;
-}
-.sheet-empty-hint strong {
-    color: #e8eaed;
-    font-weight: 600;
+    text-align: center;
 }
 .hint-destino-obrigatorio {
-    margin: 0 0 12px;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: 0;
-    line-height: 1.4;
-    color: #9aa0a6;
-    font-size: 0.88rem;
-    text-align: left;
-}
-.hint-destino-obrigatorio strong {
-    color: #e8eaed;
-    font-weight: 600;
-}
-.acao-sheet-ped .form-row-2col .form-group label {
-    text-align: left;
-    min-height: auto;
-    display: block;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: #9aa0a6;
-    margin-bottom: 6px;
-}
-.acao-sheet-ped .form-row-2col .form-group input {
-    text-align: left;
-    padding: 11px 12px;
-    background: #1e1f23;
-    border: 1px solid #2e3036;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    background: rgba(234, 210, 152, 0.12);
+    border: 1px solid rgba(234, 210, 152, 0.45);
     border-radius: 10px;
-    color: #e8eaed;
-    font-size: 0.95rem;
+    line-height: 1.35;
 }
-.acao-sheet-ped .form-row-2col .form-group input:focus {
-    border-color: rgba(234, 210, 152, 0.55);
-    box-shadow: 0 0 0 2px rgba(234, 210, 152, 0.15);
+.form-slot-reservado {
+    visibility: hidden;
+    pointer-events: none;
+}
+.acao-sheet-ped .form-row-2col {
+    align-items: end;
+}
+.motoristas-destino-wrap {
+    min-height: 52px;
 }
 .map-search-atencao {
     animation: map-search-pulse 0.9s ease-in-out 3;
@@ -800,9 +748,6 @@ html.teclado-aberto {
 }
 .acao-sheet.collapsed .acao-sheet-body {
     display: none;
-}
-.acao-sheet.sem-cta-footer {
-    --sheet-peek: calc(58px + env(safe-area-inset-bottom, 0px));
 }
 .acao-grip {
     position: relative;
