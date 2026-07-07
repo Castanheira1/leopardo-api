@@ -647,6 +647,21 @@ gmp-place-autocomplete.map-search-float {
     display: block;
 }
 .acao-titulo { color: #fff; font-weight: 700; font-size: 1rem; letter-spacing: 0.3px; }
+.btn-limpar-dest {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px 12px;
+    border: 1px solid rgba(234, 210, 152, 0.7);
+    border-radius: 999px;
+    background: rgba(15, 61, 62, 0.55);
+    color: #EAD298;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+}
 
 /* Painéis (listas) abertos pelo menu */
 .painel-box { text-align: left; }

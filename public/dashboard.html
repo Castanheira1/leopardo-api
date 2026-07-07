@@ -120,7 +120,7 @@
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
-                        <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
+                        <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span><button type="button" id="btnLimparPed" class="btn-limpar-dest" style="display:none;" onclick="limparDestino('mapPed')">Limpar destino</button></div>
                         <div class="form-row form-row-2col">
                             <div class="form-group">
                                 <label>Quando?</label>
@@ -152,7 +152,7 @@
                     <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div id="acaoSheetOfe" class="acao-sheet">
-                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
+                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span><button type="button" id="btnLimparOfe" class="btn-limpar-dest" style="display:none;" onclick="limparDestino('mapOfe')">Limpar destino</button></div>
                         <div class="form-row" id="vagasOfeWrap">
                             <div class="form-group">
                                 <label>Vagas disponíveis</label>
@@ -920,6 +920,11 @@
         const s = document.getElementById('bootSplash');
         if (s) s.remove();
     }
+    // Escolheu destino errado: limpa a marcação/rota do mapa.
+    function limparDestino(mapId) {
+        const sel = mapId === 'mapPed' ? selPed : selOfe;
+        if (sel && sel.limparRota) sel.limparRota();
+    }
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
         esconderBootSplash();
@@ -1339,6 +1344,8 @@
             }, 4000);
         }
 
+        const btnLimpar = document.getElementById(mapId === 'mapPed' ? 'btnLimparPed' : 'btnLimparOfe');
+        function mostrarBtnLimpar(v) { if (btnLimpar) btnLimpar.style.display = v ? 'inline-block' : 'none'; }
         function limparRota() {
             destino = null;
             previewSeq++;
@@ -1346,6 +1353,7 @@
             mkDestino.setMap(null);
             rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
+            mostrarBtnLimpar(false);
             if (onDestino) onDestino(null);
         }
 
@@ -1353,6 +1361,7 @@
         function setDestino(pos, texto) {
             const nomeDestino = (texto && String(texto).trim()) || '';
             destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
+            mostrarBtnLimpar(true);
             mkDestino.setMap(map);
             mkDestino.setPosition(pos);
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
