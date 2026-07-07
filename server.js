@@ -2398,6 +2398,23 @@ app.delete("/api/motorista/online", verificarAuth, async (req, res) => {
   }
 });
 
+// Modo amarelo (online_desde preenchido): nunca expõe carona/destino ao passageiro,
+// mesmo se ainda existir registro ativo inconsistente no banco.
+function motoristaVisivelPassageiro(row) {
+  if (!row?.online_desde) return row;
+  return {
+    ...row,
+    carona_id: null,
+    origem_texto: null,
+    destino_texto: null,
+    origem_lat: null,
+    origem_lng: null,
+    destino_lat: null,
+    destino_lng: null,
+    carona_vagas: null,
+  };
+}
+
 // Motoristas habilitados e online nos últimos 3 min (vistos pelo passageiro).
 app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   const { lat, lng } = req.query;
@@ -2413,14 +2430,15 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     // final é pela distância real até o passageiro — não pelo id de cadastro
     // — para o LIMIT 100 nunca cortar quem está fisicamente mais perto.
     const raio = temPos ? `WHERE (
-      (carona_id IS NULL AND ${distExpr} <= $4)
-      OR (carona_id IS NOT NULL AND ${distExpr} <= $5)
+      (online_desde IS NOT NULL AND ${distExpr} <= $4)
+      OR (online_desde IS NULL AND carona_id IS NULL AND ${distExpr} <= $4)
+      OR (online_desde IS NULL AND carona_id IS NOT NULL AND ${distExpr} <= $5)
     )` : "";
     const filtroProj = temPos ? `AND u.projeto_id = $6` : `AND u.projeto_id = $2`;
     const { rows } = await pool.query(
       `WITH candidatos AS (
          SELECT DISTINCT ON (u.id)
-                u.id, u.nome, u.sexo, l.lat, l.lng, l.vagas,
+                u.id, u.nome, u.sexo, l.lat, l.lng, l.vagas, l.online_desde,
                 h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
                 ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
                 ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas
@@ -2449,7 +2467,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
        LIMIT 100`,
       params
     );
-    res.json(rows);
+    res.json(rows.map(motoristaVisivelPassageiro));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar motoristas" });
@@ -2472,7 +2490,7 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT * FROM (
          SELECT DISTINCT ON (u.id)
-                u.id, u.nome, u.sexo, l.lat, l.lng,
+                u.id, u.nome, u.sexo, l.lat, l.lng, l.online_desde,
                 h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
                 ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
                 ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas,
@@ -2498,7 +2516,7 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
        LIMIT 100`,
       [req.user.id, origem_lat, origem_lng, destino_lat, destino_lng, pid, RAIO_ROTA_KM]
     );
-    res.json(rows.map((r, i) => ({ ...r, ordem: i })));
+    res.json(rows.map((r, i) => ({ ...motoristaVisivelPassageiro(r), ordem: i })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar motoristas na rota" });
