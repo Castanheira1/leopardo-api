@@ -131,7 +131,26 @@ document.addEventListener('DOMContentLoaded', () => {
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    location.href = 'index.html';
+    location.replace('index.html');
+}
+
+// Impede que o botão voltar do celular saia do app (como se tivesse clicado em Sair).
+// Fecha modais/painéis primeiro; só logout() encerra a sessão de propósito.
+function instalarGuardaVoltar(fecharCamada, opts = {}) {
+    const bloquearSaida = opts.bloquearSaida !== false;
+    if (!localStorage.getItem('token')) return;
+    const empilhar = () => {
+        try { history.pushState({ vapGuard: 1 }, '', location.href); } catch (_) {}
+    };
+    try { history.replaceState({ vapRoot: 1 }, '', location.href); } catch (_) {}
+    if (bloquearSaida) empilhar();
+    window.addEventListener('popstate', () => {
+        if (typeof fecharCamada === 'function' && fecharCamada()) {
+            empilhar();
+            return;
+        }
+        if (bloquearSaida) empilhar();
+    });
 }
 
 async function fetchWithAuth(url, options = {}) {
