@@ -793,6 +793,8 @@ html.teclado-aberto {
     transition: bottom 0.22s ease;
     touch-action: manipulation;
     overscroll-behavior: contain;
+    user-select: none;
+    -webkit-user-select: none;
 }
 .acao-sheet-body {
     flex: 0 1 auto;
@@ -842,19 +844,19 @@ html.teclado-aberto {
     overflow-y: auto;
     touch-action: pan-y;
 }
-/* Colapsado: só a alça fica visível — botão e campos aparecem ao puxar pra cima */
+/* Colapsado: fica só a alça. Título, campos e botão aparecem somente ao abrir. */
 .acao-sheet.collapsed .acao-sheet-body,
 .acao-sheet.collapsed .acao-sheet-footer,
-.acao-sheet.collapsed .limpar-rota-bar {
+.acao-sheet.collapsed .limpar-rota-bar,
+.acao-sheet.collapsed .acao-titulo {
     display: none !important;
 }
 .acao-sheet.collapsed .acao-grip {
-    padding: 10px 0 14px;
+    padding: 14px 0 calc(16px + env(safe-area-inset-bottom, 0px));
+    gap: 0;
 }
-.acao-sheet.collapsed .acao-titulo {
-    font-size: 0.92rem;
-    color: #9aa0a6;
-    font-weight: 600;
+.acao-sheet.collapsed {
+    background: rgba(22, 23, 25, 0.96);
 }
 .acao-grip {
     position: relative;
