@@ -447,7 +447,7 @@ function atualizarPosicaoCarro(mk, pos, posAnterior) {
     mk.setPosition(pos);
     if (!posAnterior || !mk.setHeading) return;
     const metros = distMetrosGps(posAnterior, pos);
-    if (metros < 12) return;   // GPS oscilando parado: não gira
+    if (metros < 8) return;   // GPS oscilando parado: não gira
     const h = bearingEntrePontos(posAnterior, pos);
     if (h == null) return;
     const ultimo = mk.getHeading ? mk.getHeading() : null;
