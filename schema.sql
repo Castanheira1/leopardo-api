@@ -361,10 +361,51 @@ CREATE INDEX IF NOT EXISTS idx_tokens_recup_hash
     ON tokens_recuperacao(token_hash) WHERE usado = FALSE;
 
 -- ------------------------------------------------------------
--- Segurança Supabase: RLS (app usa pg pool no server.js, não PostgREST)
+-- Segurança Supabase: RLS (app usa pg pool no server.js, não PostgREST/GraphQL)
 -- ------------------------------------------------------------
 ALTER TABLE matriculas_bloqueadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tokens_recuperacao ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usuarios_favoritos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE anuncios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contatos_motorista ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eventos_uso ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedido_fila ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_chamados ENABLE ROW LEVEL SECURITY;
+ALTER TABLE caronas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedidos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE propostas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE viagens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE viagem_pontos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE habilitacoes_motorista ENABLE ROW LEVEL SECURITY;
+ALTER TABLE localizacoes_online ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contratos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE empresas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projetos ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  REVOKE ALL ON matriculas_bloqueadas FROM anon, authenticated;
+  REVOKE ALL ON push_subscriptions FROM anon, authenticated;
+  REVOKE ALL ON tokens_recuperacao FROM anon, authenticated;
+  REVOKE ALL ON usuarios_favoritos FROM anon, authenticated;
+  REVOKE ALL ON anuncios FROM anon, authenticated;
+  REVOKE ALL ON contatos_motorista FROM anon, authenticated;
+  REVOKE ALL ON eventos_uso FROM anon, authenticated;
+  REVOKE ALL ON pedido_fila FROM anon, authenticated;
+  REVOKE ALL ON admin_chamados FROM anon, authenticated;
+  REVOKE ALL ON caronas FROM anon, authenticated;
+  REVOKE ALL ON pedidos FROM anon, authenticated;
+  REVOKE ALL ON propostas FROM anon, authenticated;
+  REVOKE ALL ON viagens FROM anon, authenticated;
+  REVOKE ALL ON viagem_pontos FROM anon, authenticated;
+  REVOKE ALL ON habilitacoes_motorista FROM anon, authenticated;
+  REVOKE ALL ON localizacoes_online FROM anon, authenticated;
+  REVOKE ALL ON usuarios FROM anon, authenticated;
+  REVOKE ALL ON contratos FROM anon, authenticated;
+  REVOKE ALL ON empresas FROM anon, authenticated;
+  REVOKE ALL ON projetos FROM anon, authenticated;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 ALTER TABLE projetos ADD COLUMN IF NOT EXISTS valor_contrato_mensal NUMERIC(12,2) DEFAULT 0;
