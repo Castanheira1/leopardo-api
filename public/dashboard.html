@@ -2497,6 +2497,7 @@
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         Object.values(pedidoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
         pedidoFleet.markers = {};
+        limparRotasPassageiroMotorista();
         if (selOfe && selOfe.limparRota) selOfe.limparRota();
         atualizarIndicadorModoOperante();
         await liberarWakeLock();
@@ -3719,6 +3720,117 @@
         return '→ ' + destPax;
     }
 
+    // Mapa do motorista (modo amarelo / sem rota): rota preta do passageiro + dourada até o embarque.
+    const MOTOR_PAX_ROTA_OPTS = { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.88 };
+    const MOTOR_EMBARQUE_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
+    let motoristaPaxRotas = { items: {} };
+    let enquadrarMapaMotoristaTimer = null;
+
+    function coletarPassageirosMapaMotorista() {
+        const lista = [];
+        Object.values(pedidoFleet.markers).forEach((mk) => {
+            const p = mk._p;
+            if (p?.origem_lat != null && p?.destino_lat != null) lista.push({ key: 'ped-' + p.id, p });
+        });
+        Object.values(contatoFleet.markers).forEach((mk) => {
+            const c = mk._c;
+            if (c?.origem_lat != null && c?.destino_lat != null && !passageiroIdEmPedidoFleet(c.passageiro_id)) {
+                lista.push({ key: 'px-' + c.passageiro_id, p: c });
+            }
+        });
+        return lista;
+    }
+
+    function limparRotasPassageiroMotorista() {
+        Object.values(motoristaPaxRotas.items).forEach((it) => {
+            if (it.rotaPax) it.rotaPax.limpar();
+            if (it.rotaEmbarque) it.rotaEmbarque.limpar();
+        });
+        motoristaPaxRotas.items = {};
+    }
+
+    function enquadrarMapaMotorista() {
+        if (!selOfe?.map || !g?.maps) return;
+        const bounds = new g.maps.LatLngBounds();
+        let tem = false;
+        const o = selOfe.getOrigem?.();
+        const dest = selOfe.getDestino?.();
+        if (o) { bounds.extend(o); tem = true; }
+        if (dest) { bounds.extend(dest); tem = true; }
+        coletarPassageirosMapaMotorista().forEach(({ p }) => {
+            bounds.extend({ lat: +p.origem_lat, lng: +p.origem_lng });
+            bounds.extend({ lat: +p.destino_lat, lng: +p.destino_lng });
+            tem = true;
+        });
+        if (!tem) return;
+        selOfe.map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
+    }
+
+    function enquadrarMapaMotoristaDebounced() {
+        clearTimeout(enquadrarMapaMotoristaTimer);
+        enquadrarMapaMotoristaTimer = setTimeout(enquadrarMapaMotorista, 350);
+    }
+
+    async function atualizarRotasPassageiroMotorista(map) {
+        if (!motoristaOnlineModo || !map) {
+            limparRotasPassageiroMotorista();
+            return;
+        }
+        const passageiros = coletarPassageirosMapaMotorista();
+        const vistos = {};
+        const motorPos = selOfe?.getOrigem?.();
+        for (const { key, p } of passageiros) {
+            vistos[key] = true;
+            const origem = { lat: +p.origem_lat, lng: +p.origem_lng };
+            const destino = { lat: +p.destino_lat, lng: +p.destino_lng };
+            let item = motoristaPaxRotas.items[key];
+            if (!item) {
+                item = motoristaPaxRotas.items[key] = {
+                    rotaPax: criarRotaControle(map, MOTOR_PAX_ROTA_OPTS),
+                    rotaEmbarque: criarRotaControle(map, MOTOR_EMBARQUE_ROTA_OPTS),
+                    paxChave: null, paxCalculando: false,
+                    embarqueUltimaPos: null, embarqueUltimaEm: 0, embarqueCalculando: false,
+                };
+            }
+            const paxChave = `${origem.lat},${origem.lng}|${destino.lat},${destino.lng}`;
+            if (item.paxChave !== paxChave && !item.paxCalculando) {
+                item.paxCalculando = true;
+                try {
+                    await item.rotaPax.calcular(origem, destino);
+                    item.paxChave = paxChave;
+                } catch (_) { /* sem rota do passageiro */ }
+                finally { item.paxCalculando = false; }
+            }
+            if (motorPos) {
+                const agora = Date.now();
+                const moved = !item.embarqueUltimaPos || distKmGps(item.embarqueUltimaPos, motorPos) >= ROTA_RECALC_KM;
+                const tempoOk = agora - (item.embarqueUltimaEm || 0) >= ROTA_RECALC_MS;
+                if ((moved || tempoOk) && !item.embarqueCalculando) {
+                    item.embarqueCalculando = true;
+                    try {
+                        await item.rotaEmbarque.calcular(motorPos, origem);
+                        item.embarqueUltimaPos = { ...motorPos };
+                        item.embarqueUltimaEm = agora;
+                    } catch (_) { /* sem rota até embarque */ }
+                    finally { item.embarqueCalculando = false; }
+                }
+            } else if (item.rotaEmbarque) {
+                item.rotaEmbarque.limpar();
+                item.embarqueUltimaPos = null;
+                item.embarqueUltimaEm = 0;
+            }
+        }
+        Object.keys(motoristaPaxRotas.items).forEach((key) => {
+            if (!vistos[key]) {
+                const it = motoristaPaxRotas.items[key];
+                if (it.rotaPax) it.rotaPax.limpar();
+                if (it.rotaEmbarque) it.rotaEmbarque.limpar();
+                delete motoristaPaxRotas.items[key];
+            }
+        });
+        if (passageiros.length) enquadrarMapaMotoristaDebounced();
+    }
+
     function passageiroIdEmPedidoFleet(passageiroId) {
         return Object.values(pedidoFleet.markers).some((mk) => mk._p?.passageiro_id === passageiroId);
     }
@@ -3760,6 +3872,7 @@
                 // (a primeira leva é o que já estava lá).
                 if (novos) buzinar();
                 pedidoFleet.viuPrimeiraLeva = true;
+                await atualizarRotasPassageiroMotorista(map);
             } catch (_) {}
         }
         tick();
@@ -3769,6 +3882,7 @@
     function removerPulsoPedido(pedidoId) {
         const mk = pedidoFleet.markers[pedidoId];
         if (mk) { mk.setMap(null); delete pedidoFleet.markers[pedidoId]; }
+        if (selOfe?.map) atualizarRotasPassageiroMotorista(selOfe.map);
     }
     // Prévia da rota (origem -> destino) dentro de um modal. Reaproveita o mapa por
     // container e mostra a linha preta da rota; sem rota disponível, só enquadra os 2 pontos.
@@ -4016,6 +4130,7 @@
                     msg('Passageiro no mapa — toque no pulso para oferecer carona.');
                 }
                 contatoFleet.viuPrimeiraLeva = true;
+                await atualizarRotasPassageiroMotorista(map);
             } catch (_) {}
         }
         contatoTickFn = tick;
@@ -4031,6 +4146,7 @@
         contatoFleet.passageirosAtivos = new Set();
         contatoFleet.viuPrimeiraLeva = false;
         contatoFleet.ultimoContatoTs = new Map();
+        limparRotasPassageiroMotorista();
     }
 
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
