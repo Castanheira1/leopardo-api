@@ -613,8 +613,8 @@ gmp-place-autocomplete.map-search-float {
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
     /* Folga extra embaixo p/ o botão não encostar na barra inferior/gestos do
-       celular (env() adapta por modelo; o +34px é a folga acima da barra de gestos). */
-    padding: 0 16px calc(34px + env(safe-area-inset-bottom));
+       celular (env() adapta por modelo; a folga fixa fica acima da barra de gestos). */
+    padding: 0 16px calc(58px + env(safe-area-inset-bottom));
     transition: transform 0.22s ease, bottom 0.22s ease;
     touch-action: none;   /* toque imediato nos botões; rolagem só com teclado aberto */
     overscroll-behavior: contain;
