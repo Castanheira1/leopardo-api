@@ -124,13 +124,13 @@
                             <span class="acao-handle"></span>
                             <span class="acao-titulo">Pedir carona</span>
                         </div>
+                        <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
+                            <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar rota</button>
+                        </div>
                         <div class="acao-sheet-body">
                         <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
                             Escolha <strong>para onde vamos</strong> no mapa para ver motoristas online.
                         </p>
-                        <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
-                            <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota" onclick="limparDestinoPassageiro()">Limpar rota</button>
-                        </div>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
                                 <label>Quando?</label>
@@ -167,8 +167,12 @@
                 <div class="map-stage">
                     <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
-                    <div id="acaoSheetOfe" class="acao-sheet">
-                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span><button type="button" id="btnLimparOfe" class="btn-limpar-dest" style="display:none;" onclick="limparDestino('mapOfe')">Limpar destino</button></div>
+                    <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe">
+                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
+                        <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
+                            <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar rota</button>
+                        </div>
+                        <div class="acao-sheet-body">
                         <div class="form-row" id="vagasOfeWrap">
                             <div class="form-group">
                                 <label>Vagas disponíveis</label>
@@ -176,7 +180,10 @@
                             </div>
                         </div>
                         <p id="statusMotoristaOnline" class="online-status" style="display:none;"></p>
-                        <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block" onclick="toggleModoMotoristaOnline()">Oferecer carona</button>
+                        </div>
+                        <div class="acao-sheet-footer">
+                            <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="toggleModoMotoristaOnline()">Oferecer carona</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -505,17 +512,20 @@
             document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
             document.documentElement.classList.toggle('teclado-aberto', inset > 80);
             _kbdAnt = inset;
+            sincronizarPeekSheet(document.getElementById('acaoSheetPed'));
+            sincronizarPeekSheet(document.getElementById('acaoSheetOfe'));
         }
     }
     function rolarCampoNoSheet(sheet, el) {
         if (!sheet || !el) return;
-        const sheetRect = sheet.getBoundingClientRect();
+        const scrollEl = sheet.querySelector('.acao-sheet-body') || sheet;
+        const sheetRect = scrollEl.getBoundingClientRect();
         const elRect = el.getBoundingClientRect();
         const margem = 16;
         if (elRect.bottom > sheetRect.bottom - margem) {
-            sheet.scrollTop += elRect.bottom - sheetRect.bottom + margem;
+            scrollEl.scrollTop += elRect.bottom - sheetRect.bottom + margem;
         } else if (elRect.top < sheetRect.top + margem) {
-            sheet.scrollTop -= sheetRect.top + margem - elRect.top;
+            scrollEl.scrollTop -= sheetRect.top + margem - elRect.top;
         }
     }
     function limparEstadoTeclado() {
@@ -1016,21 +1026,53 @@
         if (s) s.remove();
     }
     // Escolheu destino errado: limpa a marcação/rota do mapa.
+    function limparBuscaDestino(mapId) {
+        const tabId = mapId === 'mapPed' ? 'tabPedir' : 'tabOferecer';
+        const inputId = mapId === 'mapPed' ? 'destPedInput' : 'destOfeInput';
+        const inp = document.getElementById(inputId);
+        if (inp) inp.value = '';
+        const pac = document.querySelector(`#${tabId} gmp-place-autocomplete`);
+        try {
+            const interno = pac?.shadowRoot?.querySelector('input, [role="combobox"]');
+            if (interno) interno.value = '';
+        } catch (_) {}
+    }
     function limparDestino(mapId) {
+        limparBuscaDestino(mapId);
         const sel = mapId === 'mapPed' ? selPed : selOfe;
         if (sel && sel.limparRota) sel.limparRota();
+        else if (mapId === 'mapPed') carregarCaronasDestino(null);
     }
     function atualizarBtnLimparPed(visivel) {
         const wrap = document.getElementById('limparRotaPedWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+        sincronizarPeekSheet(document.getElementById('acaoSheetPed'));
+    }
+    function atualizarBtnLimparOfe(visivel) {
+        const wrap = document.getElementById('limparRotaOfeWrap');
+        if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+        sincronizarPeekSheet(document.getElementById('acaoSheetOfe'));
     }
     function limparDestinoPassageiro() {
-        const inp = document.getElementById('destPedInput');
-        if (inp) inp.value = '';
         if (carroSel) fecharCarro();
-        limparDestino('mapPed');
         if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+        limparBuscaDestino('mapPed');
+        if (selPed?.limparRota) selPed.limparRota();
+        carregarCaronasDestino(null);
+        atualizarBtnLimparPed(false);
         atualizarHintDestinoPed();
+        atualizarFormPedidoRota(false, false);
+        const wrap = document.getElementById('motoristasDestinoWrap');
+        if (wrap) wrap.style.display = 'none';
+        const sheet = document.getElementById('acaoSheetPed');
+        if (sheet) sheet.classList.remove('collapsed');
+    }
+    function limparDestinoMotorista() {
+        limparBuscaDestino('mapOfe');
+        if (selOfe?.limparRota) selOfe.limparRota();
+        atualizarBtnLimparOfe(false);
+        const sheet = document.getElementById('acaoSheetOfe');
+        if (sheet) sheet.classList.remove('collapsed');
     }
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
@@ -1448,12 +1490,19 @@
         }
 
         const btnLimpar = document.getElementById(mapId === 'mapPed' ? 'btnLimparPed' : 'btnLimparOfe');
-        // O botão fica na alça de arrastar (grip): sem isto o toque vira "arraste"
-        // e o clique é engolido — daí "não limpava". Barra o gesto de arraste.
-        if (btnLimpar && mapId !== 'mapPed') ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
+        // Sem stopPropagation o toque vira "arraste" e o clique é engolido.
+        if (btnLimpar) {
+            ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
+            btnLimpar.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (mapId === 'mapPed') limparDestinoPassageiro();
+                else limparDestinoMotorista();
+            });
+        }
         function mostrarBtnLimpar(v) {
             if (mapId === 'mapPed') atualizarBtnLimparPed(v);
-            else if (btnLimpar) btnLimpar.style.display = v ? 'inline-block' : 'none';
+            else atualizarBtnLimparOfe(v);
         }
         function limparRota() {
             destino = null;
@@ -1585,8 +1634,16 @@
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
             tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 140);
-            sincronizarPeekSheetPed();
-            window.addEventListener('resize', sincronizarPeekSheetPed);
+            const sheetPed = document.getElementById('acaoSheetPed');
+            sheetPed?.classList.remove('collapsed');
+            requestAnimationFrame(() => {
+                sincronizarPeekSheet(sheetPed);
+                requestAnimationFrame(() => sincronizarPeekSheet(sheetPed));
+            });
+            window.addEventListener('resize', () => {
+                sincronizarPeekSheet(document.getElementById('acaoSheetPed'));
+                sincronizarPeekSheet(document.getElementById('acaoSheetOfe'));
+            });
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1597,7 +1654,13 @@
         if (initOfePromise) return initOfePromise;
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
-            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'), 92);
+            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'), 140);
+            const sheetOfe = document.getElementById('acaoSheetOfe');
+            sheetOfe?.classList.remove('collapsed');
+            requestAnimationFrame(() => {
+                sincronizarPeekSheet(sheetOfe);
+                requestAnimationFrame(() => sincronizarPeekSheet(sheetOfe));
+            });
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
@@ -3188,17 +3251,21 @@
 
     // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
     // peek = quanto fica visível (a "abinha") quando colapsado.
+    const SHEET_PEEK_MIN = 132;
     function medirPeekSheet(sheet) {
-        if (!sheet) return 140;
+        if (!sheet) return SHEET_PEEK_MIN;
         const grip = sheet.querySelector('.acao-grip');
+        const limparBar = sheet.querySelector('.limpar-rota-bar');
         const foot = sheet.querySelector('.acao-sheet-footer');
         let h = 0;
         if (grip) h += grip.getBoundingClientRect().height;
-        if (foot && getComputedStyle(foot).display !== 'none') h += foot.getBoundingClientRect().height;
-        return Math.ceil(h + 4);
+        if (limparBar && limparBar.style.display !== 'none' && getComputedStyle(limparBar).display !== 'none') {
+            h += limparBar.getBoundingClientRect().height;
+        }
+        if (foot) h += foot.getBoundingClientRect().height;
+        return Math.max(SHEET_PEEK_MIN, Math.ceil(h + 6));
     }
-    function sincronizarPeekSheetPed() {
-        const sheet = document.getElementById('acaoSheetPed');
+    function sincronizarPeekSheet(sheet) {
         if (!sheet) return;
         const peek = medirPeekSheet(sheet);
         sheet.style.setProperty('--sheet-peek', peek + 'px');

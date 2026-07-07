@@ -661,10 +661,9 @@ gmp-place-autocomplete.map-search-float {
 .map-stage {
     position: relative;
     margin: 0 -16px;
-    height: calc(100vh - 150px);    /* fallback p/ navegadores sem dvh */
-    height: calc(100dvh - 150px);   /* desconta a barra dinâmica do navegador (iPhone/Android),
-                                       senão a folha de baixo (botão Publicar/Solicitar) fica
-                                       fora da tela e o botão não pode ser tocado */
+    height: calc(100vh - 150px);    /* fallback */
+    height: calc(100dvh - 150px);   /* barra dinâmica iPhone/Android */
+    height: calc(var(--appvh, 1vh) * 100 - 150px);   /* altura real medida por JS */
     min-height: 440px;
     overflow: hidden;
     background: #1b1b1b;
@@ -698,7 +697,7 @@ html.teclado-aberto {
     z-index: 18;
     display: flex;
     flex-direction: column;
-    max-height: min(72vh, calc(var(--appvh, 1vh) * 72));
+    max-height: min(62vh, calc(var(--appvh, 1vh) * 62));
     background: #161719;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
@@ -706,27 +705,36 @@ html.teclado-aberto {
     transition: transform 0.22s ease, bottom 0.22s ease;
     touch-action: manipulation;
     overscroll-behavior: contain;
-    --sheet-peek: 140px;
+    --sheet-peek: calc(132px + env(safe-area-inset-bottom, 0px));
 }
 .acao-sheet-body {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
+    padding-bottom: 8px;
+    touch-action: pan-y;
 }
 .acao-sheet-footer {
     flex-shrink: 0;
-    padding-top: 8px;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    padding-top: 10px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: #161719;
+}
+.acao-sheet .limpar-rota-bar {
+    flex-shrink: 0;
+    margin: 0 0 8px;
 }
 .btn-cta-sheet {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
+    width: 100%;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
     min-height: 52px;
     padding: 14px 20px;
     font-size: 1.02rem;
@@ -734,6 +742,7 @@ html.teclado-aberto {
     letter-spacing: 0.02em;
     border-radius: 14px;
     box-shadow: 0 8px 22px rgba(234, 210, 152, 0.28);
+    touch-action: manipulation;
 }
 .btn-cta-sheet svg {
     flex-shrink: 0;
@@ -784,6 +793,7 @@ html.teclado-aberto {
     padding: 8px 16px;
     border-radius: 999px;
     touch-action: manipulation;
+    min-height: 40px;
 }
 .acao-titulo {
     color: #fff;
