@@ -2126,6 +2126,10 @@
         motoristaOnlineModo = false;
         atualizarUiMotoristaOnline();
         pararPollContatosMotorista();
+        // Para o broadcast ANTES do DELETE: senão o próximo tick (a cada 8s) reenvia
+        // disponivel=TRUE e o motorista volta a ficar "online" — caindo no modo
+        // motorista em todo login, mesmo depois de Encerrar.
+        pararBroadcastLocalizacao();
         await fetchWithAuth('/api/motorista/online', { method: 'DELETE' }).catch(() => {});
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         Object.values(pedidoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
