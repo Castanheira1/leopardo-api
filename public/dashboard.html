@@ -1709,7 +1709,7 @@
         const km = it.dist != null && isFinite(it.dist) ? `${Number(it.dist).toFixed(1)} km` : '';
         const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
         const empresa = esc(it.nome || 'Motorista');
-        const posicao = it.ordem != null ? `<span class="ride-posicao">Nº ${it.ordem + 1} na fila</span>` : '';
+        const posicao = it.caronaId && it.ordem != null ? `<span class="ride-posicao">Nº ${it.ordem + 1} na fila</span>` : '';
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} • ${it.vagas || 1} vaga(s)`
             : `${ICN.car} Disponível agora — combine o destino`;
@@ -1757,7 +1757,9 @@
             ]);
             // Posição na fila (mais perto->mais longe ao longo da rota escolhida) — só
             // decoração da lista/mapa; quem decide a ordem de chamada é o backend.
-            const ordemPorId = new Map((Array.isArray(naRota) ? naRota : []).map((m) => [m.id, m.ordem]));
+            const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
+                .filter((m) => m.carona_id)
+                .map((m) => [m.id, m.ordem]));
             // Chave por motorista: a carona (indo ao destino) tem prioridade sobre o modo geral.
             const porMotorista = new Map();
             (Array.isArray(caronas) ? caronas : []).forEach((c) => {
@@ -1777,7 +1779,7 @@
                     id: m.id, caronaId: null,
                     nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
                     vagas: m.vagas || 1, destino: null, dist,
-                    ordem: ordemPorId.has(m.id) ? ordemPorId.get(m.id) : null,
+                    ordem: null,   // modo amarelo: perto, mas sem rota publicada
                 });
             });
             const itens = [...porMotorista.values()].sort((a, b) => a.dist - b.dist);
@@ -1932,7 +1934,7 @@
         document.getElementById('carroContatos').innerHTML = botoesContato(m.id);
         document.getElementById('modalCarro').style.display = 'flex';
         const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
-        const d = m.destino_lat != null ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
+        const d = destinoPublicadoCarro(m);
         desenharRotaMini('carroMapa', o, d);
     }
     function fecharCarro() { document.getElementById('modalCarro').style.display = 'none'; }
@@ -2912,6 +2914,13 @@
         });
         fleet.markers = {};
     }
+    function destinoPublicadoCarro(m) {
+        return m && m.carona_id && m.destino_lat != null
+            ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
+    }
+    function seloFilaCarro(m) {
+        return m && m.carona_id && m.ordem != null ? m.ordem + 1 : undefined;
+    }
     function iniciarFrotaAoVivo(map) {
         if (fleet.map && fleet.map !== map) limparFrotaAoVivo();
         if (fleet.timer) clearInterval(fleet.timer);
@@ -2920,8 +2929,9 @@
             if (document.hidden) return;   // segundo plano: não polla
             try {
                 // Posição do passageiro: motoristas online num raio de 600 m. Com um
-                // destino escolhido, junta também a fila da rota (mesma ordem da chamada
-                // sequencial) pra numerar os carros no mapa (1º, 2º, 3º...).
+                // destino escolhido, junta caronas publicadas na rota (fora do raio de
+                // 600 m) e numera só quem TEM destino publicado — modo amarelo fica
+                // dourado, sem selo de fila nem linha até o destino do passageiro.
                 const o = selPed ? selPed.getOrigem() : null;
                 const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
@@ -2932,45 +2942,61 @@
                         origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
                     }).toString();
                     const naRota = await fetchWithAuth('/api/motoristas-rota' + qRota).then((rr) => rr.ok ? rr.json() : []).catch(() => []);
-                    const ordemPorId = new Map((Array.isArray(naRota) ? naRota : []).map((m) => [m.id, m.ordem]));
+                    const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
+                        .filter((m) => m.carona_id)
+                        .map((m) => [m.id, m.ordem]));
                     const idsJaListados = new Set(lista.map((m) => m.id));
-                    lista.forEach((m) => { if (ordemPorId.has(m.id)) m.ordem = ordemPorId.get(m.id); });
-                    (Array.isArray(naRota) ? naRota : []).forEach((m) => { if (!idsJaListados.has(m.id)) lista.push(m); });
+                    lista.forEach((m) => { if (m.carona_id && ordemPorId.has(m.id)) m.ordem = ordemPorId.get(m.id); });
+                    (Array.isArray(naRota) ? naRota : []).forEach((m) => {
+                        if (m.carona_id && !idsJaListados.has(m.id)) lista.push(m);
+                    });
                 }
                 const vistos = {};
                 lista.forEach((m) => {
                     vistos[m.id] = true;
                     const pos = { lat: +m.lat, lng: +m.lng };
-                    const dest = m.destino_lat != null ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
+                    const destCarona = destinoPublicadoCarro(m);
                     let item = fleet.markers[m.id];
+                    if (item && !!item.m.carona_id !== !!m.carona_id) {
+                        item.car.setMap(null);
+                        if (item.linha) item.linha.setMap(null);
+                        if (item.destinoMk) item.destinoMk.setMap(null);
+                        delete fleet.markers[m.id];
+                        item = null;
+                    }
                     if (item) {
                         item.m = m;
                         const prev = item.lastPos;
                         atualizarPosicaoCarro(item.car, pos, prev);
                         item.lastPos = pos;
-                        if (item.linha && dest) item.linha.setPath([pos, dest]);   // a "seta" segue o carro
+                        if (destCarona) {
+                            if (item.linha) item.linha.setPath([pos, destCarona]);
+                        } else if (item.linha || item.destinoMk) {
+                            if (item.linha) { item.linha.setMap(null); item.linha = null; }
+                            if (item.destinoMk) { item.destinoMk.setMap(null); item.destinoMk = null; }
+                        }
                     } else {
                         const icon = m.carona_id ? CAR_ICON_URL : CAR_ICON_GOLD_URL;
                         const iconVariant = m.carona_id ? 'white' : 'gold';
                         const car = criarMarcador({
                             position: pos, map, icon,
                             iconW: 30, iconH: 40, iconVariant,
-                            badge: m.ordem != null ? m.ordem + 1 : undefined,
-                            title: m.nome + (m.placa ? ' • ' + m.placa : '') + (m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
+                            badge: seloFilaCarro(m),
+                            title: m.nome + (m.placa ? ' • ' + m.placa : '')
+                                + (m.carona_id && m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
                         const abrir = () => mostrarCaronaDoCarro(fleet.markers[m.id].m);
                         car.addListener('click', abrir);
-                        // Para onde o carro vai (visível sem precisar tocar): linha tracejada
-                        // dourada até um pino no destino da carona.
+                        // Linha tracejada só para carona publicada (nunca modo amarelo).
                         let linha = null, destinoMk = null;
-                        if (dest) {
+                        if (destCarona) {
                             linha = new g.maps.Polyline({
-                                map, path: [pos, dest], geodesic: true, clickable: false,
+                                map, path: [pos, destCarona], geodesic: true, clickable: false,
                                 strokeOpacity: 0,
                                 icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: '#EAD298', strokeOpacity: 0.95, scale: 3 }, offset: '0', repeat: '12px' }],
                             });
                             destinoMk = criarMarcador({
-                                position: dest, map, cor: '#EAD298',
+                                position: destCarona, map, cor: '#EAD298',
                                 title: 'Destino: ' + (m.destino_texto || ''),
                             });
                             destinoMk.addListener('click', abrir);
