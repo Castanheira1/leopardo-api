@@ -372,7 +372,8 @@ function svgCarroTopoUrl(variant = 'white') {
 function montarNoCarro(variant, w, h) {
     const rot = document.createElement('div');
     rot.className = 'vap-car-rot';
-    rot.style.cssText = `width:${w}px;height:${h}px;transform-origin:50% 50%;transform:rotate(0deg);contain:layout style paint;`;
+    rot.style.cssText = `width:${w}px;height:${h}px;transform-origin:50% 50%;transform:rotate(0deg) translateZ(0);`
+        + 'backface-visibility:hidden;-webkit-backface-visibility:hidden;contain:layout style paint;';
     rot.innerHTML = htmlSvgCarro(variant, w, h);
     return rot;
 }
@@ -536,10 +537,9 @@ function criarMarcador(opts = {}) {
     });
     if (pinEl) mk.append(pinEl);
     let _headingDeg = heading != null ? Number(heading) || 0 : 0;
-    let _headingRaf = null;
     const aplicarRotacao = () => {
         if (!rotEl) return;
-        rotEl.style.transform = `rotate(${_headingDeg}deg)`;
+        rotEl.style.transform = `rotate(${_headingDeg}deg) translateZ(0)`;
     };
     const api = {
         setPosition(p) { mk.position = normalizarLatLng(p); },
@@ -558,11 +558,10 @@ function criarMarcador(opts = {}) {
             if (!rotEl && !imgEl) return;
             _headingDeg = Number(h) || 0;
             if (rotEl) {
-                if (_headingRaf) cancelAnimationFrame(_headingRaf);
-                _headingRaf = requestAnimationFrame(() => { aplicarRotacao(); _headingRaf = null; });
+                aplicarRotacao();
                 return;
             }
-            if (imgEl) imgEl.style.transform = `rotate(${_headingDeg}deg)`;
+            if (imgEl) imgEl.style.transform = `rotate(${_headingDeg}deg) translateZ(0)`;
         },
         setIconSize(w, h) {
             if (rotEl) {
