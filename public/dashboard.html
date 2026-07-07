@@ -129,7 +129,7 @@
                         </div>
                         <div class="acao-sheet-body">
                         <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
-                            Escolha <strong>para onde vamos</strong> no mapa para ver sua rota e pedir carona.
+                            Motoristas online aparecem no mapa. Escolha <strong>para onde vamos</strong> para ver sua rota e pedir carona.
                         </p>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
@@ -480,6 +480,8 @@
     let selPed = null, selOfe = null;
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
+    let enquadrarMapaPedidoTimer = null;
+    let enquadrarMapaPedidoDebounced = () => {};
 
     /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
     function tornarSheetAcaoArrastavel(sheet, grip) {
@@ -692,7 +694,7 @@
     function exigirDestinoPassageiro(acao) {
         const texto = acao
             ? `Escolha primeiro para onde vamos — depois você pode ${acao}.`
-            : 'Escolha para onde vamos no mapa para ver sua rota e pedir carona.';
+            : 'Motoristas online aparecem no mapa. Escolha para onde vamos para ver sua rota e pedir carona.';
         msg(texto, 'error', 9000);
         selPed?.focarBuscaDestino?.();
         atualizarHintDestinoPed();
@@ -3479,8 +3481,6 @@
 
     // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
     let fleet = { markers: {}, timer: null, map: null, naRota: [], naRotaEm: 0 };
-    let enquadrarMapaPedidoTimer = null;
-    let enquadrarMapaPedidoDebounced = () => {};
     let atualizarFrotaAoVivo = null;
     function limparFrotaAoVivo() {
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
