@@ -716,7 +716,7 @@ html.teclado-aberto {
 }
 .acao-sheet-footer {
     flex-shrink: 0;
-    padding: 12px 0 calc(28px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 0 calc(44px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: #161719;
 }
