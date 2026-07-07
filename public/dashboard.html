@@ -121,6 +121,9 @@
                     <div id="mapPed" class="map-stage-map"></div>
                     <div id="acaoSheetPed" class="acao-sheet">
                         <div class="acao-grip" id="gripPed"><span class="acao-handle"></span><span class="acao-titulo">Pedir carona</span></div>
+                        <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
+                            Escolha <strong>para onde vamos</strong> no mapa para ver motoristas online.
+                        </p>
                         <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
                             <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota" onclick="limparDestinoPassageiro()">Limpar rota</button>
                         </div>
@@ -629,12 +632,27 @@
     }
 
     /* -------- util -------- */
-    function msg(texto, tipo = 'success') {
+    function msg(texto, tipo = 'success', ms = 5000) {
         const m = document.getElementById('message');
         m.style.display = 'block';
         m.className = 'message ' + tipo;
         m.textContent = texto;
-        setTimeout(() => { m.style.display = 'none'; }, 5000);
+        clearTimeout(window._msgTimer);
+        window._msgTimer = setTimeout(() => { m.style.display = 'none'; }, ms);
+    }
+    function atualizarHintDestinoPed() {
+        const hint = document.getElementById('hintEscolherDestino');
+        const dest = selPed?.getDestino?.();
+        if (hint) hint.style.display = dest ? 'none' : 'block';
+    }
+    function exigirDestinoPassageiro(acao) {
+        const texto = acao
+            ? `Escolha primeiro para onde vamos — depois você pode ${acao}.`
+            : 'Escolha primeiro para onde vamos para ver motoristas online no mapa.';
+        msg(texto, 'error', 9000);
+        selPed?.focarBuscaDestino?.();
+        atualizarHintDestinoPed();
+        return false;
     }
     function showTab(id, btn) {
         limparEstadoTeclado();
@@ -1002,8 +1020,10 @@
     function limparDestinoPassageiro() {
         const inp = document.getElementById('destPedInput');
         if (inp) inp.value = '';
+        if (carroSel) fecharCarro();
         limparDestino('mapPed');
         if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+        atualizarHintDestinoPed();
     }
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
@@ -1483,7 +1503,7 @@
 
         const inputEl = document.getElementById(inputId);
         const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
-        await ligarPlaceAutocomplete(inputEl, {
+        const pacDestino = await ligarPlaceAutocomplete(inputEl, {
             map,
             onFocus: () => {
                 const sheet = document.getElementById(sheetId);
@@ -1501,6 +1521,20 @@
                 }
             },
         });
+        function focarBuscaDestino() {
+            const sheet = document.getElementById(sheetId);
+            if (sheet) sheet.classList.remove('collapsed');
+            const wrap = inputEl.closest('.map-search-wrap');
+            if (wrap) {
+                wrap.classList.add('map-search-atencao');
+                setTimeout(() => wrap.classList.remove('map-search-atencao'), 3200);
+            }
+            try {
+                pacDestino.focus();
+                const interno = pacDestino.shadowRoot?.querySelector('input, [role="combobox"]');
+                if (interno) interno.focus();
+            } catch (_) {}
+        }
 
         // Atualiza a origem para a localização ATUAL (evita ficar travado num lugar antigo).
         async function recentrar() {
@@ -1525,6 +1559,7 @@
             irPara: (pos, texto) => setDestino(pos, texto),
             recentrar,
             limparRota,
+            focarBuscaDestino,
             // Origem vale para publicar? Só se veio do GPS de verdade.
             origemConfiavel: () => estado.gpsOk,
         };
@@ -1539,6 +1574,7 @@
         if (initPedirPromise) return initPedirPromise;
         initPedirPromise = (async () => {
             selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
+            atualizarHintDestinoPed();
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
             tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 92);
@@ -1707,7 +1743,7 @@
     async function pedirCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
         const dest = selPed && selPed.getDestino();
-        if (!dest) return msg('Defina um destino no mapa', 'error');
+        if (!dest) return exigirDestinoPassageiro('pedir carona');
         // Sem GPS não tem pedido: a origem seria um ponto fantasma longe do
         // passageiro real e o motorista nunca o acharia.
         if (!selPed.origemConfiavel()) {
@@ -1804,7 +1840,7 @@
         if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
         const dest = selPed?.getDestino?.();
         if (!dest) {
-            msg('Escolha um destino no mapa para o motorista ver sua rota.', 'error');
+            exigirDestinoPassageiro('buzinar, ligar ou chamar no WhatsApp');
             return null;
         }
         if (!selPed?.origemConfiavel?.()) {
@@ -1940,8 +1976,10 @@
             listaPerto.innerHTML = '';
             if (contPerto) contPerto.style.display = 'none';
             atualizarFormPedidoRota(false, false);
+            atualizarHintDestinoPed();
             return;
         }
+        atualizarHintDestinoPed();
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         atualizarBtnLimparPed(true);
         wrap.style.display = 'block';
@@ -2157,6 +2195,10 @@
     /* -------- passageiro clica no carro no mapa e pede a carona -------- */
     let carroSel = null;
     function mostrarCaronaDoCarro(m) {
+        if (!selPed?.getDestino?.()) {
+            exigirDestinoPassageiro('ver e falar com motoristas');
+            return;
+        }
         carroSel = m;
         const temRota = !!m.carona_id;
         document.querySelector('#modalCarro .sol-badge').textContent = temRota ? 'Carona disponível' : 'Motorista por perto';
@@ -3170,12 +3212,14 @@
     let atualizarFrotaAoVivo = null;
     function limparFrotaAoVivo() {
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
-        Object.keys(fleet.markers).forEach((id) => {
+        const ids = Object.keys(fleet.markers);
+        ids.forEach((id) => {
             const it = fleet.markers[id];
             if (it.car) it.car.setMap(null);
             if (it.rotaCtrl) it.rotaCtrl.limpar();
             if (it.destinoMk) it.destinoMk.setMap(null);
         });
+        if (ids.length && carroSel) fecharCarro();
         fleet.markers = {};
         fleet.naRota = [];
         fleet.naRotaEm = 0;
@@ -3223,12 +3267,28 @@
             const modalCarroAberto = carroSel && document.getElementById('modalCarro')?.style.display === 'flex';
             if (document.hidden && !modalCarroAberto) return;
             try {
-                // Posição do passageiro: motoristas online num raio de 600 m. Com um
-                // destino escolhido, junta caronas publicadas na rota (fora do raio de
-                // 600 m) e numera só quem TEM destino publicado — modo amarelo fica
-                // dourado, sem selo de fila nem rota até o destino do passageiro.
+                // Posição do passageiro + destino escolhido: motoristas online no raio
+                // de 600 m e caronas publicadas na rota (fora do raio). Sem destino,
+                // a frota fica oculta — o passageiro precisa marcar "para onde vamos".
                 const o = selPed ? selPed.getOrigem() : null;
                 const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
+                // Sem destino escolhido: não mostra carros no mapa (evita buzina/ligação sem rota).
+                if (!dest) {
+                    const ids = Object.keys(fleet.markers);
+                    if (ids.length) {
+                        ids.forEach((id) => {
+                            const it = fleet.markers[id];
+                            if (it.car) it.car.setMap(null);
+                            if (it.rotaCtrl) it.rotaCtrl.limpar();
+                            if (it.destinoMk) it.destinoMk.setMap(null);
+                        });
+                        if (carroSel) fecharCarro();
+                        fleet.markers = {};
+                        fleet.naRota = [];
+                        fleet.naRotaEm = 0;
+                    }
+                    return;
+                }
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
                 const lista = await r.json();
