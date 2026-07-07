@@ -1537,6 +1537,12 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
+       AND NOT EXISTS (
+         SELECT 1 FROM localizacoes_online lo
+         WHERE lo.usuario_id = c.motorista_id
+           AND lo.disponivel = TRUE
+           AND lo.online_desde IS NOT NULL
+       )
        ${filtroProj}
        ${origemRaio}
        ${destFiltro}
