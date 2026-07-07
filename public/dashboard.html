@@ -2875,7 +2875,7 @@
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         if (selfCar.timer) { clearInterval(selfCar.timer); selfCar.timer = null; }
 
-        const ehMotorista = v.motorista_id === user.id;
+        const ehMotorista = String(v.motorista_id) === String(user.id);
 
         // Mostra o "outro": passageiro vê o motorista; motorista vê o passageiro.
         const nome = ehMotorista ? v.passageiro_nome : v.motorista_nome;
@@ -2896,11 +2896,14 @@
         const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
         const map = novoMapa('mapViagem', { center: centro, zoom: 16 });
 
-        // Pinos fixos: embarque (verde) e destino (dourado).
+        // Pinos fixos: embarque (verde) e destino (dourado). Passageiro vê só referência.
         if (embarque) criarMarcador({ position: embarque, map, cor: '#22c55e', title: 'Embarque' });
         if (destino) criarMarcador({ position: destino, map, cor: '#EAD298', title: 'Destino' });
 
-        const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 });
+        // Rota turn-by-turn só no motorista; passageiro acompanha o carro ao vivo.
+        const rotaCtrl = ehMotorista
+            ? criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 })
+            : null;
 
         viagemView = {
             id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
@@ -2908,7 +2911,7 @@
             motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
             posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
-            seguir: true,   // o mapa segue a própria posição até o usuário arrastar
+            seguir: true,   // motorista segue a si; passageiro segue o carro
         };
         atualizarCabecalhoViagem();
 
@@ -2965,15 +2968,24 @@
                     + mapsBtn + wppBtn;
             }
         } else {
-            ctrl.innerHTML = wppBtn || '<p class="sheet-hint">Aguardando motorista…</p>';
+            const hint = vv.fase === 'encontro'
+                ? 'Acompanhe o motorista no mapa'
+                : 'Viagem em andamento — acompanhe no mapa';
+            ctrl.innerHTML = (wppBtn ? wppBtn + '<p class="sheet-hint">' + hint + '</p>' : '<p class="sheet-hint">' + hint + '</p>');
         }
     }
-    // Centraliza o mapa na posição atual (modo condução).
+    // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
+    function focoMapaViagem(vv) {
+        if (!vv) return null;
+        if (vv.ehMotorista) return vv.posMotorista;
+        return vv.posMotorista || vv.embarque || vv.destino;
+    }
+    // Centraliza o mapa na posição atual (modo condução — só motorista).
     function navegarApp() {
-        const vv = viagemView; if (!vv || !vv.map) return;
+        const vv = viagemView; if (!vv || !vv.map || !vv.ehMotorista) return;
         vv.seguir = true;
-        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
-        if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(18); }
+        const alvo = focoMapaViagem(vv);
+        if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(18); }
         vv.ultimaRota = 0;
         renderViagem();
     }
@@ -2987,21 +2999,27 @@
     // Fallback com voz: abre a rota da fase atual no Google Maps (o rastreamento
     // e o registro da viagem continuam no VAP em segundo plano).
     function abrirGoogleMaps() {
+        const vv = viagemView; if (!vv || !vv.ehMotorista) return;
         const alvo = alvoViagem(); if (!alvo) return;
         window.open('https://www.google.com/maps/dir/?api=1&destination=' + alvo.lat + ',' + alvo.lng + '&travelmode=driving&dir_action=navigate', '_blank');
     }
-    // Recentraliza o mapa da viagem na própria posição e reativa o "seguir".
+    // Recentraliza o mapa e reativa o "seguir" (passageiro: no carro do motorista).
     function recentrarViagem() {
         const vv = viagemView; if (!vv || !vv.map) return;
         vv.seguir = true;
-        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
-        if (minhaPos) { vv.map.panTo(minhaPos); vv.map.setZoom(17); }
+        const alvo = focoMapaViagem(vv);
+        if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(vv.ehMotorista ? 17 : 16); }
     }
-    // Desenha os dois no mapa (carro do motorista + bonequinho do passageiro) e a
-    // rota do carro até o alvo da fase. Cada lado vê o outro.
+    function rotuloProximidadeMotorista(km) {
+        if (km < 0.05) return 'Motorista chegando';
+        const m = Math.round(km * 1000);
+        const min = Math.max(1, Math.round(km / 0.45));   // ~27 km/h urbano
+        return m >= 1000 ? `~${min} min · ${km.toFixed(1)} km` : `~${min} min · ${m} m`;
+    }
+    // Motorista: carro + passageiro + rota até o alvo. Passageiro: só acompanha o carro.
     async function renderViagem() {
         const vv = viagemView; if (!vv || vv.status !== 'em_andamento') return;
-        // Carro do motorista
+        // Carro do motorista (visível nos dois lados).
         if (vv.posMotorista) {
             if (vv.carMarker) {
                 const prev = vv.carPosAnterior || vv.posMotorista;
@@ -3015,32 +3033,43 @@
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
         }
-        // Passageiro: círculo pulsante (o mesmo do modo chamada), só na fase de
-        // encontro — depois que embarca ele está dentro do carro.
-        if (vv.posPassageiro && vv.fase === 'encontro') {
+        // Pulso do passageiro: só no mapa do motorista (fase encontro).
+        if (vv.ehMotorista && vv.posPassageiro && vv.fase === 'encontro') {
             if (vv.pessoaMarker) vv.pessoaMarker.setPosition(vv.posPassageiro);
             else vv.pessoaMarker = criarPulse(vv.map, vv.posPassageiro, vv.passageiroSexo, null, 'Passageiro');
         } else if (vv.pessoaMarker) {
             vv.pessoaMarker.setMap(null); vv.pessoaMarker = null;
         }
-        // Segue a própria posição (cada um se vê no centro) — a menos que o usuário
-        // tenha arrastado o mapa para olhar em volta (aí o botão recentralizar volta).
-        const minhaPos = vv.ehMotorista ? vv.posMotorista : vv.posPassageiro;
-        if (minhaPos && vv.seguir !== false) vv.map.panTo(minhaPos);
+        const foco = focoMapaViagem(vv);
+        if (foco && vv.seguir !== false) vv.map.panTo(foco);
 
-        // Rota: do carro (motorista) até o alvo da fase.
-        const alvo = alvoViagem();
-        if (vv.posMotorista && alvo && Date.now() - vv.ultimaRota > 5000) {   // próximo passo mais fresco
+        const eta = document.getElementById('viagemEta');
+        if (vv.ehMotorista) {
+            const alvo = alvoViagem();
+            if (vv.posMotorista && alvo && vv.rotaCtrl && Date.now() - vv.ultimaRota > 5000) {
+                vv.ultimaRota = Date.now();
+                try {
+                    const resp = await vv.rotaCtrl.calcular(vv.posMotorista, alvo);
+                    const leg = resp.routes[0].legs[0];
+                    if (eta) {
+                        eta.style.display = 'block';
+                        eta.textContent = `~${leg.duration.text} · ${leg.distance.text}`;
+                    }
+                } catch (_) { /* sem rota: segue só com os marcadores */ }
+            }
+        } else if (vv.posMotorista && Date.now() - vv.ultimaRota > 5000) {
             vv.ultimaRota = Date.now();
-            try {
-                const resp = await vv.rotaCtrl.calcular(vv.posMotorista, alvo);
-                const leg = resp.routes[0].legs[0];
-                const eta = document.getElementById('viagemEta');
-                if (eta) {
-                    eta.style.display = 'block';
-                    eta.textContent = `~${leg.duration.text} · ${leg.distance.text}`;
+            if (eta) {
+                eta.style.display = 'block';
+                if (vv.fase === 'encontro') {
+                    const ref = vv.posPassageiro || vv.embarque;
+                    eta.textContent = ref
+                        ? rotuloProximidadeMotorista(distKmGps(ref, vv.posMotorista))
+                        : 'Motorista a caminho';
+                } else {
+                    eta.textContent = 'A caminho do destino';
                 }
-            } catch (_) { /* sem rota: segue só com os marcadores */ }
+            }
         }
     }
 
@@ -3734,7 +3763,7 @@
         broadcastModoOnline = false;
     }
 
-    // Passageiro acompanha o carro do motorista ao vivo, com rota e ETA.
+    // Passageiro acompanha o carro do motorista ao vivo (sem rota de navegação).
     let acompTimer = null;   // timer do acompanhamento do passageiro (passageiroLoop)
 
     /* -------- restaurar sessão (fechar/reabrir o app não perde o estado) -------- */
@@ -3746,7 +3775,7 @@
             if (r && r.ok) {
                 const ativa = (await r.json()).find(v => v.status === 'em_andamento');
                 if (ativa) {
-                    escolherPapel(ativa.motorista_id === user.id ? 'motorista' : 'passageiro');
+                    escolherPapel(String(ativa.motorista_id) === String(user.id) ? 'motorista' : 'passageiro');
                     await abrirViagem(ativa.id);
                     return true;
                 }
