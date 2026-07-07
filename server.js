@@ -344,8 +344,29 @@ async function garantirColunasLocalizacao() {
   try {
     await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP");
     await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS vagas INTEGER DEFAULT 1");
+    await corrigirInconsistenciasModoAmarelo();
   } catch (e) {
     console.warn("garantirColunasLocalizacao:", e.message);
+  }
+}
+
+// Modo amarelo = online_desde preenchido. Não pode coexistir com carona ativa —
+// senão o passageiro vê destino/rota fantasma. Limpa linhas inconsistentes no boot.
+async function corrigirInconsistenciasModoAmarelo() {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE caronas SET status = 'cancelada'
+       WHERE status = 'ativa'
+         AND motorista_id IN (
+           SELECT usuario_id FROM localizacoes_online
+           WHERE disponivel = TRUE AND online_desde IS NOT NULL
+         )`
+    );
+    if (rowCount > 0) {
+      console.log(`Modo amarelo: cancelou ${rowCount} carona(s) ativa(s) inconsistente(s).`);
+    }
+  } catch (e) {
+    console.warn("corrigirInconsistenciasModoAmarelo:", e.message);
   }
 }
 
