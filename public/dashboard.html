@@ -584,14 +584,14 @@
         // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
-            if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); selPed.dica(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
+            if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
         }
         if (id === 'tabOferecer') {
             if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
             if (!selOfe) initMapOferecer();
             else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
-                else { selOfe.recentrar(); selOfe.dica(); }
+                else { selOfe.recentrar(); }
             }
         }
     }
@@ -1373,33 +1373,22 @@
             }
         }
 
-        // Duplo toque marca o local (evita criar rota a cada toque). Toque simples só avisa.
-        let ultimaDica = 0;
-        function dicaToque(forcar) {
-            const agora = Date.now();
-            if (!forcar && agora - ultimaDica < 4000) return;
-            ultimaDica = agora;
-            msg('Toque DUAS vezes no mapa para marcar o local.');
-        }
         // Tocar num LUGAR nomeado do mapa (POI: portaria, hospital, britador…) usa o
         // NOME dele como destino — muito mais fácil que decorar o endereço de rua.
+        // O destino também pode ser definido pela busca "Para onde vamos".
         let placesSvc = null;
         map.addListener('click', (e) => {
-            if (e.placeId) {
-                if (e.stop) e.stop();   // não abre o infowindow padrão do Google
-                placesSvc = placesSvc || new g.maps.places.PlacesService(map);
-                placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
-                    if (status === 'OK' && det && det.geometry) {
-                        setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
-                    } else {
-                        setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-                    }
-                });
-                return;
-            }
-            dicaToque();
+            if (!e.placeId) return;   // toque no vazio não marca nada (evita destino/rota acidental)
+            if (e.stop) e.stop();     // não abre o infowindow padrão do Google
+            placesSvc = placesSvc || new g.maps.places.PlacesService(map);
+            placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
+                if (status === 'OK' && det && det.geometry) {
+                    setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
+                } else {
+                    setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                }
+            });
         });
-        map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
 
         const inputEl = document.getElementById(inputId);
         const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
@@ -1443,7 +1432,6 @@
             // Favoritos e afins: define o destino como se tivesse buscado na barra.
             irPara: (pos, texto) => setDestino(pos, texto),
             recentrar,
-            dica: () => dicaToque(true),
             limparRota,
             // Origem vale para publicar? Só se veio do GPS de verdade.
             origemConfiavel: () => estado.gpsOk,
@@ -1462,7 +1450,6 @@
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
             tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
-            selPed.dica();   // instrução ao abrir
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1478,8 +1465,6 @@
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map);
                 iniciarPedidosAoVivo(selOfe.map);
-            } else {
-                selOfe.dica();
             }
             return selOfe;
         })();
