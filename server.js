@@ -2836,15 +2836,19 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
        ORDER BY created_at DESC LIMIT 1`,
       [motoristaId]
     )).rows[0];
+    // Modo amarelo (online_desde): passageiro vê carro dourado sem rota — buzina
+    // combina destino, não "Solicitar vaga". Ignora carona residual no banco.
+    const modoAmarelo = !!loc?.online_desde;
+    const caronaContato = modoAmarelo ? null : caronaAtiva;
     // Lista caronas publicadas ≠ GPS ao vivo: contato vale se online OU carona ativa.
-    if (!loc?.disponivel && !caronaAtiva) {
+    if (!loc?.disponivel && !caronaContato) {
       return res.status(404).json({ error: "Motorista não está disponível agora" });
     }
-    if (caronaAtiva && caronaAtiva.vagas < npessoas) {
+    if (caronaContato && caronaContato.vagas < npessoas) {
       return res.status(400).json({
         error: npessoas === 1
           ? "Não há vagas disponíveis nesta carona"
-          : `Só há ${caronaAtiva.vagas} vaga(s) — você pediu ${npessoas}.`,
+          : `Só há ${caronaContato.vagas} vaga(s) — você pediu ${npessoas}.`,
       });
     }
 
@@ -2855,14 +2859,14 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
     if (!mot?.telefone) return res.status(400).json({ error: "Motorista sem WhatsApp cadastrado" });
 
     const destinoPax = destino_texto ? String(destino_texto).trim() : null;
-    const destinoCarona = loc?.destino_texto || caronaAtiva?.destino_texto;
+    const destinoCarona = modoAmarelo ? null : (loc?.destino_texto || caronaContato?.destino_texto);
 
     let compatContato = "none";
-    if (caronaAtiva?.destino_lat != null && destino_lat != null && destino_lng != null) {
+    if (caronaContato?.destino_lat != null && destino_lat != null && destino_lng != null) {
       compatContato = compatRotaPassageiro(
         destino_lat, destino_lng,
-        caronaAtiva.origem_lat, caronaAtiva.origem_lng,
-        caronaAtiva.destino_lat, caronaAtiva.destino_lng
+        caronaContato.origem_lat, caronaContato.origem_lng,
+        caronaContato.destino_lat, caronaContato.destino_lng
       );
       if (compatContato === "total") {
         return res.status(400).json({
