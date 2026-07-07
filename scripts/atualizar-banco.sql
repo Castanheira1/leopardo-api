@@ -85,6 +85,15 @@ CREATE TABLE IF NOT EXISTS contatos_motorista (
 CREATE INDEX IF NOT EXISTS idx_contatos_motorista_pend ON contatos_motorista (motorista_id, lido, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_eventos_uso_usuario ON eventos_uso (usuario_id, created_at DESC);
 
+-- Colunas de localização em contatos (buzina no mapa do motorista)
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS origem_lat NUMERIC(10,6);
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS origem_lng NUMERIC(10,6);
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS origem_texto TEXT;
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS destino_lat NUMERIC(10,6);
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS destino_lng NUMERIC(10,6);
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS destino_texto TEXT;
+ALTER TABLE contatos_motorista ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1;
+
 -- Admin padrão com escopo S11D
 UPDATE usuarios
 SET admin_projeto_id = (SELECT id FROM projetos WHERE codigo = 'S11D' LIMIT 1),
