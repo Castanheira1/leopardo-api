@@ -1251,7 +1251,7 @@
         // posição real do GPS: sem ele, pedir/oferecer segue bloqueado.
         let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
         const estado = { gpsOk: false };
-        const map = novoMapa(mapId, { center: origem, zoom: 15, disableDoubleClickZoom: true });
+        const map = novoMapa(mapId, { center: origem, zoom: 15 });
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
@@ -1345,6 +1345,9 @@
         }
 
         const btnLimpar = document.getElementById(mapId === 'mapPed' ? 'btnLimparPed' : 'btnLimparOfe');
+        // O botão fica na alça de arrastar (grip): sem isto o toque vira "arraste"
+        // e o clique é engolido — daí "não limpava". Barra o gesto de arraste.
+        if (btnLimpar) ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
         function mostrarBtnLimpar(v) { if (btnLimpar) btnLimpar.style.display = v ? 'inline-block' : 'none'; }
         function limparRota() {
             destino = null;
