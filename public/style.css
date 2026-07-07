@@ -1005,6 +1005,15 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .sheet-fase { color: #fff; font-size: 1.12rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
 .sheet-eta { color: #EAD298; font-weight: 600; font-size: 0.92rem; line-height: 1.3; margin: 0; }
 .sheet-hint { color: #9aa0a6; font-size: 0.92rem; text-align: center; padding: 8px 0; margin: 0; }
+.sheet-hint--chegada {
+    color: #EAD298;
+    background: rgba(234, 210, 152, 0.1);
+    border: 1px solid rgba(234, 210, 152, 0.35);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    line-height: 1.35;
+}
 
 .sheet-driver { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .sheet-selfie { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(234, 210, 152, 0.55); flex-shrink: 0; }
