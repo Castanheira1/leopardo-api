@@ -2852,6 +2852,7 @@
         if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         if (selfCar.timer) { clearInterval(selfCar.timer); selfCar.timer = null; }
+        if (selfCar.watchId != null) { navigator.geolocation.clearWatch(selfCar.watchId); selfCar.watchId = null; }
 
         const ehMotorista = String(v.motorista_id) === String(user.id);
 
@@ -2888,6 +2889,7 @@
             motoristaSexo: v.motorista_sexo, passageiroSexo: v.passageiro_sexo,
             posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
+            rotaUltimaPos: null, rotaUltimaEm: 0,
             seguir: true,   // motorista segue a si; passageiro segue o carro
         };
         atualizarCabecalhoViagem();
@@ -3018,18 +3020,24 @@
         const eta = document.getElementById('viagemEta');
         if (vv.ehMotorista) {
             const alvo = alvoViagem();
-            if (vv.posMotorista && alvo && vv.rotaCtrl && Date.now() - vv.ultimaRota > 5000) {
-                vv.ultimaRota = Date.now();
-                try {
-                    const resp = await vv.rotaCtrl.calcular(vv.posMotorista, alvo);
-                    const leg = resp.routes[0].legs[0];
-                    if (eta) {
-                        eta.style.display = 'block';
-                        eta.textContent = `~${leg.duration.text} · ${leg.distance.text}`;
-                    }
-                } catch (_) { /* sem rota: segue só com os marcadores */ }
+            if (vv.posMotorista && alvo && vv.rotaCtrl) {
+                const moved = !vv.rotaUltimaPos || distKmGps(vv.rotaUltimaPos, vv.posMotorista) >= ROTA_RECALC_KM;
+                const tempoOk = Date.now() - (vv.rotaUltimaEm || 0) >= ROTA_RECALC_MS;
+                if ((moved || tempoOk) && Date.now() - vv.ultimaRota > 2000) {
+                    vv.ultimaRota = Date.now();
+                    try {
+                        const resp = await vv.rotaCtrl.calcular(vv.posMotorista, alvo);
+                        vv.rotaUltimaPos = { ...vv.posMotorista };
+                        vv.rotaUltimaEm = Date.now();
+                        const leg = resp.routes[0].legs[0];
+                        if (eta) {
+                            eta.style.display = 'block';
+                            eta.textContent = `~${leg.duration.text} · ${leg.distance.text}`;
+                        }
+                    } catch (_) { /* sem rota: segue só com os marcadores */ }
+                }
             }
-        } else if (vv.posMotorista && Date.now() - vv.ultimaRota > 5000) {
+        } else if (vv.posMotorista && Date.now() - vv.ultimaRota > 2000) {
             vv.ultimaRota = Date.now();
             if (eta) {
                 eta.style.display = 'block';
@@ -3110,11 +3118,11 @@
                 }
             } else vv.posPassageiro = pt;
             renderViagem();
-            if (Date.now() - ultimoEnvioLoc > 4000) {
+            if (Date.now() - ultimoEnvioLoc > 2000) {
                 ultimoEnvioLoc = Date.now();
                 fetchWithAuth('/api/localizacao', { method: 'POST', body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }) }).catch(() => {});
             }
-        }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 5000 });
+        }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 });
 
         // 2) Posição do outro + fase/status (a cada 4s).
         async function tick() {
@@ -3144,7 +3152,7 @@
             } catch (_) { /* rede instável: tenta no próximo ciclo */ }
         }
         tick();
-        acompTimer = setInterval(tick, 4000);
+        acompTimer = setInterval(tick, VIAGEM_POLL_MS);
         if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
     }
     // Motorista chegou ao passageiro: muda para a fase de destino.
@@ -3232,28 +3240,32 @@
         return o && d ? `${o.lat},${o.lng}|${d.lat},${d.lng}` : null;
     }
     const FLEET_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
-    async function garantirRotaFrota(item, map, m) {
-        const origem = origemPublicadaCarro(m);
-        const destino = destinoPublicadoCarro(m);
-        if (!origem || !destino) {
+    const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
+    const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
+    const ROTA_RECALC_KM = 0.04;         // ~40 m — redesenha rota restante
+    const ROTA_RECALC_MS = 5000;         // no máximo a cada 5 s (Routes API)
+
+    // Rota restante: do carro AGORA até o destino (não deixa rastro do trecho já percorrido).
+    async function atualizarRotaFrota(item, map, pos, destino) {
+        if (!destino || !pos) {
             if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
-            if (item.destinoMk) { item.destinoMk.setMap(null); item.destinoMk = null; }
-            item.rotaChave = null;
-            item.rotaCalculando = null;
+            item.rotaUltimaPos = null;
+            item.rotaUltimaEm = 0;
             return;
         }
-        const chave = chaveRotaCarona(m);
-        if (item.rotaChave === chave && item.rotaCtrl) return;
-        if (item.rotaCalculando === chave) return;
+        const agora = Date.now();
+        const moved = !item.rotaUltimaPos || distKmGps(item.rotaUltimaPos, pos) >= ROTA_RECALC_KM;
+        const tempoOk = agora - (item.rotaUltimaEm || 0) >= ROTA_RECALC_MS;
+        if (item.rotaCtrl && !moved && !tempoOk) return;
+        if (item.rotaCalculando) return;
         if (!item.rotaCtrl) item.rotaCtrl = criarRotaControle(map, FLEET_ROTA_OPTS);
-        item.rotaCalculando = chave;
+        item.rotaCalculando = true;
         try {
-            await item.rotaCtrl.calcular(origem, destino);
-            if (item.rotaCalculando === chave) item.rotaChave = chave;
-        } catch (_) { /* sem rota disponível */ }
-        finally {
-            if (item.rotaCalculando === chave) item.rotaCalculando = null;
-        }
+            await item.rotaCtrl.calcular(pos, destino);
+            item.rotaUltimaPos = { ...pos };
+            item.rotaUltimaEm = agora;
+        } catch (_) { /* sem rota: só o carro */ }
+        finally { item.rotaCalculando = false; }
     }
     function seloFilaCarro(m) {
         return m && m.carona_id && m.ordem != null ? m.ordem + 1 : undefined;
@@ -3308,12 +3320,12 @@
                         atualizarPosicaoCarro(item.car, pos, prev);
                         item.lastPos = pos;
                         if (destCarona) {
-                            garantirRotaFrota(item, map, m);
+                            atualizarRotaFrota(item, map, pos, destCarona);
                         } else if (item.rotaCtrl || item.destinoMk) {
                             if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
                             if (item.destinoMk) { item.destinoMk.setMap(null); item.destinoMk = null; }
-                            item.rotaChave = null;
-                            item.rotaCalculando = null;
+                            item.rotaUltimaPos = null;
+                            item.rotaUltimaEm = 0;
                         }
                     } else {
                         const iconVariant = m.carona_id ? 'white' : 'gold';
@@ -3327,8 +3339,9 @@
                         const abrir = () => mostrarCaronaDoCarro(fleet.markers[m.id].m);
                         car.addListener('click', abrir);
                         // Rota real (ruas) só para carona publicada (nunca modo amarelo).
-                        let rotaCtrl = null, destinoMk = null;
-                        const novo = { m, car, rotaCtrl, destinoMk, lastPos: pos, rotaChave: null, rotaCalculando: null };
+                        let destinoMk = null;
+                        const novo = { m, car, rotaCtrl: null, destinoMk: null, lastPos: pos,
+                            rotaUltimaPos: null, rotaUltimaEm: 0, rotaCalculando: false };
                         fleet.markers[m.id] = novo;
                         if (destCarona) {
                             destinoMk = criarMarcador({
@@ -3337,7 +3350,7 @@
                             });
                             destinoMk.addListener('click', abrir);
                             novo.destinoMk = destinoMk;
-                            garantirRotaFrota(novo, map, m);
+                            atualizarRotaFrota(novo, map, pos, destCarona);
                         }
                     }
                 });
@@ -3357,7 +3370,7 @@
         }
         tick();
         atualizarFrotaAoVivo = tick;
-        fleet.timer = setInterval(tick, 8000);   // equilíbrio tempo real × carga/bateria
+        fleet.timer = setInterval(tick, FLEET_POLL_MS);
     }
 
     // Passageiros pedindo carona aparecem no mapa do MOTORISTA como bonequinhos
@@ -3574,31 +3587,33 @@
     // Mostra o próprio carro no mapa (atualiza a cada 5s). Se marcadorEmprestado for
     // passado (ex.: mkOrigem do criarSeletor), reutiliza o mesmo ícone — evita dois
     // carrinhos no mesmo GPS com rotações diferentes (efeito "hélice").
-    let selfCar = { marker: null, timer: null, lastPos: null, emprestado: false };
+    let selfCar = { marker: null, timer: null, watchId: null, lastPos: null, emprestado: false };
     function acompanharProprioCarro(map, marcadorEmprestado) {
+        if (selfCar.watchId != null) navigator.geolocation.clearWatch(selfCar.watchId);
         if (selfCar.timer) clearInterval(selfCar.timer);
+        selfCar.watchId = null;
+        selfCar.timer = null;
         if (selfCar.marker && !selfCar.emprestado) selfCar.marker.setMap(null);
         selfCar.marker = marcadorEmprestado || null;
         selfCar.emprestado = !!marcadorEmprestado;
         selfCar.lastPos = marcadorEmprestado ? null : selfCar.lastPos;
-        async function upd() {
-            try {
-                const p = await obterLocalizacao();
-                const pos = { lat: p.lat, lng: p.lng };
-                if (selfCar.marker) {
-                    atualizarPosicaoCarro(selfCar.marker, pos, selfCar.lastPos);
-                } else {
-                    selfCar.marker = criarMarcador({
-                        position: pos, map,
-                        iconW: 30, iconH: 40, iconVariant: 'white', title: 'Você', zIndex: 999,
-                    });
-                    selfCar.emprestado = false;
-                }
-                selfCar.lastPos = pos;
-            } catch (_) { /* sem GPS: ignora */ }
+        function aplicarPos(pos) {
+            if (selfCar.marker) {
+                atualizarPosicaoCarro(selfCar.marker, pos, selfCar.lastPos);
+            } else {
+                selfCar.marker = criarMarcador({
+                    position: pos, map,
+                    iconW: 30, iconH: 40, iconVariant: 'white', title: 'Você', zIndex: 999,
+                });
+                selfCar.emprestado = false;
+            }
+            selfCar.lastPos = pos;
         }
-        upd();
-        selfCar.timer = setInterval(upd, 5000);
+        selfCar.watchId = navigator.geolocation.watchPosition(
+            (p) => aplicarPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
+            () => {},
+            { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 },
+        );
     }
 
     let contatoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false, passageirosAtivos: new Set() };
@@ -3715,7 +3730,7 @@
     function iniciarBroadcastLocalizacao(modoOnline) {
         if (modoOnline) broadcastModoOnline = true;
         if (broadcastTimer) return;
-        const intervalo = () => (broadcastModoOnline ? 8000 : 8000);
+        const intervalo = () => (viagemView ? 2500 : (broadcastModoOnline ? 3500 : 5000));
         async function envia() {
             if (document.hidden && !broadcastModoOnline) return;
             try {
