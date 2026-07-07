@@ -97,7 +97,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirColunasContatosMotorista(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirCaronasUnicasAtivas(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirColunasContatosMotorista(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -409,6 +409,28 @@ async function corrigirInconsistenciasModoAmarelo() {
     }
   } catch (e) {
     console.warn("corrigirInconsistenciasModoAmarelo:", e.message);
+  }
+}
+
+// Um motorista só pode ter 1 carona ativa. Histórico antigo preso com status
+// 'ativa' duplicava cards na lista "Motoristas indo para lá".
+async function garantirCaronasUnicasAtivas() {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE caronas SET status = 'cancelada'
+       WHERE status = 'ativa'
+         AND id NOT IN (
+           SELECT DISTINCT ON (motorista_id) id
+           FROM caronas
+           WHERE status = 'ativa'
+           ORDER BY motorista_id, created_at DESC
+         )`
+    );
+    if (rowCount > 0) {
+      console.log(`Caronas: cancelou ${rowCount} registro(s) ativo(s) duplicado(s).`);
+    }
+  } catch (e) {
+    console.warn("garantirCaronasUnicasAtivas:", e.message);
   }
 }
 
@@ -1576,6 +1598,11 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
     const hab = await habilitacaoAtiva(req.user.id);
     if (!hab) return res.status(403).json({ error: "Ative o modo motorista (foto do carro + selfie) antes de oferecer carona" });
 
+    await pool.query(
+      "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
+      [req.user.id]
+    );
+
     const { rows } = await pool.query(
       `INSERT INTO caronas
          (motorista_id, habilitacao_id, origem_texto, origem_lat, origem_lng,
@@ -1669,6 +1696,11 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
        LEFT JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
+       AND c.id = (
+         SELECT cx.id FROM caronas cx
+         WHERE cx.motorista_id = c.motorista_id AND cx.status = 'ativa'
+         ORDER BY cx.created_at DESC LIMIT 1
+       )
        ${filtroProj}
        ${origemRaio}
        ${destFiltro}

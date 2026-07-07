@@ -1954,8 +1954,9 @@
                 .map((m) => [m.id, m.ordem]));
             const indoDestino = [];
             const porPerto = [];
+            const porMotorista = new Map();
             (Array.isArray(caronas) ? caronas : []).forEach((c) => {
-                indoDestino.push({
+                const item = {
                     id: c.motorista_id, caronaId: c.id,
                     nome: c.motorista_empresa || c.motorista_nome, placa: c.placa, tag: c.tag,
                     foto: c.foto_carro_url, vagas: c.vagas, destino: c.destino_texto,
@@ -1964,8 +1965,11 @@
                     online: !!c.motorista_online,
                     compatRota: c.compat_rota || 'total',
                     destinoMotorista: c.destino_texto,
-                });
+                };
+                const prev = porMotorista.get(c.motorista_id);
+                if (!prev || item.caronaId > prev.caronaId) porMotorista.set(c.motorista_id, item);
             });
+            porMotorista.forEach((item) => indoDestino.push(item));
             const idsIndo = new Set(indoDestino.map((it) => it.id));
             (Array.isArray(online) ? online : []).forEach((m) => {
                 if (m.carona_id || idsIndo.has(m.id)) return;
