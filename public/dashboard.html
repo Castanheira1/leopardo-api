@@ -155,7 +155,7 @@
                     <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div id="acaoSheetOfe" class="acao-sheet">
-                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span></div>
+                        <div class="acao-grip" id="gripOfe"><span class="acao-handle"></span><span class="acao-titulo">Oferecer carona</span><button type="button" id="btnLimparOfe" class="btn-limpar-dest" style="display:none;" onclick="limparDestino('mapOfe')">Limpar destino</button></div>
                         <div class="form-row" id="vagasOfeWrap">
                             <div class="form-group">
                                 <label>Vagas disponíveis</label>
@@ -421,7 +421,14 @@
         </div>
     </div>
 
-    <!-- Tela inicial: escolher o papel (trava no modo escolhido) -->
+    <!-- Splash de abertura: cobre a tela enquanto a sessão é restaurada, para o
+         usuário não encarar a tela de "Pedir carona" (mapa carregando) nem ver o
+         seletor de papel piscar quando ele já tem carona/viagem em andamento.
+         O init() o remove assim que decide: retoma direto ou mostra a escolha. -->
+    <div id="bootSplash" class="boot-splash"><span class="boot-spinner" aria-label="Carregando"></span></div>
+
+    <!-- Tela inicial: escolher o papel (trava no modo escolhido).
+         Fica oculta e só aparece quando NÃO há sessão a retomar (via init/menu). -->
     <div id="telaPapel" class="papel-overlay" style="display:none;">
         <div class="papel-box">
             <h2>O que você quer fazer?</h2>
@@ -468,13 +475,25 @@
         if (!emCampo && inset < 120) return 0;
         return inset;
     }
+    // Idempotente: o visualViewport dispara scroll/resize o tempo todo no celular
+    // (barra do navegador, micro-ajustes). Reescrever as variáveis a cada disparo
+    // fazia o bottom sheet reposicionar e o toque no botão "escorregar" (parecia
+    // travar). Só reescreve quando o valor MUDA de verdade.
+    let _appvhAnt = null, _kbdAnt = null;
     function compensarTeclado() {
         const vv = window.visualViewport;
         const h = vv ? vv.height : window.innerHeight;
         const inset = insetTeclado();
-        document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
-        document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
-        document.documentElement.classList.toggle('teclado-aberto', inset > 80);
+        const appvh = Math.round(h * 0.1) / 10;   // 0.1px de tolerância: ignora tremor
+        if (appvh !== _appvhAnt) {
+            document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
+            _appvhAnt = appvh;
+        }
+        if (inset !== _kbdAnt) {
+            document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
+            document.documentElement.classList.toggle('teclado-aberto', inset > 80);
+            _kbdAnt = inset;
+        }
     }
     function ajustarAltura() { compensarTeclado(); }
     ajustarAltura();
@@ -580,14 +599,14 @@
         // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
-            if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); selPed.dica(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
+            if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
         }
         if (id === 'tabOferecer') {
             if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
             if (!selOfe) initMapOferecer();
             else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
-                else { selOfe.recentrar(); selOfe.dica(); }
+                else { selOfe.recentrar(); }
             }
         }
     }
@@ -910,13 +929,26 @@
     }
 
     /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
+    // Remove o splash de abertura (idempotente): chamado assim que a UI real
+    // está pronta — seja o seletor de papel, seja a tela retomada.
+    function esconderBootSplash() {
+        const s = document.getElementById('bootSplash');
+        if (s) s.remove();
+    }
+    // Escolheu destino errado: limpa a marcação/rota do mapa.
+    function limparDestino(mapId) {
+        const sel = mapId === 'mapPed' ? selPed : selOfe;
+        if (sel && sel.limparRota) sel.limparRota();
+    }
     function abrirEscolhaPapel() {
         document.getElementById('telaPapel').style.display = 'flex';
+        esconderBootSplash();
     }
     function escolherPapel(papel) {
         localStorage.setItem('papel', papel);   // volta no mesmo modo ao reabrir o app
         registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
+        esconderBootSplash();
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
@@ -1234,7 +1266,7 @@
         // posição real do GPS: sem ele, pedir/oferecer segue bloqueado.
         let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
         const estado = { gpsOk: false };
-        const map = novoMapa(mapId, { center: origem, zoom: 15, disableDoubleClickZoom: true });
+        const map = novoMapa(mapId, { center: origem, zoom: 15 });
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
@@ -1327,6 +1359,11 @@
             }, 4000);
         }
 
+        const btnLimpar = document.getElementById(mapId === 'mapPed' ? 'btnLimparPed' : 'btnLimparOfe');
+        // O botão fica na alça de arrastar (grip): sem isto o toque vira "arraste"
+        // e o clique é engolido — daí "não limpava". Barra o gesto de arraste.
+        if (btnLimpar) ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
+        function mostrarBtnLimpar(v) { if (btnLimpar) btnLimpar.style.display = v ? 'inline-block' : 'none'; }
         function limparRota() {
             destino = null;
             previewSeq++;
@@ -1334,6 +1371,7 @@
             mkDestino.setMap(null);
             rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
+            mostrarBtnLimpar(false);
             if (onDestino) onDestino(null);
         }
 
@@ -1341,6 +1379,7 @@
         function setDestino(pos, texto) {
             const nomeDestino = (texto && String(texto).trim()) || '';
             destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
+            mostrarBtnLimpar(true);
             mkDestino.setMap(map);
             mkDestino.setPosition(pos);
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
@@ -1361,33 +1400,22 @@
             }
         }
 
-        // Duplo toque marca o local (evita criar rota a cada toque). Toque simples só avisa.
-        let ultimaDica = 0;
-        function dicaToque(forcar) {
-            const agora = Date.now();
-            if (!forcar && agora - ultimaDica < 4000) return;
-            ultimaDica = agora;
-            msg('Toque DUAS vezes no mapa para marcar o local.');
-        }
         // Tocar num LUGAR nomeado do mapa (POI: portaria, hospital, britador…) usa o
         // NOME dele como destino — muito mais fácil que decorar o endereço de rua.
+        // O destino também pode ser definido pela busca "Para onde vamos".
         let placesSvc = null;
         map.addListener('click', (e) => {
-            if (e.placeId) {
-                if (e.stop) e.stop();   // não abre o infowindow padrão do Google
-                placesSvc = placesSvc || new g.maps.places.PlacesService(map);
-                placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
-                    if (status === 'OK' && det && det.geometry) {
-                        setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
-                    } else {
-                        setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-                    }
-                });
-                return;
-            }
-            dicaToque();
+            if (!e.placeId) return;   // toque no vazio não marca nada (evita destino/rota acidental)
+            if (e.stop) e.stop();     // não abre o infowindow padrão do Google
+            placesSvc = placesSvc || new g.maps.places.PlacesService(map);
+            placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
+                if (status === 'OK' && det && det.geometry) {
+                    setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
+                } else {
+                    setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                }
+            });
         });
-        map.addListener('dblclick', (e) => setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
 
         const inputEl = document.getElementById(inputId);
         const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
@@ -1431,7 +1459,6 @@
             // Favoritos e afins: define o destino como se tivesse buscado na barra.
             irPara: (pos, texto) => setDestino(pos, texto),
             recentrar,
-            dica: () => dicaToque(true),
             limparRota,
             // Origem vale para publicar? Só se veio do GPS de verdade.
             origemConfiavel: () => estado.gpsOk,
@@ -1449,8 +1476,7 @@
             selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
-            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
-            selPed.dica();   // instrução ao abrir
+            tornarArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'), 92);
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -1461,13 +1487,11 @@
         if (initOfePromise) return initOfePromise;
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
-            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+            tornarArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'), 92);
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map);
                 iniciarPedidosAoVivo(selOfe.map);
-            } else {
-                selOfe.dica();
             }
             return selOfe;
         })();
@@ -1743,7 +1767,9 @@
     //   - online geral (sem carona): motorista disponível por perto.
     // Em ambos, sempre dá pra buzinar/ligar/chamar no WhatsApp direto da lista.
     function cardMotoristaDisponivel(it) {
-        const km = it.dist != null && isFinite(it.dist) ? `${Number(it.dist).toFixed(1)} km` : '';
+        // Só mostra a distância quando é confiável (>= 0,1 km). Abaixo disso o GPS
+        // do motorista costuma estar defasado e "0.0 km" passava informação falsa.
+        const km = it.dist != null && isFinite(it.dist) && it.dist >= 0.1 ? `${Number(it.dist).toFixed(1)} km` : '';
         const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
         const empresa = esc(it.nome || 'Motorista');
         const posicao = it.caronaId && it.ordem != null ? `<span class="ride-posicao">Nº ${it.ordem + 1} na fila</span>` : '';
@@ -1752,7 +1778,7 @@
             : `${ICN.car} Disponível agora — combine o destino`;
         const botao = it.caronaId ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${it.caronaId})">Solicitar</button>` : '';
         return `<div class="ride-item">
-            ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb">` : ''}
+            ${it.foto ? `<img src="${esc(it.foto)}" class="ride-thumb" loading="lazy" onerror="this.remove()">` : ''}
             <div class="ride-info">
                 <strong>${empresa}</strong> ${posicao}<br>
                 <small>${carro}</small><br>
@@ -2134,6 +2160,10 @@
         motoristaOnlineModo = false;
         atualizarUiMotoristaOnline();
         pararPollContatosMotorista();
+        // Para o broadcast ANTES do DELETE: senão o próximo tick (a cada 8s) reenvia
+        // disponivel=TRUE e o motorista volta a ficar "online" — caindo no modo
+        // motorista em todo login, mesmo depois de Encerrar.
+        pararBroadcastLocalizacao();
         await fetchWithAuth('/api/motorista/online', { method: 'DELETE' }).catch(() => {});
         if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
         Object.values(pedidoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
@@ -3399,6 +3429,12 @@
 
     /* -------- init -------- */
     (async function init() {
+        // Trava o botão voltar do celular JÁ — antes dos awaits de rede. Se instalar
+        // só no fim, durante a abertura o "voltar" navega o histórico real do WebView
+        // (dashboard -> login -> recarrega) e cai no seletor de papel sozinho.
+        instalarGuardaVoltar(fecharCamadaVoltar);
+        // Rede lenta/erro nunca pode deixar o usuário preso no splash: some sozinho.
+        setTimeout(esconderBootSplash, 8000);
         carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
         await sincronizarPerfil();
         await carregarOpcoesProjetoPerfil();
@@ -3440,7 +3476,6 @@
                 }
             });
         }
-        instalarGuardaVoltar(fecharCamadaVoltar);
     })();
     </script>
 </body>
