@@ -781,9 +781,9 @@
             el.innerHTML = '<div class="fav-vazio">Não foi possível carregar o catálogo.</div>';
             return;
         }
-        const filtro = (document.getElementById('perfilFavFiltro')?.value || '').trim().toLowerCase();
+        const filtro = (document.getElementById('perfilFavFiltro')?.value || '').trim();
         const visiveis = filtro
-            ? favCatalogoLocais.filter((l) => l.nome.toLowerCase().includes(filtro) || (l.grupo || '').toLowerCase().includes(filtro))
+            ? favCatalogoLocais.filter((l) => locCoincideFiltro(l, filtro))
             : favCatalogoLocais;
         if (!visiveis.length) {
             el.innerHTML = '<div class="fav-vazio">Nenhum local no filtro.</div>';
@@ -861,9 +861,9 @@
     function renderPainelLocais() {
         if (favModoPainel === 'pessoais') return renderFavoritosMenu();
         const lista = document.getElementById('listaFavoritos');
-        const filtro = (document.getElementById('favFiltro')?.value || '').trim().toLowerCase();
+        const filtro = (document.getElementById('favFiltro')?.value || '').trim();
         const visiveis = filtro
-            ? favCatalogoLocais.filter((l) => l.nome.toLowerCase().includes(filtro) || (l.grupo || '').toLowerCase().includes(filtro))
+            ? favCatalogoLocais.filter((l) => locCoincideFiltro(l, filtro))
             : favCatalogoLocais;
         if (!visiveis.length) {
             lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
@@ -921,6 +921,12 @@
     function normNomeLoc(s) {
         return String(s || '').normalize('NFD').replace(/\p{M}/gu, '')
             .replace(/[—–-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function locCoincideFiltro(local, filtroRaw) {
+        const f = normNomeLoc(filtroRaw);
+        if (!f) return true;
+        return normNomeLoc(local.nome).includes(f) || normNomeLoc(local.grupo || '').includes(f);
     }
 
     function localDoCatalogo(local) {
