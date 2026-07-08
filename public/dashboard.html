@@ -1678,6 +1678,10 @@
             mkDestino.setMap(map);
             mkDestino.setPosition(pos);
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
+            // Abaixa o sheet NA HORA: com ele suspenso, a pré-visualização do
+            // destino (busca, Locais, toque no mapa) ficava escondida atrás.
+            const sheetEl = document.getElementById(sheetId);
+            if (sheetEl) sheetEl.classList.add('collapsed');
             // Zoom no destino pra ver ONDE está indo; depois o foco volta sozinho
             // para o pulso do passageiro (ou o carrinho, no modo motorista) — os
             // carros amarelos ficam perto da origem.
