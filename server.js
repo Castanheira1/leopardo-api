@@ -2057,9 +2057,31 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     const pid = await exigirProjeto(req.user.id, res);
     if (!pid) return;
 
-    // Um pedido aberto por passageiro: cancela os anteriores (evita bonequinhos
-    // duplicados no mapa do motorista).
-    await pool.query("UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto'", [req.user.id]);
+    // Pedido imediato cancela só os "ao vivo" (sem horário futuro pendente).
+    // Agendamentos futuros continuam válidos — o passageiro pode pedir outra carona agora.
+    const hValido = horarioValido(horario);
+    let agendadoNovo = false;
+    if (hValido) {
+      const { rows: chkNovo } = await pool.query(
+        "SELECT ($1::timestamp > NOW()) AS futuro", [hValido]
+      );
+      agendadoNovo = !!chkNovo[0]?.futuro;
+    }
+    if (agendadoNovo) {
+      await pool.query(
+        `UPDATE pedidos SET status = 'cancelado'
+         WHERE passageiro_id = $1 AND status = 'aberto'
+           AND (horario IS NULL OR horario <= NOW())`,
+        [req.user.id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE pedidos SET status = 'cancelado'
+         WHERE passageiro_id = $1 AND status = 'aberto'
+           AND (horario IS NULL OR horario <= NOW() OR COALESCE(notificado, FALSE) = TRUE)`,
+        [req.user.id]
+      );
+    }
     const { rows } = await pool.query(
       `INSERT INTO pedidos
          (passageiro_id, origem_texto, origem_lat, origem_lng,
@@ -2069,7 +2091,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
        RETURNING *, (horario IS NOT NULL AND horario > NOW()) AS agendado_futuro`,
       [
         req.user.id, origem_texto || null, origem_lat, origem_lng,
-        destino_texto || null, destino_lat, destino_lng, horarioValido(horario), observacao || null, nPessoas,
+        destino_texto || null, destino_lat, destino_lng, hValido, observacao || null, nPessoas,
         selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
       ]
     );
@@ -2200,6 +2222,54 @@ app.delete("/api/pedidos/:id", verificarAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Erro ao cancelar pedido" });
+  }
+});
+
+// Editar agendamento futuro (horário / pessoas) antes de entrar no ar.
+app.patch("/api/pedidos/:id", verificarAuth, async (req, res) => {
+  const { horario, pessoas } = req.body || {};
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "Pedido inválido" });
+  try {
+    const atual = (await pool.query(
+      "SELECT * FROM pedidos WHERE id = $1 AND passageiro_id = $2 AND status = 'aberto'",
+      [id, req.user.id]
+    )).rows[0];
+    if (!atual) return res.status(404).json({ error: "Pedido não encontrado" });
+    const { rows: chk } = await pool.query(
+      `SELECT (horario IS NOT NULL AND horario > NOW()) AS futuro,
+              COALESCE(notificado, FALSE) AS notificado
+       FROM pedidos WHERE id = $1`,
+      [id]
+    );
+    if (!chk[0]?.futuro || chk[0].notificado) {
+      return res.status(400).json({
+        error: "Só é possível editar agendamentos futuros que ainda não entraram no ar.",
+      });
+    }
+    const hNovo = horario !== undefined ? horarioValido(horario) : atual.horario;
+    if (horario !== undefined && horario && !hNovo) {
+      return res.status(400).json({ error: "Horário inválido" });
+    }
+    if (hNovo) {
+      const { rows: fut } = await pool.query(
+        "SELECT ($1::timestamp > NOW()) AS ok", [hNovo]
+      );
+      if (!fut[0]?.ok) return res.status(400).json({ error: "Escolha um horário futuro" });
+    }
+    const nPessoas = pessoas !== undefined
+      ? Math.min(Math.max(parseInt(pessoas, 10) || 1, 1), 6)
+      : atual.pessoas;
+    const { rows } = await pool.query(
+      `UPDATE pedidos SET horario = $1, pessoas = $2, notificado = FALSE
+       WHERE id = $3
+       RETURNING *, (horario IS NOT NULL AND horario > NOW()) AS agendado_futuro`,
+      [hNovo, nPessoas, id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao atualizar pedido" });
   }
 });
 

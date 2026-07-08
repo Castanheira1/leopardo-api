@@ -105,6 +105,7 @@
                             <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
                             <a href="historico.html" class="nav-menu-item">Histórico</a>
                             <button onclick="abrirLocais()" class="nav-menu-item">Locais</button>
+                            <button onclick="abrirPainelAgendamentos()" class="nav-menu-item" id="menuAgendamentos" style="display:none;">Meus agendamentos <span id="badgeAgendamentos" class="nav-badge" style="display:none;"></span></button>
                             <button onclick="abrirFavoritos()" class="nav-menu-item">Meus locais favoritos</button>
                             <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
                             <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
@@ -119,6 +120,15 @@
                 <div class="map-stage">
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
+                    <div class="map-stage-controls" id="mapPedControls">
+                        <button type="button" class="map-tipo-btn" id="btnTipoMapaPed" aria-label="Alternar satélite ou mapa leve">Satélite</button>
+                    </div>
+                    <div id="bannerAgendamentos" class="banner-agendamentos" style="display:none;" role="status" aria-live="polite">
+                        <button type="button" class="banner-agendamentos__btn" onclick="abrirPainelAgendamentos()">
+                            <span class="banner-agendamentos__icon" aria-hidden="true">⏱</span>
+                            <span id="bannerAgendamentosTxt">Carona agendada</span>
+                        </button>
+                    </div>
                     <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped collapsed">
                         <div class="acao-grip" id="gripPed">
                             <span class="acao-accent" aria-hidden="true"></span>
@@ -168,6 +178,9 @@
                 <div class="map-stage">
                     <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
+                    <div class="map-stage-controls" id="mapOfeControls">
+                        <button type="button" class="map-tipo-btn" id="btnTipoMapaOfe" aria-label="Alternar satélite ou mapa leve">Satélite</button>
+                    </div>
                     <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe collapsed">
                         <div class="acao-grip" id="gripOfe">
                             <span class="acao-accent" aria-hidden="true"></span>
@@ -456,7 +469,6 @@
         </div>
     </div>
 
-    <!-- Painéis (abrem pelo menu): listas de caronas/pedidos e solicitações -->
     <div id="painelPassageiro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelPassageiro')">
         <div class="cam-box perfil-box painel-box">
             <h3>Caronas &amp; solicitações</h3>
@@ -472,6 +484,14 @@
                 <div id="listaPropPassageiro"></div>
             </div>
             <div class="sol-actions"><button type="button" class="btn btn-secondary" onclick="fecharPainel('painelPassageiro')">Fechar</button></div>
+        </div>
+    </div>
+    <div id="painelAgendamentos" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelAgendamentos')">
+        <div class="cam-box perfil-box painel-box">
+            <h3>Meus agendamentos</h3>
+            <p class="cam-hint">Caronas marcadas para mais tarde. Na hora marcada, o app entra no modo chamada automaticamente.</p>
+            <div id="listaAgendamentos" class="agenda-lista"><p class="cam-hint">Carregando…</p></div>
+            <div class="sol-actions"><button type="button" class="btn btn-secondary" onclick="fecharPainel('painelAgendamentos')">Fechar</button></div>
         </div>
     </div>
     <div id="painelMotorista" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPainel('painelMotorista')">
@@ -822,7 +842,8 @@
     function fecharPainel(id) { document.getElementById(id).style.display = 'none'; }
     function painelAberto() {
         return document.getElementById('painelPassageiro').style.display === 'flex'
-            || document.getElementById('painelMotorista').style.display === 'flex';
+            || document.getElementById('painelMotorista').style.display === 'flex'
+            || document.getElementById('painelAgendamentos').style.display === 'flex';
     }
 
     /* -------- Locais do projeto (catálogo) + favoritos pessoais (Perfil) --------
@@ -1171,6 +1192,22 @@
         const sheet = document.getElementById('acaoSheetOfe');
         if (sheet) sheet.classList.remove('collapsed');
     }
+    /** Libera o mapa após agendar: rota some, sheet abre, formulário pronto para novo pedido. */
+    function resetMapaParaNovoPedido() {
+        if (carroSel) fecharCarro();
+        if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+        limparBuscaDestino('mapPed');
+        if (selPed?.limparRota) selPed.limparRota();
+        carregarCaronasDestino(null);
+        atualizarBtnLimparPed(false);
+        atualizarHintDestinoPed();
+        atualizarFormPedidoRota(false, false);
+        const wrap = document.getElementById('motoristasDestinoWrap');
+        if (wrap) wrap.style.display = 'none';
+        const sheet = document.getElementById('acaoSheetPed');
+        if (sheet) sheet.classList.remove('collapsed');
+        inicializarQuandoPed();
+    }
     function abrirEscolhaPapel() {
         localStorage.removeItem('papel');
         document.body.classList.add('aguardando-papel');
@@ -1187,6 +1224,7 @@
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
         document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
+        document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
         atualizarIndicadorModoOperante();
         if (papel === 'motorista') {
@@ -1474,11 +1512,18 @@
             fullscreenControl: false, gestureHandling: 'greedy', ...opts,
         }));
         if (tipoMapaSalvo() === 'roadmap') map.setOptions({ styles: ESTILO_MAPA_ESCURO });
-        // Botão flutuante Satélite <-> Mapa leve (a escolha vale para os próximos mapas).
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'map-tipo-btn';
-        const rotulo = () => { b.textContent = tipoMapaSalvo() === 'hybrid' ? 'Mapa leve' : 'Satélite'; };
+        vincularBotaoTipoMapa(elId, map);
+        vincularZoomCarros(map);
+        return map;
+    }
+    function vincularBotaoTipoMapa(mapId, map) {
+        const btnId = mapId === 'mapPed' ? 'btnTipoMapaPed' : mapId === 'mapOfe' ? 'btnTipoMapaOfe' : null;
+        const b = btnId ? document.getElementById(btnId) : null;
+        if (!b) return;
+        const rotulo = () => {
+            const txt = tipoMapaSalvo() === 'hybrid' ? 'Mapa leve' : 'Satélite';
+            document.querySelectorAll('.map-tipo-btn').forEach((el) => { el.textContent = txt; });
+        };
         rotulo();
         b.onclick = () => {
             const novo = tipoMapaSalvo() === 'hybrid' ? 'roadmap' : 'hybrid';
@@ -1486,9 +1531,6 @@
             aplicarTipoMapa(map, novo);
             rotulo();
         };
-        map.controls[g.maps.ControlPosition.LEFT_BOTTOM].push(b);
-        vincularZoomCarros(map);
-        return map;
     }
 
     /* -------- seletor de rota (mapa) -------- */
@@ -1990,14 +2032,15 @@
             if (!r.ok) return msg(d.error || 'Erro', 'error');
             const eraAgendado = !!d.agendado_futuro;
             limparQuandoPed();
-            document.getElementById('acaoSheetPed').classList.add('collapsed');
             fecharChamando();
             if (eraAgendado) {
+                resetMapaParaNovoPedido();
                 const quando = parseHorarioLocal(d.horario);
                 const txt = quando
                     ? quando.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
                     : fmtHorario(d.horario);
-                msg('Carona agendada para ' + txt + '. Os motoristas serão avisados nesse horário.');
+                msg('Carona agendada para ' + txt + '. Você pode pedir outra carona agora ou ver em Meus agendamentos.');
+                await atualizarUiAgendamentos();
             } else {
                 await matchCaronas(d.id);   // popula o painel para consulta
                 mostrarChamando({ pedidoId: d.id });   // entra no modo chamada (procurando agora)
@@ -2866,20 +2909,154 @@
     function pedidoAgendadoNoFuturo(p) {
         const d = parseHorarioLocal(p?.horario);
         if (!d) return false;
-        return d.getTime() > Date.now() + 60000;
+        // Só entra no ar na hora marcada — sem margem de 1 min adiantada.
+        return d.getTime() > Date.now();
+    }
+
+    function fmtAgendamentoCurto(p) {
+        const d = parseHorarioLocal(p?.horario);
+        if (!d) return fmtHorario(p?.horario);
+        return d.toLocaleString('pt-BR', {
+            weekday: 'short', day: '2-digit', month: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        });
+    }
+
+    async function fetchMeusPedidosAbertos() {
+        const r = await fetchWithAuth('/api/pedidos?meus=1');
+        if (!r || !r.ok) return [];
+        return await r.json();
+    }
+
+    async function atualizarUiAgendamentos(pedsPre) {
+        const peds = pedsPre || await fetchMeusPedidosAbertos();
+        const agendados = peds.filter(pedidoAgendadoNoFuturo);
+        const n = agendados.length;
+        const banner = document.getElementById('bannerAgendamentos');
+        const txt = document.getElementById('bannerAgendamentosTxt');
+        const badge = document.getElementById('badgeAgendamentos');
+        const menu = document.getElementById('menuAgendamentos');
+        if (document.getElementById('modoTitulo')?.textContent === 'Passageiro') {
+            if (menu) menu.style.display = 'block';
+        }
+        if (banner) banner.style.display = n ? 'flex' : 'none';
+        if (txt) {
+            txt.textContent = n === 1
+                ? ('Agendada: ' + fmtAgendamentoCurto(agendados[0]))
+                : (n + ' caronas agendadas — toque para ver');
+        }
+        if (badge) {
+            badge.style.display = n ? 'inline-block' : 'none';
+            badge.textContent = n > 9 ? '9+' : String(n);
+        }
+        if (document.getElementById('painelAgendamentos')?.style.display === 'flex') {
+            renderListaAgendamentos(agendados);
+        }
+        return peds;
+    }
+
+    function abrirPainelAgendamentos() {
+        fecharMenu();
+        document.getElementById('painelAgendamentos').style.display = 'flex';
+        loadAgendamentos();
+    }
+
+    async function loadAgendamentos() {
+        const div = document.getElementById('listaAgendamentos');
+        if (!div) return;
+        try {
+            const peds = await fetchMeusPedidosAbertos();
+            const agendados = peds.filter(pedidoAgendadoNoFuturo);
+            renderListaAgendamentos(agendados);
+            await atualizarUiAgendamentos(peds);
+        } catch (_) {
+            div.innerHTML = '<p class="cam-hint">Não foi possível carregar. Tente de novo.</p>';
+        }
+    }
+
+    function renderListaAgendamentos(arr) {
+        const div = document.getElementById('listaAgendamentos');
+        if (!div) return;
+        if (!arr.length) {
+            div.innerHTML = '<p class="cam-hint">Nenhum agendamento futuro. Escolha destino e horário no mapa para agendar.</p>';
+            return;
+        }
+        div.innerHTML = arr.map(cardAgendamento).join('');
+    }
+
+    function cardAgendamento(p) {
+        const hid = 'agendaH_' + p.id;
+        const pid = 'agendaP_' + p.id;
+        const valH = (() => {
+            const d = parseHorarioLocal(p.horario);
+            return d ? formatDatetimeLocal(d) : '';
+        })();
+        return `<div class="agenda-card" id="agendaCard_${p.id}">
+            <strong>${esc(p.destino_texto || 'Destino no mapa')}</strong>
+            <div class="agenda-card__meta">${ICN.clock} ${esc(fmtAgendamentoCurto(p))} • ${p.pessoas || 1} pessoa(s)</div>
+            <small class="cam-hint">Motoristas serão avisados na hora marcada.</small>
+            <div class="agenda-card__acoes">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditarAgendamento(${p.id})">Editar</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="excluirAgendamento(${p.id})">Excluir</button>
+            </div>
+            <div class="agenda-card__edit">
+                <div class="form-group">
+                    <label for="${hid}">Novo horário</label>
+                    <input type="datetime-local" id="${hid}" step="300" value="${esc(valH)}">
+                </div>
+                <div class="form-group">
+                    <label for="${pid}">Pessoas</label>
+                    <input type="number" id="${pid}" min="1" max="6" value="${p.pessoas || 1}" inputmode="numeric">
+                </div>
+                <button type="button" class="btn btn-primary btn-sm btn-block" onclick="salvarAgendamento(${p.id})">Salvar</button>
+            </div>
+        </div>`;
+    }
+
+    function toggleEditarAgendamento(id) {
+        document.getElementById('agendaCard_' + id)?.classList.toggle('editing');
+    }
+
+    async function salvarAgendamento(id) {
+        const h = document.getElementById('agendaH_' + id)?.value?.trim();
+        const pessoas = +document.getElementById('agendaP_' + id)?.value || 1;
+        if (!h) return msg('Informe o horário.', 'error');
+        const local = parseDatetimeLocalValue(h);
+        if (!local || local.getTime() <= Date.now()) {
+            return msg('Escolha um horário futuro.', 'error');
+        }
+        const r = await fetchWithAuth('/api/pedidos/' + id, {
+            method: 'PATCH',
+            body: JSON.stringify({ horario: h, pessoas }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao salvar', 'error');
+        msg('Agendamento atualizado.');
+        await loadAgendamentos();
+    }
+
+    async function excluirAgendamento(id) {
+        if (!confirm('Cancelar este agendamento?')) return;
+        const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao excluir', 'error');
+        msg('Agendamento cancelado.');
+        await loadAgendamentos();
+        await atualizarUiAgendamentos();
     }
 
     async function verificarRetomarPassageiro() {
         try {
-            const r = await fetchWithAuth('/api/pedidos?meus=1');
-            if (r && r.ok) {
-                const aberto = (await r.json())[0];
-                if (!aberto) return;
-                if (pedidoAgendadoNoFuturo(aberto)) {
-                    msg('Carona agendada para ' + fmtHorario(aberto.horario) + '. Os motoristas serão avisados nesse horário.');
-                    return;
-                }
-                mostrarChamando({ pedidoId: aberto.id });
+            const peds = await fetchMeusPedidosAbertos();
+            await atualizarUiAgendamentos(peds);
+            const aoVivo = peds.find((p) => !pedidoAgendadoNoFuturo(p));
+            if (aoVivo) {
+                mostrarChamando({ pedidoId: aoVivo.id });
+                return;
+            }
+            // Só agendamentos futuros: mapa livre para novo pedido (não prende na rota).
+            if (peds.some(pedidoAgendadoNoFuturo) && selPed?.getDestino?.()) {
+                resetMapaParaNovoPedido();
             }
         } catch (_) {}
     }
@@ -2888,11 +3065,11 @@
         if (chamandoPedidoId || chamandoId) return;
         if (document.getElementById('modoTitulo')?.textContent !== 'Passageiro') return;
         try {
-            const r = await fetchWithAuth('/api/pedidos?meus=1');
-            if (!r || !r.ok) return;
-            const aberto = (await r.json())[0];
-            if (!aberto || pedidoAgendadoNoFuturo(aberto)) return;
-            mostrarChamando({ pedidoId: aberto.id });
+            const peds = await fetchMeusPedidosAbertos();
+            await atualizarUiAgendamentos(peds);
+            const aoVivo = peds.find((p) => !pedidoAgendadoNoFuturo(p));
+            if (!aoVivo) return;
+            mostrarChamando({ pedidoId: aoVivo.id });
         } catch (_) {}
     }
 
@@ -2940,9 +3117,10 @@
         const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
-        if (selPed) selPed.limparRota();   // cancelou: o mapa não fica com a rota presa
+        if (selPed) selPed.limparRota();
         msg('Solicitação cancelada.');
         loadMeusPedidos();
+        atualizarUiAgendamentos();
     }
     function renderProp(id, arr) {
         const div = document.getElementById(id);

@@ -558,11 +558,8 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
 
     /* =================== AGENDAMENTO =================== */
     grupo("Agendamento de pedido (horário futuro)");
-    // Passageiro dedicado: cada POST /api/pedidos cancela os pedidos abertos do
-    // mesmo usuário, então isolamos para não mexer no fluxo de match/proposta.
     const uAgenda = novoUsuario(7, "S11D");
-    let tokAgenda;
-    // datetime-local ("YYYY-MM-DDTHH:MM") de parede local, como o navegador envia.
+    let tokAgenda, pedidoAgendadoId;
     const datetimeLocalDaqui = (horas) => {
       const d = new Date(Date.now() + horas * 3600 * 1000);
       const p = (n) => String(n).padStart(2, "0");
@@ -580,23 +577,33 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
           origem_texto: "Portaria", origem_lat: ORIGEM.lat, origem_lng: ORIGEM.lng,
           destino_texto: "Alojamento", destino_lat: DESTINO.lat, destino_lng: DESTINO.lng,
           selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
-          horario: datetimeLocalDaqui(24),   // amanhã, mesma hora
+          horario: datetimeLocalDaqui(24),
           usar_fila: true,
         },
       });
       eq(status, 200, "status");
       eq(json.agendado_futuro, true, "agendado_futuro deveria ser true para horário futuro");
       assert(json.horario, "pedido agendado deveria guardar o horário");
+      pedidoAgendadoId = json.id;
+    });
+    await test("PATCH /api/pedidos/:id altera horário do agendamento futuro", async () => {
+      const novoHor = datetimeLocalDaqui(48);
+      const { status, json } = await api("PATCH", "/api/pedidos/" + pedidoAgendadoId, {
+        token: tokAgenda,
+        body: { horario: novoHor, pessoas: 2 },
+      });
+      eq(status, 200, "status");
+      eq(json.pessoas, 2, "pessoas");
+      eq(json.agendado_futuro, true, "continua agendado");
     });
     await test("pedido agendado NÃO aparece no mapa do motorista antes da hora", async () => {
       const { status, json } = await api(
         "GET", `/api/pedidos?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokDriver });
       eq(status, 200, "status");
-      // O motorista não deve ver um pedido cujo horário ainda é futuro.
       assert(json.every((p) => !p.horario || new Date(p.horario) <= new Date(Date.now() + 60000)),
         "pedido com horário futuro não deveria aparecer para o motorista");
     });
-    await test("POST /api/pedidos SEM horário devolve agendado_futuro=false (imediato)", async () => {
+    await test("POST imediato NÃO cancela agendamento futuro do mesmo passageiro", async () => {
       const { status, json } = await api("POST", "/api/pedidos", {
         token: tokAgenda,
         body: {
@@ -608,6 +615,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       });
       eq(status, 200, "status");
       eq(json.agendado_futuro, false, "pedido sem horário é imediato");
+      const { status: s2, json: meus } = await api("GET", "/api/pedidos?meus=1", { token: tokAgenda });
+      eq(s2, 200, "status meus");
+      assert(meus.some((p) => p.id === pedidoAgendadoId && p.status === "aberto"),
+        "agendamento futuro deveria continuar aberto");
+      assert(meus.some((p) => p.id === json.id && !p.horario),
+        "pedido imediato também deveria estar aberto");
     });
 
     /* =================== MATCH (Haversine) =================== */
