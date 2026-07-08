@@ -1658,6 +1658,15 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .ride-card--proximo { border-color: rgba(147, 197, 253, 0.35); }
 .theme-dark .ride-card { background: #161719; border-color: #25262a; }
 
+/* Enquanto não escolhe Pedir/Oferecer: não mostra o mapa por trás do overlay */
+body.aguardando-papel .dashboard,
+body.aguardando-papel .navbar .nav-user {
+    visibility: hidden;
+}
+body.aguardando-papel .navbar {
+    pointer-events: none;
+}
+
 /* Texto auxiliar */
 .cam-hint { color: #64748b; font-size: 0.85rem; margin: 6px 0; }
 
