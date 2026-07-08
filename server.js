@@ -121,7 +121,24 @@ pool.on("connect", (client) => {
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); limparPublicacoesFantasma(); garantirIndiceCaronaUnica(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirColunasContatosMotorista(); garantirRlsSupabase(); })
+  .then(async (client) => {
+    console.log("Conectado ao PostgreSQL");
+    client.release();
+    // Sequencial e em ordem de dependência: garantirColunasContatosMotorista
+    // depende da tabela criada em garantirTabelaEventosUso, e garantirRlsSupabase
+    // precisa de todas as tabelas já existentes. Em paralelo (sem await) havia
+    // corrida — "relation contatos_motorista does not exist" no primeiro boot.
+    const passos = [
+      garantirColunasUsuarios, garantirTabelaPush, garantirTabelaFavoritos,
+      garantirTabelaPedidoFila, garantirColunasViagens, garantirColunasPedidos,
+      garantirColunasLocalizacao, limparPublicacoesFantasma, garantirIndiceCaronaUnica,
+      garantirSchemaComercial, garantirTabelaAnuncios, garantirTabelaEventosUso,
+      garantirColunasContatosMotorista, garantirRlsSupabase,
+    ];
+    for (const passo of passos) {
+      try { await passo(); } catch (e) { console.warn(`${passo.name}:`, e.message); }
+    }
+  })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não

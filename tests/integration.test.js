@@ -30,6 +30,17 @@ if (!process.env.DATABASE_URL) {
   process.exit(2);
 }
 
+// Fuso da sessão igual ao do server.js (pool.on("connect") -> SET TIME ZONE).
+// As colunas de tempo são `timestamp` sem fuso; se o helper de teste gravar em
+// UTC e o servidor ler em America/Sao_Paulo, os instantes escorregam ~3h e
+// checagens como "GPS fresco" quebram. Mantém o teste fiel à produção.
+const FUSO_APP = process.env.APP_TIMEZONE || "America/Sao_Paulo";
+function pgTeste() {
+  const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+  pg.on("connect", (c) => c.query(`SET TIME ZONE '${FUSO_APP}'`).catch(() => {}));
+  return pg;
+}
+
 /* ----------------------------- mini-harness ----------------------------- */
 let passed = 0, failed = 0;
 const falhas = [];
@@ -330,7 +341,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(!m.carona_id, "modo amarelo não traz carona_id");
     });
     await test("modo amarelo tolera GPS entre FRESH e STALE (5 min)", async () => {
-      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      const pg = pgTeste();
       try {
         await pg.query(
           "UPDATE localizacoes_online SET atualizado_em = NOW() - INTERVAL '5 minutes' WHERE usuario_id = $1",
@@ -410,7 +421,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(doMotorista[0].vagas, 1, "vagas da republicação");
     });
     await test("GPS expirado: motorista fantasma some de motoristas-online e caronas", async () => {
-      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      const pg = pgTeste();
       try {
         await pg.query(
           "UPDATE localizacoes_online SET atualizado_em = NOW() - INTERVAL '10 minutes' WHERE usuario_id = $1",
@@ -436,7 +447,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     await test("DELETE /api/motorista/online cancela carona ativa do motorista", async () => {
       const { status: s1 } = await api("DELETE", "/api/motorista/online", { token: tokDriver });
       eq(s1, 200, "status sair online");
-      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      const pg = pgTeste();
       try {
         const { rows } = await pg.query("SELECT status FROM caronas WHERE id = $1", [caronaId]);
         eq(rows[0]?.status, "cancelada", "carona deve ser cancelada ao sair do online");
@@ -916,7 +927,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     grupo("LGPD — aceite de usuário já cadastrado (portão)");
     await test("usuário legado (sem aceite) tem politica_pendente=true e aceita depois", async () => {
       // Simula um usuário cadastrado ANTES da política: zera o aceite direto no banco.
-      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      const pg = pgTeste();
       try {
         await pg.query(
           "UPDATE usuarios SET politica_aceita_em = NULL, politica_versao = NULL WHERE matricula = $1",
