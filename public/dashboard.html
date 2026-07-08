@@ -1813,9 +1813,22 @@
         el.min = formatDatetimeLocal(new Date());
     }
 
+    function parseHorarioLocal(h) {
+        if (h == null || h === '') return null;
+        const s = String(h).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) {
+            const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+            return isNaN(d.getTime()) ? null : d;
+        }
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
     function tickQuandoPed() {
         const el = document.getElementById('horaPed');
         if (!el || horaPedModoAgenda || el.dataset.editando === '1') return;
+        if (document.querySelector('.cam-video')) return;
         const tab = document.getElementById('tabPedir');
         if (!tab?.classList.contains('active') || document.hidden) return;
         atualizarMinQuandoPed();
@@ -1953,11 +1966,13 @@
             hor = lerHorarioPedido();
             if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
             const margemAgenda = 60000;
-            ehAgendado = !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
+            ehAgendado = horaPedModoAgenda
+                || !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
             if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
                 return msg('Escolha um horário futuro para agendar.', 'error');
             }
         }
+        const horarioEnviar = ehAgendado && hor.local ? formatDatetimeLocal(hor.local) : null;
         const soltar = travarBotao('btnCtaPedir', 'Abrindo a câmera…');
         if (!soltar) return;   // já tem um pedido em andamento
         try {
@@ -1966,22 +1981,23 @@
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-                horario: ehAgendado ? formatDatetimeLocal(hor.local) : null, pessoas: +document.getElementById('pessoasPed').value || 1,
+                horario: horarioEnviar, pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
                 usar_fila: true,   // chama os motoristas da rota um de cada vez, mais perto primeiro
             };
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            // Limpa o horário escolhido: evita AGENDAR o próximo pedido sem querer
-            // (um horário futuro deixado no campo esconde o pedido dos motoristas).
-            const eraAgendado = ehAgendado;
+            const eraAgendado = !!d.agendado_futuro;
             limparQuandoPed();
             document.getElementById('acaoSheetPed').classList.add('collapsed');
+            fecharChamando();
             if (eraAgendado) {
-                // Pedido agendado: NÃO está procurando agora. Avisa quando vai aparecer.
-                const quando = hor.local.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-                msg('Carona agendada para ' + quando + '. Os motoristas serão avisados nesse horário.');
+                const quando = parseHorarioLocal(d.horario);
+                const txt = quando
+                    ? quando.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    : fmtHorario(d.horario);
+                msg('Carona agendada para ' + txt + '. Os motoristas serão avisados nesse horário.');
             } else {
                 await matchCaronas(d.id);   // popula o painel para consulta
                 mostrarChamando({ pedidoId: d.id });   // entra no modo chamada (procurando agora)
@@ -2848,8 +2864,9 @@
     }
 
     function pedidoAgendadoNoFuturo(p) {
-        if (!p?.horario) return false;
-        return new Date(p.horario).getTime() > Date.now() + 60000;
+        const d = parseHorarioLocal(p?.horario);
+        if (!d) return false;
+        return d.getTime() > Date.now() + 60000;
     }
 
     async function verificarRetomarPassageiro() {

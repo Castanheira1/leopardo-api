@@ -2049,13 +2049,13 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
         selfie_url, selfie_lat || null, selfie_lng || null, selfie_em || new Date(),
       ]
     );
-    res.json(rows[0]);
+    const ped = rows[0];
+    const agendadoFuturo = await pedidoAgendadoFuturo(ped.horario);
+    res.json({ ...ped, agendado_futuro: agendadoFuturo });
 
     // Pedido "para agora" (sem horário ou horário já vencido): notifica os motoristas
     // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
     // dispara a notificação na hora marcada (notificado continua FALSE até lá).
-    const ped = rows[0];
-    const agendadoFuturo = await pedidoAgendadoFuturo(ped.horario);
     if (!agendadoFuturo) {
       // usar_fila: chama os motoristas da rota um de cada vez (mais perto
       // primeiro), em vez do broadcast pra todo mundo dentro de 600 m.
