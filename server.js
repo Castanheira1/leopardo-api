@@ -827,6 +827,13 @@ async function aplicarRetencaoFotos() {
 // Protege contra iOS antigo mandando texto inválido.
 function horarioValido(h) {
   if (!h) return null;
+  // Date (ex.: coluna timestamp lida pelo node-pg): usa os componentes de parede
+  // locais — String(Date) vira "... GMT-0300 (...)" e o Postgres recusa esse texto.
+  if (h instanceof Date) {
+    if (isNaN(h.getTime())) return null;
+    const p = (n) => String(n).padStart(2, "0");
+    return `${h.getFullYear()}-${p(h.getMonth() + 1)}-${p(h.getDate())} ${p(h.getHours())}:${p(h.getMinutes())}:${p(h.getSeconds())}`;
+  }
   const s = String(h).trim();
   if (!s) return null;
   const local = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
@@ -2042,7 +2049,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
           destino_texto, destino_lat, destino_lng, horario, observacao, pessoas,
           selfie_url, selfie_lat, selfie_lng, selfie_em, notificado)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,FALSE)
-       RETURNING *`,
+       RETURNING *, (horario IS NOT NULL AND horario > NOW()) AS agendado_futuro`,
       [
         req.user.id, origem_texto || null, origem_lat, origem_lng,
         destino_texto || null, destino_lat, destino_lng, horarioValido(horario), observacao || null, nPessoas,
@@ -2050,8 +2057,11 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
       ]
     );
     const ped = rows[0];
-    const agendadoFuturo = await pedidoAgendadoFuturo(ped.horario);
-    res.json({ ...ped, agendado_futuro: agendadoFuturo });
+    // Decisão do agendamento feita no próprio banco (mesmo fuso da sessão, SET TIME
+    // ZONE no connect). Antes isto passava a Date do node-pg de volta por
+    // horarioValido() e o Postgres rejeitava a string "GMT..." (erro 500 ao agendar).
+    const agendadoFuturo = !!ped.agendado_futuro;
+    res.json(ped);
 
     // Pedido "para agora" (sem horário ou horário já vencido): notifica os motoristas
     // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
@@ -2202,16 +2212,16 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
            AND lo.disponivel = TRUE
            AND ${SQL_GPS_FRESH.replace("atualizado_em", "lo.atualizado_em")}
          WHERE c.status = 'ativa' AND c.motorista_id <> $5
-           AND u.projeto_id = $8
+           AND u.projeto_id = $7
            AND COALESCE(u.ativo, TRUE) = TRUE
            AND c.vagas > 0
-           AND (c.horario IS NULL OR $7::timestamp IS NULL
-                OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
+           AND (c.horario IS NULL OR $6::timestamp IS NULL
+                OR ABS(EXTRACT(EPOCH FROM (c.horario - $6::timestamp))) <= 3600)
        ) s
        WHERE ${combinaRota.replace(/c\./g, "s.")}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
-      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario, pid]
+      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, ped.horario, pid]
     );
     res.json(rows);
   } catch (err) {
@@ -2240,15 +2250,15 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
          FROM pedidos p
          JOIN usuarios u ON p.passageiro_id = u.id
          WHERE p.status = 'aberto' AND p.passageiro_id <> $5
-           AND u.projeto_id = $8
+           AND u.projeto_id = $7
            AND COALESCE(u.ativo, TRUE) = TRUE
-           AND (p.horario IS NULL OR $7::timestamp IS NULL
-                OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
+           AND (p.horario IS NULL OR $6::timestamp IS NULL
+                OR ABS(EXTRACT(EPOCH FROM (p.horario - $6::timestamp))) <= 3600)
        ) s
        WHERE ${combinaRota.replace(/p\./g, "s.")}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
-      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario, pid]
+      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, car.horario, pid]
     );
     res.json(rows);
   } catch (err) {
