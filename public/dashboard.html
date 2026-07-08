@@ -156,7 +156,7 @@
                         </div>
                         </div>
                         <div class="acao-sheet-footer">
-                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="pedirCarona()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir carona</span></button>
+                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="pedirCarona()">Pedir carona</button>
                         </div>
                     </div>
                 </div>
@@ -1758,17 +1758,17 @@
         const horaWrap = document.getElementById('horaPedWrap');
         const hint = document.getElementById('hintPedidoImediato');
         const btn = document.getElementById('btnCtaPedir');
-        const ctaHtmlPedirAgro = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir agora</span>';
-        const ctaHtmlPedirCarona = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Pedir carona</span>';
+        const ctaHtmlPedirAgro = 'Pedir agora';
+        const ctaHtmlPedirCarona = 'Pedir carona';
         if (temCarona) {
             horaPedModoAgenda = false;
             if (horaWrap) horaWrap.classList.add('form-slot-reservado');
             if (hint) hint.style.display = 'block';
-            if (btn) btn.innerHTML = ctaHtmlPedirAgro;
+            if (btn) btn.textContent = ctaHtmlPedirAgro;
         } else {
             if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
-            if (btn) btn.innerHTML = ctaHtmlPedirCarona;
+            if (btn) btn.textContent = ctaHtmlPedirCarona;
             sincronizarQuandoPed();
         }
         // Com motoristas na lista, a ação fica no card — mantém o footer para não mexer o peek.
@@ -2158,8 +2158,6 @@
             atualizarHintDestinoPed();
             return;
         }
-        const sheetPed = document.getElementById('acaoSheetPed');
-        if (sheetPed) sheetPed.classList.remove('collapsed');
         atualizarHintDestinoPed();
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         atualizarBtnLimparPed(true);
