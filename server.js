@@ -433,8 +433,31 @@ async function garantirCaronasUnicasAtivas() {
     if (rowCount > 0) {
       console.log(`Caronas: cancelou ${rowCount} registro(s) ativo(s) duplicado(s).`);
     }
+    await limparCaronasOrfas();
   } catch (e) {
     console.warn("garantirCaronasUnicasAtivas:", e.message);
+  }
+}
+
+// Carona ativa sem motorista online de verdade (GPS vivo) vira card fantasma
+// na lista "Motoristas indo para lá" — ex.: Vale/Portaria S11D antigo no banco.
+async function limparCaronasOrfas() {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE caronas c SET status = 'cancelada'
+       WHERE c.status = 'ativa'
+         AND NOT EXISTS (
+           SELECT 1 FROM localizacoes_online l
+           WHERE l.usuario_id = c.motorista_id
+             AND l.disponivel = TRUE
+             AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
+         )`
+    );
+    if (rowCount > 0) {
+      console.log(`Caronas: cancelou ${rowCount} rota(s) ativa(s) sem motorista online.`);
+    }
+  } catch (e) {
+    console.warn("limparCaronasOrfas:", e.message);
   }
 }
 
@@ -1151,6 +1174,11 @@ setInterval(async () => {
   }
 }, 5 * 60 * 1000);
 
+// Cancela rotas publicadas cujo motorista saiu do ar (evita cards antigos na lista).
+setInterval(() => {
+  limparCaronasOrfas().catch((err) => console.error("Erro ao limpar caronas órfãs:", err.message));
+}, 5 * 60 * 1000);
+
 // Fila de chamada sequencial (pedido por rota): avança pro próximo motorista
 // quando o da vez estoura o prazo sem responder (ver FILA_OFERTA_TIMEOUT_S).
 setInterval(() => {
@@ -1850,8 +1878,10 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
-       LEFT JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
+       JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
+       AND lo.disponivel = TRUE
+       AND lo.atualizado_em > NOW() - INTERVAL '3 minutes'
        AND c.id = (
          SELECT cx.id FROM caronas cx
          WHERE cx.motorista_id = c.motorista_id AND cx.status = 'ativa'
