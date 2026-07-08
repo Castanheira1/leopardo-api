@@ -49,6 +49,12 @@ const GPS_FRESH_MIN = Number(process.env.GPS_FRESH_MIN || 3);
 const GPS_STALE_MIN = Number(process.env.GPS_STALE_MIN || 15);
 const SQL_GPS_FRESH = `atualizado_em > NOW() - INTERVAL '${GPS_FRESH_MIN} minutes'`;
 const SQL_GPS_STALE = `atualizado_em <= NOW() - INTERVAL '${GPS_STALE_MIN} minutes'`;
+// Mapa do passageiro: rota publicada exige GPS fresco; modo amarelo tolera até STALE
+// (senão some com sinal instável entre 3–15 min, mas sem ressuscitar fantasma).
+const sqlGpsVisivelMapa = (alias = "l") => `(
+  (${alias}.online_desde IS NULL AND ${SQL_GPS_FRESH.replace("atualizado_em", alias + ".atualizado_em")})
+  OR (${alias}.online_desde IS NOT NULL AND NOT (${SQL_GPS_STALE.replace("atualizado_em", alias + ".atualizado_em")}))
+)`;
 
 // Intervalo do "avançador" da fila (verifica ofertas vencidas).
 const FILA_TICK_MS = Number(process.env.FILA_TICK_MS || 10 * 1000);
@@ -2984,7 +2990,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
          ) ca ON TRUE
          WHERE l.disponivel = TRUE
            AND COALESCE(u.ativo, TRUE) = TRUE
-           AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}
+           AND ${sqlGpsVisivelMapa("l")}
            AND u.id <> $1
            ${filtroProj}
          ORDER BY u.id, h.created_at DESC

@@ -329,6 +329,24 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(m, "motorista amarelo deve aparecer a 600 m");
       assert(!m.carona_id, "modo amarelo não traz carona_id");
     });
+    await test("modo amarelo tolera GPS entre FRESH e STALE (5 min)", async () => {
+      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        await pg.query(
+          "UPDATE localizacoes_online SET atualizado_em = NOW() - INTERVAL '5 minutes' WHERE usuario_id = $1",
+          [idDriver]
+        );
+      } finally {
+        await pg.end();
+      }
+      const { status, json } = await api("GET", `/api/motoristas-online?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokPax });
+      eq(status, 200, "status");
+      assert(json.find((x) => x.id === idDriver), "amarelo deve aparecer com GPS de 5 min");
+      await api("POST", "/api/localizacao", {
+        token: tokDriver,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng, disponivel: true },
+      });
+    });
     await test("passageiro sem hab NÃO fica online (403)", async () => {
       const { status } = await api("POST", "/api/motorista/online", {
         token: tokPax,
