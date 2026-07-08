@@ -375,13 +375,16 @@ function carregarMaps() {
 }
 
 // Carro visto de cima em perspectiva 3/4 (estilo Uber/Google Maps).
+// 'gold' é o dourado clássico da frota online; 'white' (nome legado) virou o
+// modelo dourado com detalhes PRETOS — o branco puro sumia no mapa claro.
 function carSvgPaths(variant = 'white') {
-    const body = variant === 'gold' ? '#EAD298' : '#ffffff';
-    const bodySide = variant === 'gold' ? '#d4bc7a' : '#eceff1';
-    const stroke = variant === 'gold' ? '#9a7514' : '#b0b8c0';
-    const hood = variant === 'gold' ? '#fff8dc' : '#ffffff';
-    const glass = '#2f3640';
-    const glassFront = '#455a64';
+    const dourado = variant === 'gold';
+    const body = '#EAD298';
+    const bodySide = dourado ? '#d4bc7a' : '#c9a94f';
+    const stroke = dourado ? '#9a7514' : '#111111';
+    const hood = dourado ? '#fff8dc' : '#1a1a1a';
+    const glass = dourado ? '#2f3640' : '#14181c';
+    const glassFront = dourado ? '#455a64' : '#23303a';
     return `<path d="M24 5 C16 5 11 10 10 17 L9 45 C9 53 14 58 24 58 C34 58 39 53 39 45 L38 17 C37 10 32 5 24 5Z" fill="${body}" stroke="${stroke}" stroke-width="1.1"/>`
         + `<path d="M10 17 L9 45 C9 53 14 58 24 58 L24 5 C16 5 11 10 10 17Z" fill="${bodySide}" opacity="0.6"/>`
         + `<path d="M16 7 C20 5 28 5 32 7 L30 12 C27 10 21 10 18 12Z" fill="${hood}" opacity="0.95"/>`
