@@ -1878,12 +1878,19 @@
 
     function tickQuandoPed() {
         const el = document.getElementById('horaPed');
-        if (!el || horaPedModoAgenda || el.dataset.editando === '1') return;
+        if (!el || horaPedModoAgenda) return;
+        if (el.dataset.editando === '1') {
+            // Blur perdido (ex.: picker nativo fechado no Cancelar): destrava.
+            if (document.activeElement === el) return;
+            delete el.dataset.editando;
+        }
         if (document.querySelector('.cam-video')) return;
         const tab = document.getElementById('tabPedir');
         if (!tab?.classList.contains('active') || document.hidden) return;
+        const agora = formatDatetimeLocal(new Date());
+        if (el.value === agora) return;   // mesmo minuto: não mexe no campo
         atualizarMinQuandoPed();
-        el.value = formatDatetimeLocal(new Date());
+        el.value = agora;
     }
 
     function sincronizarQuandoPed(apenasSeVazio) {
@@ -1919,19 +1926,30 @@
         if (!el || el.dataset.quandoLigado) return;
         el.dataset.quandoLigado = '1';
         el.addEventListener('focus', () => { el.dataset.editando = '1'; });
-        el.addEventListener('change', detectarModoAgendaQuandoPed);
+        el.addEventListener('change', () => {
+            // Escolheu no picker: edição terminou (o blur nem sempre dispara no Android).
+            delete el.dataset.editando;
+            detectarModoAgendaQuandoPed();
+        });
         el.addEventListener('input', detectarModoAgendaQuandoPed);
         el.addEventListener('blur', () => {
             delete el.dataset.editando;
             detectarModoAgendaQuandoPed();
         });
+        // Cancelar do picker nativo não dispara change nem blur e o campo ficava
+        // preso em "editando" — o relógio parava. Qualquer toque fora destrava.
+        document.addEventListener('pointerdown', (ev) => {
+            if (ev.target !== el && el.dataset.editando === '1') delete el.dataset.editando;
+        }, true);
     }
 
     function iniciarRelogioQuandoPed() {
         ligarEventosQuandoPed();
         sincronizarQuandoPed(true);
         if (horaPedTimer) return;
-        horaPedTimer = setInterval(tickQuandoPed, 30000);
+        // A cada segundo (só escreve quando o minuto vira): acompanha o relógio
+        // do celular sem atraso perceptível — 30 s deixava até meio minuto de defasagem.
+        horaPedTimer = setInterval(tickQuandoPed, 1000);
     }
 
     function inicializarQuandoPed() {
