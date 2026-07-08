@@ -356,20 +356,67 @@
         </div>
     </div>
 
-    <!-- Carona de um carro clicado no mapa (passageiro pede direto) -->
-    <div id="modalCarro" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharCarro()">
-        <div class="cam-box sol-box">
-            <div class="sol-badge">Carona disponível</div>
-            <img id="carroFoto" class="carro-foto" alt="" style="display:none;">
-            <h3 id="carroNome">Motorista</h3>
-            <div id="carroRota" class="sol-rota"></div>
-            <div id="carroMapa" class="mini-mapa" style="display:none;"></div>
-            <span id="carroPlaca" class="sheet-placa"></span>
-            <div id="carroContatos"></div>
-            <div class="sol-actions">
-                <button type="button" class="btn btn-secondary" onclick="fecharCarro()">Fechar</button>
-                <button type="button" class="btn btn-primary" id="btnPedirCarroMapa" onclick="pedirCaronaDoCarro()">Pedir esta carona</button>
+    <!-- Perfil do motorista (passageiro toca no carro no mapa ou na lista) -->
+    <div id="modalCarro" class="cam-overlay drv-overlay" style="display:none;" onclick="if(event.target===this) fecharCarro()">
+        <div class="drv-sheet" role="dialog" aria-labelledby="carroNome">
+            <button type="button" class="drv-close" onclick="fecharCarro()" aria-label="Fechar">×</button>
+            <div id="carroBadge" class="drv-badge">Rota publicada</div>
+
+            <div class="drv-header">
+                <div class="drv-avatar-wrap">
+                    <img id="carroSelfie" class="drv-avatar" alt="" style="display:none;">
+                    <span id="carroIniciais" class="drv-avatar drv-avatar--ph" style="display:none;"></span>
+                    <span class="drv-verified" title="Motorista verificado" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L4.8 8.2l5-.7z"/></svg>
+                    </span>
+                </div>
+                <div class="drv-meta">
+                    <h2 id="carroNome" class="drv-nome">Motorista</h2>
+                    <p id="carroRole" class="drv-role">Motorista parceiro VAP</p>
+                    <p id="carroStats" class="drv-stats"></p>
+                </div>
             </div>
+
+            <div class="drv-vehicle">
+                <div class="drv-vehicle-info">
+                    <div class="drv-vehicle-title">
+                        <span class="drv-car-icn" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg>
+                        </span>
+                        <span id="carroVeiculo">Veículo</span>
+                    </div>
+                    <p id="carroSub" class="drv-vehicle-sub"></p>
+                    <div id="carroPlacaWrap" class="drv-placa-wrap" style="display:none;">
+                        <span class="drv-placa-label">Placa</span>
+                        <span id="carroPlaca" class="drv-placa"></span>
+                    </div>
+                    <p id="carroEta" class="drv-eta"></p>
+                    <div id="carroRota" class="drv-rota"></div>
+                </div>
+                <div class="drv-vehicle-visual">
+                    <img id="carroFoto" class="drv-vehicle-img" alt="" style="display:none;">
+                    <div id="carroFotoPh" class="drv-vehicle-ph" style="display:none;" aria-hidden="true">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="drv-trust">
+                <span class="drv-shield" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+                </span>
+                <div>
+                    <strong>Motorista verificado pela VAP</strong>
+                    <p>Sua segurança é a nossa prioridade</p>
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary btn-block drv-cta" id="btnPedirCarroMapa" onclick="pedirCaronaDoCarro()" style="display:none;">Solicitar vaga</button>
+            <div id="carroContatos" class="drv-actions"></div>
+            <p class="drv-privacy">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                Seus dados estão protegidos com a gente
+            </p>
         </div>
     </div>
 
@@ -1981,6 +2028,29 @@
             <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
         </div>`;
     }
+    function botoesContatoPerfil(id) {
+        return `<div class="drv-contact-wrap" role="group" aria-label="Falar com motorista">
+            <button type="button" class="drv-btn drv-btn--whats" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+            <div class="drv-contact-row">
+                <button type="button" class="drv-btn" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+                <button type="button" class="drv-btn" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+            </div>
+        </div>`;
+    }
+    function iniciaisMotorista(nome) {
+        const p = (nome || 'M').trim().split(/\s+/).filter(Boolean);
+        if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+        return (p[0]?.[0] || 'M').toUpperCase();
+    }
+    function textoDistanciaEta(origem, m) {
+        if (!origem || m?.lat == null || m?.lng == null) return '';
+        const dist = distKmGps(origem, { lat: +m.lat, lng: +m.lng });
+        if (!isFinite(dist)) return '';
+        const metros = Math.round(dist * 1000);
+        const distTxt = dist < 1 ? `${metros} m` : `${dist.toFixed(1)} km`;
+        const min = Math.max(1, Math.round((dist / 22) * 60));
+        return `${ICN.pin} Chega em ~${min} min · ${distTxt}`;
+    }
 
     function cardMotoristaDisponivel(it) {
         const km = it.dist != null && isFinite(it.dist) && it.dist >= 0.1 ? `${Number(it.dist).toFixed(1)} km` : '';
@@ -2029,7 +2099,7 @@
         // Buzina/WhatsApp ficam para carro amarelo, passa-perto ou parcial.
         const mostrarContato = !it.caronaId || proximo || parcial;
         return `<article class="ride-card${cardMod}">
-            <div class="ride-card__head">
+            <div class="ride-card__head" role="button" tabindex="0" onclick="abrirPerfilDaLista(${it.id})" onkeydown="if(event.key==='Enter')abrirPerfilDaLista(${it.id})">
                 ${foto}
                 <div class="ride-card__body">
                     <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
@@ -2046,6 +2116,7 @@
     }
 
     let listaMotoristasTimer = null;
+    let ultimaListaMotoristas = [];
     // Ao escolher um local no mapa, monta a lista (estilo Uber):
     //   caronas indo para o destino escolhido (com vaga) — seção "indo para lá".
     // Modo amarelo (sem rota publicada) não aparece para o passageiro.
@@ -2117,6 +2188,7 @@
                 return a.dist - b.dist;
             });
             sincronizarModalCarroLista(indoDestino);
+            ultimaListaMotoristas = indoDestino;
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
@@ -2271,6 +2343,40 @@
 
     /* -------- passageiro clica no carro no mapa e pede a carona -------- */
     let carroSel = null;
+    function itemListaParaMotorista(it) {
+        return {
+            id: it.id,
+            nome: it.nome,
+            carona_id: it.caronaId,
+            placa: it.placa,
+            tag: it.tag,
+            foto_carro_url: it.foto,
+            destino_texto: it.destino,
+            carona_vagas: it.vagas,
+            vagas: it.vagas,
+            compatRota: it.compatRota,
+            dist: it.dist,
+        };
+    }
+    function abrirPerfilDaLista(id) {
+        if (!selPed?.getDestino?.()) {
+            exigirDestinoPassageiro('ver o perfil do motorista');
+            return;
+        }
+        const it = ultimaListaMotoristas.find((x) => +x.id === +id);
+        if (!it) return;
+        const fleetItem = fleet.markers[id]?.m;
+        const base = itemListaParaMotorista(it);
+        if (fleetItem) {
+            base.lat = fleetItem.lat;
+            base.lng = fleetItem.lng;
+            base.selfie_url = fleetItem.selfie_url;
+            base.origem_texto = fleetItem.origem_texto;
+            base.origem_lat = fleetItem.origem_lat;
+            base.origem_lng = fleetItem.origem_lng;
+        }
+        mostrarCaronaDoCarro(base);
+    }
     function mostrarCaronaDoCarro(m) {
         if (!selPed?.getDestino?.()) {
             exigirDestinoPassageiro('ver e falar com motoristas');
@@ -2278,26 +2384,87 @@
         }
         carroSel = m;
         const temRota = !!m.carona_id;
-        document.querySelector('#modalCarro .sol-badge').textContent = temRota ? 'Carona disponível' : 'Motorista por perto';
-        document.getElementById('carroNome').textContent = m.nome || 'Motorista';
+        const parcial = m.compatRota === 'parcial';
+        const proximo = m.compatRota === 'proximo';
+        const badge = document.getElementById('carroBadge');
+        if (badge) {
+            badge.textContent = temRota
+                ? (parcial ? 'Rota parcial' : (proximo ? 'Passa perto' : 'Rota publicada'))
+                : 'Motorista por perto';
+        }
+        const nome = m.nome || m.motorista_nome || 'Motorista';
+        document.getElementById('carroNome').textContent = nome;
+        const role = document.getElementById('carroRole');
+        if (role) role.textContent = m.empresa_nome && m.empresa_nome !== nome
+            ? `${m.empresa_nome} · Motorista parceiro VAP`
+            : 'Motorista parceiro VAP';
+        const vagas = m.carona_vagas || m.vagas || 1;
+        const stats = document.getElementById('carroStats');
+        if (stats) {
+            stats.textContent = temRota
+                ? `✓ Verificado · ${vagas} vaga(s) disponível(is)`
+                : '✓ Verificado · combine o destino pelo contato';
+        }
+        const selfie = document.getElementById('carroSelfie');
+        const iniciais = document.getElementById('carroIniciais');
+        if (m.selfie_url) {
+            selfie.src = m.selfie_url;
+            selfie.style.display = 'block';
+            if (iniciais) iniciais.style.display = 'none';
+        } else {
+            selfie.style.display = 'none';
+            if (iniciais) {
+                iniciais.textContent = iniciaisMotorista(nome);
+                iniciais.style.display = 'flex';
+            }
+        }
+        const veiculo = document.getElementById('carroVeiculo');
+        if (veiculo) veiculo.textContent = m.tag || 'Veículo';
+        const sub = document.getElementById('carroSub');
+        if (sub) {
+            sub.textContent = temRota && m.destino_texto
+                ? `Indo para ${m.destino_texto}`
+                : (m.tag && m.placa ? 'Habilitado na plataforma' : '');
+        }
+        const placaWrap = document.getElementById('carroPlacaWrap');
+        const placa = document.getElementById('carroPlaca');
+        if (placaWrap && placa) {
+            if (m.placa) {
+                placa.textContent = m.placa;
+                placaWrap.style.display = 'block';
+            } else {
+                placaWrap.style.display = 'none';
+            }
+        }
+        const origem = selPed?.getOrigem?.();
+        const eta = document.getElementById('carroEta');
+        if (eta) {
+            const etaTxt = textoDistanciaEta(origem, m);
+            eta.innerHTML = etaTxt;
+            eta.style.display = etaTxt ? 'flex' : 'none';
+        }
         document.getElementById('carroRota').innerHTML = temRota
             ? `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(m.origem_texto || 'Local do motorista')}</div>`
               + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(m.destino_texto || 'Destino no mapa')}</div>`
-            : `<div style="color:#cfd2d6;">Motorista disponível na sua região. Toque abaixo para combinar destino no WhatsApp.</div>`;
-        const placa = document.getElementById('carroPlaca');
-        placa.textContent = m.placa || '';
-        placa.style.display = m.placa ? 'inline-block' : 'none';
+            : `<div>Disponível na sua região. Use o contato abaixo para combinar o destino.</div>`;
         const foto = document.getElementById('carroFoto');
-        if (m.foto_carro_url) { foto.src = m.foto_carro_url; foto.style.display = 'block'; } else { foto.style.display = 'none'; }
+        const fotoPh = document.getElementById('carroFotoPh');
+        if (m.foto_carro_url) {
+            foto.src = m.foto_carro_url;
+            foto.style.display = 'block';
+            if (fotoPh) fotoPh.style.display = 'none';
+        } else {
+            foto.style.display = 'none';
+            if (fotoPh) fotoPh.style.display = 'flex';
+        }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
-        if (btnPedir) btnPedir.style.display = temRota ? '' : 'none';
-        // No carro branco com rota publicada, passageiro pede vaga. No carro
-        // amarelo (sem rota), buzina/ligação/WhatsApp combinam o destino.
-        document.getElementById('carroContatos').innerHTML = temRota ? '' : botoesContato(m.id);
+        const mostrarSolicitar = temRota && !parcial && !proximo;
+        if (btnPedir) {
+            btnPedir.style.display = mostrarSolicitar ? 'block' : 'none';
+            btnPedir.textContent = 'Solicitar vaga';
+        }
+        document.getElementById('carroContatos').innerHTML = botoesContatoPerfil(m.id);
         document.getElementById('modalCarro').style.display = 'flex';
-        const o = m.origem_lat != null ? { lat: +m.origem_lat, lng: +m.origem_lng } : { lat: +m.lat, lng: +m.lng };
-        const d = destinoPublicadoCarro(m);
-        desenharRotaMini('carroMapa', o, d);
     }
     function fecharCarro() {
         document.getElementById('modalCarro').style.display = 'none';

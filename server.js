@@ -2881,7 +2881,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `WITH candidatos AS (
          SELECT DISTINCT ON (u.id)
-                u.id, u.nome, u.sexo, l.lat, l.lng, l.vagas, l.online_desde,
+                u.id, u.nome, u.sexo, u.empresa_nome, l.lat, l.lng, l.vagas, l.online_desde,
                 h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
                 ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
                 ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas
