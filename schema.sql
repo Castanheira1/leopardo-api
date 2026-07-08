@@ -91,6 +91,8 @@ CREATE TABLE caronas (
 );
 CREATE INDEX IF NOT EXISTS idx_caronas_status ON caronas (status);
 CREATE INDEX IF NOT EXISTS idx_caronas_motorista ON caronas (motorista_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_caronas_um_ativa_por_motorista
+ON caronas (motorista_id) WHERE status = 'ativa';
 
 -- ------------------------------------------------------------
 -- Pedidos (pedidos de passageiro) - exige selfie ao vivo

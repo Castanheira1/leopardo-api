@@ -41,6 +41,10 @@ const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
 const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
+// GPS considerado "vivo" — motorista sem atualização recente some do mapa.
+const GPS_FRESH_MIN = Number(process.env.GPS_FRESH_MIN || 3);
+const SQL_GPS_FRESH = `atualizado_em > NOW() - INTERVAL '${GPS_FRESH_MIN} minutes'`;
+
 // Intervalo do "avançador" da fila (verifica ofertas vencidas).
 const FILA_TICK_MS = Number(process.env.FILA_TICK_MS || 10 * 1000);
 // Viagem só conta no rateio/admin se o GPS registrar deslocamento real (não simulação parado).
@@ -100,7 +104,7 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); garantirCaronasUnicasAtivas(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirColunasContatosMotorista(); garantirRlsSupabase(); })
+  .then((client) => { console.log("Conectado ao PostgreSQL"); client.release(); garantirColunasUsuarios(); garantirTabelaPush(); garantirTabelaFavoritos(); garantirTabelaPedidoFila(); garantirColunasViagens(); garantirColunasPedidos(); garantirColunasLocalizacao(); limparPublicacoesFantasma(); garantirIndiceCaronaUnica(); garantirSchemaComercial(); garantirTabelaAnuncios(); garantirTabelaEventosUso(); garantirColunasContatosMotorista(); garantirRlsSupabase(); })
   .catch((err) => console.log("Erro ao conectar:", err.message));
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
@@ -433,9 +437,35 @@ async function garantirCaronasUnicasAtivas() {
     if (rowCount > 0) {
       console.log(`Caronas: cancelou ${rowCount} registro(s) ativo(s) duplicado(s).`);
     }
-    await limparCaronasOrfas();
   } catch (e) {
     console.warn("garantirCaronasUnicasAtivas:", e.message);
+  }
+}
+
+// Garante no banco: no máximo 1 publicação ativa por motorista.
+async function garantirIndiceCaronaUnica() {
+  try {
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_caronas_um_ativa_por_motorista
+      ON caronas (motorista_id) WHERE status = 'ativa'
+    `);
+  } catch (e) {
+    console.warn("garantirIndiceCaronaUnica:", e.message);
+  }
+}
+
+// Motorista sem GPS recente não deve aparecer nem manter publicação ativa.
+async function limparLocalizacoesFantasma() {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE localizacoes_online SET disponivel = FALSE, online_desde = NULL
+       WHERE disponivel = TRUE AND NOT (${SQL_GPS_FRESH})`
+    );
+    if (rowCount > 0) {
+      console.log(`Online: desligou ${rowCount} motorista(s) com GPS expirado.`);
+    }
+  } catch (e) {
+    console.warn("limparLocalizacoesFantasma:", e.message);
   }
 }
 
@@ -450,7 +480,7 @@ async function limparCaronasOrfas() {
            SELECT 1 FROM localizacoes_online l
            WHERE l.usuario_id = c.motorista_id
              AND l.disponivel = TRUE
-             AND l.atualizado_em > NOW() - INTERVAL '3 minutes'
+             AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}
          )`
     );
     if (rowCount > 0) {
@@ -459,6 +489,25 @@ async function limparCaronasOrfas() {
   } catch (e) {
     console.warn("limparCaronasOrfas:", e.message);
   }
+}
+
+// Limpeza operacional: só a publicação atual (GPS vivo) fica visível ao usuário.
+// Histórico de viagens/rastreio permanece intacto.
+async function limparPublicacoesFantasma() {
+  await corrigirInconsistenciasModoAmarelo();
+  await garantirCaronasUnicasAtivas();
+  await limparLocalizacoesFantasma();
+  await limparCaronasOrfas();
+}
+
+async function motoristaGpsVivo(motoristaId) {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM localizacoes_online
+     WHERE usuario_id = $1 AND disponivel = TRUE
+       AND ${SQL_GPS_FRESH}`,
+    [motoristaId]
+  );
+  return rows.length > 0;
 }
 
 // Auto-heal: a viagem tem 2 fases — 'encontro' (motorista indo buscar) e
@@ -1176,7 +1225,7 @@ setInterval(async () => {
 
 // Cancela rotas publicadas cujo motorista saiu do ar (evita cards antigos na lista).
 setInterval(() => {
-  limparCaronasOrfas().catch((err) => console.error("Erro ao limpar caronas órfãs:", err.message));
+  limparPublicacoesFantasma().catch((err) => console.error("Erro ao limpar publicações fantasma:", err.message));
 }, 5 * 60 * 1000);
 
 // Fila de chamada sequencial (pedido por rota): avança pro próximo motorista
@@ -1881,7 +1930,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
        WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
        AND lo.disponivel = TRUE
-       AND lo.atualizado_em > NOW() - INTERVAL '3 minutes'
+       AND ${SQL_GPS_FRESH.replace("atualizado_em", "lo.atualizado_em")}
        AND c.id = (
          SELECT cx.id FROM caronas cx
          WHERE cx.motorista_id = c.motorista_id AND cx.status = 'ativa'
@@ -2099,6 +2148,9 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
          FROM caronas c
          JOIN usuarios u ON c.motorista_id = u.id
          LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
+         JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
+           AND lo.disponivel = TRUE
+           AND ${SQL_GPS_FRESH.replace("atualizado_em", "lo.atualizado_em")}
          WHERE c.status = 'ativa' AND c.motorista_id <> $5
            AND u.projeto_id = $8
            AND COALESCE(u.ativo, TRUE) = TRUE
@@ -2341,13 +2393,21 @@ async function criarViagemDaProposta(propostaId) {
 async function reverterRecursosDaViagem(v) {
   if (!v) return;
   if (v.carona_id) {
-    await pool.query(
-      `UPDATE caronas
-       SET vagas = LEAST(vagas + 1, 6),
-           status = CASE WHEN status IN ('concluida', 'cancelada') THEN 'ativa' ELSE status END
-       WHERE id = $1`,
-      [v.carona_id]
-    );
+    const car = (await pool.query("SELECT motorista_id FROM caronas WHERE id = $1", [v.carona_id])).rows[0];
+    if (car && await motoristaGpsVivo(car.motorista_id)) {
+      await pool.query(
+        `UPDATE caronas
+         SET vagas = LEAST(vagas + 1, 6),
+             status = CASE WHEN status IN ('concluida', 'cancelada') THEN 'ativa' ELSE status END
+         WHERE id = $1`,
+        [v.carona_id]
+      );
+    } else {
+      await pool.query(
+        "UPDATE caronas SET status = 'cancelada' WHERE id = $1 AND status = 'ativa'",
+        [v.carona_id]
+      );
+    }
   }
   if (v.pedido_id) {
     await pool.query(
@@ -2644,13 +2704,21 @@ app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
     // proposta JÁ estava aceita, ela tinha ocupado 1 vaga (ver
     // criarViagemDaProposta) — devolve essa vaga agora.
     if (pr.carona_id) {
-      if (pr.status_anterior === "aceito") {
+      const car = (await pool.query("SELECT motorista_id FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
+      if (car && await motoristaGpsVivo(car.motorista_id)) {
+        if (pr.status_anterior === "aceito") {
+          await pool.query(
+            "UPDATE caronas SET vagas = vagas + 1, status = 'ativa' WHERE id = $1 AND status <> 'cancelada'",
+            [pr.carona_id]
+          );
+        } else {
+          await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);
+        }
+      } else {
         await pool.query(
-          "UPDATE caronas SET vagas = vagas + 1, status = 'ativa' WHERE id = $1 AND status <> 'cancelada'",
+          "UPDATE caronas SET status = 'cancelada' WHERE id = $1 AND status = 'ativa'",
           [pr.carona_id]
         );
-      } else {
-        await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);
       }
     }
     if (pr.pedido_id) {
@@ -2785,10 +2853,11 @@ app.get("/api/motorista/online", verificarAuth, async (req, res) => {
     const row = (await pool.query(
       `SELECT l.disponivel, l.lat, l.lng, l.atualizado_em, l.online_desde, l.vagas,
               (SELECT id FROM caronas WHERE motorista_id = $1 AND status = 'ativa' ORDER BY created_at DESC LIMIT 1) AS carona_id
-       FROM localizacoes_online l WHERE l.usuario_id = $1`,
+       FROM localizacoes_online l
+       WHERE l.usuario_id = $1 AND l.disponivel = TRUE AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}`,
       [req.user.id]
     )).rows[0];
-    const online = !!(hab && row?.disponivel);
+    const online = !!(hab && row);
     res.json({
       online,
       lat: row?.lat != null ? +row.lat : null,
@@ -2837,6 +2906,10 @@ app.post("/api/motorista/online", verificarAuth, async (req, res) => {
 
 app.delete("/api/motorista/online", verificarAuth, async (req, res) => {
   try {
+    await pool.query(
+      "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
+      [req.user.id]
+    );
     await pool.query(
       "UPDATE localizacoes_online SET disponivel = FALSE, online_desde = NULL WHERE usuario_id = $1",
       [req.user.id]
@@ -2902,7 +2975,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
          ) ca ON TRUE
          WHERE l.disponivel = TRUE
            AND COALESCE(u.ativo, TRUE) = TRUE
-           AND (l.atualizado_em > NOW() - INTERVAL '3 minutes' OR l.online_desde IS NOT NULL OR ca.id IS NOT NULL)
+           AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}
            AND u.id <> $1
            ${filtroProj}
          ORDER BY u.id, h.created_at DESC
@@ -2952,6 +3025,7 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
          ) ca ON TRUE
          WHERE l.disponivel = TRUE
            AND COALESCE(u.ativo, TRUE) = TRUE
+           AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}
            AND u.id <> $1
            AND u.projeto_id = $6
            AND (ca.vagas IS NULL OR ca.vagas > 0)
