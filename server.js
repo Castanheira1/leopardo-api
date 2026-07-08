@@ -2307,6 +2307,45 @@ async function criarViagemDaProposta(propostaId) {
   return rows[0];
 }
 
+// Desfaz carona/pedido quando uma viagem em andamento é cancelada ou encerrada à força.
+async function reverterRecursosDaViagem(v) {
+  if (!v) return;
+  if (v.carona_id) {
+    await pool.query(
+      `UPDATE caronas
+       SET vagas = LEAST(vagas + 1, 6),
+           status = CASE WHEN status IN ('concluida', 'cancelada') THEN 'ativa' ELSE status END
+       WHERE id = $1`,
+      [v.carona_id]
+    );
+  }
+  if (v.pedido_id) {
+    await pool.query(
+      "UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'",
+      [v.pedido_id]
+    );
+  }
+}
+
+async function cancelarViagemAtiva(viagemId, usuarioId) {
+  const v = (await pool.query(
+    "SELECT * FROM viagens WHERE id = $1 AND status = 'em_andamento'",
+    [viagemId]
+  )).rows[0];
+  if (!v) return { ok: false, status: 404, error: "Viagem não encontrada ou já encerrada" };
+  if (![v.motorista_id, v.passageiro_id].includes(usuarioId)) {
+    return { ok: false, status: 403, error: "Sem permissão" };
+  }
+  const { rows } = await pool.query(
+    `UPDATE viagens SET status = 'cancelada', finalizada_em = COALESCE(finalizada_em, NOW())
+     WHERE id = $1 AND status = 'em_andamento' RETURNING *`,
+    [viagemId]
+  );
+  if (!rows[0]) return { ok: false, status: 404, error: "Viagem não encontrada ou já encerrada" };
+  await reverterRecursosDaViagem(v);
+  return { ok: true, viagem: rows[0] };
+}
+
 /* ==================== FILA DE CHAMADA SEQUENCIAL (pedido por rota) ====================
  * Passageiro escolhe uma rota (origem->destino); todo motorista habilitado e
  * disponível "na pista" (dentro de RAIO_ROTA_KM da linha reta) entra numa fila
@@ -2564,9 +2603,11 @@ app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
     // caminho): desfaz a viagem também, senão fica um "em_andamento" órfão.
     if (pr.status_anterior === "aceito") {
       await pool.query(
-        "UPDATE viagens SET status = 'cancelada' WHERE proposta_id = $1 AND status = 'em_andamento'",
+        "UPDATE viagens SET status = 'cancelada', finalizada_em = COALESCE(finalizada_em, NOW()) WHERE proposta_id = $1 AND status = 'em_andamento'",
         [pr.id]
       );
+      const v = (await pool.query("SELECT * FROM viagens WHERE proposta_id = $1 ORDER BY id DESC LIMIT 1", [pr.id])).rows[0];
+      if (v) await reverterRecursosDaViagem(v);
     }
 
     // Reabre a carona/pedido para que possam ser oferecidos de novo. Se a
@@ -3206,6 +3247,9 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
 
     const calc = await calcularKmGpsViagem(req.params.id, {
       desde: v.embarque_em || undefined,
+    }).catch((err) => {
+      console.error("calcularKmGpsViagem falhou (finalizar segue):", err?.message || err);
+      return { km: 0, kmBruto: 0, valido: false };
     });
     const med = resolverKmMedicaoViagem(v, calc, req.body?.km_maps, req.body?.km_tela);
     if (!med.valido && noDestino && med.km > 0) {
@@ -3229,6 +3273,19 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao finalizar viagem" });
+  }
+});
+
+// Motorista ou passageiro podem encerrar viagem presa (em_andamento) quando
+// finalizar/cancelar proposta não funciona mais (ex.: fase destino).
+app.post("/api/viagens/:id/cancelar", verificarAuth, async (req, res) => {
+  try {
+    const r = await cancelarViagemAtiva(+req.params.id, req.user.id);
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    res.json({ success: true, viagem: r.viagem });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao encerrar viagem" });
   }
 });
 

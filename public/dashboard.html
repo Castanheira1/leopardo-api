@@ -3124,23 +3124,28 @@
         if (btnAnd) btnAnd.style.display = 'inline-block';
         if (vv.ehMotorista) {
             if (vv.fase === 'encontro') {
-                ctrl.innerHTML = btnViagem('primary', 'Passageiro embarcou', `cheguei(${vv.id})`) + mapsBtn;
+                ctrl.innerHTML = btnViagem('primary', 'Passageiro embarcou', `cheguei(${vv.id})`) + mapsBtn
+                    + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`);
             } else if (vv.chegadaDestino) {
                 const kmPlan = distanciaViagemPlanejada(vv);
                 const kmTxt = kmPlan >= 0.1 ? ` (${kmPlan.toFixed(1)} km embarque → destino)` : '';
                 ctrl.innerHTML = `<p class="sheet-hint sheet-hint--chegada">Destino reconhecido pelo GPS${kmTxt}.</p>`
                     + btnViagem('primary', 'Finalizar viagem agora', `finalizarViagem(${vv.id})`)
                     + btnViagem('outline', 'Ainda não cheguei', 'adiarFinalizacaoDestino()')
+                    + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`)
                     + mapsBtn;
             } else {
-                ctrl.innerHTML = btnViagem('danger', 'Finalizar viagem', `finalizarViagem(${vv.id})`) + mapsBtn;
+                ctrl.innerHTML = btnViagem('danger', 'Finalizar viagem', `finalizarViagem(${vv.id})`)
+                    + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`)
+                    + mapsBtn;
             }
         } else {
             const hint = vv.fase === 'encontro'
                 ? 'Acompanhe o motorista no mapa'
                 : (vv.chegadaDestino ? 'Chegou ao destino — aguardando motorista finalizar'
                     : 'Viagem em andamento — acompanhe no mapa');
-            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>';
+            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>'
+                + btnViagem('outline', 'Encerrar viagem', `cancelarViagem(${vv.id})`);
         }
     }
     // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
@@ -3353,9 +3358,10 @@
                     vv.status = d.status;
                     if (vv.status !== 'em_andamento') {
                         clearInterval(acompTimer);
-                        // Passageiro não fica preso na tela de "concluída": volta ao mapa.
-                        // A viagem fica registrada no histórico.
-                        if (!vv.ehMotorista) { msg('Viagem concluída. Veja no histórico.'); sairDaViagem(); }
+                        viagensAbertas.delete(viagemKey(vv.id));
+                        const encerrada = vv.status === 'cancelada';
+                        msg(encerrada ? 'Viagem encerrada.' : 'Viagem concluída. Veja no histórico.');
+                        if (!vv.ehMotorista || encerrada) sairDaViagem();
                         else { atualizarCabecalhoViagem(); limparRotaViagem(); }
                         return;
                     }
@@ -3436,17 +3442,23 @@
             body.lng = viagemView.posMotorista.lng;
         }
         if (opts.automatico) body.automatico = true;
-        const r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', {
-            method: 'POST',
-            body: JSON.stringify(body),
-        });
-        const d = await r.json();
+        let r;
+        try {
+            r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+        } catch (_) {
+            if (viagemView) { viagemView.finalizando = false; viagemView.autoFinalizarTimer = null; }
+            return msg('Sem resposta do servidor. Tente "Cancelar viagem" ou aguarde e tente de novo.', 'error');
+        }
+        const d = await r.json().catch(() => ({}));
         if (!r.ok) {
             if (viagemView) {
                 viagemView.finalizando = false;
                 viagemView.autoFinalizarTimer = null;
             }
-            return msg(d.error || 'Erro', 'error');
+            return msg(d.error || 'Erro ao finalizar. Use "Cancelar viagem" se estiver preso.', 'error');
         }
         if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); limparRotaViagem(); }
         const prefixo = opts.automatico ? 'Viagem finalizada automaticamente' : 'Viagem concluída';
@@ -3460,11 +3472,32 @@
             msg('Viagem encerrada sem km suficientes — não entra no rateio/admin.', 'error');
         }
     }
+    async function cancelarViagem(viagemId) {
+        if (!confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
+        try {
+            const r = await fetchWithAuth('/api/viagens/' + viagemId + '/cancelar', { method: 'POST' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) return msg(d.error || 'Não foi possível encerrar. Tente de novo.', 'error');
+            if (viagemView) {
+                viagemView.status = 'cancelada';
+                viagemView.finalizando = false;
+                viagemView.autoFinalizarTimer = null;
+                atualizarCabecalhoViagem();
+                limparRotaViagem();
+            }
+            viagensAbertas.delete(viagemKey(viagemId));
+            msg('Viagem encerrada.');
+            sairDaViagem();
+        } catch (_) {
+            msg('Sem resposta do servidor ao encerrar. Verifique a conexão.', 'error');
+        }
+    }
     // Sai da tela de viagem (concluída) e volta ao mapa do papel atual.
     function sairDaViagem() {
         if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
         if (trackState && trackState.timer) clearInterval(trackState.timer);
         if (acompTimer) clearInterval(acompTimer);
+        if (viagemView?.id) viagensAbertas.delete(viagemKey(viagemView.id));
         trackState = null;
         viagemView = null;
         localStorage.removeItem('viagemAtiva');
