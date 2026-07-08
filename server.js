@@ -2212,16 +2212,16 @@ app.get("/api/caronas/match", verificarAuth, async (req, res) => {
            AND lo.disponivel = TRUE
            AND ${SQL_GPS_FRESH.replace("atualizado_em", "lo.atualizado_em")}
          WHERE c.status = 'ativa' AND c.motorista_id <> $5
-           AND u.projeto_id = $8
+           AND u.projeto_id = $7
            AND COALESCE(u.ativo, TRUE) = TRUE
            AND c.vagas > 0
-           AND (c.horario IS NULL OR $7::timestamp IS NULL
-                OR ABS(EXTRACT(EPOCH FROM (c.horario - $7::timestamp))) <= 3600)
+           AND (c.horario IS NULL OR $6::timestamp IS NULL
+                OR ABS(EXTRACT(EPOCH FROM (c.horario - $6::timestamp))) <= 3600)
        ) s
        WHERE ${combinaRota.replace(/c\./g, "s.")}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
-      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, RAIO_KM, ped.horario, pid]
+      [ped.origem_lat, ped.origem_lng, ped.destino_lat, ped.destino_lng, req.user.id, ped.horario, pid]
     );
     res.json(rows);
   } catch (err) {
@@ -2250,15 +2250,15 @@ app.get("/api/pedidos/match", verificarAuth, async (req, res) => {
          FROM pedidos p
          JOIN usuarios u ON p.passageiro_id = u.id
          WHERE p.status = 'aberto' AND p.passageiro_id <> $5
-           AND u.projeto_id = $8
+           AND u.projeto_id = $7
            AND COALESCE(u.ativo, TRUE) = TRUE
-           AND (p.horario IS NULL OR $7::timestamp IS NULL
-                OR ABS(EXTRACT(EPOCH FROM (p.horario - $7::timestamp))) <= 3600)
+           AND (p.horario IS NULL OR $6::timestamp IS NULL
+                OR ABS(EXTRACT(EPOCH FROM (p.horario - $6::timestamp))) <= 3600)
        ) s
        WHERE ${combinaRota.replace(/p\./g, "s.")}
        ORDER BY (s.dist_origem + s.dist_destino) ASC
        LIMIT 20`,
-      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, RAIO_KM, car.horario, pid]
+      [car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng, req.user.id, car.horario, pid]
     );
     res.json(rows);
   } catch (err) {
