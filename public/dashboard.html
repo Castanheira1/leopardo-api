@@ -3866,7 +3866,7 @@
                     const pos = { lat: +m.lat, lng: +m.lng };
                     const destCarona = destinoPublicadoCarro(m);
                     let item = fleet.markers[m.id];
-                    if (item && !!item.m.carona_id !== !!m.carona_id) {
+                    if (item && ((!!item.m.carona_id !== !!m.carona_id) || (!!item.m.online_desde !== !!m.online_desde))) {
                         item.car.setMap(null);
                         if (item.rotaCtrl) item.rotaCtrl.limpar();
                         if (item.destinoMk) item.destinoMk.setMap(null);
@@ -3887,7 +3887,7 @@
                             item.rotaUltimaEm = 0;
                         }
                     } else {
-                        const iconVariant = m.carona_id ? 'white' : 'gold';
+                        const iconVariant = (m.carona_id && !m.online_desde) ? 'white' : 'gold';
                         const car = criarMarcador({
                             position: pos, map,
                             iconW: 30, iconH: 40, iconVariant,
@@ -4275,7 +4275,9 @@
             } else {
                 selfCar.marker = criarMarcador({
                     position: pos, map,
-                    iconW: 30, iconH: 40, iconVariant: 'white', title: 'Você', zIndex: 999,
+                    iconW: 30, iconH: 40,
+                    iconVariant: motoristaModoDestino ? 'white' : 'gold',
+                    title: 'Você', zIndex: 999,
                 });
                 selfCar.emprestado = false;
             }
