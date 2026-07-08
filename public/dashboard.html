@@ -1674,7 +1674,7 @@
         if (selOfe) return selOfe;
         if (initOfePromise) return initOfePromise;
         initOfePromise = (async () => {
-            selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, atualizarIndicadorModoOperante);
+            selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, onDestinoMotorista);
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
@@ -2364,6 +2364,7 @@
     let motoristaOnlineModo = false;
     let motoristaModoDestino = false;
     let motoristaCaronaId = null;
+    let publicandoCaronaAuto = false;
     let wakeLockRef = null;
 
     function lerVagasOfe() {
@@ -2388,6 +2389,20 @@
         const modoDestino = motoristaModoDestino || !!(dest && dest.lat != null);
         el.classList.toggle('modo-indicador--geral', !modoDestino);
         el.classList.toggle('modo-indicador--destino', modoDestino);
+    }
+
+    // Motorista já online no modo amarelo (600 m): ao escolher destino no mapa,
+    // publica a carona automaticamente — senão o servidor mantém online_desde e o
+    // passageiro não vê rota nem carro fora do raio de 600 m.
+    async function onDestinoMotorista(dest) {
+        atualizarIndicadorModoOperante();
+        if (!dest || !motoristaOnlineModo || motoristaModoDestino || publicandoCaronaAuto) return;
+        publicandoCaronaAuto = true;
+        try {
+            await oferecerCarona();
+        } finally {
+            publicandoCaronaAuto = false;
+        }
     }
 
     function atualizarUiMotoristaOnline() {
