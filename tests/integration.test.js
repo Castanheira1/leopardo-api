@@ -391,6 +391,56 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(doMotorista[0].id, j1.id, "deve ser a carona mais recente");
       eq(doMotorista[0].vagas, 1, "vagas da republicação");
     });
+    await test("GPS expirado: motorista fantasma some de motoristas-online e caronas", async () => {
+      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        await pg.query(
+          "UPDATE localizacoes_online SET atualizado_em = NOW() - INTERVAL '10 minutes' WHERE usuario_id = $1",
+          [idDriver]
+        );
+      } finally {
+        await pg.end();
+      }
+      const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`;
+      const { status: s1, json: online } = await api("GET", `/api/motoristas-online${q}`, { token: tokPax });
+      eq(s1, 200, "status motoristas-online");
+      assert(!online.find((x) => x.id === idDriver), "GPS velho não deve aparecer no mapa");
+      const q2 = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${DESTINO.lat}&dest_lng=${DESTINO.lng}`;
+      const { status: s2, json: caronas } = await api("GET", "/api/caronas" + q2, { token: tokPax });
+      eq(s2, 200, "status caronas");
+      assert(!caronas.find((x) => x.id === caronaId), "carona sem GPS vivo não deve listar");
+      // Restaura GPS para os testes seguintes
+      await api("POST", "/api/localizacao", {
+        token: tokDriver,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng, disponivel: true },
+      });
+    });
+    await test("DELETE /api/motorista/online cancela carona ativa do motorista", async () => {
+      const { status: s1 } = await api("DELETE", "/api/motorista/online", { token: tokDriver });
+      eq(s1, 200, "status sair online");
+      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const { rows } = await pg.query("SELECT status FROM caronas WHERE id = $1", [caronaId]);
+        eq(rows[0]?.status, "cancelada", "carona deve ser cancelada ao sair do online");
+      } finally {
+        await pg.end();
+      }
+      // Republica para testes seguintes
+      const { status: s2, json: j2 } = await api("POST", "/api/caronas", {
+        token: tokDriver,
+        body: {
+          origem_texto: "Portaria", origem_lat: ORIGEM.lat, origem_lng: ORIGEM.lng,
+          destino_texto: "Alojamento", destino_lat: DESTINO.lat, destino_lng: DESTINO.lng,
+          vagas: 1,
+        },
+      });
+      eq(s2, 200, "status republicar após sair");
+      caronaId = j2.id;
+      await api("POST", "/api/localizacao", {
+        token: tokDriver,
+        body: { lat: ORIGEM.lat, lng: ORIGEM.lng, disponivel: true },
+      });
+    });
     await test("GET /api/caronas?meus lista a carona do motorista", async () => {
       const { status, json } = await api("GET", "/api/caronas?meus=1", { token: tokDriver });
       eq(status, 200, "status");
