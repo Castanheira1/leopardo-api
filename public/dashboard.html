@@ -169,7 +169,7 @@
                         </div>
                         </div>
                         <div class="acao-sheet-footer">
-                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="pedirCarona()">Pedir carona</button>
+                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="ctaPedirClick()">Escolher local</button>
                         </div>
                     </div>
                 </div>
@@ -1836,6 +1836,10 @@
         const btn = document.getElementById('btnCtaPedir');
         const ctaHtmlPedirAgro = 'Pedir agora';
         const ctaHtmlPedirCarona = 'Pedir carona';
+        // Sem destino o CTA vira "Escolher local" (atalho para o menu Locais):
+        // "Pedir carona" antes de escolher o destino dava a sensação de pedido
+        // já feito — e o toque só rendia um alerta de erro.
+        const ctaHtmlEscolherLocal = 'Escolher local';
         if (temCarona) {
             horaPedModoAgenda = false;
             if (horaWrap) horaWrap.classList.add('form-slot-reservado');
@@ -1844,7 +1848,7 @@
         } else {
             if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
-            if (btn) btn.textContent = ctaHtmlPedirCarona;
+            if (btn) btn.textContent = selPed?.getDestino?.() ? ctaHtmlPedirCarona : ctaHtmlEscolherLocal;
             if (!horaPedModoAgenda) tickQuandoPed();
         }
         // Com motoristas na lista, a ação fica no card — mantém o footer para não mexer o peek.
@@ -2018,6 +2022,15 @@
         b.disabled = true;
         b.textContent = texto;
         return () => { b.disabled = false; b.innerHTML = original; };
+    }
+
+    // CTA do passageiro em dois tempos: sem destino, o botão é "Escolher local"
+    // e abre direto o menu Locais (mesmo destino do menu ☰ → Locais); com
+    // destino marcado ele vira "Pedir carona" e segue o pedido normal.
+    function ctaPedirClick() {
+        const dest = selPed?.getDestino?.();
+        if (!dest) return abrirLocais();
+        return pedirCarona();
     }
 
     async function pedirCarona() {
