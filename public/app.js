@@ -374,23 +374,53 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
-// Carro visto de cima em perspectiva 3/4 (estilo Uber/Google Maps).
+// Carro visto de cima (o ícone gira com o rumo, então a vista é sempre top-down),
+// com sombreamento, faróis, lanternas, retrovisores e pneus para parecer um
+// carro de verdade mesmo em 30×40 px. 'gold' é o dourado clássico da frota
+// online; 'white' (nome legado) é o modelo dourado com detalhes PRETOS do
+// carro próprio — o branco puro sumia no mapa claro.
 function carSvgPaths(variant = 'white') {
-    const body = variant === 'gold' ? '#EAD298' : '#ffffff';
-    const bodySide = variant === 'gold' ? '#d4bc7a' : '#eceff1';
-    const stroke = variant === 'gold' ? '#9a7514' : '#b0b8c0';
-    const hood = variant === 'gold' ? '#fff8dc' : '#ffffff';
-    const glass = '#2f3640';
-    const glassFront = '#455a64';
-    return `<path d="M24 5 C16 5 11 10 10 17 L9 45 C9 53 14 58 24 58 C34 58 39 53 39 45 L38 17 C37 10 32 5 24 5Z" fill="${body}" stroke="${stroke}" stroke-width="1.1"/>`
-        + `<path d="M10 17 L9 45 C9 53 14 58 24 58 L24 5 C16 5 11 10 10 17Z" fill="${bodySide}" opacity="0.6"/>`
-        + `<path d="M16 7 C20 5 28 5 32 7 L30 12 C27 10 21 10 18 12Z" fill="${hood}" opacity="0.95"/>`
-        + `<path d="M15 15 C18 12 30 12 33 15 L34 25 L14 25Z" fill="${glassFront}"/>`
-        + `<path d="M14 27 L34 27 L32 43 L16 43Z" fill="${glass}"/>`
-        + `<path d="M16 45 L32 45 L30 51 L18 51Z" fill="${glassFront}"/>`
-        + `<ellipse cx="10.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
-        + `<ellipse cx="37.5" cy="21" rx="2.6" ry="1.8" fill="${body}" stroke="${stroke}" stroke-width="0.7"/>`
-        + '<path d="M17 54 L31 54 L30 56.5 L18 56.5Z" fill="#e53935"/>';
+    const dourado = variant === 'gold';
+    const body = '#EAD298';
+    const bodyEdge = dourado ? '#c9a94f' : '#b8963d';
+    const stroke = dourado ? '#9a7514' : '#111111';
+    const glassRoof = dourado ? '#2f3640' : '#101418';
+    const glass = dourado ? '#455a64' : '#232e38';
+    const detail = dourado ? '#9a7514' : '#1a1a1a';
+    const gid = 'vap-car-body-' + variant;
+    return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
+        + `<stop offset="0" stop-color="${bodyEdge}"/><stop offset="0.3" stop-color="${body}"/>`
+        + `<stop offset="0.7" stop-color="${body}"/><stop offset="1" stop-color="${bodyEdge}"/>`
+        + `</linearGradient></defs>`
+        // pneus (só a pontinha aparece, dos lados)
+        + `<rect x="7.6" y="13.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
+        + `<rect x="37.4" y="13.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
+        + `<rect x="7.6" y="42.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
+        + `<rect x="37.4" y="42.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
+        // retrovisores
+        + `<path d="M9.8 16.2 C7.8 15.6 6.6 16.4 6.9 17.8 C7.1 19 8.6 19.4 10.2 18.8 Z" fill="${detail}"/>`
+        + `<path d="M38.2 16.2 C40.2 15.6 41.4 16.4 41.1 17.8 C40.9 19 39.4 19.4 37.8 18.8 Z" fill="${detail}"/>`
+        // carroceria (ombros largos, frente e traseira arredondadas)
+        + `<path d="M24 2.8 C17.2 2.8 12.6 6 11.4 11.6 C10.4 16 9.8 20 9.8 25.5 L9.8 49 C9.8 56.4 14.2 60.8 24 60.8 C33.8 60.8 38.2 56.4 38.2 49 L38.2 25.5 C38.2 20 37.6 16 36.6 11.6 C35.4 6 30.8 2.8 24 2.8 Z" fill="url(#${gid})" stroke="${stroke}" stroke-width="1.2"/>`
+        // vinco do capô
+        + `<path d="M15.5 7.2 C18.5 5.4 29.5 5.4 32.5 7.2" fill="none" stroke="${detail}" stroke-width="0.8" opacity="0.55"/>`
+        // faróis
+        + `<path d="M12.3 5.8 C13.8 4.5 16 4 17.6 4.1 L17 6.9 C15.4 6.6 13.8 6.9 12.9 7.8 Z" fill="#fffdf2"/>`
+        + `<path d="M35.7 5.8 C34.2 4.5 32 4 30.4 4.1 L31 6.9 C32.6 6.6 34.2 6.9 35.1 7.8 Z" fill="#fffdf2"/>`
+        // brilho do capô
+        + `<ellipse cx="24" cy="10.5" rx="8" ry="2.6" fill="#ffffff" opacity="0.28"/>`
+        // para-brisa
+        + `<path d="M14.2 16.8 C17.6 14.4 30.4 14.4 33.8 16.8 L35 26.5 C27.5 24.8 20.5 24.8 13 26.5 Z" fill="${glass}"/>`
+        // teto de vidro
+        + `<path d="M13.2 28.3 C20 26.6 28 26.6 34.8 28.3 L33.6 41.8 C28 40.5 20 40.5 14.4 41.8 Z" fill="${glassRoof}"/>`
+        // reflexo diagonal no vidro
+        + `<path d="M16 17.5 C19 15.8 24 15.6 27 16.2 L15.6 30 C15 29.4 14.6 28.4 14.8 27 Z" fill="#ffffff" opacity="0.10"/>`
+        // vidro traseiro
+        + `<path d="M15.2 43.6 C20.4 42.4 27.6 42.4 32.8 43.6 L31.4 49.6 C26.8 48.6 21.2 48.6 16.6 49.6 Z" fill="${glass}"/>`
+        // brilho do porta-malas
+        + `<ellipse cx="24" cy="52.6" rx="7.5" ry="1.8" fill="#ffffff" opacity="0.22"/>`
+        // lanternas
+        + `<path d="M14.6 56.9 C17 57.8 21 58.2 24 58.2 C27 58.2 31 57.8 33.4 56.9 L33 54.4 C30 55.2 27 55.5 24 55.5 C21 55.5 18 55.2 15 54.4 Z" fill="#e53935"/>`;
 }
 
 function htmlSvgCarro(variant, w, h) {
