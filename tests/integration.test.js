@@ -322,10 +322,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(json.online, "online");
     });
-    await test("passageiro NÃO vê motorista no modo amarelo (sem rota publicada)", async () => {
+    await test("passageiro vê motorista no modo amarelo (600 m)", async () => {
       const { status, json } = await api("GET", `/api/motoristas-online?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokPax });
       eq(status, 200, "status");
-      assert(!json.some((m) => m.id === idDriver), "motorista amarelo não deve aparecer sem rota");
+      const m = json.find((x) => x.id === idDriver);
+      assert(m, "motorista amarelo deve aparecer a 600 m");
+      assert(!m.carona_id, "modo amarelo não traz carona_id");
     });
     await test("passageiro sem hab NÃO fica online (403)", async () => {
       const { status } = await api("POST", "/api/motorista/online", {

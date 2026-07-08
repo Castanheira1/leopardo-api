@@ -1532,8 +1532,23 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     vertical-align: middle;
 }
 .theme-dark .ride-posicao { color: #EAD298; background: #3a3115; }
-.ride-contatos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 0; justify-content: stretch; }
-.ride-contatos .btn { padding: 4px 10px; font-size: 0.78rem; }
+.ride-contatos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; justify-content: stretch; }
+.ride-contatos--icons { margin-top: 8px; flex-wrap: nowrap; }
+.ride-contatos--stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+.ride-contatos-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.ride-contato-whats { padding: 12px 14px; font-weight: 700; }
+.ride-contato-half { padding: 12px 10px; font-weight: 600; font-size: 0.88rem; }
+.ride-contatos .btn { min-height: 44px; touch-action: manipulation; }
+.ride-contatos--icons .btn { padding: 4px 10px; font-size: 0.78rem; min-height: 0; }
 .ride-icon-btn {
     flex: 1 1 0;
     min-width: 0;
@@ -1628,6 +1643,7 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .ride-badge--rota { color: #EAD298; background: rgba(234, 210, 152, 0.12); }
 .ride-badge--parcial { color: #fbbf24; background: rgba(251, 191, 36, 0.15); }
 .ride-badge--proximo { color: #93c5fd; background: rgba(147, 197, 253, 0.15); }
+.ride-badge--amarelo { color: #0F3D3E; background: #EAD298; font-weight: 800; }
 .ride-aviso-parcial {
     margin: 6px 0 0;
     padding: 8px 10px;

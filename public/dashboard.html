@@ -2024,11 +2024,20 @@
         }
     }
     function botoesContato(id, compacto) {
-        const cls = compacto ? 'ride-icon-btn' : 'btn btn-secondary btn-sm';
-        return `<div class="ride-contatos" role="group" aria-label="Falar com motorista">
-            <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn}${compacto ? '' : ' Buzinar'}</button>
-            <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone}${compacto ? '' : ' Ligar'}</button>
-            <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats}${compacto ? '' : ' WhatsApp'}</button>
+        if (compacto) {
+            const cls = 'ride-icon-btn';
+            return `<div class="ride-contatos ride-contatos--icons" role="group" aria-label="Falar com motorista">
+                <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+                <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+                <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+            </div>`;
+        }
+        return `<div class="ride-contatos ride-contatos--stack" role="group" aria-label="Falar com motorista">
+            <button type="button" class="btn btn-secondary btn-block ride-contato-whats" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+            <div class="ride-contatos-row">
+                <button type="button" class="btn btn-secondary ride-contato-half" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+                <button type="button" class="btn btn-secondary ride-contato-half" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+            </div>
         </div>`;
     }
     function botoesContatoPerfil(id) {
@@ -2070,15 +2079,15 @@
         const avisoProximo = proximo
             ? `<p class="ride-aviso-proximo">Passa perto — motorista vai até <strong>${destMot}</strong>. Não é obrigado a levar até o seu destino.</p>`
             : '';
-        const aoVivo = it.online
-            ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
-            : (it.caronaId
-                ? (parcial
+        const aoVivo = !it.caronaId
+            ? '<span class="ride-badge ride-badge--amarelo">Por perto · 600 m</span>'
+            : (it.online
+                ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
+                : (parcial
                     ? `<span class="ride-badge ride-badge--parcial">Só até ${destMot}</span>`
                     : (proximo
                         ? `<span class="ride-badge ride-badge--proximo">Passa perto</span>`
-                        : '<span class="ride-badge ride-badge--rota">Rota publicada</span>'))
-                : '');
+                        : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')));
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
             : `${ICN.car} Disponível por perto — combine o destino`;
@@ -2114,15 +2123,15 @@
                 </div>
             </div>
             ${acaoPrincipal}
-            ${mostrarContato ? botoesContato(it.id, true) : ''}
+            ${mostrarContato ? botoesContato(it.id, false) : ''}
         </article>`;
     }
 
     let listaMotoristasTimer = null;
     let ultimaListaMotoristas = [];
     // Ao escolher um local no mapa, monta a lista (estilo Uber):
-    //   caronas indo para o destino escolhido (com vaga) — seção "indo para lá".
-    // Modo amarelo (sem rota publicada) não aparece para o passageiro.
+    //   1) caronas indo para o destino (rota publicada);
+    //   2) motoristas no modo amarelo por perto (600 m) — buzina/WhatsApp.
     // dest = null -> esconde a lista.
     async function carregarCaronasDestino(dest) {
         const wrap = document.getElementById('motoristasDestinoWrap');
@@ -2158,8 +2167,10 @@
             const qRota = o ? '?' + new URLSearchParams({
                 origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
             }).toString() : '';
-            const [caronas, naRota] = await Promise.all([
+            const qOnline = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
+            const [caronas, online, naRota] = await Promise.all([
                 fetchWithAuth('/api/caronas?' + qCaronas.toString()).then(r => r.ok ? r.json() : []).catch(() => []),
+                o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
                 o ? fetchWithAuth('/api/motoristas-rota' + qRota).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
             ]);
             const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
@@ -2183,6 +2194,18 @@
                 if (!prev || item.caronaId > prev.caronaId) porMotorista.set(c.motorista_id, item);
             });
             porMotorista.forEach((item) => indoDestino.push(item));
+            const idsIndo = new Set(indoDestino.map((it) => it.id));
+            (Array.isArray(online) ? online : []).forEach((m) => {
+                if (m.carona_id || idsIndo.has(m.id)) return;
+                const dist = (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity;
+                porPerto.push({
+                    id: m.id, caronaId: null,
+                    nome: m.empresa_nome || m.nome, placa: m.placa, tag: m.tag,
+                    foto: m.foto_carro_url, selfie: m.selfie_url,
+                    vagas: m.vagas || 1, destino: null, dist, ordem: null, online: true,
+                    compatRota: 'total', destinoMotorista: null,
+                });
+            });
             indoDestino.sort((a, b) => {
                 const ordem = { total: 0, proximo: 1, parcial: 2 };
                 const oa = ordem[a.compatRota] ?? 3;
@@ -2191,7 +2214,7 @@
                 return a.dist - b.dist;
             });
             sincronizarModalCarroLista(indoDestino);
-            ultimaListaMotoristas = indoDestino;
+            ultimaListaMotoristas = [...indoDestino, ...porPerto];
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
@@ -2466,7 +2489,8 @@
             btnPedir.style.display = mostrarSolicitar ? 'block' : 'none';
             btnPedir.textContent = 'Solicitar vaga';
         }
-        document.getElementById('carroContatos').innerHTML = botoesContatoPerfil(m.id);
+        document.getElementById('carroContatos').innerHTML =
+            (!temRota || parcial || proximo) ? botoesContatoPerfil(m.id) : '';
         document.getElementById('modalCarro').style.display = 'flex';
     }
     function fecharCarro() {
@@ -3801,10 +3825,10 @@
                     if (removidos.length) sincronizarModalCarroAoVivo([], removidos);
                     return;
                 }
-                // Só caronas publicadas (rota), visíveis em 10 km — nunca modo amarelo.
+                // Com destino: carros dourados (600 m) + brancos com rota (10 km).
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
-                const lista = (await r.json()).filter((m) => m.carona_id);
+                const lista = await r.json();
                 if (o && dest) {
                     // Fila/ordem muda devagar: consulta a rota a cada ~9 s e reusa entre ticks.
                     const agora = Date.now();
