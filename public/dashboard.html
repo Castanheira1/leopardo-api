@@ -1790,7 +1790,7 @@
             if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
             if (btn) btn.textContent = ctaHtmlPedirCarona;
-            sincronizarQuandoPed();
+            if (!horaPedModoAgenda) tickQuandoPed();
         }
         // Com motoristas na lista, a ação fica no card — mantém o footer para não mexer o peek.
         if (btn) {
@@ -1807,47 +1807,67 @@
         return isNaN(d.getTime()) ? null : d;
     }
 
-    function sincronizarQuandoPed() {
+    function atualizarMinQuandoPed() {
         const el = document.getElementById('horaPed');
-        if (!el || horaPedModoAgenda) return;
+        if (!el) return;
+        el.min = formatDatetimeLocal(new Date());
+    }
+
+    function tickQuandoPed() {
+        const el = document.getElementById('horaPed');
+        if (!el || horaPedModoAgenda || el.dataset.editando === '1') return;
+        const tab = document.getElementById('tabPedir');
+        if (!tab?.classList.contains('active') || document.hidden) return;
+        atualizarMinQuandoPed();
+        el.value = formatDatetimeLocal(new Date());
+    }
+
+    function sincronizarQuandoPed(apenasSeVazio) {
+        const el = document.getElementById('horaPed');
+        if (!el || horaPedModoAgenda || el.dataset.editando === '1') return;
+        atualizarMinQuandoPed();
         const sel = parseDatetimeLocalValue(el.value);
         const margem = 60000;
         if (sel && sel.getTime() > Date.now() + margem) {
             horaPedModoAgenda = true;
             return;
         }
-        const agora = new Date();
-        el.min = formatDatetimeLocal(agora);
-        el.value = formatDatetimeLocal(agora);
+        if (apenasSeVazio && el.value.trim()) return;
+        el.value = formatDatetimeLocal(new Date());
     }
 
     function detectarModoAgendaQuandoPed() {
         const el = document.getElementById('horaPed');
         if (!el) return;
+        atualizarMinQuandoPed();
         const sel = parseDatetimeLocalValue(el.value);
         const margem = 60000;
+        const eraAgenda = horaPedModoAgenda;
         horaPedModoAgenda = !!(sel && sel.getTime() > Date.now() + margem);
-        if (!horaPedModoAgenda) sincronizarQuandoPed();
+        // Voltou para "agora" → retoma relógio ao vivo
+        if (!horaPedModoAgenda && eraAgenda) {
+            el.value = formatDatetimeLocal(new Date());
+        }
     }
 
     function ligarEventosQuandoPed() {
         const el = document.getElementById('horaPed');
         if (!el || el.dataset.quandoLigado) return;
         el.dataset.quandoLigado = '1';
+        el.addEventListener('focus', () => { el.dataset.editando = '1'; });
         el.addEventListener('change', detectarModoAgendaQuandoPed);
         el.addEventListener('input', detectarModoAgendaQuandoPed);
-        el.addEventListener('blur', detectarModoAgendaQuandoPed);
+        el.addEventListener('blur', () => {
+            delete el.dataset.editando;
+            detectarModoAgendaQuandoPed();
+        });
     }
 
     function iniciarRelogioQuandoPed() {
         ligarEventosQuandoPed();
-        sincronizarQuandoPed();
+        sincronizarQuandoPed(true);
         if (horaPedTimer) return;
-        horaPedTimer = setInterval(() => {
-            const tab = document.getElementById('tabPedir');
-            if (!tab?.classList.contains('active') || document.hidden) return;
-            sincronizarQuandoPed();
-        }, 30000);
+        horaPedTimer = setInterval(tickQuandoPed, 30000);
     }
 
     function inicializarQuandoPed() {
@@ -1934,12 +1954,6 @@
             if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
             const margemAgenda = 60000;
             ehAgendado = !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
-            if (!ehAgendado) {
-                sincronizarQuandoPed();
-                hor = lerHorarioPedido();
-                if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
-                ehAgendado = !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
-            }
             if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
                 return msg('Escolha um horário futuro para agendar.', 'error');
             }
@@ -4540,7 +4554,10 @@
             if (!document.hidden) {
                 pollPropostas();
                 pollOfertaFila();
-                if (document.getElementById('tabPedir')?.classList.contains('active')) sincronizarQuandoPed();
+                if (document.getElementById('tabPedir')?.classList.contains('active')) {
+                    if (horaPedModoAgenda) atualizarMinQuandoPed();
+                    else tickQuandoPed();
+                }
                 if (motoristaOnlineModo) {
                     ativarWakeLock();
                     refreshModoMotoristaOnline();
