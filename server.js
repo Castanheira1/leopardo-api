@@ -827,6 +827,13 @@ async function aplicarRetencaoFotos() {
 // Protege contra iOS antigo mandando texto inválido.
 function horarioValido(h) {
   if (!h) return null;
+  // Date (ex.: coluna timestamp lida pelo node-pg): usa os componentes de parede
+  // locais — String(Date) vira "... GMT-0300 (...)" e o Postgres recusa esse texto.
+  if (h instanceof Date) {
+    if (isNaN(h.getTime())) return null;
+    const p = (n) => String(n).padStart(2, "0");
+    return `${h.getFullYear()}-${p(h.getMonth() + 1)}-${p(h.getDate())} ${p(h.getHours())}:${p(h.getMinutes())}:${p(h.getSeconds())}`;
+  }
   const s = String(h).trim();
   if (!s) return null;
   const local = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
@@ -2042,7 +2049,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
           destino_texto, destino_lat, destino_lng, horario, observacao, pessoas,
           selfie_url, selfie_lat, selfie_lng, selfie_em, notificado)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,FALSE)
-       RETURNING *`,
+       RETURNING *, (horario IS NOT NULL AND horario > NOW()) AS agendado_futuro`,
       [
         req.user.id, origem_texto || null, origem_lat, origem_lng,
         destino_texto || null, destino_lat, destino_lng, horarioValido(horario), observacao || null, nPessoas,
@@ -2050,8 +2057,11 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
       ]
     );
     const ped = rows[0];
-    const agendadoFuturo = await pedidoAgendadoFuturo(ped.horario);
-    res.json({ ...ped, agendado_futuro: agendadoFuturo });
+    // Decisão do agendamento feita no próprio banco (mesmo fuso da sessão, SET TIME
+    // ZONE no connect). Antes isto passava a Date do node-pg de volta por
+    // horarioValido() e o Postgres rejeitava a string "GMT..." (erro 500 ao agendar).
+    const agendadoFuturo = !!ped.agendado_futuro;
+    res.json(ped);
 
     // Pedido "para agora" (sem horário ou horário já vencido): notifica os motoristas
     // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
