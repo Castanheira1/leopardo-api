@@ -63,6 +63,8 @@ const KM_MINIMO_VIAGEM = Number(process.env.KM_MINIMO_VIAGEM || 0.5);
 const KM_SEGMENTO_MIN = Number(process.env.KM_SEGMENTO_MIN || 0.03);
 const KM_VELOCIDADE_MAX_H = Number(process.env.KM_VELOCIDADE_MAX_H || 120);
 const RAIO_CHEGADA_DEST_KM = Number(process.env.RAIO_CHEGADA_DEST_KM || 0.15);
+// Fuso dos projetos (canteiros Vale/PA). Horário agendado é horário de parede local.
+const FUSO_APP = process.env.APP_TIMEZONE || "America/Sao_Paulo";
 
 if (!JWT_SECRET) {
   console.error("ERRO: JWT_SECRET não definido no .env");
@@ -112,6 +114,10 @@ const pool = new Pool({
   max: 10,                        // não subir: o Session pooler do Supabase tem teto próprio
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000, // falha rápido em vez de enfileirar para sempre
+});
+
+pool.on("connect", (client) => {
+  client.query(`SET TIME ZONE '${FUSO_APP.replace(/'/g, "")}'`).catch(() => {});
 });
 
 pool.connect()
@@ -396,8 +402,9 @@ async function garantirColunasPedidos() {
     // notificado: pedido agendado (horário futuro) só notifica os motoristas na hora
     // marcada. Marca quando a notificação de proximidade já foi enviada.
     await pool.query("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notificado BOOLEAN DEFAULT FALSE");
+    await pool.query("UPDATE pedidos SET notificado = FALSE WHERE notificado IS NULL");
   } catch (e) {
-    console.warn("garantirColunasPedidos:", e.message);
+    console.error("garantirColunasPedidos FALHOU — rode migrations/2026-07-08-pedidos-agendamento.sql no Supabase:", e.message);
   }
 }
 
@@ -816,10 +823,24 @@ async function aplicarRetencaoFotos() {
   }
 }
 
-// Horário vindo do cliente: só aceita data que parseia; senão vira NULL ("agora").
-// Protege contra datetime-local degradado (iOS antigo) mandando texto inválido,
-// que gravaria um pedido/carona invisível para sempre.
-const horarioValido = (h) => (h && !isNaN(Date.parse(h)) ? h : null);
+// Horário vindo do cliente: datetime-local (horário de parede do canteiro, sem UTC).
+// Protege contra iOS antigo mandando texto inválido.
+function horarioValido(h) {
+  if (!h) return null;
+  const s = String(h).trim();
+  if (!s) return null;
+  const local = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (local) return `${local[1]}-${local[2]}-${local[3]} ${local[4]}:${local[5]}:00`;
+  if (!isNaN(Date.parse(s))) return s;
+  return null;
+}
+
+async function pedidoAgendadoFuturo(horario) {
+  const h = horarioValido(horario);
+  if (!h) return false;
+  const { rows } = await pool.query("SELECT ($1::timestamp > NOW()) AS futuro", [h]);
+  return !!rows[0]?.futuro;
+}
 
 // Expressão Haversine (km) entre uma coluna (latCol/lngCol) e parâmetros $i/$j
 const haversine = (latCol, lngCol, pLat, pLng) => `
@@ -1212,7 +1233,7 @@ setInterval(async () => {
   try {
     const { rows } = await pool.query(`
       SELECT * FROM pedidos
-      WHERE status = 'aberto' AND notificado = FALSE
+      WHERE status = 'aberto' AND COALESCE(notificado, FALSE) = FALSE
         AND horario IS NOT NULL AND horario <= NOW()
     `);
     await Promise.all(rows.map(ativarPedidoAgendado));
@@ -2019,8 +2040,8 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
       `INSERT INTO pedidos
          (passageiro_id, origem_texto, origem_lat, origem_lng,
           destino_texto, destino_lat, destino_lng, horario, observacao, pessoas,
-          selfie_url, selfie_lat, selfie_lng, selfie_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          selfie_url, selfie_lat, selfie_lng, selfie_em, notificado)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,FALSE)
        RETURNING *`,
       [
         req.user.id, origem_texto || null, origem_lat, origem_lng,
@@ -2034,7 +2055,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
     // dispara a notificação na hora marcada (notificado continua FALSE até lá).
     const ped = rows[0];
-    const agendadoFuturo = ped.horario && new Date(ped.horario).getTime() > Date.now();
+    const agendadoFuturo = await pedidoAgendadoFuturo(ped.horario);
     if (!agendadoFuturo) {
       // usar_fila: chama os motoristas da rota um de cada vez (mais perto
       // primeiro), em vez do broadcast pra todo mundo dentro de 600 m.
