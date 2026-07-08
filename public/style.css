@@ -481,6 +481,18 @@ body {
     background: linear-gradient(145deg, #EAD298 0%, #c9a84c 100%);
     border-color: rgba(255, 255, 255, 0.2);
 }
+/* Modo amarelo: uma linha só, tipografia padrão de app móvel */
+.ios-banner--amarelo .ios-banner__body {
+    justify-content: center;
+}
+.ios-banner--amarelo .ios-banner__title {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    color: rgba(255, 255, 255, 0.92);
+}
 .acao-sheet .form-group {
     margin-bottom: 12px;
 }

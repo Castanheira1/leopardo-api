@@ -2581,14 +2581,18 @@
             } else {
                 st.style.display = 'flex';
                 st.classList.toggle('ios-banner--destino', !!motoristaModoDestino);
+                st.classList.toggle('ios-banner--amarelo', !motoristaModoDestino);
                 if (motoristaModoDestino) {
                     if (tit) tit.textContent = dest?.texto ? 'Rota publicada' : 'Carona ativa';
-                    if (sub) sub.textContent = dest?.texto
-                        ? (dest.texto + ' · visível em 10 km')
-                        : 'Visível em 10 km para passageiros';
+                    if (sub) {
+                        sub.style.display = '';
+                        sub.textContent = dest?.texto
+                            ? (dest.texto + ' · visível em 10 km')
+                            : 'Visível em 10 km para passageiros';
+                    }
                 } else {
-                    if (tit) tit.textContent = 'Você está online';
-                    if (sub) sub.textContent = 'Recebendo pedidos em 600 m';
+                    if (tit) tit.textContent = 'Você está online num raio de 600 m.';
+                    if (sub) { sub.textContent = ''; sub.style.display = 'none'; }
                 }
             }
         }
