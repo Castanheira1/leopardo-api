@@ -891,7 +891,7 @@ html.teclado-aberto {
 /* Alça preta de arrastar — Pedir/Oferecer carona. */
 .acao-handle {
     width: 80px;
-    height: 13px;
+    height: 24px;
     border-radius: 999px;
     background: #44464b;
     box-shadow: none;
