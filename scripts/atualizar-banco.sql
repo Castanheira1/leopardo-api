@@ -63,6 +63,8 @@ CREATE INDEX IF NOT EXISTS idx_tokens_recup_hash
 -- Pedidos / viagens (colunas extras)
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notificado BOOLEAN DEFAULT FALSE;
+UPDATE pedidos SET notificado = FALSE WHERE notificado IS NULL;
+CREATE INDEX IF NOT EXISTS idx_pedidos_status_horario ON pedidos (status, horario);
 ALTER TABLE viagens ADD COLUMN IF NOT EXISTS fase TEXT DEFAULT 'encontro';
 ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP;
 ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS vagas INTEGER DEFAULT 1;

@@ -1952,7 +1952,7 @@
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-                horario: ehAgendado ? hor.iso : null, pessoas: +document.getElementById('pessoasPed').value || 1,
+                horario: ehAgendado ? formatDatetimeLocal(hor.local) : null, pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
                 usar_fila: true,   // chama os motoristas da rota um de cada vez, mais perto primeiro
             };
