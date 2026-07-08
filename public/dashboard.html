@@ -2047,8 +2047,8 @@
 
     let listaMotoristasTimer = null;
     // Ao escolher um local no mapa, monta a lista (estilo Uber):
-    //   1) caronas indo para o destino escolhido (com vaga) — seção "indo para lá";
-    //   2) motoristas online por perto no modo amarelo — seção separada, sem fila.
+    //   caronas indo para o destino escolhido (com vaga) — seção "indo para lá".
+    // Modo amarelo (sem rota publicada) não aparece para o passageiro.
     // dest = null -> esconde a lista.
     async function carregarCaronasDestino(dest) {
         const wrap = document.getElementById('motoristasDestinoWrap');
@@ -2081,13 +2081,11 @@
             const qCaronas = new URLSearchParams();
             if (o) { qCaronas.set('lat', o.lat); qCaronas.set('lng', o.lng); }
             qCaronas.set('dest_lat', dest.lat); qCaronas.set('dest_lng', dest.lng);
-            const qOnline = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
             const qRota = o ? '?' + new URLSearchParams({
                 origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
             }).toString() : '';
-            const [caronas, online, naRota] = await Promise.all([
+            const [caronas, naRota] = await Promise.all([
                 fetchWithAuth('/api/caronas?' + qCaronas.toString()).then(r => r.ok ? r.json() : []).catch(() => []),
-                o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
                 o ? fetchWithAuth('/api/motoristas-rota' + qRota).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
             ]);
             const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
@@ -2111,17 +2109,6 @@
                 if (!prev || item.caronaId > prev.caronaId) porMotorista.set(c.motorista_id, item);
             });
             porMotorista.forEach((item) => indoDestino.push(item));
-            const idsIndo = new Set(indoDestino.map((it) => it.id));
-            (Array.isArray(online) ? online : []).forEach((m) => {
-                if (m.carona_id || idsIndo.has(m.id)) return;
-                const dist = (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity;
-                porPerto.push({
-                    id: m.id, caronaId: null,
-                    nome: m.nome, placa: m.placa, tag: m.tag, foto: m.foto_carro_url,
-                    vagas: m.vagas || 1, destino: null, dist, ordem: null, online: true,
-                    compatRota: 'total', destinoMotorista: null,
-                });
-            });
             indoDestino.sort((a, b) => {
                 const ordem = { total: 0, proximo: 1, parcial: 2 };
                 const oa = ordem[a.compatRota] ?? 3;
@@ -3625,14 +3612,25 @@
             const modalCarroAberto = carroSel && document.getElementById('modalCarro')?.style.display === 'flex';
             if (document.hidden && !modalCarroAberto) return;
             try {
-                // Motoristas online no raio de 600 m (+ caronas na rota quando o
-                // passageiro já escolheu destino). Rotas douradas = carona publicada.
-                // Buzina/ligação/WhatsApp continuam exigindo destino do passageiro.
                 const o = selPed ? selPed.getOrigem() : null;
                 const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
+                // Sem destino do passageiro: não mostra carros (modo amarelo some do mapa).
+                if (!dest) {
+                    const removidos = Object.keys(fleet.markers);
+                    removidos.forEach((id) => {
+                        const it = fleet.markers[id];
+                        it.car.setMap(null);
+                        if (it.rotaCtrl) it.rotaCtrl.limpar();
+                        if (it.destinoMk) it.destinoMk.setMap(null);
+                        delete fleet.markers[id];
+                    });
+                    if (removidos.length) sincronizarModalCarroAoVivo([], removidos);
+                    return;
+                }
+                // Só caronas publicadas (rota), visíveis em 10 km — nunca modo amarelo.
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
-                const lista = await r.json();
+                const lista = (await r.json()).filter((m) => m.carona_id);
                 if (o && dest) {
                     // Fila/ordem muda devagar: consulta a rota a cada ~9 s e reusa entre ticks.
                     const agora = Date.now();

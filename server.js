@@ -2844,16 +2844,9 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     const temPos = lat != null && lng != null;
     const params = temPos ? [req.user.id, lat, lng, RAIO_ONLINE_KM, RAIO_VISIVEL_KM, pid] : [req.user.id, pid];
     const distExpr = haversine("lat", "lng", "$2", "$3");
-    // Filtro de raio: 600 m para quem está só no modo online (sem carona ativa
-    // publicada); 10 km para quem tem carona com destino publicada. Aplicado
-    // DEPOIS de reduzir a 1 linha por motorista (CTE abaixo), e a ordenação
-    // final é pela distância real até o passageiro — não pelo id de cadastro
-    // — para o LIMIT 100 nunca cortar quem está fisicamente mais perto.
-    const raio = temPos ? `WHERE (
-      (online_desde IS NOT NULL AND ${distExpr} <= $4)
-      OR (online_desde IS NULL AND carona_id IS NULL AND ${distExpr} <= $4)
-      OR (online_desde IS NULL AND carona_id IS NOT NULL AND ${distExpr} <= $5)
-    )` : "";
+    // Filtro de raio: só motoristas com carona publicada (rota), visíveis em 10 km.
+    // Modo amarelo (online_desde, sem rota) não aparece no mapa do passageiro.
+    const raio = temPos ? `WHERE carona_id IS NOT NULL AND ${distExpr} <= $5` : "WHERE carona_id IS NOT NULL";
     const filtroProj = temPos ? `AND u.projeto_id = $6` : `AND u.projeto_id = $2`;
     const { rows } = await pool.query(
       `WITH candidatos AS (

@@ -322,10 +322,10 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(json.online, "online");
     });
-    await test("passageiro vê motorista online no mapa (600 m)", async () => {
+    await test("passageiro NÃO vê motorista no modo amarelo (sem rota publicada)", async () => {
       const { status, json } = await api("GET", `/api/motoristas-online?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokPax });
       eq(status, 200, "status");
-      assert(json.some((m) => m.id === idDriver), "motorista online não apareceu");
+      assert(!json.some((m) => m.id === idDriver), "motorista amarelo não deve aparecer sem rota");
     });
     await test("passageiro sem hab NÃO fica online (403)", async () => {
       const { status } = await api("POST", "/api/motorista/online", {
@@ -360,6 +360,13 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       eq(json.status, "ativa", "status carona");
       caronaId = json.id;
+    });
+    await test("passageiro vê motorista com rota publicada (10 km)", async () => {
+      const { status, json } = await api("GET", `/api/motoristas-online?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokPax });
+      eq(status, 200, "status");
+      const m = json.find((x) => x.id === idDriver);
+      assert(m, "motorista com rota publicada deve aparecer");
+      assert(m.carona_id, "deve trazer carona_id");
     });
     await test("POST /api/caronas cancela carona anterior — lista sem duplicata", async () => {
       const { status: s1, json: j1 } = await api("POST", "/api/caronas", {
