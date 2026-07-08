@@ -1191,16 +1191,31 @@ async function notificarMotoristasProximos(ped) {
   try { await pool.query("UPDATE pedidos SET notificado = TRUE WHERE id = $1", [ped.id]); } catch (_) {}
 }
 
-// Agendador: pedidos com horário marcado só aparecem/notificam na hora. A cada
-// minuto, dispara a notificação de proximidade dos que acabaram de "vencer".
+// Agendador: pedidos com horário marcado só entram no ar na hora marcada.
+// Usa a mesma fila sequencial do pedido imediato (usar_fila), não só push 600 m.
+async function ativarPedidoAgendado(ped) {
+  try {
+    await iniciarFilaPedido(ped.id);
+    await pool.query("UPDATE pedidos SET notificado = TRUE WHERE id = $1", [ped.id]);
+    const destino = ped.destino_texto ? ` para ${ped.destino_texto}` : "";
+    enviarPush(ped.passageiro_id, {
+      title: "Horário da sua carona",
+      body: `Seu pedido agendado entrou no ar${destino}. Procurando motoristas.`,
+      url: "/dashboard.html",
+    });
+  } catch (e) {
+    console.warn("ativarPedidoAgendado:", e.message);
+  }
+}
+
 setInterval(async () => {
   try {
     const { rows } = await pool.query(`
-      SELECT id, passageiro_id, origem_lat, origem_lng, destino_texto FROM pedidos
+      SELECT * FROM pedidos
       WHERE status = 'aberto' AND notificado = FALSE
         AND horario IS NOT NULL AND horario <= NOW()
     `);
-    await Promise.all(rows.map(notificarMotoristasProximos));
+    await Promise.all(rows.map(ativarPedidoAgendado));
   } catch (err) {
     console.error("Erro ao notificar pedidos agendados:", err.message);
   }
