@@ -1794,6 +1794,12 @@
     function sincronizarQuandoPed() {
         const el = document.getElementById('horaPed');
         if (!el || horaPedModoAgenda) return;
+        const sel = parseDatetimeLocalValue(el.value);
+        const margem = 60000;
+        if (sel && sel.getTime() > Date.now() + margem) {
+            horaPedModoAgenda = true;
+            return;
+        }
         const agora = new Date();
         el.min = formatDatetimeLocal(agora);
         el.value = formatDatetimeLocal(agora);
@@ -1814,6 +1820,7 @@
         el.dataset.quandoLigado = '1';
         el.addEventListener('change', detectarModoAgendaQuandoPed);
         el.addEventListener('input', detectarModoAgendaQuandoPed);
+        el.addEventListener('blur', detectarModoAgendaQuandoPed);
     }
 
     function iniciarRelogioQuandoPed() {
@@ -1907,11 +1914,16 @@
         if (pedidoTemCaronaNaRota) {
             ehAgendado = false;
         } else {
-            if (!horaPedModoAgenda) sincronizarQuandoPed();
             hor = lerHorarioPedido();
             if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
             const margemAgenda = 60000;
             ehAgendado = !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
+            if (!ehAgendado) {
+                sincronizarQuandoPed();
+                hor = lerHorarioPedido();
+                if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
+                ehAgendado = !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
+            }
             if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
                 return msg('Escolha um horário futuro para agendar.', 'error');
             }
@@ -2803,13 +2815,35 @@
         } catch (_) {}
     }
 
+    function pedidoAgendadoNoFuturo(p) {
+        if (!p?.horario) return false;
+        return new Date(p.horario).getTime() > Date.now() + 60000;
+    }
+
     async function verificarRetomarPassageiro() {
         try {
             const r = await fetchWithAuth('/api/pedidos?meus=1');
             if (r && r.ok) {
                 const aberto = (await r.json())[0];
-                if (aberto) mostrarChamando({ pedidoId: aberto.id });
+                if (!aberto) return;
+                if (pedidoAgendadoNoFuturo(aberto)) {
+                    msg('Carona agendada para ' + fmtHorario(aberto.horario) + '. Os motoristas serão avisados nesse horário.');
+                    return;
+                }
+                mostrarChamando({ pedidoId: aberto.id });
             }
+        } catch (_) {}
+    }
+
+    async function verificarPedidoAgendadoEntrouNoAr() {
+        if (chamandoPedidoId || chamandoId) return;
+        if (document.getElementById('modoTitulo')?.textContent !== 'Passageiro') return;
+        try {
+            const r = await fetchWithAuth('/api/pedidos?meus=1');
+            if (!r || !r.ok) return;
+            const aberto = (await r.json())[0];
+            if (!aberto || pedidoAgendadoNoFuturo(aberto)) return;
+            mostrarChamando({ pedidoId: aberto.id });
         } catch (_) {}
     }
 
@@ -2841,7 +2875,9 @@
         const ofertas = Number(p.ofertas) || 0;
         const status = ofertas > 0
             ? `<span class="badge badge-ativo">${ofertas} oferta(s) — veja abaixo</span>`
-            : '<small>Aguardando um motorista na sua rota…</small>';
+            : (pedidoAgendadoNoFuturo(p)
+                ? '<small>Agendado — motoristas serão avisados na hora marcada.</small>'
+                : '<small>Aguardando um motorista na sua rota…</small>');
         return `<div class="ride-item">
             <div class="ride-info">
                 <strong>Solicitação ativa</strong><br>
@@ -3055,6 +3091,7 @@
     }
 
     async function pollPropostas() {
+        await verificarPedidoAgendadoEntrouNoAr();
         if (document.hidden) return;   // app em segundo plano: não consome rede
         try {
             const r = await fetchWithAuth('/api/propostas');
