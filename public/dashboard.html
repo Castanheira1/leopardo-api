@@ -121,7 +121,9 @@
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div class="map-stage-controls" id="mapPedControls">
-                        <button type="button" class="map-tipo-btn" id="btnTipoMapaPed" aria-label="Alternar satélite ou mapa leve">Satélite</button>
+                        <button type="button" class="map-tipo-btn" id="btnTipoMapaPed" aria-label="Alternar satélite ou mapa leve" title="Alternar satélite ou mapa leve">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5"/></svg>
+                        </button>
                     </div>
                     <div id="bannerAgendamentos" class="banner-agendamentos" style="display:none;" role="status" aria-live="polite">
                         <button type="button" class="banner-agendamentos__btn" onclick="abrirPainelAgendamentos()">
@@ -179,7 +181,9 @@
                     <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div class="map-stage-controls" id="mapOfeControls">
-                        <button type="button" class="map-tipo-btn" id="btnTipoMapaOfe" aria-label="Alternar satélite ou mapa leve">Satélite</button>
+                        <button type="button" class="map-tipo-btn" id="btnTipoMapaOfe" aria-label="Alternar satélite ou mapa leve" title="Alternar satélite ou mapa leve">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5"/></svg>
+                        </button>
                     </div>
                     <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe collapsed">
                         <div class="acao-grip" id="gripOfe">
@@ -552,10 +556,6 @@
     let selPed = null, selOfe = null;
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
-    let enquadrarMapaPedidoTimer = null;
-    let enquadrarMapaPedidoDebounced = () => {};
-    let agendarEnquadrarMapaPedido = () => {};
-    let mapaPedidoAutoEnquadrar = true;
 
     /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
     function tornarSheetAcaoArrastavel(sheet, grip) {
@@ -1485,33 +1485,43 @@
 
     /* -------- mapa: criação central + alternador Satélite/Mapa leve -------- */
     // Satélite é pesado em internet fraca. O tipo escolhido fica salvo; o modo
-    // "mapa leve" usa o vetor ESCURO (estilo app de corrida) — carrega muito
-    // mais rápido. Os carros/pulsos/rotas continuam ao vivo igual.
-    const ESTILO_MAPA_ESCURO = [
-        { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#8a93a3' }] },
-        { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#d5b97a' }] },
-        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#263c3f' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
-        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
-        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
-        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#746855' }] },
-        { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1f2835' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
+    // padrão é o mapa CLARO (branco, estilo Uber): ruas brancas, quadras e
+    // prédios em cinza suave — carrega muito mais rápido. Os carros/pulsos/
+    // rotas continuam ao vivo igual.
+    const ESTILO_MAPA_CLARO = [
+        { elementType: 'geometry', stylers: [{ color: '#f7f8fa' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#5b6470' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
+        { elementType: 'labels.icon', stylers: [{ saturation: -60 }, { lightness: 20 }] },
+        { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d7dbe2' }] },
+        // Quadras e prédios com contorno dá a sensação de relevo (tipo 3D leve).
+        { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#ececf0' }] },
+        { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#d9dde3' }] },
+        { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#e6e8ec' }] },
+        { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a8f98' }] },
+        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#d9ead3' }] },
+        { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#5e8a5a' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#dfe3e8' }] },
+        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#eef0f3' }] },
+        { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#d4d9df' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c6d5dd' }] },
         { featureType: 'transit', stylers: [{ visibility: 'off' }] },
     ];
-    function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapa') || 'hybrid'; } catch (_) { return 'hybrid'; } }
+    // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
+    // satélite alterna de novo e a escolha fica salva normalmente.
+    function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
     function aplicarTipoMapa(map, tipo) {
         map.setMapTypeId(tipo);
-        map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_ESCURO : null });
+        map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_CLARO : null });
     }
     function novoMapa(elId, opts) {
         const map = new g.maps.Map(document.getElementById(elId), opcoesMapa({
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
             fullscreenControl: false, gestureHandling: 'greedy', ...opts,
         }));
-        if (tipoMapaSalvo() === 'roadmap') map.setOptions({ styles: ESTILO_MAPA_ESCURO });
+        if (tipoMapaSalvo() === 'roadmap') map.setOptions({ styles: ESTILO_MAPA_CLARO });
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);
         return map;
@@ -1521,13 +1531,18 @@
         const b = btnId ? document.getElementById(btnId) : null;
         if (!b) return;
         const rotulo = () => {
-            const txt = tipoMapaSalvo() === 'hybrid' ? 'Mapa leve' : 'Satélite';
-            document.querySelectorAll('.map-tipo-btn').forEach((el) => { el.textContent = txt; });
+            const satAtivo = tipoMapaSalvo() === 'hybrid';
+            const alvo = satAtivo ? 'Ver mapa leve' : 'Ver satélite';
+            document.querySelectorAll('.map-tipo-btn').forEach((el) => {
+                el.classList.toggle('map-tipo-btn--sat', satAtivo);
+                el.title = alvo;
+                el.setAttribute('aria-label', alvo);
+            });
         };
         rotulo();
         b.onclick = () => {
             const novo = tipoMapaSalvo() === 'hybrid' ? 'roadmap' : 'hybrid';
-            try { localStorage.setItem('tipoMapa', novo); } catch (_) {}
+            try { localStorage.setItem('tipoMapaV2', novo); } catch (_) {}
             aplicarTipoMapa(map, novo);
             rotulo();
         };
@@ -1543,10 +1558,6 @@
         let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
         const estado = { gpsOk: false };
         const map = novoMapa(mapId, { center: origem, zoom: 15 });
-        if (mapId === 'mapPed') {
-            map.addListener('zoom_changed', () => { mapaPedidoAutoEnquadrar = false; });
-            map.addListener('dragstart', () => { mapaPedidoAutoEnquadrar = false; });
-        }
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
@@ -1610,7 +1621,6 @@
                 const titulo = destino.texto ? `<strong>${esc(destino.texto)}</strong><br>` : '';
                 rotaInfo.innerHTML = `${titulo}${ICN.route} ${leg.distance.text} &nbsp;•&nbsp; ${ICN.clock} ${leg.duration.text}`;
                 rotaInfo.style.display = 'block';
-                enquadrarMapaPedidoDebounced();
             } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
@@ -1665,16 +1675,11 @@
             mkDestino.setMap(map);
             mkDestino.setPosition(pos);
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
-            if (mapId === 'mapPed') {
-                // Não voa pro destino: carros amarelos ficam perto da origem (600 m).
-                mapaPedidoAutoEnquadrar = true;
-                previewSeq++;
-                if (previewTimer) clearTimeout(previewTimer);
-                Promise.resolve(tracarRota()).finally(() => agendarEnquadrarMapaPedido());
-            } else {
-                map.panTo(pos);
-                Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos));
-            }
+            // Zoom no destino pra ver ONDE está indo; depois o foco volta sozinho
+            // para o pulso do passageiro (ou o carrinho, no modo motorista) — os
+            // carros amarelos ficam perto da origem.
+            map.panTo(pos);
+            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos));
             if (onDestino) onDestino(destino);
             // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
             if (!nomeDestino) {
@@ -4017,35 +4022,6 @@
         return m && m.carona_id && m.destino_lat != null
             ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
     }
-    // Enquadra rota do passageiro (preta) + motoristas/rotas douradas no mesmo zoom.
-    function enquadrarMapaPedido() {
-        if (!mapaPedidoAutoEnquadrar || !selPed?.map || !g?.maps) return;
-        const map = selPed.map;
-        const bounds = new g.maps.LatLngBounds();
-        let tem = false;
-        try {
-            const o = selPed.getOrigem?.();
-            const dest = selPed.getDestino?.();
-            if (o) { bounds.extend(o); tem = true; }
-            if (dest) { bounds.extend(dest); tem = true; }
-            Object.values(fleet.markers || {}).forEach((it) => {
-                if (it.lastPos) { bounds.extend(it.lastPos); tem = true; }
-                const d = destinoPublicadoCarro(it.m);
-                if (d) { bounds.extend(d); tem = true; }
-            });
-            if (!tem) return;
-            map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
-        } catch (_) { /* mapa ainda montando */ }
-    }
-    enquadrarMapaPedidoDebounced = () => {
-        clearTimeout(enquadrarMapaPedidoTimer);
-        enquadrarMapaPedidoTimer = setTimeout(enquadrarMapaPedido, 350);
-    };
-    agendarEnquadrarMapaPedido = () => {
-        enquadrarMapaPedidoDebounced();
-        setTimeout(enquadrarMapaPedidoDebounced, 600);
-        setTimeout(enquadrarMapaPedidoDebounced, 3200);
-    };
     const FLEET_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
     const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
     const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
