@@ -69,7 +69,7 @@
         .fav-star:disabled { opacity: .5; cursor: wait; }
     </style>
 </head>
-<body class="theme-dark app-mobile aguardando-papel">
+<body class="theme-dark app-mobile">
     <nav class="navbar">
         <div class="nav-container">
             <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
@@ -530,6 +530,7 @@
     let enquadrarMapaPedidoTimer = null;
     let enquadrarMapaPedidoDebounced = () => {};
     let agendarEnquadrarMapaPedido = () => {};
+    let mapaPedidoAutoEnquadrar = true;
 
     /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
     function tornarSheetAcaoArrastavel(sheet, grip) {
@@ -1479,6 +1480,10 @@
         let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
         const estado = { gpsOk: false };
         const map = novoMapa(mapId, { center: origem, zoom: 15 });
+        if (mapId === 'mapPed') {
+            map.addListener('zoom_changed', () => { mapaPedidoAutoEnquadrar = false; });
+            map.addListener('dragstart', () => { mapaPedidoAutoEnquadrar = false; });
+        }
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
@@ -1599,6 +1604,7 @@
             if (nomeDestino) mkDestino.setTitle(nomeDestino);
             if (mapId === 'mapPed') {
                 // Não voa pro destino: carros amarelos ficam perto da origem (600 m).
+                mapaPedidoAutoEnquadrar = true;
                 previewSeq++;
                 if (previewTimer) clearTimeout(previewTimer);
                 Promise.resolve(tracarRota()).finally(() => agendarEnquadrarMapaPedido());
@@ -2152,6 +2158,8 @@
             atualizarHintDestinoPed();
             return;
         }
+        const sheetPed = document.getElementById('acaoSheetPed');
+        if (sheetPed) sheetPed.classList.remove('collapsed');
         atualizarHintDestinoPed();
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         atualizarBtnLimparPed(true);
@@ -2377,6 +2385,7 @@
             placa: it.placa,
             tag: it.tag,
             foto_carro_url: it.foto,
+            selfie_url: it.selfie,
             destino_texto: it.destino,
             carona_vagas: it.vagas,
             vagas: it.vagas,
@@ -3743,7 +3752,7 @@
     }
     // Enquadra rota do passageiro (preta) + motoristas/rotas douradas no mesmo zoom.
     function enquadrarMapaPedido() {
-        if (!selPed?.map || !g?.maps) return;
+        if (!mapaPedidoAutoEnquadrar || !selPed?.map || !g?.maps) return;
         const map = selPed.map;
         const bounds = new g.maps.LatLngBounds();
         let tem = false;
@@ -3795,7 +3804,6 @@
             await item.rotaCtrl.calcular(pos, destino);
             item.rotaUltimaPos = { ...pos };
             item.rotaUltimaEm = agora;
-            if (selPed?.getDestino?.()) enquadrarMapaPedidoDebounced();
         } catch (_) { /* sem rota: só o carro */ }
         finally { item.rotaCalculando = false; }
     }
@@ -3914,7 +3922,6 @@
                     }
                 });
                 sincronizarModalCarroAoVivo(lista, removidos);
-                if (dest && Object.keys(fleet.markers).length) agendarEnquadrarMapaPedido();
             } catch (_) {}
         }
         tick();
