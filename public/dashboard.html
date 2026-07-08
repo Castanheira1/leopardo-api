@@ -2962,6 +2962,9 @@
 
     function abrirPainelAgendamentos() {
         fecharMenu();
+        // Edição que ficou aberta de outra visita não pode travar o refresh da lista.
+        document.querySelectorAll('#listaAgendamentos .agenda-card.editing')
+            .forEach((el) => el.classList.remove('editing'));
         document.getElementById('painelAgendamentos').style.display = 'flex';
         loadAgendamentos();
     }
@@ -2982,6 +2985,9 @@
     function renderListaAgendamentos(arr) {
         const div = document.getElementById('listaAgendamentos');
         if (!div) return;
+        // Alguém editando um card? NÃO re-renderiza: o poll de 8s reconstruía a
+        // lista inteira e fechava/zerava o formulário no meio da digitação.
+        if (div.querySelector('.agenda-card.editing')) return;
         if (!arr.length) {
             div.innerHTML = '<p class="cam-hint">Nenhum agendamento futuro. Escolha destino e horário no mapa para agendar.</p>';
             return;
@@ -3037,6 +3043,8 @@
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro ao salvar', 'error');
         msg('Agendamento atualizado.');
+        // Fecha a edição ANTES de recarregar: com um card em edição a lista não re-renderiza.
+        document.getElementById('agendaCard_' + id)?.classList.remove('editing');
         await loadAgendamentos();
     }
 
@@ -3046,6 +3054,9 @@
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro ao excluir', 'error');
         msg('Agendamento cancelado.');
+        // Tira o card excluído na hora — mesmo se outro card estiver em edição
+        // (nesse caso a lista não re-renderiza para não perder a digitação).
+        document.getElementById('agendaCard_' + id)?.remove();
         await loadAgendamentos();
         await atualizarUiAgendamentos();
     }
