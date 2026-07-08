@@ -69,7 +69,7 @@
         .fav-star:disabled { opacity: .5; cursor: wait; }
     </style>
 </head>
-<body class="theme-dark app-mobile">
+<body class="theme-dark app-mobile aguardando-papel">
     <nav class="navbar">
         <div class="nav-container">
             <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
@@ -1150,11 +1150,14 @@
         if (sheet) sheet.classList.remove('collapsed');
     }
     function abrirEscolhaPapel() {
+        localStorage.removeItem('papel');
+        document.body.classList.add('aguardando-papel');
         document.getElementById('telaPapel').style.display = 'flex';
         esconderBootSplash();
     }
     function escolherPapel(papel) {
-        localStorage.setItem('papel', papel);   // volta no mesmo modo ao reabrir o app
+        document.body.classList.remove('aguardando-papel');
+        localStorage.setItem('papel', papel);   // usado só na sessão atual (menu, voltar da viagem)
         registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
         esconderBootSplash();
@@ -3678,7 +3681,7 @@
         // A viagem acabou: a rota antiga não pode ficar presa nos mapas de pedir/oferecer.
         if (selPed) selPed.limparRota();
         if (selOfe) selOfe.limparRota();
-        escolherPapel(localStorage.getItem('papel') || 'passageiro');
+        abrirEscolhaPapel();
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
@@ -4408,41 +4411,68 @@
     // Passageiro acompanha o carro do motorista ao vivo (sem rota de navegação).
     let acompTimer = null;   // timer do acompanhamento do passageiro (passageiroLoop)
 
-    /* -------- restaurar sessão (fechar/reabrir o app não perde o estado) -------- */
-    // O servidor é a fonte da verdade: ao reabrir, retoma a viagem em andamento ou a
-    // carona publicada. Tudo dentro de try/catch para o app não quebrar offline.
-    async function restaurarSessao() {
+    // Só viagem em andamento retoma direto — todo o resto passa pela escolha Pedir/Oferecer.
+    async function retomarViagemSeAtiva() {
         try {
             const r = await fetchWithAuth('/api/viagens');
-            if (r && r.ok) {
-                const ativa = (await r.json()).find(v => v.status === 'em_andamento');
-                if (ativa) {
-                    escolherPapel(String(ativa.motorista_id) === String(user.id) ? 'motorista' : 'passageiro');
-                    await abrirViagem(ativa.id);
-                    return true;
+            if (!r?.ok) return false;
+            const ativa = (await r.json()).find((v) => v.status === 'em_andamento');
+            if (!ativa) return false;
+            escolherPapel(String(ativa.motorista_id) === String(user.id) ? 'motorista' : 'passageiro');
+            await abrirViagem(ativa.id);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    async function carregarAppEmSegundoPlano() {
+        try {
+            await sincronizarPerfil();
+            user = JSON.parse(localStorage.getItem('user') || 'null');
+            aplicarPerfilNaTela();
+        } catch (_) {}
+        carregarOpcoesProjetoPerfil().catch(() => {});
+        checarTelefone();
+        checarCadastro();
+        try {
+            await carregarHabilitacao();
+            if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
+        } catch (_) {}
+        loadPropostas().catch(() => {});
+        registrarPush(true);
+        pollPropostas();
+        setInterval(pollPropostas, 8000);
+        pollOfertaFila();
+        setInterval(pollOfertaFila, 5000);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                pollPropostas();
+                pollOfertaFila();
+                if (document.getElementById('tabPedir')?.classList.contains('active')) sincronizarQuandoPed();
+                if (motoristaOnlineModo) {
+                    ativarWakeLock();
+                    refreshModoMotoristaOnline();
+                    pollContatosMotoristaOnce();
                 }
             }
-        } catch (_) { /* offline: cai para a escolha de papel */ }
-        // Motorista que ficou no modo amarelo (online): fechar/reabrir NÃO derruba —
-        // volta direto ao modo online, sem repassar pela escolha de papel.
-        // (escolherPapel('motorista') dispara verificarRetomarMotorista, que reativa
-        //  broadcast, wake lock e o poll de pedidos.)
-        try {
-            const r = await fetchWithAuth('/api/motorista/online');
-            if (r && r.ok) {
-                const st = await r.json();
-                if (st && st.online) { escolherPapel('motorista'); return true; }
-            }
-        } catch (_) { /* offline: cai para a escolha de papel */ }
-        // Passageiro com pedido ainda aberto: retoma a tela "Procurando motorista…".
-        try {
-            const r = await fetchWithAuth('/api/pedidos?meus=1');
-            if (r && r.ok) {
-                const aberto = (await r.json())[0];
-                if (aberto) { escolherPapel('passageiro'); return true; }
-            }
-        } catch (_) { /* offline: cai para a escolha de papel */ }
-        return false;
+        });
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (ev) => {
+                if (ev.data && (ev.data.action === 'contato_whatsapp' || ev.data.action === 'contato_mapa')) {
+                    buzinar();
+                    pollContatosMotoristaOnce();
+                }
+                if (ev.data && ev.data.action === 'nova_solicitacao') {
+                    buzinar();
+                    pollPropostas();
+                }
+                if (ev.data && ev.data.action === 'nova_oferta_fila') {
+                    buzinar();
+                    pollOfertaFila();
+                }
+            });
+        }
     }
 
     function fecharCamadaVoltar() {
@@ -4474,8 +4504,7 @@
         }
         const telaPapel = document.getElementById('telaPapel');
         if (telaPapel && telaPapel.style.display === 'flex') {
-            telaPapel.style.display = 'none';
-            return true;
+            return true;   // botão voltar não fecha a escolha de papel
         }
         const tabViagem = document.getElementById('tabViagem');
         if (tabViagem && tabViagem.classList.contains('active')) {
@@ -4487,57 +4516,16 @@
 
     /* -------- init -------- */
     (async function init() {
-        // Trava o botão voltar do celular JÁ — antes dos awaits de rede. Se instalar
-        // só no fim, durante a abertura o "voltar" navega o histórico real do WebView
-        // (dashboard -> login -> recarrega) e cai no seletor de papel sozinho.
         instalarGuardaVoltar(fecharCamadaVoltar);
-        // Rede lenta/erro nunca pode deixar o usuário preso no splash: some sozinho.
         setTimeout(esconderBootSplash, 8000);
-        carregarMaps().catch(() => {});   // baixa o Google Maps já — o mapa abre na hora
-        await sincronizarPerfil();
-        await carregarOpcoesProjetoPerfil();
-        checarTelefone();
-        checarCadastro();
-        await carregarHabilitacao().catch(() => {});
-        if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
-        await loadPropostas();
-        // Sempre pergunta Pedir ou Oferecer, exceto viagem em andamento já retomada.
-        const retomou = await restaurarSessao();
-        if (!retomou) abrirEscolhaPapel();
-        registrarPush(true);   // sincroniza a inscrição se a permissão já foi dada (sem popup)
-        pollPropostas();
-        setInterval(pollPropostas, 8000);   // detecta aceite/oferta sem martelar o servidor
-        pollOfertaFila();
-        setInterval(pollOfertaFila, 5000);   // fila sequencial: cronômetro curto, poll um pouco mais frequente
-        // Voltou do segundo plano: atualiza na hora, sem esperar o próximo tick.
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
-                pollPropostas();
-                pollOfertaFila();
-                if (document.getElementById('tabPedir')?.classList.contains('active')) sincronizarQuandoPed();
-                if (motoristaOnlineModo) {
-                    ativarWakeLock();   // o navegador solta o lock ao ocultar a aba: re-adquire ao voltar
-                    refreshModoMotoristaOnline();
-                    pollContatosMotoristaOnce();
-                }
-            }
-        });
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.addEventListener('message', (ev) => {
-                if (ev.data && (ev.data.action === 'contato_whatsapp' || ev.data.action === 'contato_mapa')) {
-                    buzinar();
-                    pollContatosMotoristaOnce();
-                }
-                if (ev.data && ev.data.action === 'nova_solicitacao') {
-                    buzinar();
-                    pollPropostas();
-                }
-                if (ev.data && ev.data.action === 'nova_oferta_fila') {
-                    buzinar();
-                    pollOfertaFila();   // não espera o próximo tick — mostra a oferta na hora
-                }
-            });
-        }
+        carregarMaps().catch(() => {});
+
+        // Escolha de papel na hora: só espera checar viagem em andamento (1 request).
+        const retomouViagem = await retomarViagemSeAtiva();
+        if (!retomouViagem) abrirEscolhaPapel();
+
+        // Perfil, habilitação, propostas etc. rodam em paralelo — não seguram a tela.
+        carregarAppEmSegundoPlano();
     })();
     </script>
 </body>
