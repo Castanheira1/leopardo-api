@@ -41,9 +41,14 @@ const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
 const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
-// GPS considerado "vivo" — motorista sem atualização recente some do mapa.
+// Dois limites de GPS, para não punir sinal instável (túnel, iOS em background):
+//  - FRESH: some do MAPA na hora (mata fantasma visualmente), mas a publicação
+//    continua no banco — o motorista reaparece quando o GPS volta.
+//  - STALE: só aqui a publicação é REALMENTE cancelada (sumiu de vez).
 const GPS_FRESH_MIN = Number(process.env.GPS_FRESH_MIN || 3);
+const GPS_STALE_MIN = Number(process.env.GPS_STALE_MIN || 15);
 const SQL_GPS_FRESH = `atualizado_em > NOW() - INTERVAL '${GPS_FRESH_MIN} minutes'`;
+const SQL_GPS_STALE = `atualizado_em <= NOW() - INTERVAL '${GPS_STALE_MIN} minutes'`;
 
 // Intervalo do "avançador" da fila (verifica ofertas vencidas).
 const FILA_TICK_MS = Number(process.env.FILA_TICK_MS || 10 * 1000);
@@ -454,23 +459,26 @@ async function garantirIndiceCaronaUnica() {
   }
 }
 
-// Motorista sem GPS recente não deve aparecer nem manter publicação ativa.
+// Motorista que sumiu de VEZ (GPS parado além do limite longo) sai do online.
+// Sinal instável (< GPS_STALE_MIN) só some do mapa, sem perder a publicação.
 async function limparLocalizacoesFantasma() {
   try {
     const { rowCount } = await pool.query(
       `UPDATE localizacoes_online SET disponivel = FALSE, online_desde = NULL
-       WHERE disponivel = TRUE AND NOT (${SQL_GPS_FRESH})`
+       WHERE disponivel = TRUE AND ${SQL_GPS_STALE}`
     );
     if (rowCount > 0) {
-      console.log(`Online: desligou ${rowCount} motorista(s) com GPS expirado.`);
+      console.log(`Online: desligou ${rowCount} motorista(s) com GPS parado há +${GPS_STALE_MIN} min.`);
     }
   } catch (e) {
     console.warn("limparLocalizacoesFantasma:", e.message);
   }
 }
 
-// Carona ativa sem motorista online de verdade (GPS vivo) vira card fantasma
-// na lista "Motoristas indo para lá" — ex.: Vale/Portaria S11D antigo no banco.
+// Carona ativa cujo motorista sumiu de vez (sem GPS há +GPS_STALE_MIN, ou
+// offline) vira card fantasma — ex.: Vale/Portaria S11D antigo no banco.
+// Não cancela por instabilidade curta: enquanto o motorista pode voltar, a
+// publicação fica no banco (só não aparece no mapa, pelo filtro FRESH).
 async function limparCaronasOrfas() {
   try {
     const { rowCount } = await pool.query(
@@ -480,7 +488,7 @@ async function limparCaronasOrfas() {
            SELECT 1 FROM localizacoes_online l
            WHERE l.usuario_id = c.motorista_id
              AND l.disponivel = TRUE
-             AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}
+             AND NOT (${SQL_GPS_STALE.replace("atualizado_em", "l.atualizado_em")})
          )`
     );
     if (rowCount > 0) {
@@ -2854,7 +2862,8 @@ app.get("/api/motorista/online", verificarAuth, async (req, res) => {
       `SELECT l.disponivel, l.lat, l.lng, l.atualizado_em, l.online_desde, l.vagas,
               (SELECT id FROM caronas WHERE motorista_id = $1 AND status = 'ativa' ORDER BY created_at DESC LIMIT 1) AS carona_id
        FROM localizacoes_online l
-       WHERE l.usuario_id = $1 AND l.disponivel = TRUE AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}`,
+       WHERE l.usuario_id = $1 AND l.disponivel = TRUE
+         AND NOT (${SQL_GPS_STALE.replace("atualizado_em", "l.atualizado_em")})`,
       [req.user.id]
     )).rows[0];
     const online = !!(hab && row);
