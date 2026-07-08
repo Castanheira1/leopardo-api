@@ -858,7 +858,8 @@ html.teclado-aberto {
 .acao-sheet.collapsed .acao-sheet-body,
 .acao-sheet.collapsed .acao-sheet-footer,
 .acao-sheet.collapsed .limpar-rota-bar,
-.acao-sheet.collapsed .acao-titulo {
+.acao-sheet.collapsed .acao-titulo,
+.acao-sheet.collapsed .acao-accent {
     display: none !important;
 }
 .acao-sheet.collapsed .acao-grip {
@@ -879,12 +880,20 @@ html.teclado-aberto {
     cursor: grab;
     touch-action: none;   /* só a alça bloqueia gestos — o resto do sheet pode rolar */
 }
-/* Alça do bottom sheet — Pedir/Oferecer carona. */
+/* Barra dourada fina (decoração) — Pedir/Oferecer carona. */
+.acao-accent {
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(234, 210, 152, 0.55);
+    display: block;
+}
+/* Alça preta de arrastar — Pedir/Oferecer carona. */
 .acao-handle {
     width: 80px;
     height: 13px;
     border-radius: 999px;
-    background: rgba(234, 210, 152, 0.7);
+    background: #44464b;
     box-shadow: none;
     display: block;
 }
