@@ -879,12 +879,12 @@ html.teclado-aberto {
     cursor: grab;
     touch-action: none;   /* só a alça bloqueia gestos — o resto do sheet pode rolar */
 }
-/* Alça discreta estilo bottom sheet (sem a meia-bola dourada). */
+/* Alça do bottom sheet — Pedir/Oferecer carona. */
 .acao-handle {
-    width: 42px;
-    height: 4px;
+    width: 56px;
+    height: 7px;
     border-radius: 999px;
-    background: rgba(234, 210, 152, 0.55);
+    background: rgba(234, 210, 152, 0.7);
     box-shadow: none;
     display: block;
 }
