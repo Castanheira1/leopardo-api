@@ -544,7 +544,11 @@
         let startY = 0, moved = 0, dragging = false;
         const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
         const down = (e) => { dragging = true; moved = 0; startY = yOf(e); };
-        const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; };
+        const move = (e) => {
+            if (!dragging) return;
+            moved = yOf(e) - startY;
+            if (e.cancelable) e.preventDefault();
+        };
         const up = () => {
             if (!dragging) return;
             dragging = false;
@@ -554,10 +558,14 @@
         };
         grip.addEventListener('mousedown', down);
         grip.addEventListener('touchstart', down, { passive: true });
+        grip.addEventListener('touchmove', move, { passive: false });
         window.addEventListener('mousemove', move);
-        window.addEventListener('touchmove', move, { passive: true });
         window.addEventListener('mouseup', up);
         window.addEventListener('touchend', up);
+    }
+
+    function sheetAcaoExpandido() {
+        return !!document.querySelector('.acao-sheet:not(.collapsed)');
     }
 
     /* -------- altura real da tela + compensação do teclado virtual -------- */
@@ -588,14 +596,22 @@
         const vv = window.visualViewport;
         const h = vv ? vv.height : window.innerHeight;
         const inset = insetTeclado();
-        const appvh = Math.round(h * 0.1) / 10;   // 0.1px de tolerância: ignora tremor
+        const sheetAberto = sheetAcaoExpandido();
+        const tecladoAtivo = inset > 80;
+        // Sheet aberto sem teclado: ignora micro-ajustes do viewport (barra do navegador).
+        const appvh = (sheetAberto && !tecladoAtivo)
+            ? Math.round(h / 4) / 25
+            : Math.round(h * 0.1) / 10;
         if (appvh !== _appvhAnt) {
             document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
             _appvhAnt = appvh;
         }
-        if (inset !== _kbdAnt) {
+        const mudouKbd = inset !== _kbdAnt;
+        const kbdRelevante = tecladoAtivo || _kbdAnt > 80 || !sheetAberto
+            || Math.abs(inset - _kbdAnt) >= 12;
+        if (mudouKbd && kbdRelevante) {
             document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
-            document.documentElement.classList.toggle('teclado-aberto', inset > 80);
+            document.documentElement.classList.toggle('teclado-aberto', tecladoAtivo);
             _kbdAnt = inset;
         }
     }
@@ -2253,6 +2269,8 @@
             if (!listaMotoristasTimer) {
                 listaMotoristasTimer = setInterval(() => {
                     const d = selPed?.getDestino?.();
+                    const sheet = document.getElementById('acaoSheetPed');
+                    if (sheet && !sheet.classList.contains('collapsed')) return;
                     if (d && document.getElementById('tabPedir')?.classList.contains('active') && !document.hidden) {
                         carregarCaronasDestino(d);
                     }
