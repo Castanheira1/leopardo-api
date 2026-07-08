@@ -1509,6 +1509,10 @@
         { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c6d5dd' }] },
         { featureType: 'transit', stylers: [{ visibility: 'off' }] },
     ];
+    // Zoom padrão de "foco na origem": nível de rua, com o pulso/carrinho no
+    // centro e uns 2-3 quarteirões em volta. Usado ao abrir o mapa, recentrar
+    // e sempre que o foco volta da pré-visualização do destino.
+    const ZOOM_FOCO_ORIGEM = 17;
     // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
     // satélite alterna de novo e a escolha fica salva normalmente.
     function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
@@ -1557,7 +1561,7 @@
         // posição real do GPS: sem ele, pedir/oferecer segue bloqueado.
         let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
         const estado = { gpsOk: false };
-        const map = novoMapa(mapId, { center: origem, zoom: 15 });
+        const map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
@@ -1627,17 +1631,16 @@
         function preVisualizarDestino(pos) {
             const seq = ++previewSeq;
             if (previewTimer) clearTimeout(previewTimer);
-            const zoomVolta = Math.max(16, map.getZoom() || 16);
 
             map.panTo(pos);
-            map.setZoom(Math.max(18, zoomVolta));
+            map.setZoom(18);
 
             previewTimer = setTimeout(() => {
                 if (seq !== previewSeq) return;
                 const origem = mkOrigem.getPosition();
                 if (!origem) return;
                 map.panTo({ lat: origem.lat(), lng: origem.lng() });
-                map.setZoom(zoomVolta);
+                map.setZoom(ZOOM_FOCO_ORIGEM);
             }, 4000);
         }
 
@@ -1755,6 +1758,7 @@
                 mkOrigem.setPosition(p);
                 if (pulseOrigem) pulseOrigem.setPosition(p);
                 map.panTo(p);
+                map.setZoom(ZOOM_FOCO_ORIGEM);
                 if (destino) tracarRota();
             } catch (_) {
                 if (!estado.gpsOk) msg('Ainda sem sua localização. Libere o GPS nos ajustes do aparelho para continuar.', 'error');
@@ -3665,7 +3669,7 @@
         const vv = viagemView; if (!vv || !vv.map) return;
         vv.seguir = true;
         const alvo = focoMapaViagem(vv);
-        if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(vv.ehMotorista ? 17 : 16); }
+        if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(ZOOM_FOCO_ORIGEM); }
     }
     function rotuloProximidadeMotorista(km) {
         if (km < 0.05) return 'Motorista chegando';
