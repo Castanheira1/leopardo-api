@@ -1345,29 +1345,46 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 }
 .chamando-sub { color: #cfd2d6; margin: 0; font-size: 0.82rem; }
 
-/* Vitrine de anúncios: cartão flutuante do tamanho exato da imagem, com
-   sombra, solto sobre o mapa (que aparece ao redor por todos os lados) —
-   integrado ao mapa como os demais elementos flutuantes do app. O admin
-   sobe qualquer proporção: pôster vertical fica alto e estreito, foto
-   horizontal fica larga e baixa — o cartão acompanha sozinho. */
+/* Vitrine de anúncios: altura fixa e proporcional — nunca cresce pra tomar a
+   tela toda. O admin decide quantas fotos entram (curadoria no dashboard);
+   troca sozinha em loop, o usuário só acompanha. */
 .chamando-ads {
     position: relative;
     flex: 0 0 auto;
-    align-self: center;
-    width: fit-content;
-    max-width: calc(100% - 20px);
-    margin: max(8px, env(safe-area-inset-top)) auto 0;
+    height: 40vh;
+    min-height: 220px;
+    max-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: max(8px, env(safe-area-inset-top)) 10px 0;
     border-radius: 14px;
     overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    background: #ece9e4;   /* claro, na família do mapa — nada de faixa preta */
     z-index: 2;
+}
+/* A própria foto, borrada e clareada, preenche a sobra do card: laterais no
+   pôster vertical, em cima/embaixo na foto horizontal — qualquer proporção
+   que o admin subir funciona sozinha. */
+.chamando-ad-fundo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(22px) brightness(1.45) saturate(0.85);
+    opacity: 0.85;
+    transform: scale(1.12);   /* esconde as bordas escurecidas do blur */
 }
 .chamando-ad-img {
     display: block;
+    position: relative;   /* pinta por cima do fundo borrado */
     width: auto;
     height: auto;
     max-width: 100%;
-    max-height: min(42vh, 420px);
+    max-height: 100%;
+    object-fit: contain;
+    object-position: center center;
     transition: opacity 0.18s ease;
 }
 .chamando-ad-img.trocando { opacity: 0; }
