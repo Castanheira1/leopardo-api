@@ -469,17 +469,17 @@
         <!-- Pontinhos abaixo do card (como no layout): qual anúncio está no ar. -->
         <div id="chamandoAdDots" class="chamando-ad-dots" aria-hidden="true"></div>
         <!-- Vão transparente: o mapa real da aba ativa (por trás do overlay) aparece
-             aqui — só o cartão de status flutua por cima, sem tampar a tela toda. -->
-        <div class="chamando-mapa-vao">
-            <div class="chamando-status-flutuante">
+             aqui inteiro, limpo — o status da busca mora no rodapé, estilo Uber. -->
+        <div class="chamando-mapa-vao"></div>
+        <div class="chamando-rodape">
+            <div class="chamando-progresso" aria-hidden="true"><span></span></div>
+            <div class="chamando-status-rodape">
                 <div class="chamando-radar"><span class="chamando-ring"></span><span class="chamando-ring"></span><span class="chamando-dot"></span></div>
                 <div class="chamando-status-txt">
                     <h3 id="chamandoTitulo">Chamando…</h3>
                     <p class="chamando-sub" id="chamandoSub">Aguardando o motorista aceitar</p>
                 </div>
             </div>
-        </div>
-        <div class="chamando-rodape">
             <div class="chamando-info-bar">
                 <div class="chamando-info-item">
                     <span class="chamando-info-ico" id="chamandoIcoTempo"></span>
@@ -2598,8 +2598,6 @@
         if (!chamandoPedidoId || !ads.length) { box.style.display = 'none'; return; }
         anuncioIdx = 0;
         box.style.display = 'flex';
-        // Com anúncio no topo, o cartão de status não precisa desviar do notch.
-        document.getElementById('modalChamando').classList.add('com-anuncio');
         montarDotsAnuncio(ads.length);
         pintarAnuncio(ads[0], ads[1] && ads[1].imagem_url);
         if (ads.length > 1) {
@@ -2625,7 +2623,6 @@
         }
         if (dots) dots.innerHTML = '';
         if (box) box.style.display = 'none';
-        document.getElementById('modalChamando').classList.remove('com-anuncio');
     }
     async function cancelarChamando() {
         const prop = chamandoId, ped = chamandoPedidoId;
