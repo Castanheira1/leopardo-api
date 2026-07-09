@@ -603,8 +603,11 @@
             foco.matches('input, select, textarea')
             || foco.closest?.('gmp-place-autocomplete')
         );
-        // Evita falso positivo quando só a barra do navegador encolhe/expande.
-        if (!emCampo && inset < 120) return 0;
+        // Sem campo focado não há teclado — evita que a barra do navegador/status
+        // bar ainda se ajustando no boot seja lida como teclado aberto, prendendo
+        // o sheet (--sheet-kbd) recortado para fora da tela pelo overflow:hidden
+        // do .map-stage até o usuário deslogar e logar de novo.
+        if (!emCampo) return 0;
         return inset;
     }
     // Idempotente: o visualViewport dispara scroll/resize o tempo todo no celular
@@ -4773,6 +4776,7 @@
         setInterval(pollOfertaFila, 5000);
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
+                compensarTeclado();   // recalcula --sheet-kbd ao voltar do 2º plano
                 pollPropostas();
                 pollOfertaFila();
                 if (document.getElementById('tabPedir')?.classList.contains('active')) {
