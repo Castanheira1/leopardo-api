@@ -1389,18 +1389,16 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     pointer-events: none;
 }
 /* Indicador de posição do carrossel — só decorativo, some com 1 anúncio só.
-   Fica no topo do card pra nunca disputar espaço com o título (que ocupa a
-   faixa de baixo, quando o anúncio tem um). */
+   Fica logo abaixo do card do anúncio, como no layout. */
 .chamando-ad-dots {
-    position: absolute;
-    left: 0; right: 0; top: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 5px;
-    z-index: 1;
+    margin: 8px 10px 0;
     pointer-events: none;
 }
+.chamando-ad-dots:empty { display: none; }
 .chamando-ad-dots span {
     width: 6px; height: 6px;
     border-radius: 50%;
@@ -1422,7 +1420,8 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     /* Sem anúncio o vão começa no topo da tela: o cartão desvia do notch/barra
        de status. Com anúncio (classe no overlay), o vão já está bem abaixo. */
     top: max(12px, env(safe-area-inset-top));
-    left: 12px; right: 12px;
+    left: 12px;
+    max-width: calc(100% - 24px);   /* encolhe pro conteúdo (como no layout), não estica */
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1447,25 +1446,41 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
 }
+/* Barra única com divisórias finas entre os itens (como no layout). */
 .chamando-info-bar {
     display: flex;
-    gap: 8px;
     margin-bottom: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
 }
 .chamando-info-item {
-    flex: 1 1 0;
+    flex: 1 1 auto;   /* largura acompanha o conteúdo — nada de cortar "Procurando…" */
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 12px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 10px 8px;
 }
+.chamando-info-item + .chamando-info-item { border-left: 1px solid rgba(255, 255, 255, 0.08); }
 .chamando-info-ico { color: #EAD298; flex-shrink: 0; display: flex; }
+/* Cancelar busca no estilo do layout: contorno vermelho sobre fundo escuro
+   (exceção pontual à identidade dourada — é a ação destrutiva da tela). */
+.chamando-cancelar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    background: transparent;
+    border: 1px solid rgba(255, 106, 106, 0.55);
+    color: #ff6a6a;
+    touch-action: manipulation;
+}
+.chamando-cancelar:hover, .chamando-cancelar:active { background: rgba(255, 106, 106, 0.08); }
+.chamando-cancelar svg { flex-shrink: 0; }
 .chamando-info-corpo { display: flex; flex-direction: column; min-width: 0; }
-.chamando-info-rotulo { font-size: 0.66rem; font-weight: 600; color: #9aa0a6; text-transform: uppercase; letter-spacing: 0.02em; }
-.chamando-info-valor { font-size: 0.86rem; font-weight: 600; color: #e8eaed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chamando-info-rotulo { font-size: 0.66rem; font-weight: 600; color: #9aa0a6; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
+.chamando-info-valor { font-size: 0.8rem; font-weight: 600; color: #e8eaed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Escalado pro radar compacto de 52px do cartão flutuante: os anéis expandem
    até a borda do radar, sem vazar pra fora do cartão sobre o mapa. */
 @keyframes radarExpand {
