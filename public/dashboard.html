@@ -2526,12 +2526,14 @@
         document.body.classList.add('buscando-carona');
         document.getElementById('modalChamando').style.display = 'flex';
         iniciarAnunciosEspera();
+        iniciarBolinhaBusca();
     }
     function fecharChamando() {
         chamandoId = null;
         chamandoPedidoId = null;
         pararAnunciosEspera();
         pararCronometroChamando();
+        pararBolinhaBusca();
         document.body.classList.remove('buscando-carona');
         document.getElementById('modalChamando').style.display = 'none';
     }
@@ -2636,6 +2638,192 @@
         if (dots) dots.innerHTML = '';
         if (box) box.style.display = 'none';
     }
+
+    /* -------- bolinha-radar: a busca visível no mapa (joguinho) -------- */
+    // Uma bolinha dourada percorre o mapa DE VERDADE durante a espera: vai de
+    // carrinho em carrinho por ordem de distância, "toca" cada um, mostra que
+    // chamou e que ninguém topou ainda, e recomeça — não para até dar match.
+    // É a parte invisível da busca (avisamos os motoristas e esperamos alguém
+    // aceitar) virando teatro visual; o match real continua no pollPropostas,
+    // que fecha esta tela sozinho quando alguém aceita.
+    const BOLINHA_TOQUE_MS = 2600;    // parada "chamando" em cima do carro
+    const BOLINHA_RESULT_MS = 1500;   // mostra que este não topou ainda
+    const BOLINHA_PAUSA_MS = 1300;    // respiro antes de recomeçar a rodada
+    let bolinha = null;
+    function criarBolinhaOverlay(map, pos) {
+        const ov = new g.maps.OverlayView();
+        ov.pos = pos;
+        ov.onAdd = function () {
+            const d = document.createElement('div');
+            d.className = 'bolinha-busca';
+            d.innerHTML = '<span class="bb-ring"></span><span class="bb-ring"></span><span class="bb-dot"></span><span class="bb-rotulo"></span>';
+            this.div = d;
+            this.getPanes().overlayMouseTarget.appendChild(d);
+        };
+        ov.draw = function () {
+            if (!this.div) return;
+            const pr = this.getProjection();
+            if (!pr) return;
+            const p = pr.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+            if (p) { this.div.style.left = p.x + 'px'; this.div.style.top = p.y + 'px'; }
+        };
+        ov.onRemove = function () { if (this.div) { this.div.remove(); this.div = null; } };
+        ov.setMap(map);
+        return ov;
+    }
+    // O rótulo fica guardado no estado e é aplicado a cada frame: o div do
+    // overlay só existe depois do onAdd (assíncrono no Maps), então setar
+    // direto aqui perderia os primeiros textos.
+    function rotuloBolinha(txt) {
+        if (bolinha) bolinha.rotuloTxt = txt || '';
+    }
+    function aplicarVisualBolinha(st) {
+        const div = st.ov && st.ov.div;
+        if (!div) return;
+        div.classList.toggle('tocando', st.fase === 'tocando');
+        const r = div.querySelector('.bb-rotulo');
+        if (r && r.textContent !== (st.rotuloTxt || '')) {
+            r.textContent = st.rotuloTxt || '';
+            r.style.display = st.rotuloTxt ? '' : 'none';
+        }
+    }
+    function statusBuscaRodape(txt) {
+        const el = document.getElementById('chamandoMotoristasTxt');
+        if (el && txt) el.textContent = txt;
+    }
+    function carrosDaBusca() {
+        return Object.values(fleet.markers).filter((it) => it.lastPos && it.m);
+    }
+    function primeiroNome(m) { return ((m && m.nome) || 'o motorista').split(' ')[0]; }
+    function iniciarBolinhaBusca() {
+        pararBolinhaBusca();
+        if (!chamandoPedidoId) return;   // joguinho só na busca por motorista
+        const preparar = () => {
+            if (!chamandoPedidoId) return;   // a busca já fechou enquanto esperava
+            const map = fleet.map;
+            const origem = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
+            // Mapa/origem ainda não prontos: tenta de novo daqui a pouco.
+            if (!g || !map || !origem) { bolinha = { aguardando: setTimeout(preparar, 700) }; return; }
+            const st = {
+                map, origem,
+                pos: { ...origem },
+                ov: null,
+                visitados: new Set(),
+                alvo: null,
+                fase: 'escolher',
+                iniFase: 0,
+                posIni: null,
+                dur: 0,
+                angulo: 0,
+                ultimo: 0,
+                raf: 0,
+            };
+            st.ov = criarBolinhaOverlay(map, st.pos);
+            bolinha = st;
+            st.raf = requestAnimationFrame(passoBolinha);
+        };
+        preparar();
+    }
+    function passoBolinha(agora) {
+        const st = bolinha;
+        if (!st || st.aguardando) return;
+        if (!st.ultimo) st.ultimo = agora;
+        const carros = carrosDaBusca();
+        switch (st.fase) {
+            case 'escolher': {
+                if (!carros.length) {
+                    st.fase = 'patrulha';
+                    rotuloBolinha('Procurando motoristas na região…');
+                    statusBuscaRodape('Procurando…');
+                    break;
+                }
+                const livres = carros.filter((c) => !st.visitados.has(String(c.m.id)));
+                if (!livres.length) {
+                    // Rodada completa sem match: respira e insiste com todos de novo.
+                    st.visitados.clear();
+                    st.fase = 'pausa';
+                    st.iniFase = agora;
+                    rotuloBolinha('Ninguém topou ainda — insistindo…');
+                    statusBuscaRodape('Insistindo com ' + carros.length + ' por perto');
+                    break;
+                }
+                livres.sort((a, b) => distKmGps(st.pos, a.lastPos) - distKmGps(st.pos, b.lastPos));
+                st.alvo = livres[0];
+                st.posIni = { ...st.pos };
+                st.iniFase = agora;
+                const dist = distKmGps(st.pos, st.alvo.lastPos);
+                st.dur = Math.max(900, Math.min(2600, 900 + dist * 900));
+                st.fase = 'indo';
+                rotuloBolinha('Indo até ' + primeiroNome(st.alvo.m) + '…');
+                statusBuscaRodape(carros.length + ' por perto');
+                break;
+            }
+            case 'indo': {
+                const item = st.alvo && fleet.markers[st.alvo.m.id];
+                if (!item) { st.alvo = null; st.fase = 'escolher'; break; }   // o carro saiu do ar
+                const t = Math.min(1, (agora - st.iniFase) / st.dur);
+                const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;   // easeInOut
+                st.pos = {
+                    lat: st.posIni.lat + (item.lastPos.lat - st.posIni.lat) * e,
+                    lng: st.posIni.lng + (item.lastPos.lng - st.posIni.lng) * e,
+                };
+                if (t >= 1) {
+                    st.fase = 'tocando';
+                    st.iniFase = agora;
+                    rotuloBolinha('Chamando ' + primeiroNome(st.alvo.m) + '…');
+                    statusBuscaRodape('Chamando ' + primeiroNome(st.alvo.m) + '…');
+                }
+                break;
+            }
+            case 'tocando': {
+                const item = st.alvo && fleet.markers[st.alvo.m.id];
+                if (item) st.pos = { ...item.lastPos };   // gruda no carro (ele anda)
+                if (agora - st.iniFase >= BOLINHA_TOQUE_MS) {
+                    st.fase = 'resultado';
+                    st.iniFase = agora;
+                    rotuloBolinha(primeiroNome(st.alvo && st.alvo.m) + ' ainda não topou');
+                    statusBuscaRodape('Tentando o próximo…');
+                }
+                break;
+            }
+            case 'resultado': {
+                if (agora - st.iniFase >= BOLINHA_RESULT_MS) {
+                    if (st.alvo) st.visitados.add(String(st.alvo.m.id));
+                    st.alvo = null;
+                    st.fase = 'escolher';
+                }
+                break;
+            }
+            case 'pausa': {
+                if (agora - st.iniFase >= BOLINHA_PAUSA_MS) st.fase = 'escolher';
+                break;
+            }
+            case 'patrulha': {
+                // Sem carro no ar: a bolinha ronda a origem até alguém aparecer.
+                st.angulo += 0.0014 * (agora - st.ultimo);
+                const R = 0.0012;   // ~130 m
+                st.pos = {
+                    lat: st.origem.lat + Math.sin(st.angulo) * R,
+                    lng: st.origem.lng + Math.cos(st.angulo) * R * 1.3,
+                };
+                if (carros.length) st.fase = 'escolher';
+                break;
+            }
+        }
+        st.ultimo = agora;
+        st.ov.pos = st.pos;
+        st.ov.draw();
+        aplicarVisualBolinha(st);
+        st.raf = requestAnimationFrame(passoBolinha);
+    }
+    function pararBolinhaBusca() {
+        if (!bolinha) return;
+        if (bolinha.aguardando) clearTimeout(bolinha.aguardando);
+        if (bolinha.raf) cancelAnimationFrame(bolinha.raf);
+        if (bolinha.ov) bolinha.ov.setMap(null);
+        bolinha = null;
+    }
+
     async function cancelarChamando() {
         const prop = chamandoId, ped = chamandoPedidoId;
         fecharChamando();
