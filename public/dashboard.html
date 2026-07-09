@@ -1654,6 +1654,10 @@
                 if (!origem) return;
                 map.panTo({ lat: origem.lat(), lng: origem.lng() });
                 map.setZoom(ZOOM_FOCO_ORIGEM);
+                // Sobe a alça de volta: só com a rota no mapa, sem o CTA à vista, dava
+                // pra achar que a carona já tinha sido pedida.
+                const sheetEl = document.getElementById(sheetId);
+                if (sheetEl) sheetEl.classList.remove('collapsed');
             }, 4000);
         }
 
