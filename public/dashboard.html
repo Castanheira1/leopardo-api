@@ -805,11 +805,21 @@
         // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
-            if (!selPed) initMapPedir(); else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
+            if (!selPed) {
+                initMapPedir().catch((err) => {
+                    console.error('initMapPedir falhou:', err);
+                    msg('Não foi possível carregar o mapa. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                });
+            } else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
         }
         if (id === 'tabOferecer') {
             if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
-            if (!selOfe) initMapOferecer();
+            if (!selOfe) {
+                initMapOferecer().catch((err) => {
+                    console.error('initMapOferecer falhou:', err);
+                    msg('Não foi possível carregar o mapa. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                });
+            }
             else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
                 else { selOfe.recentrar(); }
