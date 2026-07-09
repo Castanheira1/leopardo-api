@@ -1351,9 +1351,9 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .chamando-ads {
     position: relative;
     flex: 0 0 auto;
-    height: 34vh;
-    min-height: 190px;
-    max-height: 320px;
+    height: 40vh;
+    min-height: 220px;
+    max-height: 400px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1395,7 +1395,11 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     align-items: center;
     justify-content: center;
     gap: 5px;
-    margin: 8px 10px 0;
+    width: max-content;
+    margin: 8px auto 0;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(11, 11, 13, 0.55);   /* pílula escura: legível sobre o mapa claro */
     pointer-events: none;
 }
 .chamando-ad-dots:empty { display: none; }
@@ -1408,32 +1412,39 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .chamando-ad-dots span.ativo { background: #EAD298; transform: scale(1.25); }
 
 /* Vão transparente entre o anúncio e o rodapé: é aqui que o mapa real (por
-   trás do overlay) aparece. O cartão de status flutua por cima, sem tampar
-   a tela — só avisa que a busca está rolando. */
+   trás do overlay) aparece, inteiro e limpo — o status da busca mora no
+   rodapé, estilo Uber. */
 .chamando-mapa-vao {
     flex: 1 1 auto;
-    min-height: 64px;
-    position: relative;
+    min-height: 48px;
 }
-.chamando-status-flutuante {
-    position: absolute;
-    /* Sem anúncio o vão começa no topo da tela: o cartão desvia do notch/barra
-       de status. Com anúncio (classe no overlay), o vão já está bem abaixo. */
-    top: max(12px, env(safe-area-inset-top));
-    left: 12px;
-    max-width: calc(100% - 24px);   /* encolhe pro conteúdo (como no layout), não estica */
+/* Barra de progresso indeterminada no topo do rodapé (padrão Uber: a busca
+   "anda" no painel de baixo, não flutuando sobre o mapa). */
+.chamando-progresso {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(234, 210, 152, 0.16);
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+.chamando-progresso span {
+    display: block;
+    width: 38%;
+    height: 100%;
+    border-radius: 2px;
+    background: #EAD298;
+    animation: buscaVaiVem 1.5s ease-in-out infinite;
+}
+@keyframes buscaVaiVem {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(290%); }
+}
+.chamando-status-rodape {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: rgba(11, 11, 13, 0.88);
-    border: 1px solid rgba(234, 210, 152, 0.18);
-    border-radius: 16px;
-    padding: 10px 14px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    margin-bottom: 12px;
 }
-.chamando-overlay.com-anuncio .chamando-status-flutuante { top: 12px; }
 .chamando-status-txt { text-align: left; min-width: 0; }
 .chamando-status-txt h3 { font-size: 1rem; margin: 0 0 2px; color: #fff; }
 
@@ -1481,8 +1492,8 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .chamando-info-corpo { display: flex; flex-direction: column; min-width: 0; }
 .chamando-info-rotulo { font-size: 0.66rem; font-weight: 600; color: #9aa0a6; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
 .chamando-info-valor { font-size: 0.8rem; font-weight: 600; color: #e8eaed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Escalado pro radar compacto de 52px do cartão flutuante: os anéis expandem
-   até a borda do radar, sem vazar pra fora do cartão sobre o mapa. */
+/* Escalado pro radar compacto de 52px do rodapé: os anéis expandem até a
+   borda do radar, sem vazar por cima dos textos ao lado. */
 @keyframes radarExpand {
     0%   { width: 20px; height: 20px; margin: -10px 0 0 -10px; opacity: 0.9; }
     100% { width: 52px; height: 52px; margin: -26px 0 0 -26px; opacity: 0; }
