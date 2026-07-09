@@ -465,8 +465,9 @@
         <div id="chamandoAds" class="chamando-ads" style="display:none;">
             <img id="chamandoAdImg" class="chamando-ad-img" alt="" decoding="async" fetchpriority="low">
             <div id="chamandoAdTitulo" class="chamando-ad-titulo"></div>
-            <div id="chamandoAdDots" class="chamando-ad-dots" aria-hidden="true"></div>
         </div>
+        <!-- Pontinhos abaixo do card (como no layout): qual anúncio está no ar. -->
+        <div id="chamandoAdDots" class="chamando-ad-dots" aria-hidden="true"></div>
         <!-- Vão transparente: o mapa real da aba ativa (por trás do overlay) aparece
              aqui — só o cartão de status flutua por cima, sem tampar a tela toda. -->
         <div class="chamando-mapa-vao">
@@ -483,7 +484,7 @@
                 <div class="chamando-info-item">
                     <span class="chamando-info-ico" id="chamandoIcoTempo"></span>
                     <span class="chamando-info-corpo">
-                        <span class="chamando-info-rotulo">Tempo de busca</span>
+                        <span class="chamando-info-rotulo">Tempo</span>
                         <span class="chamando-info-valor" id="chamandoTempoTxt">0:00</span>
                     </span>
                 </div>
@@ -502,7 +503,7 @@
                     </span>
                 </div>
             </div>
-            <button type="button" class="btn btn-danger btn-block" onclick="cancelarChamando()">Cancelar busca</button>
+            <button type="button" class="btn btn-block chamando-cancelar" onclick="cancelarChamando()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg> Cancelar busca</button>
         </div>
     </div>
 
