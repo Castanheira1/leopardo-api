@@ -4770,6 +4770,9 @@ app.post("/api/admin/chamados/:id/recusar", verificarAuth, carregarAdminEscopo, 
   }
 });
 
+/* ==================== FROTA FAKE (testes visuais, admin) ==================== */
+require("./sim-frota")({ app, pool, bcrypt, verificarAuth, carregarAdminEscopo });
+
 /* ============================ ESTÁTICOS ============================ */
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
