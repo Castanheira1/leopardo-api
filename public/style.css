@@ -1307,54 +1307,57 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     display: block;
 }
 .viagem-map { position: absolute; inset: 0; z-index: 0; }
-/* Tela "Chamando…" — pulso radar enquanto espera o outro aceitar */
+/* Tela "Chamando…" — mapa real da aba ativa aparece por trás; só os cartões
+   (anúncio, status, rodapé) têm fundo próprio, o resto é transparente. */
 .cam-overlay.chamando-overlay {
     flex-direction: column;
     align-items: stretch;
-    justify-content: flex-end;
-    background: #0b0b0d;
+    justify-content: flex-start;
+    background: transparent;
     padding: 0;
+    pointer-events: none;   /* o vão central deixa o mapa por trás clicável (recentrar etc.) */
 }
-.cam-overlay.chamando-overlay .chamando-box {
-    flex-shrink: 0;
-    width: 100%;
-    max-width: none;
-    max-height: none;
-    padding: 10px 18px calc(12px + env(safe-area-inset-bottom));
-}
-.chamando-box { text-align: center; }
-.chamando-radar { position: relative; width: 96px; height: 96px; margin: 2px auto 10px; display: flex; align-items: center; justify-content: center; }
+.cam-overlay.chamando-overlay > * { pointer-events: auto; }
+/* Vão do mapa: sem fundo E sem capturar toque — o mapa real por trás continua
+   arrastável/pinçável enquanto o passageiro espera (o card de status não tem
+   nenhum botão, não precisa interceptar toque). */
+.cam-overlay.chamando-overlay .chamando-mapa-vao { pointer-events: none; }
+.chamando-radar { position: relative; width: 52px; height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 /* anéis concêntricos que expandem (radar estilo Uber) */
 .chamando-ring {
     position: absolute;
     left: 50%; top: 50%;
-    width: 40px; height: 40px;
-    margin: -20px 0 0 -20px;
+    width: 22px; height: 22px;
+    margin: -11px 0 0 -11px;
     border-radius: 50%;
     border: 2px solid rgba(234, 210, 152, 0.7);
     animation: radarExpand 2.2s ease-out infinite;
 }
 .chamando-ring:nth-child(2) { animation-delay: 1.1s; }
 .chamando-dot {
-    width: 26px;
-    height: 26px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
     background: #EAD298;
-    box-shadow: 0 0 18px rgba(234, 210, 152, 0.6);
+    box-shadow: 0 0 14px rgba(234, 210, 152, 0.6);
     z-index: 1;
     animation: pingPulse 1.6s ease-out infinite;
 }
-.chamando-box h3 { font-size: 1.15rem; margin-bottom: 4px; }
-.chamando-sub { color: #cfd2d6; margin: 0 0 12px; font-size: 0.9rem; }
-/* Vitrine de anúncios: flexível — ocupa todo o espaço acima do painel de busca. */
+.chamando-sub { color: #cfd2d6; margin: 0; font-size: 0.82rem; }
+
+/* Vitrine de anúncios: altura fixa e proporcional — nunca cresce pra tomar a
+   tela toda. O admin decide quantas fotos entram (curadoria no dashboard);
+   troca sozinha em loop, o usuário só acompanha. */
 .chamando-ads {
     position: relative;
-    flex: 1 1 0;
-    min-height: 0;
+    flex: 0 0 auto;
+    height: 34vh;
+    min-height: 190px;
+    max-height: 320px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: max(8px, env(safe-area-inset-top)) 10px 4px;
+    margin: max(8px, env(safe-area-inset-top)) 10px 0;
     border-radius: 14px;
     overflow: hidden;
     background: #111214;
@@ -1385,6 +1388,80 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
     pointer-events: none;
 }
+/* Indicador de posição do carrossel — só decorativo, some com 1 anúncio só.
+   Fica no topo do card pra nunca disputar espaço com o título (que ocupa a
+   faixa de baixo, quando o anúncio tem um). */
+.chamando-ad-dots {
+    position: absolute;
+    left: 0; right: 0; top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    z-index: 1;
+    pointer-events: none;
+}
+.chamando-ad-dots span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.35);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+.chamando-ad-dots span.ativo { background: #EAD298; transform: scale(1.25); }
+
+/* Vão transparente entre o anúncio e o rodapé: é aqui que o mapa real (por
+   trás do overlay) aparece. O cartão de status flutua por cima, sem tampar
+   a tela — só avisa que a busca está rolando. */
+.chamando-mapa-vao {
+    flex: 1 1 auto;
+    min-height: 64px;
+    position: relative;
+}
+.chamando-status-flutuante {
+    position: absolute;
+    top: 12px; left: 12px; right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(11, 11, 13, 0.88);
+    border: 1px solid rgba(234, 210, 152, 0.18);
+    border-radius: 16px;
+    padding: 10px 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.chamando-status-txt { text-align: left; min-width: 0; }
+.chamando-status-txt h3 { font-size: 1rem; margin: 0 0 2px; color: #fff; }
+
+/* Rodapé: info da busca (tempo/motoristas/passageiros) + cancelar. */
+.chamando-rodape {
+    flex: 0 0 auto;
+    background: #161719;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+}
+.chamando-info-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.chamando-info-item {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 8px 10px;
+}
+.chamando-info-ico { color: #EAD298; flex-shrink: 0; display: flex; }
+.chamando-info-corpo { display: flex; flex-direction: column; min-width: 0; }
+.chamando-info-rotulo { font-size: 0.66rem; font-weight: 600; color: #9aa0a6; text-transform: uppercase; letter-spacing: 0.02em; }
+.chamando-info-valor { font-size: 0.86rem; font-weight: 600; color: #e8eaed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes radarExpand {
     0%   { width: 36px; height: 36px; margin: -18px 0 0 -18px; opacity: 0.9; }
     100% { width: 96px; height: 96px; margin: -48px 0 0 -48px; opacity: 0; }
@@ -2131,7 +2208,7 @@ body.aguardando-papel .navbar {
         border-bottom-right-radius: var(--phone-inner-r);
     }
     body.app-mobile .cam-overlay .cam-box,
-    body.app-mobile .cam-overlay.chamando-overlay .chamando-box {
+    body.app-mobile .cam-overlay.chamando-overlay .chamando-rodape {
         border-bottom-left-radius: var(--phone-inner-r);
         border-bottom-right-radius: var(--phone-inner-r);
     }
