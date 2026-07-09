@@ -1419,7 +1419,10 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 }
 .chamando-status-flutuante {
     position: absolute;
-    top: 12px; left: 12px; right: 12px;
+    /* Sem anúncio o vão começa no topo da tela: o cartão desvia do notch/barra
+       de status. Com anúncio (classe no overlay), o vão já está bem abaixo. */
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px; right: 12px;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1431,6 +1434,7 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
 }
+.chamando-overlay.com-anuncio .chamando-status-flutuante { top: 12px; }
 .chamando-status-txt { text-align: left; min-width: 0; }
 .chamando-status-txt h3 { font-size: 1rem; margin: 0 0 2px; color: #fff; }
 
@@ -1462,13 +1466,15 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 .chamando-info-corpo { display: flex; flex-direction: column; min-width: 0; }
 .chamando-info-rotulo { font-size: 0.66rem; font-weight: 600; color: #9aa0a6; text-transform: uppercase; letter-spacing: 0.02em; }
 .chamando-info-valor { font-size: 0.86rem; font-weight: 600; color: #e8eaed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Escalado pro radar compacto de 52px do cartão flutuante: os anéis expandem
+   até a borda do radar, sem vazar pra fora do cartão sobre o mapa. */
 @keyframes radarExpand {
-    0%   { width: 36px; height: 36px; margin: -18px 0 0 -18px; opacity: 0.9; }
-    100% { width: 96px; height: 96px; margin: -48px 0 0 -48px; opacity: 0; }
+    0%   { width: 20px; height: 20px; margin: -10px 0 0 -10px; opacity: 0.9; }
+    100% { width: 52px; height: 52px; margin: -26px 0 0 -26px; opacity: 0; }
 }
 @keyframes pingPulse {
     0%   { box-shadow: 0 0 0 0 rgba(234, 210, 152, 0.55); transform: scale(0.7); opacity: 1; }
-    70%  { box-shadow: 0 0 0 32px rgba(234, 210, 152, 0); transform: scale(1); opacity: 0.9; }
+    70%  { box-shadow: 0 0 0 16px rgba(234, 210, 152, 0); transform: scale(1); opacity: 0.9; }
     100% { box-shadow: 0 0 0 0 rgba(234, 210, 152, 0); transform: scale(0.7); opacity: 1; }
 }
 /* Pulso "radar" no mapa do motorista: passageiro pedindo carona, cor por sexo (--cor) */

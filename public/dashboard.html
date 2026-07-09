@@ -2596,9 +2596,9 @@
         // Só na busca por motorista (pedido aberto) e se ainda estiver procurando.
         if (!chamandoPedidoId || !ads.length) { box.style.display = 'none'; return; }
         anuncioIdx = 0;
-        const img = document.getElementById('chamandoAdImg');
-        const tit = document.getElementById('chamandoAdTitulo');
         box.style.display = 'flex';
+        // Com anúncio no topo, o cartão de status não precisa desviar do notch.
+        document.getElementById('modalChamando').classList.add('com-anuncio');
         montarDotsAnuncio(ads.length);
         pintarAnuncio(ads[0], ads[1] && ads[1].imagem_url);
         if (ads.length > 1) {
@@ -2624,6 +2624,7 @@
         }
         if (dots) dots.innerHTML = '';
         if (box) box.style.display = 'none';
+        document.getElementById('modalChamando').classList.remove('com-anuncio');
     }
     async function cancelarChamando() {
         const prop = chamandoId, ped = chamandoPedidoId;
