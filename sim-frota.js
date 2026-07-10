@@ -34,7 +34,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const TICK_MS = 10 * 1000;      // cadência fixa de atualização das posições
+const TICK_MS = 5 * 1000;       // cadência fixa de atualização das posições
 const DT_MAX_S = 60;            // servidor dormiu (plano free): não teleporta
 const VEL_KMH = 90;             // todos os carros na mesma velocidade real
 const SELFIE_REFRESH_MS = 60 * 60 * 1000;
@@ -458,9 +458,9 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
               caminhos.delete(uid);
               const indoB = !r.indo_b;
               let destNovo = indoB ? { lat: +r.b_lat, lng: +r.b_lng } : { lat: +r.a_lat, lng: +r.a_lng };
-              // Virando no S11D rumo ao passageiro: se ele se moveu (> 500 m),
+              // Virando no S11D rumo ao passageiro: se ele se moveu (> 250 m),
               // a ponta B do loop acompanha a âncora nova.
-              if (indoB && distKm(destNovo, ancora) > 0.5) {
+              if (indoB && distKm(destNovo, ancora) > 0.25) {
                 destNovo = ancora;
                 retargets.push({ id: uid, dest: destNovo, indoB, novaB: ancora, modo: r.modo });
               } else {

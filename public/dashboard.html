@@ -5154,11 +5154,42 @@
         return false;
     }
 
+    /* -------- posição viva do passageiro -> banco -------- */
+    // A bolinha azul que pulsa no mapa também vai pro servidor enquanto o app
+    // está aberto: alimenta o match por proximidade e calibra a frota fake
+    // (os carros fazem o loop ancorados NESTA posição). Nunca aparece como
+    // motorista (disponivel: false) e cede a vez quando o próprio usuário está
+    // transmitindo como motorista (modo online / viagem).
+    let paxLocTimer = null;
+    let paxLocUltimo = null;
+    function transmitirPosicaoPassageiro() {
+        if (document.hidden || !navigator.geolocation) return;
+        if (typeof motoristaOnlineModo !== 'undefined' && motoristaOnlineModo) return;
+        if (trackState) return;   // em viagem o rastreio da viagem já transmite
+        navigator.geolocation.getCurrentPosition((p) => {
+            const pt = { lat: p.coords.latitude, lng: p.coords.longitude };
+            const agora = Date.now();
+            // Parado: 1 update por minuto; andando (>25 m): a cada ciclo.
+            if (paxLocUltimo && distKmGps(paxLocUltimo, pt) < 0.025 && agora - paxLocUltimo.em < 60000) return;
+            paxLocUltimo = { ...pt, em: agora };
+            fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: false }),
+            }).catch(() => {});
+        }, () => {}, { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 });
+    }
+    function iniciarTransmissaoPassageiro() {
+        if (paxLocTimer) return;
+        transmitirPosicaoPassageiro();
+        paxLocTimer = setInterval(transmitirPosicaoPassageiro, 7000);
+    }
+
     /* -------- init -------- */
     (async function init() {
         instalarGuardaVoltar(fecharCamadaVoltar);
         setTimeout(esconderBootSplash, 8000);
         carregarMaps().catch(() => {});
+        iniciarTransmissaoPassageiro();
 
         // Escolha de papel na hora: só espera checar viagem em andamento (1 request).
         const retomouViagem = await retomarViagemSeAtiva();
