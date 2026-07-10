@@ -16,6 +16,18 @@
 //
 // Os usuários fake têm matrícula com prefixo 99SIM, senha aleatória (ninguém
 // loga com eles) e podem ser apagados por completo com DELETE ?apagar=1.
+//
+// Eles também RESPONDEM de verdade, pelos mesmos endpoints do app (token
+// assinado internamente + chamada em localhost — nada de duplicar regra):
+//   - oferta da fila (busca automática): aceita ~70% / recusa ~30%, com
+//     atraso humano de 4-11 s;
+//   - proposta direta do passageiro (pediu vaga na carona): idem;
+//   - pedido aberto SEM fila: um motorista amarelo por perto oferece carona;
+//   - quem aceita DIRIGE até o passageiro (fase encontro), confirma o
+//     embarque, segue pro destino gravando pontos GPS e finaliza a viagem.
+// E a frota lê a atividade real do projeto: pedido aberto ou passageiro
+// transmitindo posição vira "ímã" — parte dos amarelos gravita pra lá,
+// entrando no raio de 600 m e viabilizando o match.
 
 const fs = require("fs");
 const path = require("path");
@@ -90,11 +102,120 @@ function carregarLocaisS11D() {
   }
 }
 
-module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, carregarAdminEscopo }) {
+module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, carregarAdminEscopo, assinarToken, porta }) {
   const LOCAIS_S11D = carregarLocaisS11D();
   let ultimoTick = 0;
   let ultimaSelfie = 0;
   let tickRodando = false;
+  let respondendo = false;
+
+  /* ------------------ agir como o motorista fake (API real) ------------------ */
+  const tokens = new Map();          // uid -> { token, exp }
+  const decisoes = new Map();        // 'fila:ID' | 'prop:ID' -> { quando, aceita, feita }
+  const espontaneas = new Map();     // pedidoId -> { em, total }
+  const viagemEstado = new Map();    // viagemId -> { chegouEncontroEm, iniciada, finalizada }
+  function tokenDe(uid) {
+    const t = tokens.get(uid);
+    if (t && t.exp > Date.now()) return t.token;
+    const token = assinarToken({ id: uid, matricula: "99SIM", is_admin: false });
+    tokens.set(uid, { token, exp: Date.now() + 6 * 3600 * 1000 });
+    return token;
+  }
+  async function apiSim(uid, metodo, rota, body) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${porta}${rota}`, {
+        method: metodo,
+        headers: {
+          Authorization: `Bearer ${tokenDe(uid)}`,
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return r.status;
+    } catch (e) {
+      console.warn("sim-frota apiSim:", rota, e.message);
+      return 0;
+    }
+  }
+  // Decide uma vez (com atraso humano) e executa uma vez.
+  function agir(chave, probAceite, executar) {
+    let d = decisoes.get(chave);
+    if (!d) {
+      d = { quando: Date.now() + rnd(4000, 11000), aceita: Math.random() < probAceite, feita: false };
+      decisoes.set(chave, d);
+      if (decisoes.size > 800) {
+        for (const k of decisoes.keys()) { decisoes.delete(k); if (decisoes.size <= 400) break; }
+      }
+    }
+    if (!d.feita && Date.now() >= d.quando) { d.feita = true; executar(d.aceita); }
+  }
+
+  // Responde ofertas/propostas dirigidas aos fake — roda mais rápido que o
+  // tick de movimento pra resposta parecer gente (a oferta da fila expira).
+  async function responder() {
+    if (respondendo) return;
+    respondendo = true;
+    try {
+      const sims = (await pool.query("SELECT usuario_id, modo FROM sim_frota")).rows;
+      if (!sims.length) return;
+      const ids = sims.map((s) => s.usuario_id);
+
+      // 1) Busca automática: oferta da fila na vez de um fake.
+      const ofertas = await pool.query(
+        `SELECT id, motorista_id FROM pedido_fila
+         WHERE status = 'ofertada' AND expira_em > NOW() AND motorista_id = ANY($1)`, [ids]
+      );
+      for (const o of ofertas.rows) {
+        agir(`fila:${o.id}`, 0.7, (aceita) =>
+          apiSim(o.motorista_id, "POST", `/api/pedido-fila/${o.id}/${aceita ? "aceitar" : "recusar"}`));
+      }
+
+      // 2) Passageiro pediu vaga direto na carona de um fake.
+      const props = await pool.query(
+        `SELECT id, para_usuario_id FROM propostas
+         WHERE status = 'pendente' AND para_usuario_id = ANY($1)`, [ids]
+      );
+      for (const p of props.rows) {
+        agir(`prop:${p.id}`, 0.75, (aceita) =>
+          apiSim(p.para_usuario_id, "POST", `/api/propostas/${p.id}/${aceita ? "aceitar" : "recusar"}`));
+      }
+
+      // 3) Pedido aberto de gente real SEM fila: um amarelo por perto oferece.
+      const pedidos = await pool.query(
+        `SELECT p.id, p.origem_lat, p.origem_lng FROM pedidos p
+         JOIN usuarios u ON u.id = p.passageiro_id
+         WHERE p.status = 'aberto' AND u.matricula NOT LIKE '99SIM%'
+           AND p.created_at BETWEEN NOW() - INTERVAL '30 minutes' AND NOW() - INTERVAL '15 seconds'
+           AND NOT EXISTS (SELECT 1 FROM pedido_fila f WHERE f.pedido_id = p.id)
+           AND NOT EXISTS (SELECT 1 FROM propostas pr WHERE pr.pedido_id = p.id AND pr.status IN ('pendente', 'aceito'))`
+      );
+      if (pedidos.rows.length) {
+        const amarelos = (await pool.query(
+          `SELECT s.usuario_id, l.lat, l.lng FROM sim_frota s
+           JOIN localizacoes_online l ON l.usuario_id = s.usuario_id
+           WHERE s.modo = 'amarelo' AND l.disponivel = TRUE`
+        )).rows;
+        for (const ped of pedidos.rows) {
+          const ctl = espontaneas.get(ped.id) || { em: 0, total: 0 };
+          if (ctl.total >= 2 || Date.now() - ctl.em < 90 * 1000) continue;
+          const origem = { lat: +ped.origem_lat, lng: +ped.origem_lng };
+          const perto = amarelos
+            .map((a) => ({ ...a, d: distKm(origem, { lat: +a.lat, lng: +a.lng }) }))
+            .filter((a) => a.d <= 2.5)
+            .sort((a, b) => a.d - b.d)[0];
+          if (!perto) continue;
+          ctl.em = Date.now(); ctl.total++;
+          espontaneas.set(ped.id, ctl);
+          apiSim(perto.usuario_id, "POST", "/api/propostas", { pedido_id: ped.id });
+        }
+      }
+    } catch (e) {
+      if (!/sim_frota.*does not exist/i.test(e.message)) console.warn("sim-frota responder:", e.message);
+    } finally {
+      respondendo = false;
+    }
+  }
+  setInterval(responder, 5 * 1000).unref?.();
 
   async function garantirTabelaSim() {
     await pool.query(`
@@ -135,16 +256,78 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
       const agora = Date.now();
       const dtS = ultimoTick ? Math.min(DT_MAX_S, (agora - ultimoTick) / 1000) : TICK_MS / 1000;
       ultimoTick = agora;
+      const idsAtivos = rows.map((r) => r.usuario_id);
+
+      // Viagens em andamento com motorista fake: ele dirige de verdade —
+      // encontro (buscar o passageiro) -> embarque -> destino -> finalizar.
+      const viagens = (await pool.query(
+        `SELECT id, motorista_id, fase, origem_lat, origem_lng, destino_lat, destino_lng
+         FROM viagens WHERE status = 'em_andamento' AND motorista_id = ANY($1)`, [idsAtivos]
+      )).rows;
+      const viagemDe = new Map(viagens.map((v) => [v.motorista_id, v]));
+
+      // Ímãs: atividade real do projeto (pedido aberto ou posição transmitida
+      // por gente de verdade). Parte dos amarelos gravita pra lá — é o que
+      // coloca carro dourado dentro do raio de 600 m do passageiro.
+      const imas = (await pool.query(
+        `SELECT p.origem_lat AS lat, p.origem_lng AS lng FROM pedidos p
+         JOIN usuarios u ON u.id = p.passageiro_id
+         WHERE p.status = 'aberto' AND u.matricula NOT LIKE '99SIM%'
+           AND p.created_at > NOW() - INTERVAL '30 minutes'
+         UNION
+         SELECT l.lat, l.lng FROM localizacoes_online l
+         JOIN usuarios u ON u.id = l.usuario_id
+         WHERE u.matricula NOT LIKE '99SIM%' AND l.atualizado_em > NOW() - INTERVAL '5 minutes'`
+      )).rows.map((i) => ({ lat: +i.lat, lng: +i.lng }));
+      const imaMaisPerto = (p) => {
+        let melhor = null, dMelhor = Infinity;
+        for (const i of imas) { const d = distKm(p, i); if (d < dMelhor) { dMelhor = d; melhor = i; } }
+        return melhor && { ...melhor, d: dMelhor };
+      };
 
       const ids = [], lats = [], lngs = [];
       const retargets = [];
+      const caronasPraRepublicar = [];
       for (const r of rows) {
         const pos = { lat: +r.lat, lng: +r.lng };
         let dest = { lat: +r.dest_lat, lng: +r.dest_lng };
-        const dist = distKm(pos, dest);
         const passo = (+r.vel_kmh * dtS / 3600) * rnd(0.85, 1.15);
+        const viagem = viagemDe.get(r.usuario_id);
         let nova;
-        if (passo >= dist - 0.03) {
+
+        if (viagem) {
+          // Em corrida: o destino manda — encontro ou destino final.
+          const noEncontro = viagem.fase === "encontro";
+          const alvo = noEncontro
+            ? { lat: +viagem.origem_lat, lng: +viagem.origem_lng }
+            : { lat: +viagem.destino_lat, lng: +viagem.destino_lng };
+          const dAlvo = distKm(pos, alvo);
+          const est = viagemEstado.get(viagem.id) || {};
+          if (passo >= dAlvo - 0.02 || dAlvo < 0.05) {
+            nova = jitter(alvo, 15);
+            if (noEncontro) {
+              // Chegou no passageiro: espera uns segundos "embarcando" e confirma.
+              if (!est.chegouEncontroEm) est.chegouEncontroEm = agora;
+              else if (!est.iniciada && agora - est.chegouEncontroEm > 9000) {
+                est.iniciada = true;
+                apiSim(r.usuario_id, "POST", `/api/viagens/${viagem.id}/iniciar`);
+              }
+            } else if (!est.finalizada) {
+              est.finalizada = true;
+              apiSim(r.usuario_id, "POST", `/api/viagens/${viagem.id}/finalizar`);
+              if (r.modo === "carona") caronasPraRepublicar.push(r.usuario_id);
+            }
+            viagemEstado.set(viagem.id, est);
+            if (viagemEstado.size > 300) {
+              for (const k of viagemEstado.keys()) { viagemEstado.delete(k); if (viagemEstado.size <= 150) break; }
+            }
+          } else {
+            const f = passo / dAlvo;
+            nova = jitter({ lat: pos.lat + (alvo.lat - pos.lat) * f, lng: pos.lng + (alvo.lng - pos.lng) * f }, 10);
+            // Rastro GPS da corrida (conta km depois do embarque).
+            if (!noEncontro) apiSim(r.usuario_id, "POST", `/api/viagens/${viagem.id}/pontos`, { pontos: [nova] });
+          }
+        } else if (passo >= distKm(pos, dest) - 0.03) {
           // Chegou: escolhe o próximo trecho.
           nova = dest;
           if (r.modo === "carona") {
@@ -152,16 +335,42 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
             dest = indoB ? { lat: +r.b_lat, lng: +r.b_lng } : { lat: +r.a_lat, lng: +r.a_lng };
             retargets.push({ id: r.usuario_id, dest, indoB });
           } else {
-            dest = proximoDestinoAmarelo(nova);
+            // Perto de um ímã, ronda o passageiro; senão segue o passeio normal.
+            const ima = imaMaisPerto(nova);
+            dest = ima && ima.d < 2.5 ? jitter(ima, rnd(120, 600)) : proximoDestinoAmarelo(nova);
             retargets.push({ id: r.usuario_id, dest, indoB: null });
           }
         } else {
-          const f = passo / dist;
+          // A caminho: 2/3 dos amarelos largam o passeio pra gravitar no ímã.
+          if (r.modo === "amarelo" && r.usuario_id % 3 !== 0) {
+            const ima = imaMaisPerto(pos);
+            if (ima && ima.d < 25 && distKm(dest, ima) > 1.2) {
+              dest = jitter(ima, 250);
+              retargets.push({ id: r.usuario_id, dest, indoB: null });
+            }
+          }
+          const dist = distKm(pos, dest);
+          const f = Math.min(1, passo / dist);
           nova = jitter({ lat: pos.lat + (dest.lat - pos.lat) * f, lng: pos.lng + (dest.lng - pos.lng) * f }, 12);
         }
         ids.push(r.usuario_id);
         lats.push(nova.lat.toFixed(6));
         lngs.push(nova.lng.toFixed(6));
+      }
+
+      // Carona consumida numa viagem concluída: publica outra igual (A -> B)
+      // pro carro branco continuar no jogo com rota no mapa.
+      for (const uid of caronasPraRepublicar) {
+        await pool.query(
+          `INSERT INTO caronas (motorista_id, origem_texto, origem_lat, origem_lng,
+                                destino_texto, destino_lat, destino_lng, vagas, status)
+           SELECT s.usuario_id, 'Origem S11D', s.a_lat, s.a_lng, 'Destino combinado', s.b_lat, s.b_lng,
+                  1 + (s.usuario_id % 4), 'ativa'
+           FROM sim_frota s
+           WHERE s.usuario_id = $1
+             AND NOT EXISTS (SELECT 1 FROM caronas c WHERE c.motorista_id = $1 AND c.status = 'ativa')`,
+          [uid]
+        );
       }
 
       await pool.query(
