@@ -25,35 +25,24 @@
 //   - pedido aberto SEM fila: um motorista amarelo por perto oferece carona;
 //   - quem aceita DIRIGE até o passageiro (fase encontro), confirma o
 //     embarque, segue pro destino gravando pontos GPS e finaliza a viagem.
-// E a frota lê a atividade real do projeto: pedido aberto ou passageiro
-// transmitindo posição vira "ímã" — parte dos amarelos gravita pra lá,
-// entrando no raio de 600 m e viabilizando o match.
+// E a frota trabalha EM LOOP ancorada no passageiro real: o banco fornece a
+// última localização dele (localizacoes_online; senão a origem do pedido
+// aberto; senão o centro de Canaã) e TODO carro faz o vai-e-volta
+// S11D <-> passageiro pela pista, a 90 km/h exatos — o tempo de cada perna
+// é a distância real dividida pela velocidade, em tempo real.
 
 const fs = require("fs");
 const path = require("path");
 
-const TICK_MS = 15 * 1000;
+const TICK_MS = 10 * 1000;      // cadência fixa de atualização das posições
 const DT_MAX_S = 60;            // servidor dormiu (plano free): não teleporta
+const VEL_KMH = 90;             // todos os carros na mesma velocidade real
 const SELFIE_REFRESH_MS = 60 * 60 * 1000;
 const FOTO_FAKE = "/logo-vap.png";
 
-// Centro e pontos de circulação em Canaã dos Carajás (sede do município).
-// O catálogo do app (locais-favoritos.json) só tem locais do complexo S11D —
-// estes POIs da cidade são aproximações; como todo destino vira rota da
-// Routes API, o ponto final "gruda" na pista mais próxima (carro nunca fica
-// dentro de quarteirão).
+// Fallback da âncora do loop quando não há passageiro real transmitindo nem
+// pedido aberto: centro de Canaã dos Carajás (sede do município).
 const CANAA_CENTRO = { lat: -6.4966, lng: -49.8779 };
-const CANAA_POIS = [
-  { nome: "Hospital Municipal de Canaã", lat: -6.4922, lng: -49.8735 },
-  { nome: "Atacadão Macre — Centro", lat: -6.4938, lng: -49.8802 },
-  { nome: "Shopping Casa 8", lat: -6.4952, lng: -49.8824 },
-  { nome: "Praça da Bíblia", lat: -6.4945, lng: -49.8770 },
-  { nome: "Praça de Alimentação Mazaropi", lat: -6.4930, lng: -49.8752 },
-  { nome: "Cine Blue — Centro", lat: -6.4975, lng: -49.8790 },
-  { nome: "Rodoviária de Canaã dos Carajás", lat: -6.5003, lng: -49.8718 },
-  { nome: "Prefeitura / Lago Municipal", lat: -6.5019, lng: -49.8778 },
-  { nome: "Saída p/ S11D (PA-160)", lat: -6.4899, lng: -49.8952 },
-];
 
 const NOMES = [
   "João", "Maria", "José", "Ana", "Carlos", "Francisca", "Antônio", "Juliana",
@@ -163,7 +152,6 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
   const espontaneas = new Map();     // pedidoId -> { em, total }
   const viagemEstado = new Map();    // viagemId -> { chegouEncontroEm, iniciada, finalizada }
   const caminhos = new Map();        // uid -> { chave, pontos (rota real), idx }
-  const pausas = new Map();          // uid -> timestamp até quando fica estacionado
   function tokenDe(uid) {
     const t = tokens.get(uid);
     if (t && t.exp > Date.now()) return t.token;
@@ -343,31 +331,29 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
     return promessa;
   }
 
-  // Todo destino é um ponto CALIBRADO (catálogo do S11D + POIs da cidade) —
-  // nada de coordenada aleatória; o carro sempre vai a um lugar de verdade.
-  const LOCAIS_TODOS = [...LOCAIS_S11D, ...CANAA_POIS];
-  function localAleatorio(lista, longeDe) {
-    const opcoes = longeDe ? lista.filter((l) => distKm(l, longeDe) > 0.15) : lista;
-    return sorteio(opcoes.length ? opcoes : lista);
-  }
-  function localMaisPertoDe(p) {
-    let melhor = LOCAIS_TODOS[0], dMelhor = Infinity;
-    for (const l of LOCAIS_TODOS) { const d = distKm(p, l); if (d < dMelhor) { dMelhor = d; melhor = l; } }
-    return melhor;
-  }
-  // Próximo destino de um carro amarelo: com passageiro real por perto (ímã),
-  // ronda os locais calibrados em volta dele; senão, perto de Canaã transita
-  // entre os POIs da cidade (hospital, mercado, praças) ou volta pro S11D.
-  function proximoDestinoAmarelo(pos, ima) {
-    if (ima && ima.d < 3) {
-      const emVolta = LOCAIS_TODOS.slice()
-        .sort((a, b) => distKm(a, ima) - distKm(b, ima))
-        .slice(0, 3);
-      return localAleatorio(emVolta, pos);
+  // Âncora do loop: a última localização REAL do passageiro, direto do banco
+  // (localizacoes_online fresca; senão a origem do pedido aberto mais recente;
+  // senão o centro de Canaã). Arredondada a ~11 m pra frota inteira dividir o
+  // mesmo cache de rota.
+  async function ancoraDoPassageiro() {
+    const { rows } = await pool.query(
+      `SELECT l.lat, l.lng FROM localizacoes_online l
+       JOIN usuarios u ON u.id = l.usuario_id
+       WHERE u.matricula NOT LIKE '99SIM%' AND l.atualizado_em > NOW() - INTERVAL '10 minutes'
+       ORDER BY l.atualizado_em DESC LIMIT 1`
+    );
+    let p = rows[0];
+    if (!p) {
+      const ped = await pool.query(
+        `SELECT p.origem_lat AS lat, p.origem_lng AS lng FROM pedidos p
+         JOIN usuarios u ON u.id = p.passageiro_id
+         WHERE p.status = 'aberto' AND u.matricula NOT LIKE '99SIM%'
+         ORDER BY p.created_at DESC LIMIT 1`
+      );
+      p = ped.rows[0];
     }
-    const pertoDaCidade = distKm(pos, CANAA_CENTRO) < 6;
-    const vaiPraCidade = pertoDaCidade ? Math.random() < 0.6 : Math.random() < 0.45;
-    return localAleatorio(vaiPraCidade ? CANAA_POIS : LOCAIS_S11D, pos);
+    const base = p ? { lat: +p.lat, lng: +p.lng } : CANAA_CENTRO;
+    return { lat: +(+base.lat).toFixed(4), lng: +(+base.lng).toFixed(4) };
   }
 
   /* ------------------------------ tick de movimento ------------------------------ */
@@ -396,24 +382,9 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
       )).rows;
       const viagemDe = new Map(viagens.map((v) => [v.motorista_id, v]));
 
-      // Ímãs: atividade real do projeto (pedido aberto ou posição transmitida
-      // por gente de verdade). Parte dos amarelos gravita pra lá — é o que
-      // coloca carro dourado dentro do raio de 600 m do passageiro.
-      const imas = (await pool.query(
-        `SELECT p.origem_lat AS lat, p.origem_lng AS lng FROM pedidos p
-         JOIN usuarios u ON u.id = p.passageiro_id
-         WHERE p.status = 'aberto' AND u.matricula NOT LIKE '99SIM%'
-           AND p.created_at > NOW() - INTERVAL '30 minutes'
-         UNION
-         SELECT l.lat, l.lng FROM localizacoes_online l
-         JOIN usuarios u ON u.id = l.usuario_id
-         WHERE u.matricula NOT LIKE '99SIM%' AND l.atualizado_em > NOW() - INTERVAL '5 minutes'`
-      )).rows.map((i) => ({ lat: +i.lat, lng: +i.lng }));
-      const imaMaisPerto = (p) => {
-        let melhor = null, dMelhor = Infinity;
-        for (const i of imas) { const d = distKm(p, i); if (d < dMelhor) { dMelhor = d; melhor = i; } }
-        return melhor && { ...melhor, d: dMelhor };
-      };
+      // Âncora do loop: onde o passageiro real está (fornecida pelo banco).
+      // Todo carro faz o vai-e-volta S11D <-> âncora passando perto dele.
+      const ancora = await ancoraDoPassageiro();
 
       const ids = [], lats = [], lngs = [];
       const retargets = [];
@@ -422,7 +393,8 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
         const uid = r.usuario_id;
         const pos = { lat: +r.lat, lng: +r.lng };
         const dest = { lat: +r.dest_lat, lng: +r.dest_lng };
-        const passo = (+r.vel_kmh * dtS / 3600) * rnd(0.9, 1.1);
+        // 90 km/h exatos: o passo é a velocidade x o tempo REAL decorrido.
+        const passo = VEL_KMH * dtS / 3600;
         const viagem = viagemDe.get(uid);
         let nova = pos;
         try {
@@ -465,11 +437,9 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
               // Rastro GPS da corrida (conta km depois do embarque) — na pista.
               apiSim(uid, "POST", `/api/viagens/${viagem.id}/pontos`, { pontos: [nova] });
             }
-          } else if ((pausas.get(uid) || 0) > agora) {
-            // Estacionado no local calibrado (hospital, mercado, portaria…).
-            nova = pos;
           } else {
-            // Passeio normal: segue a rota real até o destino calibrado.
+            // Loop constante: segue a rota real da perna atual (A = local do
+            // S11D; B = âncora do passageiro), sem paradas.
             const chave = `d${chavePonto(dest)}`;
             let cam = caminhos.get(uid);
             // Recalcula se o destino mudou OU se a posição dessincronizou da
@@ -484,28 +454,17 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
             cam.idx = res.idx;
             nova = res.pos;
             if (res.fim) {
+              // Fim da perna: dá meia-volta na hora (vai-e-volta constante).
               caminhos.delete(uid);
-              // Estaciona um pouco no local — espalha a frota, nada de bolo.
-              if (Math.random() < 0.6) pausas.set(uid, agora + rnd(20000, 90000));
-              let destNovo;
-              if (r.modo === "carona") {
-                const indoB = !r.indo_b;
-                destNovo = indoB ? { lat: +r.b_lat, lng: +r.b_lng } : { lat: +r.a_lat, lng: +r.a_lng };
-                retargets.push({ id: uid, dest: destNovo, indoB });
+              const indoB = !r.indo_b;
+              let destNovo = indoB ? { lat: +r.b_lat, lng: +r.b_lng } : { lat: +r.a_lat, lng: +r.a_lng };
+              // Virando no S11D rumo ao passageiro: se ele se moveu (> 500 m),
+              // a ponta B do loop acompanha a âncora nova.
+              if (indoB && distKm(destNovo, ancora) > 0.5) {
+                destNovo = ancora;
+                retargets.push({ id: uid, dest: destNovo, indoB, novaB: ancora, modo: r.modo });
               } else {
-                destNovo = proximoDestinoAmarelo(nova, imaMaisPerto(nova));
-                retargets.push({ id: uid, dest: destNovo, indoB: null });
-              }
-            } else if (r.modo === "amarelo" && uid % 3 !== 0) {
-              // Apareceu passageiro real (ímã) longe do destino atual: 2/3 dos
-              // amarelos redirecionam pro local calibrado mais perto dele.
-              const ima = imaMaisPerto(pos);
-              if (ima && ima.d < 25) {
-                const alvoIma = localMaisPertoDe(ima);
-                if (distKm(dest, alvoIma) > 1.2) {
-                  retargets.push({ id: uid, dest: alvoIma, indoB: null });
-                  caminhos.delete(uid);
-                }
+                retargets.push({ id: uid, dest: destNovo, indoB });
               }
             }
           }
@@ -540,9 +499,21 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
       );
       for (const t of retargets) {
         await pool.query(
-          `UPDATE sim_frota SET dest_lat = $2, dest_lng = $3, indo_b = COALESCE($4, indo_b) WHERE usuario_id = $1`,
-          [t.id, t.dest.lat.toFixed(6), t.dest.lng.toFixed(6), t.indoB]
+          `UPDATE sim_frota SET dest_lat = $2, dest_lng = $3, indo_b = COALESCE($4, indo_b),
+                  b_lat = COALESCE($5, b_lat), b_lng = COALESCE($6, b_lng)
+           WHERE usuario_id = $1`,
+          [t.id, t.dest.lat.toFixed(6), t.dest.lng.toFixed(6), t.indoB,
+           t.novaB ? t.novaB.lat.toFixed(6) : null, t.novaB ? t.novaB.lng.toFixed(6) : null]
         );
+        // Carro branco: a rota publicada acompanha a ponta nova do loop —
+        // o destino da carona continua batendo com o caminho de verdade.
+        if (t.novaB && t.modo === "carona") {
+          await pool.query(
+            `UPDATE caronas SET destino_lat = $2, destino_lng = $3
+             WHERE motorista_id = $1 AND status = 'ativa'`,
+            [t.id, t.novaB.lat.toFixed(6), t.novaB.lng.toFixed(6)]
+          );
+        }
       }
       // Selfie/foto "do dia" renovadas de hora em hora (regra real: < 12 h);
       // e o cache de rotas fica num teto (rotas de viagem têm pontos únicos).
@@ -608,10 +579,13 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
              AND status = 'cancelada'
              AND id IN (SELECT MAX(id) FROM caronas GROUP BY motorista_id)`
         );
+        // Frotas antigas entram no padrão novo: 90 km/h pra todo mundo.
+        await pool.query("UPDATE sim_frota SET vel_kmh = $1", [VEL_KMH]);
         ultimaSelfie = Date.now();
       }
 
       // Cria o que faltar até n.
+      const ancoraSeed = await ancoraDoPassageiro();
       const faltam = Math.max(0, n - existentes.length);
       const senhaHash = await bcrypt.hash(String(Math.random()).slice(2, 14), 10);
       const uniq = String(Date.now()).slice(-5);
@@ -635,18 +609,12 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
           [uid, placa, `${CARROS[k % CARROS.length]} ${CORES[k % CORES.length]}`, FOTO_FAKE, FOTO_FAKE]
         );
 
-        // Metade nasce no S11D, metade na cidade — sempre em locais CALIBRADOS,
-        // distribuídos em round-robin (nada de frota amontoada num canto).
-        const nasceNoS11D = k % 4 < 2;
-        const localA = nasceNoS11D
-          ? LOCAIS_S11D[(k * 7) % LOCAIS_S11D.length]
-          : CANAA_POIS[(k * 5) % CANAA_POIS.length];
-        const localB = nasceNoS11D
-          ? CANAA_POIS[(k * 3) % CANAA_POIS.length]
-          : LOCAIS_S11D[(k * 11) % LOCAIS_S11D.length];
+        // Todo carro nasce num local CALIBRADO do S11D (round-robin, sem bolo)
+        // e faz o loop A (S11D) <-> B (âncora = onde o passageiro real está).
+        const localA = LOCAIS_S11D[(k * 7) % LOCAIS_S11D.length];
         const posIni = jitter(localA, 250);   // nasce "na rua perto" do local, não em cima
         const A = { lat: localA.lat, lng: localA.lng };
-        const B = { lat: localB.lat, lng: localB.lng };
+        const B = ancoraSeed;
         const vagas = 1 + (k % 4);
 
         if (modo === "carona") {
@@ -654,7 +622,8 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
             `INSERT INTO caronas (motorista_id, origem_texto, origem_lat, origem_lng,
                                   destino_texto, destino_lat, destino_lng, vagas, status)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ativa')`,
-            [uid, localA.nome, A.lat.toFixed(6), A.lng.toFixed(6), localB.nome, B.lat.toFixed(6), B.lng.toFixed(6), vagas]
+            [uid, localA.nome, A.lat.toFixed(6), A.lng.toFixed(6), "Canaã dos Carajás",
+             B.lat.toFixed(6), B.lng.toFixed(6), vagas]
           );
         }
         await pool.query(
@@ -663,12 +632,11 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
            ON CONFLICT (usuario_id) DO UPDATE SET lat = $2, lng = $3, disponivel = TRUE, vagas = $4, online_desde = $5, atualizado_em = NOW()`,
           [uid, posIni.lat.toFixed(6), posIni.lng.toFixed(6), vagas, modo === "amarelo" ? new Date() : null]
         );
-        const dest = modo === "carona" ? B : proximoDestinoAmarelo(posIni, null);
         await pool.query(
           `INSERT INTO sim_frota (usuario_id, modo, dest_lat, dest_lng, a_lat, a_lng, b_lat, b_lng, indo_b, vel_kmh)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)`,
-          [uid, modo, dest.lat.toFixed(6), dest.lng.toFixed(6), A.lat.toFixed(6), A.lng.toFixed(6),
-           B.lat.toFixed(6), B.lng.toFixed(6), rnd(55, 85).toFixed(1)]
+          [uid, modo, B.lat.toFixed(6), B.lng.toFixed(6), A.lat.toFixed(6), A.lng.toFixed(6),
+           B.lat.toFixed(6), B.lng.toFixed(6), VEL_KMH]
         );
       }
       ultimoTick = 0;
@@ -684,7 +652,6 @@ module.exports = function montarSimFrota({ app, pool, bcrypt, verificarAuth, car
     try {
       await garantirTabelaSim();
       caminhos.clear();
-      pausas.clear();
       if (String(req.query.apagar) === "1") {
         // Some por completo: apaga os usuários fake (CASCADE limpa o resto).
         const { rowCount } = await pool.query(
