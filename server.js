@@ -4771,7 +4771,11 @@ app.post("/api/admin/chamados/:id/recusar", verificarAuth, carregarAdminEscopo, 
 });
 
 /* ==================== FROTA FAKE (testes visuais, admin) ==================== */
-require("./sim-frota")({ app, pool, bcrypt, verificarAuth, carregarAdminEscopo });
+require("./sim-frota")({
+  app, pool, bcrypt, verificarAuth, carregarAdminEscopo,
+  porta: PORT,
+  assinarToken: (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" }),
+});
 
 /* ============================ ESTÁTICOS ============================ */
 app.use(express.static(path.join(__dirname, "public")));
