@@ -465,17 +465,45 @@ function bearingEntrePontos(de, para) {
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
+// Desliza o marcador da posição atual até a nova (tween ~2,8 s, cobrindo o
+// intervalo do poll) — o carro "vive" no mapa, estilo bolinha do Google Maps
+// em viagem, em vez de pular de ponto em ponto a cada atualização.
+const _animCarro = new WeakMap();
 function atualizarPosicaoCarro(mk, pos, posAnterior) {
     if (!mk) return;
-    mk.setPosition(pos);
-    if (!posAnterior || !mk.setHeading) return;
-    const metros = distMetrosGps(posAnterior, pos);
-    if (metros < 8) return;   // GPS oscilando parado: não gira
-    const h = bearingEntrePontos(posAnterior, pos);
-    if (h == null) return;
-    const ultimo = mk.getHeading ? mk.getHeading() : null;
-    if (ultimo != null && diferencaAngulo(ultimo, h) < 18 && metros < 35) return;
-    mk.setHeading(h);
+    const anterior = _animCarro.get(mk);
+    if (anterior && anterior.raf) cancelAnimationFrame(anterior.raf);
+    const de = (anterior && anterior.atual) || posAnterior;
+
+    if (de && mk.setHeading) {
+        const metros = distMetrosGps(de, pos);
+        if (metros >= 8) {   // GPS oscilando parado: não gira
+            const h = bearingEntrePontos(de, pos);
+            if (h != null) {
+                const ultimo = mk.getHeading ? mk.getHeading() : null;
+                if (ultimo == null || diferencaAngulo(ultimo, h) >= 18 || metros >= 35) mk.setHeading(h);
+            }
+        }
+    }
+
+    // Sem referência, parado ou salto grande (teleporte): aplica direto.
+    if (!de || distMetrosGps(de, pos) < 1 || distMetrosGps(de, pos) > 2500) {
+        mk.setPosition(pos);
+        _animCarro.set(mk, { atual: { lat: pos.lat, lng: pos.lng }, raf: 0 });
+        return;
+    }
+    const st = { de: { lat: de.lat, lng: de.lng }, atual: { lat: de.lat, lng: de.lng }, t0: performance.now(), raf: 0 };
+    const passo = (ts) => {
+        const t = Math.min(1, (ts - st.t0) / 2800);
+        st.atual = {
+            lat: st.de.lat + (pos.lat - st.de.lat) * t,
+            lng: st.de.lng + (pos.lng - st.de.lng) * t,
+        };
+        mk.setPosition(st.atual);
+        st.raf = t < 1 ? requestAnimationFrame(passo) : 0;
+    };
+    st.raf = requestAnimationFrame(passo);
+    _animCarro.set(mk, st);
 }
 
 // Marcadores de carro redimensionam conforme o zoom do mapa (como Uber/Maps).
