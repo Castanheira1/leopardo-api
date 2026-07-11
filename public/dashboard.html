@@ -1609,6 +1609,12 @@
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
             fullscreenControl: false, gestureHandling: 'greedy', ...opts,
         }));
+        // Reforço: se a lib ainda não tinha o enum na 1ª opção, aplica depois.
+        try {
+            const rt = renderingTypeRaster();
+            if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
+            else map.setOptions({ renderingType: rt });
+        } catch (_) { /* API antiga: ignora */ }
         aplicarEstiloMapa(map, tipoMapaSalvo());
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);

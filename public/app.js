@@ -237,13 +237,20 @@ let _mapId = 'DEMO_MAP_ID';
 let _RouteClass = null;
 let _AdvancedMarkerElement = null;
 let _PinElement = null;
+let _RenderingType = null; // preenchido em carregarMaps() via importLibrary('maps')
+
+// Com mapId o Maps tende a VECTOR, que chama GetViewportInfo (502/CORS intermitente).
+// RASTER evita esse RPC. A string 'RASTER' funciona mesmo se o enum ainda não carregou.
+function renderingTypeRaster() {
+    return _RenderingType?.RASTER
+        || window.google?.maps?.RenderingType?.RASTER
+        || 'RASTER';
+}
 
 function opcoesMapa(opts = {}) {
     const o = { mapId: _mapId, ...opts };
-    // Vector + DEMO_MAP_ID dispara RPC interno GetViewportInfo (502/CORS intermitente).
-    if (!o.renderingType && window.google?.maps?.RenderingType) {
-        o.renderingType = google.maps.RenderingType.RASTER;
-    }
+    // Sempre força raster (não depende do enum estar em google.maps).
+    if (o.renderingType == null) o.renderingType = renderingTypeRaster();
     return o;
 }
 
@@ -412,7 +419,8 @@ function instalarMapsBootstrap(apiKey) {
                         m.head.append(a);
                     }));
                 d[l] ? null : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
-            })({ key: apiKey, v: 'weekly' });
+            // quarterly = canal estável (weekly costuma quebrar com GetViewportInfo).
+            })({ key: apiKey, v: 'quarterly' });
             google.maps.importLibrary('maps').then(resolve).catch(reject);
         } catch (err) {
             reject(err);
@@ -428,12 +436,13 @@ function carregarMaps() {
         if (!cfg.mapsApiKey) throw new Error('Google Maps API key não configurada (.env GOOGLE_MAPS_API_KEY)');
         _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
         await instalarMapsBootstrap(cfg.mapsApiKey);
-        const [, markerLib, routesLib] = await Promise.all([
+        const [mapsLib, markerLib, routesLib] = await Promise.all([
             google.maps.importLibrary('maps'),
             google.maps.importLibrary('marker'),
             google.maps.importLibrary('routes'),
             google.maps.importLibrary('places'),
         ]);
+        _RenderingType = mapsLib.RenderingType || window.google?.maps?.RenderingType || null;
         _RouteClass = routesLib.Route;
         _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
         _PinElement = markerLib.PinElement;
