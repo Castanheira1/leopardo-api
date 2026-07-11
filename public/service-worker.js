@@ -2,7 +2,7 @@
 // Objetivo: o app NÃO é offline, mas não pode quebrar sem internet — ele abre e
 // mostra a última versão carregada. O cache é FIXO (só o "esqueleto" do app),
 // sobrescreve em vez de acumular, e os dados de API nunca são cacheados.
-const VERSION = "v271";
+const VERSION = "v272";
 const CACHE = `vagao-shell-${VERSION}`;
 
 // Lista fixa de arquivos do app (o cache nunca cresce além disto).
@@ -26,6 +26,14 @@ const SHELL = [
   "/apple-touch-icon.png",
   "/favicon.ico",
 ];
+
+// CSS/JS críticos: rede primeiro — evita UI “atrasada” após deploy.
+function isShellCodigo(pathname) {
+  return pathname === "/style.css"
+    || pathname === "/app.js"
+    || pathname === "/pwa.js"
+    || pathname.endsWith(".html");
+}
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -116,8 +124,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Assets do esqueleto (css/js/ícones): cache primeiro, com atualização em
-  // segundo plano. Só re-cacheia o que JÁ faz parte do shell — mantém o cache fixo.
+  // CSS/JS/HTML do app: rede primeiro (deploy aparece na hora; offline usa cache).
+  if (isShellCodigo(url.pathname)) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(async () => (await caches.match(req)) || Response.error())
+    );
+    return;
+  }
+
+  // Ícones/imagens do shell: cache primeiro + refresh em segundo plano.
   event.respondWith(
     caches.match(req).then((cached) => {
       const network = fetch(req)

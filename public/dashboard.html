@@ -161,11 +161,11 @@
                         </p>
                         <div id="motoristasDestinoWrap" class="motoristas-destino-wrap" style="display:none;">
                             <div id="motoristasIndoDestino">
-                                <strong class="painel-tit">Motoristas indo para lá</strong>
+                                <strong class="painel-tit painel-tit--lista">Indo para lá</strong>
                                 <div id="listaIndoDestino"></div>
                             </div>
                             <div id="motoristasPorPerto" style="display:none;margin-top:10px;">
-                                <strong class="painel-tit">Online por perto (sem destino fixo)</strong>
+                                <strong class="painel-tit painel-tit--lista">Online por perto</strong>
                                 <div id="listaPorPerto"></div>
                             </div>
                         </div>
@@ -2872,8 +2872,7 @@
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
             } else if (!indoDestino.length && contPerto) {
                 contPerto.style.display = 'block';
-                listaPerto.innerHTML = '<p class="cam-hint">Nenhum motorista <strong>online</strong> a menos de <strong>600 m</strong>. '
-                    + 'Confira: mesmo <strong>projeto</strong> no perfil, GPS ligado no celular do motorista, selfie válida (12h).</p>';
+                listaPerto.innerHTML = '<p class="lista-vazia-leve">Nenhum online por perto</p>';
             } else if (contPerto) {
                 contPerto.style.display = 'none';
                 listaPerto.innerHTML = '';
