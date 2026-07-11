@@ -540,12 +540,29 @@ function htmlSvgCarro(variant, w, h) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="${w}" height="${h}" style="display:block;pointer-events:none">${carSvgPaths(variant)}</svg>`;
 }
 
+// Imagem real da pickup amarela (referência do cliente). SVG só no fallback preto.
+const CAR_PICKUP_PNG = '/pickup-ranger-yellow.png';
+
 function montarNoCarro(variant, w, h) {
     const rot = document.createElement('div');
     rot.className = 'vap-car-rot';
     rot.style.cssText = `width:${w}px;height:${h}px;transform-origin:50% 50%;transform:rotate(0deg) translateZ(0);`
         + 'backface-visibility:hidden;-webkit-backface-visibility:hidden;contain:layout style paint;';
-    rot.innerHTML = htmlSvgCarro(variant, w, h);
+    const preta = variant === 'black' || variant === 'dark';
+    if (!preta) {
+        const img = document.createElement('img');
+        img.src = CAR_PICKUP_PNG;
+        img.alt = '';
+        img.draggable = false;
+        img.width = w;
+        img.height = h;
+        img.style.cssText = `display:block;width:${w}px;height:${h}px;object-fit:contain;pointer-events:none;`
+            + 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));';
+        img.onerror = () => { rot.innerHTML = htmlSvgCarro(variant, w, h); };
+        rot.appendChild(img);
+    } else {
+        rot.innerHTML = htmlSvgCarro(variant, w, h);
+    }
     return rot;
 }
 
@@ -624,8 +641,9 @@ const _regZoomCar = new WeakMap();
 
 function tamanhoCarroPorZoom(zoom) {
     const z = Math.max(10, Math.min(20, Number(zoom) || 15));
-    const f = Math.pow(1.12, z - 15);   // zoom 15 = 30×40 px (referência)
-    return { w: Math.round(30 * f), h: Math.round(40 * f) };
+    // zoom 15 = 36×48 px — um pouco maior para a PNG da Ranger legível
+    const f = Math.pow(1.12, z - 15);
+    return { w: Math.round(36 * f), h: Math.round(48 * f) };
 }
 
 function vincularZoomCarros(map) {
@@ -768,6 +786,11 @@ function criarMarcador(opts = {}) {
                 rotEl.style.height = h + 'px';
                 const svg = rotEl.querySelector('svg');
                 if (svg) { svg.setAttribute('width', w); svg.setAttribute('height', h); }
+                const img = rotEl.querySelector('img');
+                if (img) {
+                    img.width = w; img.height = h;
+                    img.style.width = w + 'px'; img.style.height = h + 'px';
+                }
             } else if (imgEl) {
                 imgEl.style.width = w + 'px';
                 imgEl.style.height = h + 'px';

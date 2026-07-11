@@ -1659,7 +1659,7 @@
         // pulso anda junto. Nunca deixa o ícone derrubar o mapa caso falhe.
         const mkOrigem = criarMarcador({
             position: origem, map, invisivel: !comoCarro,
-            iconW: comoCarro ? 30 : undefined, iconH: comoCarro ? 40 : undefined,
+            iconW: comoCarro ? 36 : undefined, iconH: comoCarro ? 48 : undefined,
             iconVariant: comoCarro ? 'gold' : undefined,
             title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
         });
@@ -4108,7 +4108,7 @@
             } else {
                 vv.carMarker = criarMarcador({
                     position: vv.posMotorista, map: vv.map,
-                    iconW: 30, iconH: 40, iconVariant: 'gold', title: 'Motorista', zIndex: 999,
+                    iconW: 36, iconH: 48, iconVariant: 'gold', title: 'Motorista', zIndex: 999,
                 });
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
@@ -4585,7 +4585,7 @@
                         const iconVariant = 'gold';
                         const car = criarMarcador({
                             position: pos, map,
-                            iconW: 30, iconH: 40, iconVariant,
+                            iconW: 36, iconH: 48, iconVariant,
                             badge: seloFilaCarro(m),
                             title: m.nome + (m.placa ? ' • ' + m.placa : '')
                                 + (m.carona_id && m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
@@ -4967,7 +4967,7 @@
             } else {
                 selfCar.marker = criarMarcador({
                     position: pos, map,
-                    iconW: 30, iconH: 40,
+                    iconW: 36, iconH: 48,
                     iconVariant: 'gold',
                     title: 'Você', zIndex: 999,
                 });
