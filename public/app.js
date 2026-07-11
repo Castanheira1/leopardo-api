@@ -451,118 +451,80 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
-// Pickup top-down (referência Ranger amarela). Frente = topo (gira no mapa).
-// Carroceria INTEIRA amarela (laterais da caçamba também); só o forro interno é escuro.
+// Pickup top-down em SVG puro (padrão do projeto). Frente = topo, gira com o rumo.
+// Silhueta no estilo do carro clássico do app + proporções de Ranger (foto).
+// Sem fundo branco: só paths transparentes.
 function carSvgPaths(variant = 'gold') {
     const gid = 'vap-car-body-' + variant;
     const preta = variant === 'black' || variant === 'dark';
-    const body0 = preta ? '#12151a' : '#C9921A';
-    const body1 = preta ? '#2a3038' : '#E4B429';
-    const body2 = preta ? '#1a1e24' : '#D9A61F';
-    const stroke = preta ? '#050608' : '#8A6A12';
+    // Mostarda da foto / preto legado
+    const body = preta ? '#2e333b' : '#E4B429';
+    const bodyEdge = preta ? '#0e1116' : '#C9921A';
+    const stroke = preta ? '#000000' : '#8A6A12';
     const glass = preta ? '#0c1015' : '#2C2C2E';
-    const glassSide = preta ? '#1a222c' : '#3A3A3C';
-    const bedFloor = preta ? '#0a0c0f' : '#1C1C1E';
-    const tire = '#1A1A1A';
-    const mirror = '#1A1A1A';
+    const glassSide = preta ? '#15181d' : '#3A3A3C';
+    const roof = preta ? '#1e2023' : '#D9A61F';
+    const bed = preta ? '#12151a' : '#1C1C1E';
+    const detail = preta ? '#0a0c0f' : '#B88918';
+    const tire = '#15181b';
+    const mirror = preta ? '#15181d' : '#1A1A1A';
+    const head = preta ? '#d8dde3' : '#F0F0F2';
     const grille = preta ? '#0a0c0f' : '#2A2A2A';
-    const head = preta ? '#d8dde3' : '#E8E8EA';
-    const tail = '#D32F2F';
-    const crease = preta ? '#0a0c0f' : '#B88918';
-    const shine = preta ? '0.06' : '0.20';
+    const tail = '#e03131';
+    const shine = preta ? '0.08' : '0.22';
 
-    return `<defs>
-<linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
-<stop offset="0" stop-color="${body0}"/>
-<stop offset="0.18" stop-color="${body1}"/>
-<stop offset="0.82" stop-color="${body1}"/>
-<stop offset="1" stop-color="${body0}"/>
-</linearGradient>
-<linearGradient id="${gid}-roof" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="${body1}"/>
-<stop offset="1" stop-color="${body2}"/>
-</linearGradient>
-</defs>
-<!-- pneus -->
-<rect x="7" y="11" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
-<rect x="37.5" y="11" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
-<rect x="7" y="46.8" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
-<rect x="37.5" y="46.8" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
-<!-- silhueta: frente arredondada (topo), laterais retas, traseira da caçamba -->
-<path d="M24 2.5
-  C18.4 2.5 14.6 4.1 13 6.8
-  C11.8 8.8 11.2 11.2 11 14
-  L10.8 22 L10.8 37.2
-  C10.8 38.6 11.1 39.4 11.8 40
-  L11.8 56.4
-  C11.8 59.4 14.2 61.5 17.4 61.7
-  L30.6 61.7
-  C33.8 61.5 36.2 59.4 36.2 56.4
-  L36.2 40
-  C36.9 39.4 37.2 38.6 37.2 37.2
-  L37.2 22 L37 14
-  C36.8 11.2 36.2 8.8 35 6.8
-  C33.4 4.1 29.6 2.5 24 2.5 Z"
-  fill="url(#${gid})" stroke="${stroke}" stroke-width="0.95"/>
-<!-- vincos do capô (como na referência) -->
-<path d="M15.4 5.6 C18.8 4.2 29.2 4.2 32.6 5.6" fill="none" stroke="${crease}" stroke-width="0.7" opacity="0.55"/>
-<path d="M16.6 7.4 C19.6 6.2 28.4 6.2 31.4 7.4" fill="none" stroke="${crease}" stroke-width="0.55" opacity="0.4"/>
-<path d="M24 5 L24 13.5" stroke="${crease}" stroke-width="0.7" opacity="0.42" stroke-linecap="round"/>
-<!-- grade + faróis -->
-<path d="M16 3.5 C19.2 2.8 28.8 2.8 32 3.5 L32.6 6.3 C28.8 5.6 19.2 5.6 15.4 6.3 Z" fill="${grille}"/>
-<path d="M12.4 5.3 C13.7 4.2 15.6 3.8 16.9 4 L16.4 6.5 C15.1 6.2 13.6 6.5 12.7 7.3 Z" fill="${head}"/>
-<path d="M35.6 5.3 C34.3 4.2 32.4 3.8 31.1 4 L31.6 6.5 C32.9 6.2 34.4 6.5 35.3 7.3 Z" fill="${head}"/>
-<ellipse cx="24" cy="9.5" rx="7" ry="2" fill="#ffffff" opacity="${shine}"/>
-<!-- para-brisa -->
-<path d="M14 14.4 C17.8 12.3 30.2 12.3 34 14.4 L34.8 21.6 C28.2 20.1 19.8 20.1 13.2 21.6 Z" fill="${glass}"/>
-<path d="M16.2 15 C19.2 13.7 24.4 13.5 27.4 14.2 L15.6 20.4 C15.1 19.5 15 18.2 15.3 17 Z" fill="#ffffff" opacity="0.12"/>
-<!-- retrovisores -->
-<path d="M9.2 16.6 C7.3 15.9 6.2 16.7 6.6 18 C6.9 19.2 8.4 19.6 10.1 19 Z" fill="${mirror}"/>
-<path d="M38.8 16.6 C40.7 15.9 41.8 16.7 41.4 18 C41.1 19.2 39.6 19.6 37.9 19 Z" fill="${mirror}"/>
-<!-- teto da cabine (amarelo, por cima da carroceria) -->
-<path d="M13.4 22.8 C19.2 21.1 28.8 21.1 34.6 22.8 L33.8 35 C28.4 33.7 19.6 33.7 14.2 35 Z" fill="url(#${gid}-roof)"/>
-<ellipse cx="24" cy="26.4" rx="6.4" ry="1.55" fill="#ffffff" opacity="${preta ? '0.05' : '0.14'}"/>
-<!-- vidros laterais -->
-<path d="M11.5 24 C12.4 23.5 13.3 23.4 14 23.7 L13.6 33.5 C12.8 33.9 11.9 34 11.3 33.6 Z" fill="${glassSide}"/>
-<path d="M36.5 24 C35.6 23.5 34.7 23.4 34 23.7 L34.4 33.5 C35.2 33.9 36.1 34 36.7 33.6 Z" fill="${glassSide}"/>
-<!-- divisão cabine / caçamba -->
-<path d="M12.2 36.4 C18.6 35.1 29.4 35.1 35.8 36.4" fill="none" stroke="${stroke}" stroke-width="1" opacity="0.45"/>
-<!-- forro da caçamba (só o INTERIOR escuro; laterais ficam amarelas) -->
-<rect x="13.6" y="38.2" width="20.8" height="17.2" rx="1.3" fill="${bedFloor}"/>
-<path d="M17.2 39.4 L17.2 54.2 M24 39.4 L24 54.2 M30.8 39.4 L30.8 54.2"
-  stroke="${preta ? '#06080a' : '#0e0e10'}" stroke-width="1" opacity="0.65"/>
-<!-- lanternas -->
-<path d="M11.6 55.6 C12.9 56.7 14.6 57.3 16 57.5 L15.6 59.8 C14 59.5 12.4 58.8 11.2 57.7 Z" fill="${tail}"/>
-<path d="M36.4 55.6 C35.1 56.7 33.4 57.3 32 57.5 L32.4 59.8 C34 59.5 35.6 58.8 36.8 57.7 Z" fill="${tail}"/>`;
+    return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
+        + `<stop offset="0" stop-color="${bodyEdge}"/><stop offset="0.22" stop-color="${body}"/>`
+        + `<stop offset="0.78" stop-color="${body}"/><stop offset="1" stop-color="${bodyEdge}"/>`
+        + `</linearGradient></defs>`
+        // pneus
+        + `<rect x="7.6" y="11" width="3.2" height="8.5" rx="1.5" fill="${tire}"/>`
+        + `<rect x="37.2" y="11" width="3.2" height="8.5" rx="1.5" fill="${tire}"/>`
+        + `<rect x="7.6" y="46.5" width="3.2" height="8.5" rx="1.5" fill="${tire}"/>`
+        + `<rect x="37.2" y="46.5" width="3.2" height="8.5" rx="1.5" fill="${tire}"/>`
+        // carroceria (mesma família do SVG clássico do app)
+        + `<path d="M24 2.6 C17.4 2.6 13.2 4.6 12 8.2 C11 11.2 10.6 14.4 10.5 18 L10.5 37.5 C10.5 39 10.9 40 11.8 40.8 L11.8 56.2 C11.8 59.4 14.4 61.6 17.8 61.7 L30.2 61.7 C33.6 61.6 36.2 59.4 36.2 56.2 L36.2 40.8 C37.1 40 37.5 39 37.5 37.5 L37.5 18 C37.4 14.4 37 11.2 36 8.2 C34.8 4.6 30.6 2.6 24 2.6 Z" fill="url(#${gid})" stroke="${stroke}" stroke-width="1.05"/>`
+        // vincos do capô
+        + `<path d="M15.2 5.6 C18.8 4 29.2 4 32.8 5.6" fill="none" stroke="${detail}" stroke-width="0.75" opacity="0.55"/>`
+        + `<path d="M16.4 7.4 C19.6 6.1 28.4 6.1 31.6 7.4" fill="none" stroke="${detail}" stroke-width="0.55" opacity="0.4"/>`
+        + `<path d="M24 4.8 L24 13.2" stroke="${detail}" stroke-width="0.7" opacity="0.4" stroke-linecap="round"/>`
+        // grade + faróis
+        + `<path d="M16.2 3.4 C19.2 2.7 28.8 2.7 31.8 3.4 L32.4 6.1 C28.6 5.4 19.4 5.4 15.6 6.1 Z" fill="${grille}"/>`
+        + `<path d="M12.4 5.2 C13.7 4.1 15.6 3.7 16.9 3.9 L16.4 6.4 C15.1 6.1 13.6 6.4 12.7 7.2 Z" fill="${head}"/>`
+        + `<path d="M35.6 5.2 C34.3 4.1 32.4 3.7 31.1 3.9 L31.6 6.4 C32.9 6.1 34.4 6.4 35.3 7.2 Z" fill="${head}"/>`
+        + `<ellipse cx="24" cy="9.4" rx="7.2" ry="2" fill="#ffffff" opacity="${shine}"/>`
+        // para-brisa
+        + `<path d="M13.8 14.2 C17.6 12.1 30.4 12.1 34.2 14.2 L35 21.8 C28.4 20.2 19.6 20.2 13 21.8 Z" fill="${glass}"/>`
+        + `<path d="M16.2 14.8 C19.2 13.5 24.4 13.3 27.4 14 L15.6 20.4 C15.1 19.5 15 18.2 15.3 17 Z" fill="#ffffff" opacity="0.12"/>`
+        // retrovisores
+        + `<path d="M9.6 16.4 C7.7 15.7 6.5 16.5 6.8 17.9 C7.1 19.1 8.6 19.5 10.2 18.8 Z" fill="${mirror}"/>`
+        + `<path d="M38.4 16.4 C40.3 15.7 41.5 16.5 41.2 17.9 C40.9 19.1 39.4 19.5 37.8 18.8 Z" fill="${mirror}"/>`
+        // teto da cabine (amarelo / escuro — NÃO vidro inteiro)
+        + `<path d="M13.4 22.6 C19.2 20.9 28.8 20.9 34.6 22.6 L33.8 34.8 C28.4 33.5 19.6 33.5 14.2 34.8 Z" fill="${roof}"/>`
+        + `<ellipse cx="24" cy="26" rx="6.2" ry="1.5" fill="#ffffff" opacity="${preta ? '0.05' : '0.14'}"/>`
+        // vidros laterais das portas
+        + `<path d="M11.5 23.8 C12.4 23.3 13.3 23.2 14 23.5 L13.6 33.2 C12.8 33.6 11.9 33.7 11.3 33.3 Z" fill="${glassSide}"/>`
+        + `<path d="M36.5 23.8 C35.6 23.3 34.7 23.2 34 23.5 L34.4 33.2 C35.2 33.6 36.1 33.7 36.7 33.3 Z" fill="${glassSide}"/>`
+        // divisão cabine / caçamba
+        + `<path d="M12.2 36.2 C18.6 34.9 29.4 34.9 35.8 36.2" fill="none" stroke="${stroke}" stroke-width="1" opacity="0.4"/>`
+        // forro interno da caçamba (laterais da carroceria ficam amarelas)
+        + `<rect x="13.6" y="37.8" width="20.8" height="17.6" rx="1.4" fill="${bed}"/>`
+        + `<path d="M17.2 39 L17.2 54.2 M24 39 L24 54.2 M30.8 39 L30.8 54.2" stroke="${preta ? '#08090b' : '#0e0e10'}" stroke-width="1" opacity="0.7"/>`
+        // lanternas
+        + `<path d="M11.6 55.4 C12.9 56.5 14.6 57.1 16 57.3 L15.6 59.6 C14 59.3 12.4 58.6 11.2 57.5 Z" fill="${tail}"/>`
+        + `<path d="M36.4 55.4 C35.1 56.5 33.4 57.1 32 57.3 L32.4 59.6 C34 59.3 35.6 58.6 36.8 57.5 Z" fill="${tail}"/>`;
 }
 
 function htmlSvgCarro(variant, w, h) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="${w}" height="${h}" style="display:block;pointer-events:none">${carSvgPaths(variant)}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="${w}" height="${h}" style="display:block;pointer-events:none;background:transparent">${carSvgPaths(variant)}</svg>`;
 }
-
-// Imagem real da pickup amarela (referência do cliente). SVG só no fallback preto.
-const CAR_PICKUP_PNG = '/pickup-ranger-yellow.png';
 
 function montarNoCarro(variant, w, h) {
     const rot = document.createElement('div');
     rot.className = 'vap-car-rot';
     rot.style.cssText = `width:${w}px;height:${h}px;transform-origin:50% 50%;transform:rotate(0deg) translateZ(0);`
-        + 'backface-visibility:hidden;-webkit-backface-visibility:hidden;contain:layout style paint;';
-    const preta = variant === 'black' || variant === 'dark';
-    if (!preta) {
-        const img = document.createElement('img');
-        img.src = CAR_PICKUP_PNG;
-        img.alt = '';
-        img.draggable = false;
-        img.width = w;
-        img.height = h;
-        img.style.cssText = `display:block;width:${w}px;height:${h}px;object-fit:contain;pointer-events:none;`
-            + 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));';
-        img.onerror = () => { rot.innerHTML = htmlSvgCarro(variant, w, h); };
-        rot.appendChild(img);
-    } else {
-        rot.innerHTML = htmlSvgCarro(variant, w, h);
-    }
+        + 'background:transparent;backface-visibility:hidden;-webkit-backface-visibility:hidden;contain:layout style paint;';
+    rot.innerHTML = htmlSvgCarro(variant, w, h);
     return rot;
 }
 
@@ -641,9 +603,8 @@ const _regZoomCar = new WeakMap();
 
 function tamanhoCarroPorZoom(zoom) {
     const z = Math.max(10, Math.min(20, Number(zoom) || 15));
-    // zoom 15 = 36×48 px — um pouco maior para a PNG da Ranger legível
-    const f = Math.pow(1.12, z - 15);
-    return { w: Math.round(36 * f), h: Math.round(48 * f) };
+    const f = Math.pow(1.12, z - 15);   // zoom 15 = 30×40 px (padrão do app)
+    return { w: Math.round(30 * f), h: Math.round(40 * f) };
 }
 
 function vincularZoomCarros(map) {
@@ -786,11 +747,6 @@ function criarMarcador(opts = {}) {
                 rotEl.style.height = h + 'px';
                 const svg = rotEl.querySelector('svg');
                 if (svg) { svg.setAttribute('width', w); svg.setAttribute('height', h); }
-                const img = rotEl.querySelector('img');
-                if (img) {
-                    img.width = w; img.height = h;
-                    img.style.width = w + 'px'; img.style.height = h + 'px';
-                }
             } else if (imgEl) {
                 imgEl.style.width = w + 'px';
                 imgEl.style.height = h + 'px';
