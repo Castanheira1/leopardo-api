@@ -4335,6 +4335,13 @@
         const fase = document.getElementById('viagemFase');
         const ctrl = document.getElementById('viagemControles');
         const eta = document.getElementById('viagemEta');
+        const sheet = document.getElementById('viagemSheet');
+        // Sempre expande o sheet ao atualizar CTA — evita botão “sumido” no fundo
+        if (sheet) {
+            sheet.classList.remove('collapsed');
+            sheet.style.transform = '';
+            sheet.style.setProperty('--sheet-peek', '96px');
+        }
         if (fase) fase.textContent = rotuloFaseViagem(vv);
         atualizarLinhaDestinoViagem();
         const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
@@ -4530,45 +4537,66 @@
         const btnRec = document.getElementById('btnRecentrar'); if (btnRec) btnRec.style.display = 'none';
     }
 
-    // Bottom sheet arrastável (puxa pra baixo = some / pra cima = aparece).
-    // peek = quanto fica visível (a "abinha") quando colapsado.
-    function tornarArrastavel(sheet, grip, peekVis = 44) {
+    // Bottom sheet arrastável (só pela alça — não rouba toque dos botões).
+    // peek = quanto fica visível quando colapsado (alça + margem do CTA).
+    function tornarArrastavel(sheet, grip, peekVis = 96) {
         if (!sheet || !grip || sheet._dragReady) return;
         sheet._dragReady = true;
+        sheet._peekVis = peekVis;
         const peek = () => sheet._peekVis || peekVis;
         const curT = () => (new DOMMatrix(getComputedStyle(sheet).transform).m42 || 0);
         let startY = 0, startT = 0, dragging = false, moved = 0, limite = 0;
         const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
-        const down = (e) => {
-            dragging = true; moved = 0; startY = yOf(e);
-            const p = peek();
-            limite = sheet.offsetHeight - p;
-            sheet.style.setProperty('--sheet-peek', p + 'px');
-            sheet.style.transition = 'none'; startT = curT();
+        const move = (e) => {
+            if (!dragging) return;
+            moved = yOf(e) - startY;
+            // Só arrasta de verdade após 8px — evita “toque” virar colapso
+            if (Math.abs(moved) < 8) return;
+            if (e.cancelable) e.preventDefault();
+            sheet.style.transform = `translateY(${Math.max(0, Math.min(limite, startT + moved))}px)`;
         };
-        const move = (e) => { if (!dragging) return; moved = yOf(e) - startY; sheet.style.transform = `translateY(${Math.max(0, Math.min(limite, startT + moved))}px)`; };
         const up = () => {
             if (!dragging) return;
             dragging = false;
+            window.removeEventListener('mousemove', move);
+            window.removeEventListener('touchmove', move);
+            window.removeEventListener('mouseup', up);
+            window.removeEventListener('touchend', up);
             const t = curT();
             const p = peek();
             sheet.style.transition = '';
             sheet.style.transform = '';
             sheet.style.setProperty('--sheet-peek', p + 'px');
-            const colapsar = Math.abs(moved) < 6 ? !sheet.classList.contains('collapsed') : t > (sheet.offsetHeight - p) / 2;
+            // Toque curto na alça: alterna. Arraste: decide pelo deslocamento.
+            if (Math.abs(moved) < 10) return; // não colapsa em micro-movimento
+            const colapsar = moved > 24 || t > (sheet.offsetHeight - p) / 2;
             sheet.classList.toggle('collapsed', colapsar);
+        };
+        const down = (e) => {
+            dragging = true;
+            moved = 0;
+            startY = yOf(e);
+            const p = peek();
+            limite = Math.max(0, sheet.offsetHeight - p);
+            sheet.style.setProperty('--sheet-peek', p + 'px');
+            sheet.style.transition = 'none';
+            startT = sheet.classList.contains('collapsed') ? limite : 0;
+            window.addEventListener('mousemove', move);
+            window.addEventListener('touchmove', move, { passive: false });
+            window.addEventListener('mouseup', up);
+            window.addEventListener('touchend', up);
         };
         grip.addEventListener('mousedown', down);
         grip.addEventListener('touchstart', down, { passive: true });
-        window.addEventListener('mousemove', move);
-        window.addEventListener('touchmove', move, { passive: true });
-        window.addEventListener('mouseup', up);
-        window.addEventListener('touchend', up);
     }
     function initSheetDrag() {
         const sheet = document.getElementById('viagemSheet');
-        if (sheet) sheet.classList.remove('collapsed');
-        tornarArrastavel(sheet, document.getElementById('sheetGrip'), 64);
+        if (sheet) {
+            sheet.classList.remove('collapsed');
+            // Peek maior: alça + botão cancelar não somem sob a barra do Android
+            sheet.style.setProperty('--sheet-peek', '96px');
+        }
+        tornarArrastavel(sheet, document.getElementById('sheetGrip'), 96);
     }
 
     // Loop único dos dois lados: cada um transmite a SUA posição (GPS) e busca a
