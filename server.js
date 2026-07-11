@@ -2366,15 +2366,20 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       return res.json(rows);
     }
 
-    // Com lat/lng (mapa do motorista): só pedidos DENTRO do raio de visibilidade,
-    // os mais perto primeiro — carona é entre gente próxima.
+    // Com lat/lng (mapa do motorista): pedidos próximos.
+    // - Online sem destino (amarelo): raio RAIO_ONLINE_KM (600 m)
+    // - Com carona/rota publicada: raio RAIO_VISIVEL_KM (10 km) — senão o motorista
+    //   não via o pulso de quem pediu a poucos km.
     if (lat && lng) {
       const pid = await projetoDoUsuario(req.user.id);
       if (!pid) return res.json([]);
+      const temCarona = (await pool.query(
+        `SELECT 1 FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1`,
+        [req.user.id]
+      )).rows[0];
+      const raioKm = temCarona ? RAIO_VISIVEL_KM : RAIO_ONLINE_KM;
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
-      const params = [lat, lng, RAIO_ONLINE_KM];
-      if (pid) params.push(pid);
-      const filtroProj = pid ? `AND u.projeto_id = $${params.length}` : "";
+      const params = [lat, lng, raioKm, pid];
       const { rows } = await pool.query(
         `SELECT * FROM (
            SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
@@ -2384,7 +2389,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
            WHERE p.status = 'aberto'
              AND COALESCE(u.ativo, TRUE) = TRUE
              AND (p.horario IS NULL OR p.horario <= NOW())
-             ${filtroProj}
+             AND u.projeto_id = $4
          ) s
          WHERE s.dist_origem <= $3
          ORDER BY s.dist_origem ASC

@@ -247,21 +247,15 @@ function renderingTypeRaster() {
         || 'RASTER';
 }
 
-// Map ID "de verdade" (Cloud Console) → estilo vem da nuvem.
-// DEMO_MAP_ID → sem mapId no Map, para o JSON ESTILO_MAPA_CLARO funcionar
-// (mapa branco sem ícones de loja). Advanced Markers exigem mapId; com DEMO
-// usamos OverlayView HTML (criarMarcador) que não precisa de mapId.
+// Advanced Markers EXIGEM mapId no Map. DEMO_MAP_ID vale para dev/prod sem
+// Map ID próprio. (Remover o mapId quebrava carrinho e pinos no mapa.)
 function mapaIdEfetivo() {
-    if (!_mapId || _mapId === 'DEMO_MAP_ID') return null;
-    return _mapId;
+    return _mapId || 'DEMO_MAP_ID';
 }
 
 function opcoesMapa(opts = {}) {
-    const o = { ...opts };
-    const mid = mapaIdEfetivo();
-    if (mid) o.mapId = mid;
-    else delete o.mapId;
-    // Sempre força raster (não depende do enum estar em google.maps).
+    const o = { mapId: mapaIdEfetivo(), ...opts };
+    // Sempre força raster (evita GetViewportInfo 502 em VECTOR).
     if (o.renderingType == null) o.renderingType = renderingTypeRaster();
     return o;
 }
@@ -644,66 +638,7 @@ function removerMarcadorCarro(map, marker) {
     if (set) set.delete(marker);
 }
 
-// Overlay HTML no mapa (não precisa de mapId — libera ESTILO_MAPA_CLARO local).
-function criarOverlayHtml(map, position, content, zIndex, title) {
-    const Overlay = google.maps.OverlayView;
-    class VapHtmlMarker extends Overlay {
-        constructor() {
-            super();
-            this.pos = normalizarLatLng(position);
-            this.div = null;
-            this._z = zIndex;
-            this._title = title || '';
-            this._listeners = [];
-        }
-        onAdd() {
-            const div = document.createElement('div');
-            div.style.cssText = 'position:absolute;transform:translate(-50%,-50%);cursor:pointer;'
-                + 'background:transparent;border:0;padding:0;line-height:0;user-select:none;';
-            if (this._z != null) div.style.zIndex = String(this._z);
-            if (this._title) div.title = this._title;
-            if (content) div.appendChild(content);
-            this.div = div;
-            this.getPanes().overlayMouseTarget.appendChild(div);
-            this._listeners.forEach(({ ev, fn }) => div.addEventListener(ev, fn));
-        }
-        draw() {
-            if (!this.div || !this.pos) return;
-            const proj = this.getProjection();
-            if (!proj) return;
-            const pt = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.pos.lat, this.pos.lng));
-            if (!pt) return;
-            this.div.style.left = pt.x + 'px';
-            this.div.style.top = pt.y + 'px';
-        }
-        onRemove() {
-            if (this.div?.parentNode) this.div.parentNode.removeChild(this.div);
-            this.div = null;
-        }
-        setPosition(p) {
-            this.pos = normalizarLatLng(p);
-            this.draw();
-        }
-        getPosition() {
-            if (!this.pos) return null;
-            return { lat: () => this.pos.lat, lng: () => this.pos.lng };
-        }
-        setTitle(t) {
-            this._title = t || '';
-            if (this.div) this.div.title = this._title;
-        }
-        addDomListener(ev, fn) {
-            this._listeners.push({ ev, fn });
-            if (this.div) this.div.addEventListener(ev, fn);
-            return { remove: () => this.div && this.div.removeEventListener(ev, fn) };
-        }
-    }
-    const ov = new VapHtmlMarker();
-    ov.setMap(map || null);
-    return ov;
-}
-
-// Marcador moderno: AdvancedMarkerElement (com Map ID real) ou OverlayView (DEMO + estilo local).
+// Marcador moderno (AdvancedMarkerElement) — mapId obrigatório no Map (DEMO_MAP_ID ok).
 function criarMarcador(opts = {}) {
     const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading, iconVariant } = opts;
     let pinEl = null;
@@ -767,79 +702,41 @@ function criarMarcador(opts = {}) {
             wrapEl = img;
         }
     } else if (label || cor) {
-        if (_PinElement && mapaIdEfetivo()) {
-            const pinOpts = {
-                background: cor || '#EA4335',
-                borderColor: '#fff',
-                glyphColor: '#fff',
-                scale: label ? 1.1 : 0.85,
-            };
-            if (label) pinOpts.glyphText = label;
-            pinEl = new _PinElement(pinOpts);
-        } else {
-            // Pin simples em HTML (sem mapId / AdvancedMarker)
-            const d = document.createElement('div');
-            d.style.cssText = 'width:18px;height:18px;border-radius:50%;background:'
-                + (cor || '#EA4335') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);';
-            if (label) {
-                d.style.cssText = 'min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:'
-                    + (cor || '#EA4335') + ';border:2px solid #fff;color:#fff;font:700 11px/18px system-ui,sans-serif;'
-                    + 'text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.35);';
-                d.textContent = label;
-            }
-            content = d;
-        }
+        const pinOpts = {
+            background: cor || '#EA4335',
+            borderColor: '#fff',
+            glyphColor: '#fff',
+            scale: label ? 1.1 : 0.85,
+        };
+        if (label) pinOpts.glyphText = label;
+        pinEl = new _PinElement(pinOpts);
     }
-
-    const usarAdvanced = !!(mapaIdEfetivo() && _AdvancedMarkerElement);
-    let mk = null;
-    let ov = null;
-    if (usarAdvanced) {
-        mk = new _AdvancedMarkerElement({
-            map: map || null,
-            position: normalizarLatLng(position),
-            title: title || '',
-            content: content || null,
-            zIndex,
-        });
-        if (pinEl) mk.append(pinEl);
-    } else {
-        // DEMO_MAP_ID / sem mapId: OverlayView (permite mapa branco estilizado)
-        if (pinEl && !content) content = pinEl.element || pinEl;
-        ov = criarOverlayHtml(map, position, content, zIndex, title);
-    }
-
+    const mk = new _AdvancedMarkerElement({
+        map: map || null,
+        position: normalizarLatLng(position),
+        title: title || '',
+        content: content || null,
+        zIndex,
+    });
+    if (pinEl) mk.append(pinEl);
     let _headingDeg = heading != null ? Number(heading) || 0 : 0;
     const aplicarRotacao = () => {
         if (!rotEl || rotEl.dataset.semGiro) return;
         rotEl.style.transform = `rotate(${_headingDeg}deg) translateZ(0)`;
     };
     if (_headingDeg) aplicarRotacao();
-
     const api = {
-        setPosition(p) {
-            const pos = normalizarLatLng(p);
-            if (mk) mk.position = pos;
-            else if (ov) ov.setPosition(pos);
-        },
-        getPosition() {
-            if (mk) return posicaoLegada(mk);
-            if (ov) return ov.getPosition();
-            return null;
-        },
+        setPosition(p) { mk.position = normalizarLatLng(p); },
+        getPosition() { return posicaoLegada(mk); },
         setMap(m) {
             if (!m && mapRef && iconVariant) removerMarcadorCarro(mapRef, api);
-            if (mk) mk.map = m;
-            else if (ov) ov.setMap(m || null);
+            mk.map = m;
             if (m) {
                 mapRef = m;
                 if (iconVariant) registrarMarcadorCarro(m, api);
             }
         },
-        setTitle(t) {
-            if (mk) mk.title = t || '';
-            else if (ov) ov.setTitle(t || '');
-        },
+        setTitle(t) { mk.title = t || ''; },
         getHeading() { return _headingDeg; },
         setHeading(h) {
             if (!rotEl && !imgEl) return;
@@ -863,17 +760,13 @@ function criarMarcador(opts = {}) {
             }
         },
         addListener(ev, fn) {
-            if (mk) {
-                const e = ev === 'click' ? 'gmp-click' : ev;
-                if (e === 'gmp-click') mk.gmpClickable = true;
-                if (typeof mk.addEventListener === 'function') {
-                    mk.addEventListener(e, fn);
-                    return { remove: () => mk.removeEventListener(e, fn) };
-                }
-                return mk.addListener(e, fn);
+            const e = ev === 'click' ? 'gmp-click' : ev;
+            if (e === 'gmp-click') mk.gmpClickable = true;
+            if (typeof mk.addEventListener === 'function') {
+                mk.addEventListener(e, fn);
+                return { remove: () => mk.removeEventListener(e, fn) };
             }
-            const domEv = ev === 'gmp-click' ? 'click' : ev;
-            return ov.addDomListener(domEv, fn);
+            return mk.addListener(e, fn);
         },
     };
     if (mapRef && iconVariant) registrarMarcadorCarro(mapRef, api);
