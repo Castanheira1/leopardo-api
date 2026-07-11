@@ -1310,7 +1310,7 @@
         carregarCaronasDestino(null);
         atualizarBtnLimparPed(false);
         atualizarHintDestinoPed();
-        atualizarFormPedidoRota(false, false);
+        atualizarFormPedidoRota(false);
         const wrap = document.getElementById('motoristasDestinoWrap');
         if (wrap) wrap.style.display = 'none';
         const sheet = document.getElementById('acaoSheetPed');
@@ -1352,7 +1352,7 @@
         carregarCaronasDestino(null);
         atualizarBtnLimparPed(false);
         atualizarHintDestinoPed();
-        atualizarFormPedidoRota(false, false);
+        atualizarFormPedidoRota(false);
         const wrap = document.getElementById('motoristasDestinoWrap');
         if (wrap) wrap.style.display = 'none';
         const sheet = document.getElementById('acaoSheetPed');
@@ -2133,7 +2133,7 @@
             // CTA do passageiro muda NA HORA (não espera a lista de motoristas).
             if (mapId === 'mapPed') {
                 atualizarHintDestinoPed();
-                atualizarFormPedidoRota(false, false);
+                atualizarFormPedidoRota(false);
             }
             // Abaixa o sheet NA HORA: com ele suspenso, a pré-visualização do
             // destino (busca, Locais, toque no mapa) ficava escondida atrás.
@@ -2316,34 +2316,39 @@
         const el = document.querySelector('#acaoSheetPed .acao-titulo');
         if (el) el.textContent = tituloSheetPed();
     }
-    function atualizarFormPedidoRota(temCarona, temMotoristasVisiveis) {
+    /**
+     * Atualiza CTA/horário conforme há carona na rota (pedido imediato).
+     * NÃO esconde o botão quando há carro amarelo na lista — isso gerava
+     * “Pedir carona” dourado piscando (mostra → some após o fetch).
+     * Contato do amarelo: modal do carro. Pedido geral: botão sempre estável.
+     */
+    function atualizarFormPedidoRota(temCarona) {
         pedidoTemCaronaNaRota = !!temCarona;
         const horaWrap = document.getElementById('horaPedWrap');
         const hint = document.getElementById('hintPedidoImediato');
         const btn = document.getElementById('btnCtaPedir');
-        const ctaHtmlPedirAgro = 'Pedir agora';
-        const ctaHtmlPedirCarona = 'Pedir carona';
-        // Sem destino o CTA vira "Escolher local" (atalho para o menu Locais):
-        // "Pedir carona" antes de escolher o destino dava a sensação de pedido
-        // já feito — e o toque só rendia um alerta de erro.
-        const ctaHtmlEscolherLocal = 'Escolher local';
         const temDest = !!selPed?.getDestino?.();
         if (temCarona) {
             horaPedModoAgenda = false;
             if (horaWrap) horaWrap.classList.add('form-slot-reservado');
             if (hint) hint.style.display = 'block';
-            if (btn) btn.textContent = ctaHtmlPedirAgro;
+            if (btn) {
+                btn.textContent = 'Pedir agora';
+                btn.style.display = '';
+                btn.style.visibility = '';
+                btn.style.pointerEvents = '';
+            }
         } else {
             if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
-            if (btn) btn.textContent = temDest ? ctaHtmlPedirCarona : ctaHtmlEscolherLocal;
+            if (btn) {
+                // Sem destino → Escolher local; com destino → Pedir carona (sempre visível)
+                btn.textContent = temDest ? 'Pedir carona' : 'Escolher local';
+                btn.style.display = '';
+                btn.style.visibility = '';
+                btn.style.pointerEvents = '';
+            }
             if (!horaPedModoAgenda) tickQuandoPed();
-        }
-        // Com motoristas na lista, a ação fica no card — mantém o footer para não mexer o peek.
-        if (btn) {
-            btn.style.display = '';
-            btn.style.visibility = temMotoristasVisiveis ? 'hidden' : 'visible';
-            btn.style.pointerEvents = temMotoristasVisiveis ? 'none' : 'auto';
         }
         atualizarTituloSheetPed();
     }
@@ -2589,8 +2594,8 @@
             soltar();
             // soltar() restaura o label antigo do botão; reaplica o estado real.
             const temDest = !!selPed?.getDestino?.();
-            atualizarFormPedidoRota(eraAgendado ? false : pedidoTemCaronaNaRota, false);
-            if (!temDest) atualizarFormPedidoRota(false, false);
+            atualizarFormPedidoRota(eraAgendado ? false : pedidoTemCaronaNaRota);
+            if (!temDest) atualizarFormPedidoRota(false);
         }
     }
 
@@ -2798,12 +2803,12 @@
             listaIndo.innerHTML = '';
             listaPerto.innerHTML = '';
             if (contPerto) contPerto.style.display = 'none';
-            atualizarFormPedidoRota(false, false);
+            atualizarFormPedidoRota(false);
             atualizarHintDestinoPed();
             return;
         }
         atualizarHintDestinoPed();
-        atualizarFormPedidoRota(false, false);
+        // CTA não depende da lista: amarelo → contato no modal; botão fica estável.
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         atualizarBtnLimparPed(true);
         wrap.style.display = 'block';
@@ -2900,10 +2905,8 @@
                 contPerto.style.display = 'none';
                 listaPerto.innerHTML = '';
             }
-            atualizarFormPedidoRota(
-                indoDestino.some((it) => it.compatRota === 'total'),
-                indoDestino.length > 0 || porPerto.length > 0,
-            );
+            // Só "Pedir agora" se houver carona TOTAL na rota (não esconde CTA por amarelo)
+            atualizarFormPedidoRota(indoDestino.some((it) => it.compatRota === 'total'));
             if (!listaMotoristasTimer) {
                 // Refresh em silêncio (não zera a lista). Só com sheet colapsado
                 // ou a cada 12s em background — evita “piscar” com a alça aberta.
@@ -2920,7 +2923,7 @@
             if (!ultimaListaMotoristas.length) {
                 listaIndo.innerHTML = '<p class="lista-vazia-leve">Não foi possível carregar</p>';
             }
-            atualizarFormPedidoRota(false, false);
+            atualizarFormPedidoRota(false);
         } finally {
             if (seq === _listaMotSeq) _listaMotCarregando = false;
         }
