@@ -1355,7 +1355,9 @@ function decodificarPolylineServer(str) {
 const ROTAS_CACHE_MEM = new Map(); // chave -> { path, distanceMeters, durationMillis, km, em }
 const ROTAS_CACHE_TTL_MS = Number(process.env.ROTAS_CACHE_TTL_MS || 6 * 60 * 60 * 1000); // 6 h
 const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30); // teto / minuto
+const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 1500); // teto / dia (orçamento)
 let rotasGoogleJanela = { t0: Date.now(), n: 0 };
+let rotasGoogleDia = { dia: "", n: 0 };
 const rotasGoogleStats = { hit: 0, miss: 0, google: 0, bloqueado: 0 };
 
 function chaveRotaApprox(olat, olng, dlat, dlng) {
@@ -1365,6 +1367,14 @@ function chaveRotaApprox(olat, olng, dlat, dlng) {
 }
 
 function rotasGooglePermitida() {
+  // Teto DIÁRIO primeiro: é o freio de fatura de verdade — o teto por minuto
+  // sozinho ainda deixaria passar dezenas de milhares de chamadas num dia.
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (rotasGoogleDia.dia !== hoje) rotasGoogleDia = { dia: hoje, n: 0 };
+  if (rotasGoogleDia.n >= ROTAS_GOOGLE_MAX_DIA) {
+    rotasGoogleStats.bloqueado++;
+    return false;
+  }
   const agora = Date.now();
   if (agora - rotasGoogleJanela.t0 > 60_000) {
     rotasGoogleJanela = { t0: agora, n: 0 };
@@ -1373,6 +1383,7 @@ function rotasGooglePermitida() {
     rotasGoogleStats.bloqueado++;
     return false;
   }
+  rotasGoogleDia.n++;
   rotasGoogleJanela.n++;
   return true;
 }
@@ -1435,7 +1446,7 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
   if (!rotasGooglePermitida()) {
     return res.status(429).json({
       error: "Limite de rotas Google/min atingido (economia de cota). Tente de novo em instantes.",
-      stats: { ...rotasGoogleStats, teto_min: ROTAS_GOOGLE_MAX_MIN },
+      stats: { ...rotasGoogleStats, teto_min: ROTAS_GOOGLE_MAX_MIN, teto_dia: ROTAS_GOOGLE_MAX_DIA, usadas_hoje: rotasGoogleDia.n },
     });
   }
 
