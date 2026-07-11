@@ -1654,6 +1654,32 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     background: rgba(15, 61, 62, 1);
 }
 
+/* Nome do local na prévia satélite (ao escolher destino). */
+.map-nome-local {
+    position: absolute;
+    left: 50%;
+    bottom: max(28%, calc(120px + env(safe-area-inset-bottom, 0px)));
+    transform: translateX(-50%);
+    z-index: 15;
+    max-width: min(86%, 320px);
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(15, 61, 62, 0.92);
+    color: #EAD298;
+    font-size: 0.95rem;
+    font-weight: 650;
+    line-height: 1.25;
+    text-align: center;
+    letter-spacing: -0.01em;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(234, 210, 152, 0.4);
+    pointer-events: none;
+    display: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Faixa no mapa: lembrete de caronas agendadas (não prende a tela).
    Margens simétricas de 70px: não encosta no botão redondo de satélite à direita. */
 .banner-agendamentos {

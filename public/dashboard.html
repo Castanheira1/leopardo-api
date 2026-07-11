@@ -1627,6 +1627,43 @@
         map.setMapTypeId(tipo);
         aplicarEstiloMapa(map, tipo);
     }
+    function rotuloBotoesTipoMapa(map) {
+        const id = map && map.getMapTypeId ? map.getMapTypeId() : tipoMapaSalvo();
+        const satAtivo = id === 'hybrid' || id === 'satellite';
+        const alvo = satAtivo ? 'Ver mapa leve' : 'Ver satélite';
+        document.querySelectorAll('.map-tipo-btn').forEach((el) => {
+            el.classList.toggle('map-tipo-btn--sat', satAtivo);
+            el.title = alvo;
+            el.setAttribute('aria-label', alvo);
+        });
+    }
+    // Pré-aquece tiles de satélite da região (mapa oculto 256px) — quando o
+    // usuário escolhe o local, o hybrid já costuma estar no cache do browser.
+    function preaquecerSatelite(gmaps, center) {
+        if (window.__vapSatWarm || !gmaps?.maps || !center) return;
+        window.__vapSatWarm = true;
+        try {
+            const el = document.createElement('div');
+            el.setAttribute('aria-hidden', 'true');
+            el.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:320px;opacity:0;pointer-events:none;';
+            document.body.appendChild(el);
+            const warm = new gmaps.maps.Map(el, opcoesMapa({
+                center: { lat: Number(center.lat), lng: Number(center.lng) },
+                zoom: 17,
+                mapTypeId: 'hybrid',
+                disableDefaultUI: true,
+                gestureHandling: 'none',
+                keyboardShortcuts: false,
+                clickableIcons: false,
+            }));
+            try {
+                if (typeof warm.setRenderingType === 'function') warm.setRenderingType(renderingTypeRaster());
+            } catch (_) {}
+            const limpar = () => { try { el.remove(); } catch (_) {} };
+            gmaps.maps.event.addListenerOnce(warm, 'tilesloaded', () => setTimeout(limpar, 1500));
+            setTimeout(limpar, 8000); // segurança se tilesloaded nunca vier
+        } catch (_) { /* sem warm: preview ainda funciona, só carrega na hora */ }
+    }
     function novoMapa(elId, opts) {
         const map = new g.maps.Map(document.getElementById(elId), opcoesMapa({
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
@@ -1641,27 +1678,24 @@
         aplicarEstiloMapa(map, tipoMapaSalvo());
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);
+        // Warm satélite da área (leve, fora da tela) depois do primeiro idle.
+        g.maps.event.addListenerOnce(map, 'idle', () => {
+            const c = map.getCenter();
+            if (c) preaquecerSatelite(g, { lat: c.lat(), lng: c.lng() });
+        });
         return map;
     }
     function vincularBotaoTipoMapa(mapId, map) {
         const btnId = mapId === 'mapPed' ? 'btnTipoMapaPed' : mapId === 'mapOfe' ? 'btnTipoMapaOfe' : null;
         const b = btnId ? document.getElementById(btnId) : null;
         if (!b) return;
-        const rotulo = () => {
-            const satAtivo = tipoMapaSalvo() === 'hybrid';
-            const alvo = satAtivo ? 'Ver mapa leve' : 'Ver satélite';
-            document.querySelectorAll('.map-tipo-btn').forEach((el) => {
-                el.classList.toggle('map-tipo-btn--sat', satAtivo);
-                el.title = alvo;
-                el.setAttribute('aria-label', alvo);
-            });
-        };
-        rotulo();
+        rotuloBotoesTipoMapa(map);
         b.onclick = () => {
-            const novo = tipoMapaSalvo() === 'hybrid' ? 'roadmap' : 'hybrid';
+            const novo = (map.getMapTypeId() === 'hybrid' || map.getMapTypeId() === 'satellite')
+                ? 'roadmap' : 'hybrid';
             try { localStorage.setItem('tipoMapaV2', novo); } catch (_) {}
             aplicarTipoMapa(map, novo);
-            rotulo();
+            rotuloBotoesTipoMapa(map);
         };
     }
 
@@ -1767,15 +1801,49 @@
             } catch (_) { /* sem rota disponível: mantém destino em memória */ }
         }
 
-        function preVisualizarDestino(pos) {
+        // Tipo de mapa antes do preview satélite (não grava no localStorage).
+        let tipoMapaAntesPreview = null;
+        const stageEl = document.getElementById(mapId)?.parentElement || null;
+        let nomeLocalEl = null;
+        function mostrarNomeLocal(nome) {
+            if (!stageEl) return;
+            if (!nomeLocalEl) {
+                nomeLocalEl = document.createElement('div');
+                nomeLocalEl.className = 'map-nome-local';
+                nomeLocalEl.setAttribute('role', 'status');
+                stageEl.appendChild(nomeLocalEl);
+            }
+            const t = (nome && String(nome).trim()) || 'Destino';
+            nomeLocalEl.textContent = t;
+            nomeLocalEl.style.display = 'block';
+        }
+        function ocultarNomeLocal() {
+            if (nomeLocalEl) nomeLocalEl.style.display = 'none';
+        }
+        function preVisualizarDestino(pos, nome) {
             const seq = ++previewSeq;
             if (previewTimer) clearTimeout(previewTimer);
 
+            // Satélite só na prévia do local (leve: tiles já pré-aquecidos).
+            // Não altera a preferência salva do usuário.
+            if (tipoMapaAntesPreview == null) {
+                tipoMapaAntesPreview = map.getMapTypeId() || tipoMapaSalvo() || 'roadmap';
+            }
+            aplicarTipoMapa(map, 'hybrid');
+            rotuloBotoesTipoMapa(map);
             map.panTo(pos);
             map.setZoom(18);
+            mostrarNomeLocal(nome || destino?.texto);
 
             previewTimer = setTimeout(() => {
                 if (seq !== previewSeq) return;
+                ocultarNomeLocal();
+                // Volta ao mapa que o usuário tinha (quase sempre o leve).
+                if (tipoMapaAntesPreview) {
+                    aplicarTipoMapa(map, tipoMapaAntesPreview === 'satellite' ? 'hybrid' : tipoMapaAntesPreview);
+                    tipoMapaAntesPreview = null;
+                    rotuloBotoesTipoMapa(map);
+                }
                 const origem = mkOrigem.getPosition();
                 if (!origem) return;
                 map.panTo({ lat: origem.lat(), lng: origem.lng() });
@@ -1809,6 +1877,12 @@
             rotaDurMsTotal = 0;
             previewSeq++;
             if (previewTimer) clearTimeout(previewTimer);
+            ocultarNomeLocal();
+            if (tipoMapaAntesPreview) {
+                aplicarTipoMapa(map, tipoMapaAntesPreview === 'satellite' ? 'hybrid' : tipoMapaAntesPreview);
+                tipoMapaAntesPreview = null;
+                rotuloBotoesTipoMapa(map);
+            }
             rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
             mostrarBtnLimpar(false);
@@ -1824,11 +1898,9 @@
             // destino (busca, Locais, toque no mapa) ficava escondida atrás.
             const sheetEl = document.getElementById(sheetId);
             if (sheetEl) sheetEl.classList.add('collapsed');
-            // Zoom no destino pra ver ONDE está indo; depois o foco volta sozinho
-            // para o pulso do passageiro (ou o carrinho, no modo motorista) — os
-            // carros amarelos ficam perto da origem.
+            // Prévia: satélite + zoom + nome do local (~4 s), depois volta ao mapa leve.
             map.panTo(pos);
-            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos));
+            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos, nomeDestino));
             if (onDestino) onDestino(destino);
             // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
             if (!nomeDestino) {
@@ -1838,6 +1910,10 @@
                         if (status === 'OK' && res && res[0] && destino
                             && destino.lat === pos.lat && destino.lng === pos.lng) {
                             destino.texto = res[0].formatted_address;
+                            // Atualiza a faixa de nome se a prévia satélite ainda estiver aberta.
+                            if (nomeLocalEl && nomeLocalEl.style.display !== 'none') {
+                                mostrarNomeLocal(destino.texto);
+                            }
                         }
                     });
                 } catch (_) { /* sem geocoder: segue sem o nome */ }
