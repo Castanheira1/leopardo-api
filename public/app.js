@@ -399,16 +399,16 @@ function carregarMaps() {
 // Carro visto de cima (o ícone gira com o rumo, então a vista é sempre top-down),
 // com sombreamento, faróis, lanternas, retrovisores e pneus para parecer um
 // carro de verdade mesmo em 30×40 px. 'gold' é o dourado clássico da frota
-// online; 'white' (nome legado) é o modelo dourado com detalhes PRETOS do
-// carro próprio — o branco puro sumia no mapa claro.
+// online; 'white' é o carro próprio: branco 3D (referência do cliente), com
+// carroceria branca sombreada e teto de vidro/retrovisores pretos brilhantes.
 function carSvgPaths(variant = 'white') {
     const dourado = variant === 'gold';
-    const body = '#EAD298';
-    const bodyEdge = dourado ? '#c9a94f' : '#b8963d';
-    const stroke = dourado ? '#9a7514' : '#111111';
-    const glassRoof = dourado ? '#2f3640' : '#101418';
-    const glass = dourado ? '#455a64' : '#232e38';
-    const detail = dourado ? '#9a7514' : '#1a1a1a';
+    const body = dourado ? '#EAD298' : '#ffffff';
+    const bodyEdge = dourado ? '#c9a94f' : '#c6cdd3';
+    const stroke = dourado ? '#9a7514' : '#7f8a92';
+    const glassRoof = dourado ? '#2f3640' : '#14181c';
+    const glass = dourado ? '#455a64' : '#242c33';
+    const detail = dourado ? '#9a7514' : '#15181c';
     const gid = 'vap-car-body-' + variant;
     return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
         + `<stop offset="0" stop-color="${bodyEdge}"/><stop offset="0.3" stop-color="${body}"/>`
