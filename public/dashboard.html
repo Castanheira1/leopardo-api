@@ -1678,21 +1678,16 @@
     // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
     // satélite alterna de novo e a escolha fica salva normalmente.
     function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
-    // Com Map ID real o Google proíbe styles no cliente (aviso no console).
-    // mapaIdEfetivo() devolve null no DEMO → Map sem mapId → styles locais OK.
-    // NUNCA chamar setOptions({ styles }) se o Map tiver mapId.
+    // mapId sempre no Map (DEMO_MAP_ID) para Advanced Markers. Com mapId o Google
+    // PROÍBE styles no cliente — não chamar setOptions({ styles }) (evita warning
+    // e garante carrinho/pulso no mapa). Estilo branco Cloud fica para Map ID real.
     function mapaUsaEstiloLocal() {
-        if (typeof mapaIdEfetivo === 'function') return !mapaIdEfetivo();
-        return !_mapId || _mapId === 'DEMO_MAP_ID';
+        return false;
     }
     function aplicarEstiloMapa(map, tipo) {
-        // Guardia absoluta: com mapId o Google ignora styles e só polui o console.
-        if (!mapaUsaEstiloLocal()) return;
-        if (tipo !== 'roadmap') {
-            try { map.setOptions({ styles: null }); } catch (_) {}
-            return;
-        }
-        try { map.setOptions({ styles: ESTILO_MAPA_CLARO }); } catch (_) {}
+        // no-op proposital: styles + mapId = erro no console e mapa inconsistente
+        void map;
+        void tipo;
     }
     function aplicarTipoMapa(map, tipo) {
         map.setMapTypeId(tipo);
@@ -4854,59 +4849,90 @@
         fleet.timer = setInterval(tick, FLEET_POLL_MS);
     }
 
-    // Passageiros pedindo carona aparecem no mapa do MOTORISTA como bonequinhos
-    // "acenando" (marcador pulando). O motorista toca e oferece a carona.
-    // Marcador "pulsando" (radar) por sexo, no mapa (overlay HTML). Azul = homem,
-    // rosa = mulher, cinza = não informado. Definido lazy (precisa do g.maps carregado).
-    let _PulseClass = null;
+    // Passageiros pedindo carona: pulso radar no mapa do MOTORISTA.
+    // Usa AdvancedMarkerElement (mesmo caminho do carrinho) — OverlayView sumia
+    // no celular. Azul = homem, rosa = mulher, cinza = não informado.
+    function montarConteudoPulse(sexo, titulo, rotulo) {
+        const cor = sexo === 'F' ? '#ff2f92' : sexo === 'M' ? '#3d8bff' : '#b0b6bf';
+        const d = document.createElement('div');
+        d.className = 'map-pulse';
+        d.title = titulo || '';
+        d.style.setProperty('--cor', cor);
+        d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
+        if (rotulo) {
+            const r = document.createElement('span');
+            r.className = 'mp-rotulo';
+            r.textContent = rotulo;
+            d.appendChild(r);
+        }
+        return d;
+    }
     function criarPulse(map, pos, sexo, onClick, titulo, rotulo) {
-        if (!_PulseClass) {
-            _PulseClass = class extends g.maps.OverlayView {
-                constructor(p, s, cb, t, r) { super(); this.pos = p; this.sexo = s; this.cb = cb; this.titulo = t; this.rotulo = r; this.div = null; }
-                onAdd() {
-                    if (this.div) return;
-                    const panes = this.getPanes();
-                    if (!panes) return;
-                    const pane = panes.overlayMouseTarget || panes.floatPane || panes.overlayLayer;
-                    if (!pane) return;
-                    // Tons mais vivos: destacam no mapa híbrido (satélite escuro).
-                    const cor = this.sexo === 'F' ? '#ff2f92' : this.sexo === 'M' ? '#3d8bff' : '#b0b6bf';
-                    const d = document.createElement('div');
-                    d.className = 'map-pulse';
-                    d.title = this.titulo || '';
-                    d.style.setProperty('--cor', cor);
-                    d.style.zIndex = '120';
-                    d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
-                    // Rótulo (ex.: destino do pedido) abaixo do ponto — textContent
-                    // porque o texto vem do usuário.
-                    if (this.rotulo) {
-                        const r = document.createElement('span');
-                        r.className = 'mp-rotulo';
-                        r.textContent = this.rotulo;
-                        d.appendChild(r);
-                    }
-                    // Sem clique (ex.: o próprio pulso do passageiro) → não captura toques,
-                    // deixando arrastar o marcador que fica embaixo.
-                    if (this.cb) d.addEventListener('click', (e) => { e.stopPropagation(); this.cb(); });
-                    else d.style.pointerEvents = 'none';
-                    this.div = d;
-                    pane.appendChild(d);
-                }
-                draw() {
-                    if (!this.div) {
-                        try { this.onAdd(); } catch (_) { return; }
-                    }
-                    if (!this.div || !this.pos) return;
-                    const proj = this.getProjection();
-                    if (!proj) return;
-                    const pt = proj.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
-                    if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
-                }
-                setPosition(p) { this.pos = p; this.draw(); }
-                onRemove() { if (this.div) { this.div.remove(); this.div = null; } }
+        const posN = { lat: Number(pos.lat), lng: Number(pos.lng) };
+        const div = montarConteudoPulse(sexo, titulo, rotulo);
+        // Advanced Marker (mapId obrigatório — já setado em opcoesMapa)
+        if (typeof _AdvancedMarkerElement === 'function' && _AdvancedMarkerElement) {
+            const mk = new _AdvancedMarkerElement({
+                map: map || null,
+                position: posN,
+                title: titulo || '',
+                content: div,
+                zIndex: 120,
+                gmpClickable: !!onClick,
+            });
+            if (onClick) {
+                mk.addEventListener('gmp-click', (e) => {
+                    try { e?.stop?.(); } catch (_) {}
+                    onClick();
+                });
+                // clique no HTML também (alguns browsers Android)
+                div.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+            } else {
+                div.style.pointerEvents = 'none';
+            }
+            return {
+                div,
+                pos: posN,
+                _mk: mk,
+                setPosition(p) {
+                    this.pos = { lat: Number(p.lat), lng: Number(p.lng) };
+                    mk.position = this.pos;
+                },
+                setMap(m) { mk.map = m || null; },
             };
         }
-        const o = new _PulseClass(pos, sexo, onClick, titulo, rotulo);
+        // Fallback OverlayView se marker lib não carregou
+        const Overlay = g.maps.OverlayView;
+        class PulseOv extends Overlay {
+            constructor(p, d, cb) {
+                super();
+                this.pos = p;
+                this.div = d;
+                this.cb = cb;
+            }
+            onAdd() {
+                if (!this.div) return;
+                const panes = this.getPanes();
+                const pane = panes?.overlayMouseTarget || panes?.floatPane;
+                if (!pane || this.div.parentNode) return;
+                if (this.cb) this.div.addEventListener('click', (e) => { e.stopPropagation(); this.cb(); });
+                else this.div.style.pointerEvents = 'none';
+                pane.appendChild(this.div);
+            }
+            draw() {
+                if (!this.div || !this.pos) return;
+                if (!this.div.parentNode) {
+                    try { this.onAdd(); } catch (_) { return; }
+                }
+                const proj = this.getProjection();
+                if (!proj) return;
+                const pt = proj.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+                if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
+            }
+            setPosition(p) { this.pos = { lat: Number(p.lat), lng: Number(p.lng) }; this.draw(); }
+            onRemove() { if (this.div?.parentNode) this.div.parentNode.removeChild(this.div); }
+        }
+        const o = new PulseOv(posN, div, onClick);
         o.setMap(map);
         return o;
     }

@@ -1524,18 +1524,49 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     70%  { box-shadow: 0 0 0 16px rgba(234, 210, 152, 0); transform: scale(1); opacity: 0.9; }
     100% { box-shadow: 0 0 0 0 rgba(234, 210, 152, 0); transform: scale(0.7); opacity: 1; }
 }
-/* Pulso "radar" no mapa do motorista: passageiro pedindo carona, cor por sexo (--cor) */
-.map-pulse { position: absolute; transform: translate(-50%, -50%); width: 0; height: 0; cursor: pointer; }
-.map-pulse .mp-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--cor); border: 2px solid #fff; box-shadow: 0 0 14px var(--cor), 0 0 4px var(--cor); }
-.map-pulse .mp-ring { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--cor); animation: mpExpand 1.8s ease-out infinite; }
+/* Pulso "radar" no mapa (AdvancedMarker content): passageiro pedindo carona.
+   Com AdvancedMarker o centro é o content — usamos caixa 48x48 + absolute interno. */
+.map-pulse {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    cursor: pointer;
+    overflow: visible;
+    pointer-events: auto;
+    transform: translateZ(0);
+}
+.map-pulse .mp-dot {
+    position: absolute; left: 50%; top: 50%;
+    width: 16px; height: 16px; margin: -8px 0 0 -8px;
+    border-radius: 50%; background: var(--cor, #3d8bff); border: 2px solid #fff;
+    box-shadow: 0 0 14px var(--cor, #3d8bff), 0 0 4px var(--cor, #3d8bff);
+    z-index: 2;
+}
+.map-pulse .mp-ring {
+    position: absolute; left: 50%; top: 50%;
+    width: 16px; height: 16px; margin: -8px 0 0 -8px;
+    border-radius: 50%; border: 3px solid var(--cor, #3d8bff);
+    animation: mpExpand 1.8s ease-out infinite;
+    z-index: 1;
+    pointer-events: none;
+}
 .map-pulse .mp-ring:nth-child(2) { animation-delay: 0.9s; }
-/* Rótulo abaixo do pulso (ex.: destino do pedido) — o motorista vê para onde
-   a pessoa quer ir sem tocar no marcador. */
-.map-pulse .mp-rotulo { position: absolute; top: 13px; left: 50%; transform: translateX(-50%);
+/* Rótulo abaixo do pulso (ex.: destino do pedido) */
+.map-pulse .mp-rotulo {
+    position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
     white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis;
     background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
-    border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
+    border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600;
+    z-index: 3; pointer-events: none;
+}
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
+/* Carrinho no AdvancedMarker — evita colapso de layout no mobile */
+.vap-car-rot, .vap-html-marker {
+    display: block;
+    overflow: visible;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+}
 /* Bolinha-radar da busca: percorre o mapa visitando os carrinhos durante a
    espera (só visual — não captura toque; o mapa continua arrastável). */
 .bolinha-busca { position: absolute; transform: translate(-50%, -50%); width: 0; height: 0; pointer-events: none; z-index: 6; }

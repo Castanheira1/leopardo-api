@@ -247,21 +247,19 @@ function renderingTypeRaster() {
         || 'RASTER';
 }
 
-// Map ID "de verdade" (Cloud Console) → estilo vem da nuvem.
-// DEMO_MAP_ID → sem mapId no Map, para o JSON ESTILO_MAPA_CLARO funcionar
-// (mapa branco sem ícones de loja). Advanced Markers exigem mapId; com DEMO
-// usamos OverlayView HTML (criarMarcador) que não precisa de mapId.
+// Advanced Markers EXIGEM mapId no Map. DEMO_MAP_ID é aceito pelo Google e
+// basta para o carrinho/pulso aparecerem. Sem mapId o OverlayView falhava em
+// vários celulares e o motorista/passageiro não via nada no mapa.
+// NÃO aplicar styles no cliente quando há mapId (Google proíbe e avisa no console).
 function mapaIdEfetivo() {
-    if (!_mapId || _mapId === 'DEMO_MAP_ID') return null;
-    return _mapId;
+    return _mapId || 'DEMO_MAP_ID';
 }
 
 function opcoesMapa(opts = {}) {
-    const o = { ...opts };
-    const mid = mapaIdEfetivo();
-    if (mid) o.mapId = mid;
-    else delete o.mapId;
-    // Sempre força raster (não depende do enum estar em google.maps).
+    const o = { mapId: mapaIdEfetivo(), ...opts };
+    // mapId sempre (mesmo se opts tentar apagar)
+    o.mapId = mapaIdEfetivo();
+    // Sempre força raster (evita GetViewportInfo 502 em VECTOR).
     if (o.renderingType == null) o.renderingType = renderingTypeRaster();
     return o;
 }
@@ -790,7 +788,7 @@ function criarMarcador(opts = {}) {
             wrapEl = img;
         }
     } else if (label || cor) {
-        if (_PinElement && mapaIdEfetivo()) {
+        if (_PinElement) {
             const pinOpts = {
                 background: cor || '#EA4335',
                 borderColor: '#fff',
@@ -799,8 +797,9 @@ function criarMarcador(opts = {}) {
             };
             if (label) pinOpts.glyphText = label;
             pinEl = new _PinElement(pinOpts);
+            // PinElement vira content do AdvancedMarker (append sozinho falha em alguns builds)
+            content = pinEl.element || pinEl;
         } else {
-            // Pin simples em HTML (sem mapId / AdvancedMarker)
             const d = document.createElement('div');
             d.style.cssText = 'width:18px;height:18px;border-radius:50%;background:'
                 + (cor || '#EA4335') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);';
@@ -814,13 +813,11 @@ function criarMarcador(opts = {}) {
         }
     }
 
-    const usarAdvanced = !!(mapaIdEfetivo() && _AdvancedMarkerElement);
-    // Carrinho/pulso precisam ficar acima das tiles; sem zIndex o overlay some
-    // atrás de controles em alguns zoom/browsers.
-    const zEfetivo = zIndex != null ? zIndex : (iconVariant ? 100 : (content || pinEl ? 50 : undefined));
+    // Preferir AdvancedMarker (mapId sempre presente). OverlayView só se a lib marker falhar.
+    const zEfetivo = zIndex != null ? zIndex : (iconVariant ? 100 : (content ? 50 : undefined));
     let mk = null;
     let ov = null;
-    if (usarAdvanced) {
+    if (_AdvancedMarkerElement) {
         mk = new _AdvancedMarkerElement({
             map: map || null,
             position: normalizarLatLng(position),
@@ -828,10 +825,7 @@ function criarMarcador(opts = {}) {
             content: content || null,
             zIndex: zEfetivo,
         });
-        if (pinEl) mk.append(pinEl);
     } else {
-        // DEMO_MAP_ID / sem mapId: OverlayView (permite mapa branco estilizado)
-        if (pinEl && !content) content = pinEl.element || pinEl;
         ov = criarOverlayHtml(map, position, content, zEfetivo, title);
     }
 

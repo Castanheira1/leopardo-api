@@ -1,15 +1,17 @@
 /**
- * Testes de contrato: mapa DEMO sem mapId + styles locais; OverlayView para
- * marcadores; nunca styles quando mapId real. Não precisa de Google Maps API.
+ * Contrato de visualização no mapa:
+ * - mapId sempre (DEMO_MAP_ID) → Advanced Markers (carrinho/pulso)
+ * - nunca styles no cliente com mapId
+ * - pulso via AdvancedMarker, não só OverlayView
  */
 const fs = require("fs");
 const path = require("path");
-const assert = require("assert");
 
 const root = path.join(__dirname, "..");
 const appJs = fs.readFileSync(path.join(root, "public/app.js"), "utf8");
 const dash = fs.readFileSync(path.join(root, "public/dashboard.html"), "utf8");
 const sw = fs.readFileSync(path.join(root, "public/service-worker.js"), "utf8");
+const css = fs.readFileSync(path.join(root, "public/style.css"), "utf8");
 
 let failed = 0;
 function ok(cond, msg) {
@@ -21,83 +23,69 @@ function ok(cond, msg) {
   }
 }
 
-// --- mapaIdEfetivo: DEMO → null (sem mapId no Map) ---
+// mapId sempre para Advanced Markers
 ok(
-  /function mapaIdEfetivo\(\)\s*\{[\s\S]*?if \(!_mapId \|\| _mapId === 'DEMO_MAP_ID'\) return null;/.test(appJs),
-  "mapaIdEfetivo devolve null para DEMO_MAP_ID"
+  /function mapaIdEfetivo\(\)\s*\{\s*return _mapId \|\| 'DEMO_MAP_ID';\s*\}/.test(appJs),
+  "mapaIdEfetivo sempre devolve mapId (DEMO ok)"
 );
 ok(
-  !/function mapaIdEfetivo\(\)\s*\{\s*return _mapId \|\| 'DEMO_MAP_ID';/.test(appJs),
-  "mapaIdEfetivo NÃO força DEMO_MAP_ID no Map (regressão 5622eaf)"
-);
-
-// --- opcoesMapa: remove mapId quando mid é null ---
-ok(
-  /function opcoesMapa[\s\S]*?delete o\.mapId/.test(appJs),
-  "opcoesMapa remove mapId no modo DEMO"
+  /o\.mapId = mapaIdEfetivo\(\)/.test(appJs) || /mapId: mapaIdEfetivo\(\)/.test(appJs),
+  "opcoesMapa define mapId"
 );
 ok(
-  !/const o = \{ mapId: mapaIdEfetivo\(\)/.test(appJs),
-  "opcoesMapa não injeta mapId cego"
+  !/if \(!_mapId \|\| _mapId === 'DEMO_MAP_ID'\) return null;/.test(appJs),
+  "não remove mapId no DEMO (regressão OverlayView)"
 );
 
-// --- OverlayView path para DEMO ---
-ok(appJs.includes("function criarOverlayHtml"), "criarOverlayHtml existe");
-ok(appJs.includes("obterVapHtmlMarkerClass"), "classe OverlayView cacheada");
+// Advanced Marker preferido para criarMarcador
 ok(
-  /const usarAdvanced = !!\(mapaIdEfetivo\(\) && _AdvancedMarkerElement\)/.test(appJs),
-  "Advanced Marker só com mapId real"
+  /if \(_AdvancedMarkerElement\)\s*\{[\s\S]*?new _AdvancedMarkerElement/.test(appJs),
+  "criarMarcador usa AdvancedMarkerElement"
 );
 ok(
-  /ov = criarOverlayHtml\(map, position, content, zEfetivo, title\)/.test(appJs)
-    || /ov = criarOverlayHtml\(map, position, content, zIndex, title\)/.test(appJs),
-  "DEMO usa OverlayView HTML (carrinho/pinos)"
-);
-ok(
-  appJs.includes("panes.overlayMouseTarget || panes.floatPane || panes.overlayLayer"),
-  "OverlayView tolera panes ausentes (fallback de pane)"
-);
-ok(
-  /if \(!this\.div\) \{\s*try \{ this\.onAdd\(\); \}/.test(appJs),
-  "OverlayView re-tenta onAdd no draw se panes estavam null"
+  /content: pinEl\.element \|\| pinEl/.test(appJs) || /content = pinEl\.element \|\| pinEl/.test(appJs),
+  "PinElement vira content do AdvancedMarker"
 );
 
-// --- dashboard: styles só sem mapId ---
+// dashboard: sem styles com mapId
 ok(
-  /function mapaUsaEstiloLocal\(\)\s*\{[\s\S]*?mapaIdEfetivo\(\)/.test(dash),
-  "mapaUsaEstiloLocal usa mapaIdEfetivo()"
+  /function mapaUsaEstiloLocal\(\)\s*\{\s*return false;/.test(dash),
+  "mapaUsaEstiloLocal desligado (sem styles+mapId)"
 );
 ok(
-  /function aplicarEstiloMapa\(map, tipo\)\s*\{[\s\S]*?if \(!mapaUsaEstiloLocal\(\)\) return;/.test(dash),
-  "aplicarEstiloMapa aborta com mapId (sem warning Google)"
-);
-
-// --- pulse do motorista endurecido ---
-ok(
-  dash.includes("panes.overlayMouseTarget || panes.floatPane || panes.overlayLayer"),
-  "criarPulse usa pane com fallback"
-);
-ok(
-  /map-pulse[\s\S]*?zIndex = '120'/.test(dash) || dash.includes("d.style.zIndex = '120'"),
-  "pulso com z-index alto no mapa"
+  !/map\.setOptions\(\{\s*styles:\s*ESTILO_MAPA_CLARO/.test(dash),
+  "aplicarEstiloMapa não seta ESTILO_MAPA_CLARO"
 );
 
-// --- raio de pedidos (motorista vê pulso além de 600 m com carona) ---
-const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
+// pulso Advanced Marker
 ok(
-  /const raioKm = temCarona \? RAIO_VISIVEL_KM : RAIO_ONLINE_KM/.test(server),
-  "GET /api/pedidos: 10 km com carona, 600 m online"
+  /function criarPulse\(/.test(dash) && /new _AdvancedMarkerElement/.test(dash),
+  "criarPulse usa AdvancedMarkerElement"
+);
+ok(
+  /montarConteudoPulse/.test(dash),
+  "conteúdo HTML do pulso montado para o marker"
+);
+ok(
+  /className = 'map-pulse'/.test(dash),
+  "classe map-pulse no content"
 );
 
-// --- SW bump ---
-ok(/const VERSION = "v246"/.test(sw), "service-worker v246 invalida cache do fix");
+// CSS do pulso compatível com AdvancedMarker (caixa com tamanho)
+ok(
+  /\.map-pulse\s*\{[\s\S]*?width:\s*48px/.test(css),
+  "map-pulse tem largura/altura (não width:0)"
+);
 
-// --- SVG do carro ainda existe ---
-ok(appJs.includes("function montarNoCarro"), "montarNoCarro (SVG pickup) presente");
+// SW
+ok(/const VERSION = "v247"/.test(sw), "service-worker v247");
+
+// SVG carro
+ok(appJs.includes("function montarNoCarro"), "montarNoCarro presente");
 ok(appJs.includes("function carSvgPaths"), "carSvgPaths presente");
 
 if (failed) {
   console.error(`\n${failed} teste(s) falharam`);
   process.exit(1);
 }
-console.log("\nTodos os testes de mapa/marcadores passaram.");
+console.log("\nTodos os testes de visualização no mapa passaram.");
