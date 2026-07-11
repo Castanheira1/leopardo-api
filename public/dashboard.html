@@ -1809,7 +1809,6 @@
             rotaDurMsTotal = 0;
             previewSeq++;
             if (previewTimer) clearTimeout(previewTimer);
-            mkDestino.setMap(null);
             rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
             mostrarBtnLimpar(false);
@@ -1821,9 +1820,6 @@
             const nomeDestino = (texto && String(texto).trim()) || '';
             destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
             mostrarBtnLimpar(true);
-            mkDestino.setMap(map);
-            mkDestino.setPosition(pos);
-            if (nomeDestino) mkDestino.setTitle(nomeDestino);
             // Abaixa o sheet NA HORA: com ele suspenso, a pré-visualização do
             // destino (busca, Locais, toque no mapa) ficava escondida atrás.
             const sheetEl = document.getElementById(sheetId);
