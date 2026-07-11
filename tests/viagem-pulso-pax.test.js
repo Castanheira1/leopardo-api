@@ -14,20 +14,18 @@ function ok(c, m) {
 
 ok(dash.includes("mostrarPulsoPax"), "flag mostrarPulsoPax em renderViagem");
 ok(
-  /vv\.ehMotorista \? vv\.fase === 'encontro' : true/.test(dash)
-    || /ehMotorista \? vv\.fase === 'encontro' : true/.test(dash),
-  "passageiro sempre ve o proprio pulso; motorista so no encontro"
+  /mostrarPulsoPax = !!vv\.posPassageiro && vv\.fase === 'encontro'/.test(dash),
+  "pulso so na fase encontro (apos embarque some)"
 );
 ok(
   /titPulso = vv\.ehMotorista \? 'Passageiro' : 'Você'/.test(dash),
-  "titulo do pulso 'Você' no mapa do passageiro"
+  "titulo do pulso 'Você' no mapa do passageiro na espera"
 );
-// Nao remove mais o pulso do pax so porque nao e motorista
 ok(
-  !/if \(vv\.ehMotorista && vv\.posPassageiro && vv\.fase === 'encontro'\) \{\s*if \(vv\.pessoaMarker\) vv\.pessoaMarker\.setPosition/.test(dash),
-  "regra antiga (so motorista) removida"
+  dash.includes("Depois do embarque (fase destino): só o carrinho"),
+  "comentario: so carrinho apos embarque"
 );
-ok(/VERSION = "v258"/.test(sw), "SW v258");
+ok(/VERSION = "v259"/.test(sw), "SW v259");
 
 // pos inicial para passageiro tambem (embarque)
 ok(

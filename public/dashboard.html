@@ -4430,12 +4430,11 @@
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
         }
-        // Pulso do passageiro:
-        // - motorista: vê o pax na fase encontro
-        // - passageiro: mantém o próprio pulso para se localizar no mapa (aguarda o carro)
-        const mostrarPulsoPax = !!vv.posPassageiro && (
-            vv.ehMotorista ? vv.fase === 'encontro' : true
-        );
+        // Pulso do passageiro só na espera (fase encontro):
+        // - motorista localiza quem buscar
+        // - passageiro se localiza no mapa
+        // Depois do embarque (fase destino): só o carrinho (mais limpo, estilo Uber).
+        const mostrarPulsoPax = !!vv.posPassageiro && vv.fase === 'encontro';
         if (mostrarPulsoPax) {
             const sexoPulso = vv.passageiroSexo || user?.sexo || null;
             const titPulso = vv.ehMotorista ? 'Passageiro' : 'Você';
