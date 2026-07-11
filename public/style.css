@@ -794,7 +794,8 @@ html.teclado-aberto {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: var(--sheet-kbd, 0px);
+    /* Nunca deixa o sheet sair da tela por --sheet-kbd residual */
+    bottom: min(var(--sheet-kbd, 0px), 45vh);
     z-index: 18;
     display: flex;
     flex-direction: column;
@@ -808,6 +809,8 @@ html.teclado-aberto {
     user-select: none;
     -webkit-user-select: none;
     pointer-events: none;
+    /* alça/botão não somem atrás de tiles do Maps */
+    visibility: visible;
 }
 .acao-sheet > * {
     pointer-events: auto;
@@ -855,28 +858,22 @@ html.teclado-aberto {
     overflow-y: auto;
     touch-action: pan-y;
 }
-/* Colapsado: só a alça. Botão e conteúdo aparecem ao arrastar para cima. */
+/* Colapsado: alça + título (a alça NUNCA some). Botão/conteúdo ao puxar pra cima. */
 .acao-sheet.collapsed .acao-sheet-body,
 .acao-sheet.collapsed .acao-sheet-footer,
-.acao-sheet.collapsed .limpar-rota-bar,
-.acao-sheet.collapsed .acao-titulo,
-.acao-sheet.collapsed .acao-accent {
+.acao-sheet.collapsed .limpar-rota-bar {
     display: none !important;
 }
 .acao-sheet.collapsed .acao-grip {
-    padding: 14px 0 calc(16px + env(safe-area-inset-bottom, 0px));
-    gap: 0;
+    padding: 12px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+    gap: 6px;
+    min-height: 52px;
 }
 .acao-sheet.collapsed {
     background: rgba(22, 23, 25, 0.96);
 }
-/* Aberto: só o título na alça — sem pílula cinza nem faixa dourada extra */
-.acao-sheet:not(.collapsed) .acao-handle,
-.acao-sheet:not(.collapsed) .acao-accent {
-    display: none;
-}
 .acao-sheet:not(.collapsed) .acao-grip {
-    gap: 0;
+    gap: 6px;
     padding: 10px 0 6px;
 }
 .acao-grip {
@@ -885,27 +882,29 @@ html.teclado-aberto {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 12px 0 10px;
     cursor: grab;
     touch-action: none;   /* só a alça bloqueia gestos — o resto do sheet pode rolar */
+    /* alça sempre no fluxo visível — não some com z-index do mapa */
+    z-index: 2;
 }
-/* Barra dourada fina (decoração) — Pedir/Oferecer carona. */
-.acao-accent {
-    width: 42px;
-    height: 4px;
-    border-radius: 999px;
-    background: rgba(234, 210, 152, 0.55);
-    display: block;
-}
-/* Alça preta de arrastar — Pedir/Oferecer carona. */
+/* Alça de arrastar — SEMPRE visível (aberto ou colapsado). Antes sumia no aberto. */
 .acao-handle {
-    width: 80px;
-    height: 24px;
+    width: 44px;
+    height: 5px;
     border-radius: 999px;
-    background: #44464b;
+    background: rgba(255, 255, 255, 0.45);
     box-shadow: none;
-    display: block;
+    display: block !important;
+    flex-shrink: 0;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+.acao-sheet.collapsed .acao-handle {
+    width: 52px;
+    height: 6px;
+    background: rgba(234, 210, 152, 0.75);
 }
 .limpar-rota-bar {
     display: flex;
@@ -989,12 +988,21 @@ body.theme-dark {
 .theme-dark .tab-content { min-height: 0; }
 .theme-dark .tab-content.active {
     flex: 1 1 auto;
-    min-height: 0;
+    /* Nunca 0: se o flex ainda não calculou, o sheet (botão) sumia da tela */
+    min-height: min(70dvh, 520px);
     position: relative;
     overflow: hidden;
 }
-.theme-dark .map-stage { height: 100%; min-height: 0; }
-.theme-dark .viagem-wrap { height: 100%; min-height: 0; }
+/* height 100% + min-height:0 fazia o map-stage colapsar a 0px no boot / troca
+   de usuário — tela preta limpa sem botão até o Maps disparar resize. */
+.theme-dark .map-stage {
+    height: 100%;
+    min-height: min(60dvh, 440px);
+}
+.theme-dark .viagem-wrap {
+    height: 100%;
+    min-height: min(60dvh, 440px);
+}
 
 .theme-dark .navbar { background: #0b0b0d; box-shadow: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .theme-dark .dashboard { background: transparent; box-shadow: none; border-radius: 0; }

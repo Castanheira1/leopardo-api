@@ -133,11 +133,11 @@
                             <span id="bannerAgendamentosTxt">Carona agendada</span>
                         </button>
                     </div>
-                    <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped collapsed">
+                    <!-- Aberto por padrão: botão visível no 1º paint (sem esperar Maps). -->
+                    <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped">
                         <div class="acao-grip" id="gripPed">
-                            <span class="acao-accent" aria-hidden="true"></span>
-                            <span class="acao-titulo">Pedir carona</span>
                             <span class="acao-handle" aria-hidden="true"></span>
+                            <span class="acao-titulo">Pedir carona</span>
                         </div>
                         <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
                             <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar rota</button>
@@ -187,11 +187,10 @@
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5"/></svg>
                         </button>
                     </div>
-                    <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe collapsed">
+                    <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe">
                         <div class="acao-grip" id="gripOfe">
-                            <span class="acao-accent" aria-hidden="true"></span>
-                            <span class="acao-titulo">Ficar online</span>
                             <span class="acao-handle" aria-hidden="true"></span>
+                            <span class="acao-titulo">Ficar online</span>
                         </div>
                         <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
                             <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar destino</button>
@@ -628,7 +627,41 @@
     }
 
     function sheetAcaoExpandido() {
-        return !!document.querySelector('.acao-sheet:not(.collapsed)');
+        return !!document.querySelector('.tab-content.active .acao-sheet:not(.collapsed)');
+    }
+    /** Restaura sheet/botão se a tela ficou "limpa" (altura 0 / teclado residual). */
+    function garantirUiAcaoVisivel(abrirCta) {
+        limparEstadoTeclado();
+        // --appvh já no primeiro paint (não espera visualViewport/Maps).
+        const h = window.visualViewport?.height || window.innerHeight || 700;
+        document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
+        const tab = document.querySelector('.tab-content.active');
+        const stage = tab?.querySelector('.map-stage');
+        if (stage) {
+            // Se o flex colapsou a área, força altura mínima legível na hora.
+            if (stage.clientHeight < 120) {
+                stage.style.minHeight = Math.round(Math.min(h * 0.62, 520)) + 'px';
+            }
+        }
+        document.querySelectorAll('.tab-content.active .acao-sheet').forEach((sheet) => {
+            sheet.style.visibility = 'visible';
+            sheet.style.display = 'flex';
+            sheet.style.opacity = '1';
+            sheet.style.pointerEvents = '';
+            sheet.style.bottom = '';
+            if (abrirCta) sheet.classList.remove('collapsed');
+        });
+        compensarTeclado();
+    }
+    function expandirSheetAcao(qual) {
+        const ids = qual === 'pedir' ? ['acaoSheetPed']
+            : qual === 'oferecer' ? ['acaoSheetOfe']
+            : ['acaoSheetPed', 'acaoSheetOfe'];
+        ids.forEach((id) => {
+            const sheet = document.getElementById(id);
+            if (sheet) sheet.classList.remove('collapsed');
+        });
+        garantirUiAcaoVisivel(true);
     }
 
     /* -------- altura real da tela + compensação do teclado virtual -------- */
@@ -843,17 +876,26 @@
         document.getElementById(id).classList.add('active');
         if (btn) btn.classList.add('active');
         syncMapasAbas(id);
-        // Mapa de pedir: cria na 1ª vez; nas demais, religa a frota de carros ao vivo
-        // (ela pode ter sido parada ao entrar numa viagem).
-        // Só a frota da aba ativa fica rodando (não polla as duas ao mesmo tempo).
+        // Botão/alça na hora — NÃO espera o Google Maps (tela ficava limpa até o mapa carregar).
+        if (id === 'tabPedir' || id === 'tabOferecer') {
+            expandirSheetAcao(id === 'tabPedir' ? 'pedir' : 'oferecer');
+            requestAnimationFrame(() => garantirUiAcaoVisivel(true));
+        }
+        // Mapa em paralelo (não bloqueia o CTA).
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
             if (!selPed) {
                 initMapPedir().catch((err) => {
                     console.error('initMapPedir falhou:', err);
                     msg('Não foi possível carregar o mapa. Troque de aba e volte para tentar de novo.', 'error', 9000);
-                });
-            } else { iniciarFrotaAoVivo(selPed.map); selPed.recentrar(); sincronizarQuandoPed(); iniciarRelogioQuandoPed(); }
+                }).finally(() => garantirUiAcaoVisivel(true));
+            } else {
+                iniciarFrotaAoVivo(selPed.map);
+                selPed.recentrar();
+                sincronizarQuandoPed();
+                iniciarRelogioQuandoPed();
+                garantirUiAcaoVisivel(true);
+            }
         }
         if (id === 'tabOferecer') {
             if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
@@ -861,11 +903,11 @@
                 initMapOferecer().catch((err) => {
                     console.error('initMapOferecer falhou:', err);
                     msg('Não foi possível carregar o mapa. Troque de aba e volte para tentar de novo.', 'error', 9000);
-                });
-            }
-            else {
+                }).finally(() => garantirUiAcaoVisivel(true));
+            } else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
                 else { selOfe.recentrar(); }
+                garantirUiAcaoVisivel(true);
             }
         }
     }
@@ -1267,7 +1309,8 @@
         const wrap = document.getElementById('motoristasDestinoWrap');
         if (wrap) wrap.style.display = 'none';
         const sheet = document.getElementById('acaoSheetPed');
-        if (sheet) sheet.classList.add('collapsed');
+        if (sheet) sheet.classList.remove('collapsed');
+        garantirUiAcaoVisivel(true);
     }
     async function limparDestinoMotorista() {
         limparBuscaDestino('mapOfe');
@@ -1323,12 +1366,18 @@
         registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
         esconderBootSplash();
+        limparEstadoTeclado();
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
         document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
         document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+        // 2 frames: 1º após active na tab, 2º após layout flex — evita tela limpa.
+        requestAnimationFrame(() => {
+            garantirUiAcaoVisivel(true);
+            requestAnimationFrame(() => garantirUiAcaoVisivel(true));
+        });
         atualizarIndicadorModoOperante();
         if (papel === 'motorista') {
             carregarHabilitacao().then(() => verificarRetomarMotorista());
@@ -2086,6 +2135,7 @@
             iniciarFrotaAoVivo(selPed.map);
             inicializarQuandoPed();
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+            expandirSheetAcao('pedir');
             return selPed;
         })();
         try { return await initPedirPromise; }
@@ -2097,6 +2147,7 @@
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, onDestinoMotorista);
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+            expandirSheetAcao('oferecer');
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
                 acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
@@ -5456,7 +5507,8 @@
         setInterval(pollOfertaFila, 5000);
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
-                compensarTeclado();   // recalcula --sheet-kbd ao voltar do 2º plano
+                // Voltar do app em 2º plano: botão às vezes sumia até o próximo resize.
+                garantirUiAcaoVisivel(false);
                 pollPropostas();
                 pollOfertaFila();
                 if (document.getElementById('tabPedir')?.classList.contains('active')) {
@@ -5559,6 +5611,12 @@
 
     /* -------- init -------- */
     (async function init() {
+        // Altura real já no boot — evita map-stage com 0px e tela limpa sem botão.
+        try {
+            const h0 = window.visualViewport?.height || window.innerHeight || 700;
+            document.documentElement.style.setProperty('--appvh', (h0 * 0.01) + 'px');
+            document.documentElement.style.setProperty('--sheet-kbd', '0px');
+        } catch (_) {}
         instalarGuardaVoltar(fecharCamadaVoltar);
         setTimeout(esconderBootSplash, 8000);
         carregarMaps().catch(() => {});
@@ -5567,6 +5625,7 @@
         // Escolha de papel na hora: só espera checar viagem em andamento (1 request).
         const retomouViagem = await retomarViagemSeAtiva();
         if (!retomouViagem) abrirEscolhaPapel();
+        else garantirUiAcaoVisivel(true);
 
         // Perfil, habilitação, propostas etc. rodam em paralelo — não seguram a tela.
         carregarAppEmSegundoPlano();
