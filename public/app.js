@@ -452,67 +452,88 @@ function carregarMaps() {
 }
 
 // Pickup top-down (referência Ranger amarela). Frente = topo (gira no mapa).
-// Detalhe calibrado p/ ~30×40 px: sem maçanetas/frisos miúdos que viram ruído.
+// Carroceria INTEIRA amarela (laterais da caçamba também); só o forro interno é escuro.
 function carSvgPaths(variant = 'gold') {
     const gid = 'vap-car-body-' + variant;
     const preta = variant === 'black' || variant === 'dark';
-    const body0 = preta ? '#14171c' : '#C9921A';
-    const body1 = preta ? '#2c333c' : '#E8B84A';
-    const body2 = preta ? '#1a1e24' : '#D4A01C';
-    const stroke = preta ? '#050608' : '#8B6914';
-    const glass = preta ? '#0c1015' : '#2A2A2C';
-    const glassSide = preta ? '#151a20' : '#343436';
-    const bed = preta ? '#101318' : '#242426';
-    const bedInner = preta ? '#0a0c0f' : '#18181A';
-    const tire = '#111';
+    const body0 = preta ? '#12151a' : '#C9921A';
+    const body1 = preta ? '#2a3038' : '#E4B429';
+    const body2 = preta ? '#1a1e24' : '#D9A61F';
+    const stroke = preta ? '#050608' : '#8A6A12';
+    const glass = preta ? '#0c1015' : '#2C2C2E';
+    const glassSide = preta ? '#1a222c' : '#3A3A3C';
+    const bedFloor = preta ? '#0a0c0f' : '#1C1C1E';
+    const tire = '#1A1A1A';
     const mirror = '#1A1A1A';
     const grille = preta ? '#0a0c0f' : '#2A2A2A';
-    const head = preta ? '#d8dde3' : '#F2F2F4';
-    const tail = '#E53935';
+    const head = preta ? '#d8dde3' : '#E8E8EA';
+    const tail = '#D32F2F';
     const crease = preta ? '#0a0c0f' : '#B88918';
-    const shine = preta ? '0.06' : '0.22';
+    const shine = preta ? '0.06' : '0.20';
 
     return `<defs>
 <linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
-<stop offset="0" stop-color="${body0}"/><stop offset="0.2" stop-color="${body1}"/>
-<stop offset="0.8" stop-color="${body1}"/><stop offset="1" stop-color="${body0}"/>
+<stop offset="0" stop-color="${body0}"/>
+<stop offset="0.18" stop-color="${body1}"/>
+<stop offset="0.82" stop-color="${body1}"/>
+<stop offset="1" stop-color="${body0}"/>
 </linearGradient>
 <linearGradient id="${gid}-roof" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="${body1}"/><stop offset="1" stop-color="${body2}"/>
+<stop offset="0" stop-color="${body1}"/>
+<stop offset="1" stop-color="${body2}"/>
 </linearGradient>
 </defs>
-<rect x="6.8" y="11" width="3.6" height="8.5" rx="1.6" fill="${tire}"/>
-<rect x="37.6" y="11" width="3.6" height="8.5" rx="1.6" fill="${tire}"/>
-<rect x="6.8" y="47" width="3.6" height="8.5" rx="1.6" fill="${tire}"/>
-<rect x="37.6" y="47" width="3.6" height="8.5" rx="1.6" fill="${tire}"/>
-<path d="M24 2.4
-  C17.6 2.4 13.6 4.4 12 7.8 C10.8 10.2 10.4 12.8 10.2 15.5
-  L10 23 L10 36.8 C10 38.6 10.5 39.8 11.6 40.6
-  L11.6 56.5 C11.6 59.6 14 61.8 17.2 62 L30.8 62
-  C34 61.8 36.4 59.6 36.4 56.5 L36.4 40.6
-  C37.5 39.8 38 38.6 38 36.8 L38 23 L37.8 15.5
-  C37.6 12.8 37.2 10.2 36 7.8 C34.4 4.4 30.4 2.4 24 2.4 Z"
-  fill="url(#${gid})" stroke="${stroke}" stroke-width="1"/>
-<path d="M15 5.6 C18.6 4 29.4 4 33 5.6" fill="none" stroke="${crease}" stroke-width="0.75" opacity="0.5"/>
-<path d="M24 5 L24 13.2" stroke="${crease}" stroke-width="0.75" opacity="0.4" stroke-linecap="round"/>
-<path d="M15.8 3.4 C19 2.7 29 2.7 32.2 3.4 L32.8 6.2 C29 5.5 19 5.5 15.2 6.2 Z" fill="${grille}"/>
-<path d="M12.2 5.2 C13.5 4.1 15.4 3.7 16.8 3.9 L16.3 6.5 C15 6.2 13.5 6.5 12.5 7.3 Z" fill="${head}"/>
-<path d="M35.8 5.2 C34.5 4.1 32.6 3.7 31.2 3.9 L31.7 6.5 C33 6.2 34.5 6.5 35.5 7.3 Z" fill="${head}"/>
-<ellipse cx="24" cy="9.2" rx="7.4" ry="2.1" fill="#fff" opacity="${shine}"/>
-<path d="M13.8 14.2 C17.6 12 30.4 12 34.2 14.2 L35 21.6 C28.4 20 19.6 20 13 21.6 Z" fill="${glass}"/>
-<path d="M16 14.8 C19 13.4 24.2 13.2 27.4 13.9 L15.6 20.2 C15.1 19.3 15 18 15.3 16.8 Z" fill="#fff" opacity="0.14"/>
-<path d="M9.2 16.6 C7.3 15.8 6.1 16.6 6.5 18 C6.8 19.2 8.3 19.7 10.1 19 Z" fill="${mirror}"/>
-<path d="M38.8 16.6 C40.7 15.8 41.9 16.6 41.5 18 C41.2 19.2 39.7 19.7 37.9 19 Z" fill="${mirror}"/>
-<path d="M13.2 23 C19 21.2 29 21.2 34.8 23 L34 35.2 C28.6 33.8 19.4 33.8 14 35.2 Z" fill="url(#${gid}-roof)"/>
-<ellipse cx="24" cy="26.2" rx="6.8" ry="1.7" fill="#fff" opacity="${preta ? '0.05' : '0.16'}"/>
-<path d="M11.4 24.4 C12.3 23.9 13.2 23.8 13.9 24 L13.5 33.6 C12.7 34 11.8 34 11.2 33.6 Z" fill="${glassSide}"/>
-<path d="M36.6 24.4 C35.7 23.9 34.8 23.8 34.1 24 L34.5 33.6 C35.3 34 36.2 34 36.8 33.6 Z" fill="${glassSide}"/>
-<path d="M12 36.8 C18.5 35.4 29.5 35.4 36 36.8 L35.4 38.6 C29.2 37.4 18.8 37.4 12.6 38.6 Z" fill="${stroke}" opacity="0.28"/>
-<rect x="12" y="38.4" width="24" height="19.2" rx="1.8" fill="${bed}" stroke="${stroke}" stroke-width="0.6"/>
-<rect x="13.6" y="40" width="20.8" height="15.6" rx="1.2" fill="${bedInner}"/>
-<path d="M18 41 L18 54.4 M24 41 L24 54.4 M30 41 L30 54.4" stroke="${preta ? '#08090b' : '#0e0e10'}" stroke-width="1.1" opacity="0.75"/>
-<path d="M11.4 55.8 C12.8 57 14.5 57.6 16 57.8 L15.6 60.2 C13.9 59.9 12.2 59.1 11 57.9 Z" fill="${tail}"/>
-<path d="M36.6 55.8 C35.2 57 33.5 57.6 32 57.8 L32.4 60.2 C34.1 59.9 35.8 59.1 37 57.9 Z" fill="${tail}"/>`;
+<!-- pneus -->
+<rect x="7" y="11" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
+<rect x="37.5" y="11" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
+<rect x="7" y="46.8" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
+<rect x="37.5" y="46.8" width="3.5" height="8.4" rx="1.5" fill="${tire}"/>
+<!-- silhueta: frente arredondada (topo), laterais retas, traseira da caçamba -->
+<path d="M24 2.5
+  C18.4 2.5 14.6 4.1 13 6.8
+  C11.8 8.8 11.2 11.2 11 14
+  L10.8 22 L10.8 37.2
+  C10.8 38.6 11.1 39.4 11.8 40
+  L11.8 56.4
+  C11.8 59.4 14.2 61.5 17.4 61.7
+  L30.6 61.7
+  C33.8 61.5 36.2 59.4 36.2 56.4
+  L36.2 40
+  C36.9 39.4 37.2 38.6 37.2 37.2
+  L37.2 22 L37 14
+  C36.8 11.2 36.2 8.8 35 6.8
+  C33.4 4.1 29.6 2.5 24 2.5 Z"
+  fill="url(#${gid})" stroke="${stroke}" stroke-width="0.95"/>
+<!-- vincos do capô (como na referência) -->
+<path d="M15.4 5.6 C18.8 4.2 29.2 4.2 32.6 5.6" fill="none" stroke="${crease}" stroke-width="0.7" opacity="0.55"/>
+<path d="M16.6 7.4 C19.6 6.2 28.4 6.2 31.4 7.4" fill="none" stroke="${crease}" stroke-width="0.55" opacity="0.4"/>
+<path d="M24 5 L24 13.5" stroke="${crease}" stroke-width="0.7" opacity="0.42" stroke-linecap="round"/>
+<!-- grade + faróis -->
+<path d="M16 3.5 C19.2 2.8 28.8 2.8 32 3.5 L32.6 6.3 C28.8 5.6 19.2 5.6 15.4 6.3 Z" fill="${grille}"/>
+<path d="M12.4 5.3 C13.7 4.2 15.6 3.8 16.9 4 L16.4 6.5 C15.1 6.2 13.6 6.5 12.7 7.3 Z" fill="${head}"/>
+<path d="M35.6 5.3 C34.3 4.2 32.4 3.8 31.1 4 L31.6 6.5 C32.9 6.2 34.4 6.5 35.3 7.3 Z" fill="${head}"/>
+<ellipse cx="24" cy="9.5" rx="7" ry="2" fill="#ffffff" opacity="${shine}"/>
+<!-- para-brisa -->
+<path d="M14 14.4 C17.8 12.3 30.2 12.3 34 14.4 L34.8 21.6 C28.2 20.1 19.8 20.1 13.2 21.6 Z" fill="${glass}"/>
+<path d="M16.2 15 C19.2 13.7 24.4 13.5 27.4 14.2 L15.6 20.4 C15.1 19.5 15 18.2 15.3 17 Z" fill="#ffffff" opacity="0.12"/>
+<!-- retrovisores -->
+<path d="M9.2 16.6 C7.3 15.9 6.2 16.7 6.6 18 C6.9 19.2 8.4 19.6 10.1 19 Z" fill="${mirror}"/>
+<path d="M38.8 16.6 C40.7 15.9 41.8 16.7 41.4 18 C41.1 19.2 39.6 19.6 37.9 19 Z" fill="${mirror}"/>
+<!-- teto da cabine (amarelo, por cima da carroceria) -->
+<path d="M13.4 22.8 C19.2 21.1 28.8 21.1 34.6 22.8 L33.8 35 C28.4 33.7 19.6 33.7 14.2 35 Z" fill="url(#${gid}-roof)"/>
+<ellipse cx="24" cy="26.4" rx="6.4" ry="1.55" fill="#ffffff" opacity="${preta ? '0.05' : '0.14'}"/>
+<!-- vidros laterais -->
+<path d="M11.5 24 C12.4 23.5 13.3 23.4 14 23.7 L13.6 33.5 C12.8 33.9 11.9 34 11.3 33.6 Z" fill="${glassSide}"/>
+<path d="M36.5 24 C35.6 23.5 34.7 23.4 34 23.7 L34.4 33.5 C35.2 33.9 36.1 34 36.7 33.6 Z" fill="${glassSide}"/>
+<!-- divisão cabine / caçamba -->
+<path d="M12.2 36.4 C18.6 35.1 29.4 35.1 35.8 36.4" fill="none" stroke="${stroke}" stroke-width="1" opacity="0.45"/>
+<!-- forro da caçamba (só o INTERIOR escuro; laterais ficam amarelas) -->
+<rect x="13.6" y="38.2" width="20.8" height="17.2" rx="1.3" fill="${bedFloor}"/>
+<path d="M17.2 39.4 L17.2 54.2 M24 39.4 L24 54.2 M30.8 39.4 L30.8 54.2"
+  stroke="${preta ? '#06080a' : '#0e0e10'}" stroke-width="1" opacity="0.65"/>
+<!-- lanternas -->
+<path d="M11.6 55.6 C12.9 56.7 14.6 57.3 16 57.5 L15.6 59.8 C14 59.5 12.4 58.8 11.2 57.7 Z" fill="${tail}"/>
+<path d="M36.4 55.6 C35.1 56.7 33.4 57.3 32 57.5 L32.4 59.8 C34 59.5 35.6 58.8 36.8 57.7 Z" fill="${tail}"/>`;
 }
 
 function htmlSvgCarro(variant, w, h) {
