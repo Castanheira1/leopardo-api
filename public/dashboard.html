@@ -1566,26 +1566,41 @@
     // padrão é o mapa CLARO (branco, estilo Uber): ruas brancas, quadras e
     // prédios em cinza suave — carrega muito mais rápido. Os carros/pulsos/
     // rotas continuam ao vivo igual.
+    // Mapa leve (branco, estilo Uber): ruas brancas, fundo claro, SEM ícones
+    // coloridos de loja/restaurante/POI — só ruas + nomes essenciais.
     const ESTILO_MAPA_CLARO = [
-        { elementType: 'geometry', stylers: [{ color: '#f7f8fa' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#5b6470' }] },
+        { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+        { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
         { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
-        { elementType: 'labels.icon', stylers: [{ saturation: -60 }, { lightness: 20 }] },
         { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d7dbe2' }] },
-        // Quadras e prédios com contorno dá a sensação de relevo (tipo 3D leve).
-        { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#ececf0' }] },
+        { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+        { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f0f1f3' }] },
+        { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#ebecef' }] },
         { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#d9dde3' }] },
-        { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#e6e8ec' }] },
-        { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a8f98' }] },
-        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#d9ead3' }] },
-        { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#5e8a5a' }] },
+        // Esconde TODOS os POIs (ícones coloridos de loja, restaurante, etc.)
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.government', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.medical', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.place_of_worship', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.school', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.sports_complex', stylers: [{ visibility: 'off' }] },
+        // Parques só como mancha verde, sem pin colorido
+        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ visibility: 'on' }, { color: '#dcead6' }] },
+        { featureType: 'poi.park', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.park', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
         { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
         { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#dfe3e8' }] },
+        { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
         { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
         { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#eef0f3' }] },
         { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#d4d9df' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c6d5dd' }] },
         { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+        { featureType: 'transit.station', stylers: [{ visibility: 'off' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c6d5dd' }] },
+        { featureType: 'water', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
     ];
     // Zoom padrão de "foco na origem": nível de rua, com o pulso/carrinho no
     // centro e uns 2-3 quarteirões em volta. Usado ao abrir o mapa, recentrar
@@ -1594,11 +1609,19 @@
     // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
     // satélite alterna de novo e a escolha fica salva normalmente.
     function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
-    // Com mapId (Cloud-based maps), o Google proíbe styles no cliente
-    // (warning no console). Estilo claro fica no Map ID do Cloud Console.
+    // Com Map ID real (Cloud Console) o Google manda o estilo pela nuvem e
+    // proíbe styles no cliente. Com DEMO_MAP_ID + RASTER aplicamos o JSON local
+    // (mapa branco sem POIs) — necessário para o visual Uber do app.
+    function mapaUsaEstiloLocal() {
+        return !_mapId || _mapId === 'DEMO_MAP_ID';
+    }
     function aplicarEstiloMapa(map, tipo) {
-        if (_mapId) return;
-        map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_CLARO : null });
+        if (tipo !== 'roadmap') {
+            try { map.setOptions({ styles: null }); } catch (_) {}
+            return;
+        }
+        if (!mapaUsaEstiloLocal()) return; // estilo vem do Cloud Map ID
+        try { map.setOptions({ styles: ESTILO_MAPA_CLARO }); } catch (_) {}
     }
     function aplicarTipoMapa(map, tipo) {
         map.setMapTypeId(tipo);
@@ -1607,7 +1630,7 @@
     function novoMapa(elId, opts) {
         const map = new g.maps.Map(document.getElementById(elId), opcoesMapa({
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
-            fullscreenControl: false, gestureHandling: 'greedy', ...opts,
+            fullscreenControl: false, gestureHandling: 'greedy', clickableIcons: false, ...opts,
         }));
         // Reforço: se a lib ainda não tinha o enum na 1ª opção, aplica depois.
         try {
