@@ -442,100 +442,35 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
-// Carro visto de cima (o ícone gira com o rumo, então a vista é sempre top-down),
-// com sombreamento, faróis, lanternas, retrovisores e pneus para parecer um
-// carro de verdade mesmo em 30×40 px. 'gold' é o dourado clássico da frota
-// online; 'white' é o carro próprio: branco 3D (referência do cliente), com
-// carroceria branca sombreada e teto de vidro/retrovisores pretos brilhantes.
 function carSvgPaths(variant = 'white') {
-    const dourado = variant === 'gold';
-    const body = dourado ? '#EAD298' : '#ffffff';
-    const bodyEdge = dourado ? '#c9a94f' : '#c6cdd3';
-    const stroke = dourado ? '#9a7514' : '#7f8a92';
-    const glassRoof = dourado ? '#2f3640' : '#14181c';
-    const glass = dourado ? '#455a64' : '#242c33';
-    const detail = dourado ? '#9a7514' : '#15181c';
     const gid = 'vap-car-body-' + variant;
     return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
-        + `<stop offset="0" stop-color="${bodyEdge}"/><stop offset="0.3" stop-color="${body}"/>`
-        + `<stop offset="0.7" stop-color="${body}"/><stop offset="1" stop-color="${bodyEdge}"/>`
+        + `<stop offset="0" stop-color="#0e1116"/><stop offset="0.28" stop-color="#2e333b"/>`
+        + `<stop offset="0.72" stop-color="#2e333b"/><stop offset="1" stop-color="#0e1116"/>`
         + `</linearGradient></defs>`
-        // pneus (só a pontinha aparece, dos lados)
-        + `<rect x="7.6" y="13.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
-        + `<rect x="37.4" y="13.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
-        + `<rect x="7.6" y="42.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
-        + `<rect x="37.4" y="42.5" width="3" height="9" rx="1.5" fill="#15181b"/>`
-        // retrovisores
-        + `<path d="M9.8 16.2 C7.8 15.6 6.6 16.4 6.9 17.8 C7.1 19 8.6 19.4 10.2 18.8 Z" fill="${detail}"/>`
-        + `<path d="M38.2 16.2 C40.2 15.6 41.4 16.4 41.1 17.8 C40.9 19 39.4 19.4 37.8 18.8 Z" fill="${detail}"/>`
-        // carroceria (ombros largos, frente e traseira arredondadas)
-        + `<path d="M24 2.8 C17.2 2.8 12.6 6 11.4 11.6 C10.4 16 9.8 20 9.8 25.5 L9.8 49 C9.8 56.4 14.2 60.8 24 60.8 C33.8 60.8 38.2 56.4 38.2 49 L38.2 25.5 C38.2 20 37.6 16 36.6 11.6 C35.4 6 30.8 2.8 24 2.8 Z" fill="url(#${gid})" stroke="${stroke}" stroke-width="1.2"/>`
-        // vinco do capô
-        + `<path d="M15.5 7.2 C18.5 5.4 29.5 5.4 32.5 7.2" fill="none" stroke="${detail}" stroke-width="0.8" opacity="0.55"/>`
-        // faróis
-        + `<path d="M12.3 5.8 C13.8 4.5 16 4 17.6 4.1 L17 6.9 C15.4 6.6 13.8 6.9 12.9 7.8 Z" fill="#fffdf2"/>`
-        + `<path d="M35.7 5.8 C34.2 4.5 32 4 30.4 4.1 L31 6.9 C32.6 6.6 34.2 6.9 35.1 7.8 Z" fill="#fffdf2"/>`
-        // brilho do capô
-        + `<ellipse cx="24" cy="10.5" rx="8" ry="2.6" fill="#ffffff" opacity="0.28"/>`
-        // para-brisa
-        + `<path d="M14.2 16.8 C17.6 14.4 30.4 14.4 33.8 16.8 L35 26.5 C27.5 24.8 20.5 24.8 13 26.5 Z" fill="${glass}"/>`
-        // teto de vidro
-        + `<path d="M13.2 28.3 C20 26.6 28 26.6 34.8 28.3 L33.6 41.8 C28 40.5 20 40.5 14.4 41.8 Z" fill="${glassRoof}"/>`
-        // reflexo diagonal no vidro
-        + `<path d="M16 17.5 C19 15.8 24 15.6 27 16.2 L15.6 30 C15 29.4 14.6 28.4 14.8 27 Z" fill="#ffffff" opacity="0.10"/>`
-        // vidro traseiro
-        + `<path d="M15.2 43.6 C20.4 42.4 27.6 42.4 32.8 43.6 L31.4 49.6 C26.8 48.6 21.2 48.6 16.6 49.6 Z" fill="${glass}"/>`
-        // brilho do porta-malas
-        + `<ellipse cx="24" cy="52.6" rx="7.5" ry="1.8" fill="#ffffff" opacity="0.22"/>`
-        // lanternas
-        + `<path d="M14.6 56.9 C17 57.8 21 58.2 24 58.2 C27 58.2 31 57.8 33.4 56.9 L33 54.4 C30 55.2 27 55.5 24 55.5 C21 55.5 18 55.2 15 54.4 Z" fill="#e53935"/>`;
-}
-
-// Carro próprio em PERSPECTIVA 3/4 (igual à referência do cliente): sedã branco
-// 3D com teto de vidro preto, retrovisor preto e sombra no chão. Esta vista não
-// gira com o rumo — girar um carro de lado o deixaria de cabeça para baixo —
-// então o marcador fica fixo (montarNoCarro marca data-sem-giro).
-function carPerspectivaSvg() {
-    return `<defs>`
-        + `<linearGradient id="vap-pcar-body" x1="0" y1="0" x2="0" y2="1">`
-        + `<stop offset="0" stop-color="#ffffff"/><stop offset="0.72" stop-color="#f4f6f8"/><stop offset="1" stop-color="#d3dae0"/>`
-        + `</linearGradient>`
-        + `<linearGradient id="vap-pcar-glass" x1="0" y1="0" x2="1" y2="1">`
-        + `<stop offset="0" stop-color="#262d34"/><stop offset="1" stop-color="#0d1114"/>`
-        + `</linearGradient></defs>`
-        // sombra no chão (dá o "flutuar" 3D da referência)
-        + `<ellipse cx="49" cy="53" rx="40" ry="4.6" fill="#3c444c" opacity="0.20"/>`
-        // carroceria branca: sedã alongado e baixo (traseira à esquerda, frente à direita)
-        + `<path d="M11 43.5 C9.4 41 9 37.8 9.7 35.2 C10.5 31.6 13.2 29.3 18 28.4 L24 27.3 C27 21.4 33 16.7 41 15.5 C49 14.3 56.5 16.9 61 22.2 C62.4 23.9 64 24.9 67 25.3 C74.5 26.3 82 27.4 87.8 29.6 C91.2 30.9 92.9 33 93.1 35.6 C93.3 39 92.6 41.6 90.4 43.2 C88.2 44.8 84.5 45.5 80 45.7 L26 47.7 C18.5 48 13 46.6 11 43.5 Z"`
-        + ` fill="url(#vap-pcar-body)" stroke="#9aa4ac" stroke-width="0.9"/>`
-        // canopy de vidro preto (para-brisa + teto)
-        + `<path d="M30 26.2 C33 20.3 39 16.5 45.5 16.1 C52 15.7 57.8 18.7 60.8 23.6 C55.2 21.8 49.5 21.1 44 21.5 C38.5 21.9 33.5 23.5 30 26.2 Z" fill="url(#vap-pcar-glass)"/>`
-        // vidros laterais escuros com pilar branco
-        + `<path d="M30.5 27.4 C35 24.9 41 23.7 47 23.7 C52 23.7 57.2 24.5 60.6 25.9 L59.6 29.3 C52 27.7 43 27.7 36.5 28.9 C34 29.4 32 29.9 30.8 30.4 C30 29.4 29.9 28.4 30.5 27.4 Z" fill="#2b333b"/>`
-        + `<path d="M45 23.8 L46.6 27.9 L44.2 28 L42.7 24 Z" fill="#f4f6f8" opacity="0.9"/>`
-        // arcos das rodas (sombreado)
-        + `<path d="M20.5 47.2 A8.4 8.4 0 0 1 36.5 46.9 Z" fill="#b9c2c9" opacity="0.55"/>`
-        + `<path d="M66 47.3 A8.8 8.8 0 0 1 82.5 47 Z" fill="#b9c2c9" opacity="0.55"/>`
-        // rodas: pneu escuro + roda clara + miolo
-        + `<circle cx="28.5" cy="46.3" r="7.4" fill="#14181c"/><circle cx="28.5" cy="46.3" r="3.2" fill="#e6eaee"/><circle cx="28.5" cy="46.3" r="1.1" fill="#3c444c"/>`
-        + `<circle cx="74" cy="46.8" r="7.7" fill="#14181c"/><circle cx="74" cy="46.8" r="3.4" fill="#e6eaee"/><circle cx="74" cy="46.8" r="1.2" fill="#3c444c"/>`
-        // retrovisor preto
-        + `<path d="M61 22.6 C63.6 21.3 65.3 21.9 65.5 23.5 C65.6 24.9 64 25.7 61.8 25.3 Z" fill="#14181c"/>`
-        // maçaneta e vinco da porta
-        + `<path d="M40 31.8 L46.5 31.5" stroke="#b9c2c9" stroke-width="1.1" stroke-linecap="round"/>`
-        + `<path d="M51.5 29 C52.3 33.5 52.3 38.5 51.5 43.5" fill="none" stroke="#c9d1d7" stroke-width="0.8" opacity="0.8"/>`
-        // vinco lateral (linha de cintura, dá o comprido do sedã)
-        + `<path d="M14 33.5 C30 31 58 28.5 88 33.8" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.7"/>`
-        // faixa do farol (LED fino, como na referência)
-        + `<path d="M83 32.6 C87.5 33.4 91 34.8 92.6 36.6" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity="0.95"/>`
-        // lanterna traseira discreta
-        + `<path d="M10.8 34.6 C12.2 33.5 14.2 32.8 16.2 32.5" fill="none" stroke="#e05555" stroke-width="1.4" stroke-linecap="round" opacity="0.9"/>`;
+        + `<rect x="7.8" y="11" width="3" height="9" rx="1.5" fill="#08090b"/>`
+        + `<rect x="37.2" y="11" width="3" height="9" rx="1.5" fill="#08090b"/>`
+        + `<rect x="7.8" y="42" width="3" height="9" rx="1.5" fill="#08090b"/>`
+        + `<rect x="37.2" y="42" width="3" height="9" rx="1.5" fill="#08090b"/>`
+        + `<path d="M10.6 15.2 C8.4 14.6 7.2 15.5 7.5 17 C7.8 18.3 9.4 18.7 11 18 Z" fill="#15181d"/>`
+        + `<path d="M37.4 15.2 C39.6 14.6 40.8 15.5 40.5 17 C40.2 18.3 38.6 18.7 37 18 Z" fill="#15181d"/>`
+        + `<path d="M24 2.8 C17.2 2.8 12.8 5 11.8 9.6 C11 13.2 10.5 16.6 10.5 21 L10.5 51.5 C10.5 57.2 12.6 60.6 17.2 61.3 L30.8 61.3 C35.4 60.6 37.5 57.2 37.5 51.5 L37.5 21 C37.5 16.6 37 13.2 36.2 9.6 C35.2 5 30.8 2.8 24 2.8 Z" fill="url(#${gid})" stroke="#000000" stroke-width="1"/>`
+        + `<path d="M15 4.6 C20 3.4 28 3.4 33 4.6" fill="none" stroke="#000000" stroke-width="0.9" opacity="0.45"/>`
+        + `<path d="M24 6 L24 12.6" stroke="#0a0c0f" stroke-width="1" opacity="0.6" stroke-linecap="round"/>`
+        + `<ellipse cx="24" cy="9.4" rx="8" ry="2.4" fill="#ffffff" opacity="0.10"/>`
+        + `<path d="M13.6 15.4 C17.2 13.5 30.8 13.5 34.4 15.4 L33.4 23.4 C27 22 21 22 14.6 23.4 Z" fill="#0c1015"/>`
+        + `<path d="M16 16.2 C19 14.9 24 14.7 27 15.2 L15.9 22.4 C15.3 21.8 15.1 20.8 15.3 19.5 Z" fill="#ffffff" opacity="0.08"/>`
+        + `<path d="M11.5 17.4 C12.3 17.2 13 17.3 13.6 17.6 L13.6 39.6 C13 39.9 12.3 40 11.5 39.8 Z" fill="#0c1015"/>`
+        + `<path d="M36.5 17.4 C35.7 17.2 35 17.3 34.4 17.6 L34.4 39.6 C35 39.9 35.7 40 36.5 39.8 Z" fill="#0c1015"/>`
+        + `<rect x="17.8" y="25.2" width="12.4" height="9.6" rx="2" fill="#07080a" stroke="#3a4048" stroke-width="0.6" stroke-opacity="0.5"/>`
+        + `<path d="M15 40.8 C20.4 39.7 27.6 39.7 33 40.8 L32.2 44 C27 43.1 21 43.1 15.8 44 Z" fill="#0c1015"/>`
+        + `<rect x="12.8" y="45.6" width="22.4" height="11.8" rx="1.6" fill="#1e2023" stroke="#000000" stroke-width="0.6"/>`
+        + `<path d="M15.6 47 L15.6 56.4 M18.4 47 L18.4 56.4 M21.2 47 L21.2 56.4 M24 47 L24 56.4 M26.8 47 L26.8 56.4 M29.6 47 L29.6 56.4 M32.4 47 L32.4 56.4" stroke="#0c0d0f" stroke-width="1"/>`
+        + `<path d="M11.8 55.6 C13 56.3 14.4 56.7 15.8 56.9 L15.5 59.4 C14 59.2 12.5 58.7 11.4 58 Z" fill="#e03131"/>`
+        + `<path d="M36.2 55.6 C35 56.3 33.6 56.7 32.2 56.9 L32.5 59.4 C34 59.2 35.5 58.7 36.6 58 Z" fill="#e03131"/>`;
 }
 
 function htmlSvgCarro(variant, w, h) {
-    if (variant !== 'gold') {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 64" width="${w}" height="${h}" style="display:block;pointer-events:none">${carPerspectivaSvg()}</svg>`;
-    }
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="${w}" height="${h}" style="display:block;pointer-events:none">${carSvgPaths(variant)}</svg>`;
 }
 
@@ -544,7 +479,6 @@ function montarNoCarro(variant, w, h) {
     rot.className = 'vap-car-rot';
     rot.style.cssText = `width:${w}px;height:${h}px;transform-origin:50% 50%;transform:rotate(0deg) translateZ(0);`
         + 'backface-visibility:hidden;-webkit-backface-visibility:hidden;contain:layout style paint;';
-    if (variant !== 'gold') rot.dataset.semGiro = '1';   // vista em perspectiva não gira
     rot.innerHTML = htmlSvgCarro(variant, w, h);
     return rot;
 }
@@ -825,6 +759,13 @@ function criarRotaControle(map, polylineOptions = {}) {
         limpar() {
             polylines.forEach((pl) => pl.setMap(null));
             polylines = [];
+        },
+        // Traça uma polyline já conhecida (ex.: rota do simulador vinda do
+        // servidor) — nenhuma chamada à Routes API.
+        desenhar(pontos) {
+            ctrl.limpar();
+            const pts = (pontos || []).map(normalizarLatLng).filter(Boolean);
+            if (pts.length >= 2) desenharLinha(pts);
         },
         setMap(m) {
             if (!m) ctrl.limpar();
