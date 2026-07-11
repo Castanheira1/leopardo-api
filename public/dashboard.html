@@ -268,9 +268,10 @@
                     <small class="perfil-nav-sub">Locais que aparecem só para você</small>
                 </button>
                 <div class="perfil-secao">
+                    <p id="habStatusPerfil" class="hab-status" style="display:none;" role="status"></p>
                     <div class="hab-actions">
                         <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar para oferecer carona</button>
-                        <button onclick="ativarMotorista(true)" class="btn btn-secondary btn-sm">Trocar veículo</button>
+                        <button onclick="ativarMotorista(true)" id="btnTrocarVeic" class="btn btn-secondary btn-sm">Trocar veículo</button>
                     </div>
                 </div>
                 <div class="cam-actions">
@@ -582,7 +583,7 @@
             </button>
             <button type="button" class="papel-opt" onclick="escolherPapel('motorista')">
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="#EAD298"/><circle cx="16.5" cy="16" r="1.2" fill="#EAD298"/></svg>
-                <span class="papel-tit">Ficar online</span>
+                <span class="papel-tit">Oferecer carona</span>
                 <span class="papel-sub">Sou motorista</span>
             </button>
         </div>
@@ -1403,6 +1404,8 @@
         document.getElementById('perfilSexo').value = user.sexo || '';
         document.getElementById('modalPerfil').style.display = 'flex';
         perfilIrPara(typeof view === 'string' ? view : 'menu');
+        // Atualiza status da habilitação ao abrir (evita “ativar de novo” à toa).
+        try { await carregarHabilitacao(); } catch (_) { atualizarUiHabilitacaoPerfil(); }
         try {
             await carregarFavoritosPessoais();
         } catch (_) { favPessoais = []; }
@@ -1452,13 +1455,47 @@
     }
 
     /* -------- habilitação motorista -------- */
+    function atualizarUiHabilitacaoPerfil() {
+        const nav = document.getElementById('navAtivar');
+        const btn = document.getElementById('btnAtivarMot');
+        const btnTroca = document.getElementById('btnTrocarVeic');
+        const st = document.getElementById('habStatusPerfil');
+        const ativo = !!(habHoje && selfieAindaValida(habHoje));
+        if (nav) {
+            nav.innerHTML = ativo
+                ? '<span style="color:#22c55e">●</span> Motorista ativo'
+                : 'Ativar no Perfil';
+        }
+        if (st) {
+            if (ativo) {
+                const placa = habHoje.placa ? String(habHoje.placa).toUpperCase() : '';
+                const tag = habHoje.tag ? String(habHoje.tag) : '';
+                const veic = [tag, placa].filter(Boolean).join(' · ') || 'veículo ok';
+                st.style.display = 'block';
+                st.innerHTML = `<span style="color:#22c55e">●</span> <strong>Modo motorista ativo</strong><br><small>${esc(veic)} · selfie válida por 12h</small>`;
+            } else {
+                st.style.display = 'none';
+                st.innerHTML = '';
+            }
+        }
+        if (btn) {
+            // Já ativo: some o botão de ativar (evita tédio de “ativar de novo”).
+            btn.style.display = ativo ? 'none' : '';
+            btn.textContent = 'Ativar para oferecer carona';
+            btn.disabled = false;
+        }
+        if (btnTroca) {
+            btnTroca.style.display = ativo ? '' : 'none';
+            btnTroca.disabled = false;
+        }
+    }
+
     async function carregarHabilitacao() {
         const r = await fetchWithAuth('/api/habilitacao/hoje');
         habHoje = await r.json();
-        const nav = document.getElementById('navAtivar');
-        if (nav) nav.innerHTML = habHoje
-            ? '<span style="color:#22c55e">●</span> Motorista ativo'
-            : 'Ativar no Perfil';
+        // API pode devolver null literal ou string "null"
+        if (!habHoje || habHoje === 'null') habHoje = null;
+        atualizarUiHabilitacaoPerfil();
         if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
     }
 
