@@ -697,9 +697,21 @@ async function carregarSimFrota() {
         if (!r.ok) throw new Error(d.error || 'Erro');
         if (!d.total) { el.textContent = 'Nenhum carro fake criado ainda.'; return; }
         const quando = d.ultima_atualizacao ? new Date(d.ultima_atualizacao).toLocaleTimeString('pt-BR') : '—';
-        el.textContent = d.ativos
+        let txt = d.ativos
             ? `${d.ativos} de ${d.total} carros circulando (${d.com_rota} com rota publicada) · última posição ${quando}`
             : `${d.total} carros criados, todos desligados.`;
+        if (d.em_viagem) txt += ` · ${d.em_viagem} em viagem`;
+        if (d.horario_sp) txt += ` · horário SP ${d.horario_sp} (${d.dia_sp || ''})`;
+        if (d.metricas) {
+            const m = d.metricas;
+            txt += ` · API ok/fail ${m.api_ok || 0}/${m.api_fail || 0}`;
+            if (m.ultima_falha) txt += ` (última falha ${m.ultima_falha.status} em ${m.ultima_falha.rota || '?'})`;
+        }
+        if (d.rotinas && d.rotinas.length) {
+            const resumo = d.rotinas.slice(0, 4).map((r) => `${r.turno}/${r.fase}`).join(', ');
+            txt += ` · rotinas: ${resumo}…`;
+        }
+        el.textContent = txt;
     } catch (e) { el.textContent = e.message; }
 }
 async function ligarSimFrota() {

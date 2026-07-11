@@ -323,6 +323,28 @@ function respostaRotaFallback(o, d) {
     };
 }
 
+/** Rota pela pista via servidor (Routes REST) — evita falha do Route.computeRoutes no browser. */
+async function calcularRotaServidor(o, d) {
+    const r = await fetchWithAuth('/api/rotas', {
+        method: 'POST',
+        body: JSON.stringify({
+            origin_lat: o.lat, origin_lng: o.lng,
+            dest_lat: d.lat, dest_lng: d.lng,
+        }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.path?.length) {
+        throw new Error(j?.error || `rota servidor HTTP ${r.status}`);
+    }
+    const distText = formatarMetros(j.distanceMeters);
+    const durText = formatarDuracaoMs(j.durationMillis);
+    return {
+        routes: [{ legs: [{ distance: { text: distText }, duration: { text: durText }, steps: [] }] }],
+        _fallbackLine: j.path,
+        km: j.km != null ? j.km : Math.round(((j.distanceMeters || 0) / 1000) * 100) / 100,
+    };
+}
+
 function instalarMapsBootstrap(apiKey) {
     if (window.google?.maps?.importLibrary) return Promise.resolve();
     if (window.__vapMapsBootstrap) return window.__vapMapsBootstrap;
@@ -678,7 +700,8 @@ function criarMarcador(opts = {}) {
     return api;
 }
 
-// Rotas via Route.computeRoutes (Routes API). Sem DirectionsService legado.
+// Rotas: SOMENTE via /api/rotas (cache no servidor). Não chama Routes no browser
+// (cada computeRoutes do client = cobrança extra + falha comum).
 function criarRotaControle(map, polylineOptions = {}) {
     const estilo = { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95, ...polylineOptions };
     let polylines = [];
@@ -698,28 +721,11 @@ function criarRotaControle(map, polylineOptions = {}) {
             if (!_RouteClass) await carregarMaps();
 
             try {
-                const { routes } = await _RouteClass.computeRoutes({
-                    origin: o,
-                    destination: d,
-                    travelMode: 'DRIVING',
-                    fields: ['path', 'distanceMeters', 'durationMillis', 'localizedValues', 'legs'],
-                });
-                if (!routes?.length) throw new Error('sem rota');
-                const route = routes[0];
-                if (map) {
-                    polylines = route.createPolylines() || [];
-                    if (!polylines.length && route.path?.length) {
-                        desenharLinha(route.path);
-                    } else {
-                        polylines.forEach((pl) => {
-                            if (pl.setOptions) pl.setOptions(estilo);
-                            pl.setMap(map);
-                        });
-                    }
-                }
-                return respostaRotaLegada(route);
+                const resp = await calcularRotaServidor(o, d);
+                if (resp._fallbackLine?.length >= 2 && map) desenharLinha(resp._fallbackLine);
+                return resp;
             } catch (err) {
-                console.warn('Route.computeRoutes indisponível — linha reta:', err?.message || err);
+                // Sem Google: linha reta local (não gera cota).
                 const resp = respostaRotaFallback(o, d);
                 if (map && resp._fallbackLine) desenharLinha(resp._fallbackLine);
                 return resp;
