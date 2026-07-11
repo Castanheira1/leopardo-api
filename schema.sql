@@ -254,6 +254,8 @@ WHERE NOT EXISTS (SELECT 1 FROM empresas WHERE nome = 'Vale S.A.');
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_projeto_id INTEGER REFERENCES projetos(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+-- 1 sessão ativa por conta (login novo encerra o aparelho anterior)
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS sessao_id VARCHAR(64);
 
 -- ------------------------------------------------------------
 -- Matrículas bloqueadas (ex-funcionários — impedem novo cadastro)

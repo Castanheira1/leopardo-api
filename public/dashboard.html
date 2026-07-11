@@ -1727,16 +1727,19 @@
     // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
     // satélite alterna de novo e a escolha fica salva normalmente.
     function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
-    // mapId sempre no Map (DEMO_MAP_ID) para Advanced Markers. Com mapId o Google
-    // PROÍBE styles no cliente — não chamar setOptions({ styles }) (evita warning
-    // e garante carrinho/pulso no mapa). Estilo branco Cloud fica para Map ID real.
+    // DEMO sem mapId → mapa branco local (ESTILO_MAPA_CLARO). Map ID real → nuvem.
+    // Nunca aplicar styles se houver mapId (Google proíbe).
     function mapaUsaEstiloLocal() {
-        return false;
+        if (typeof mapaIdEfetivo === 'function') return !mapaIdEfetivo();
+        return !_mapId || _mapId === 'DEMO_MAP_ID';
     }
     function aplicarEstiloMapa(map, tipo) {
-        // no-op proposital: styles + mapId = erro no console e mapa inconsistente
-        void map;
-        void tipo;
+        if (!mapaUsaEstiloLocal()) return;
+        if (tipo !== 'roadmap') {
+            try { map.setOptions({ styles: null }); } catch (_) {}
+            return;
+        }
+        try { map.setOptions({ styles: ESTILO_MAPA_CLARO }); } catch (_) {}
     }
     function aplicarTipoMapa(map, tipo) {
         map.setMapTypeId(tipo);
@@ -4921,8 +4924,9 @@
     function criarPulse(map, pos, sexo, onClick, titulo, rotulo) {
         const posN = { lat: Number(pos.lat), lng: Number(pos.lng) };
         const div = montarConteudoPulse(sexo, titulo, rotulo);
-        // Advanced Marker (mapId obrigatório — já setado em opcoesMapa)
-        if (typeof _AdvancedMarkerElement === 'function' && _AdvancedMarkerElement) {
+        // Advanced Marker só com Map ID real; DEMO (mapa branco) → OverlayView.
+        if (typeof mapaIdEfetivo === 'function' && mapaIdEfetivo()
+            && typeof _AdvancedMarkerElement === 'function' && _AdvancedMarkerElement) {
             const mk = new _AdvancedMarkerElement({
                 map: map || null,
                 position: posN,

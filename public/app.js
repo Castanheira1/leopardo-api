@@ -171,7 +171,15 @@ async function fetchWithAuth(url, options = {}) {
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
     const resp = await fetch(url, { ...options, headers, credentials: 'include' });
-    if (resp.status === 401) { avisoProximaPagina('Sessão expirada. Entre novamente.'); logout(); }
+    if (resp.status === 401) {
+        let msg401 = 'Sessão expirada. Entre novamente.';
+        try {
+            const d = await resp.clone().json();
+            if (d && d.error) msg401 = d.error;
+        } catch (_) {}
+        avisoProximaPagina(msg401);
+        logout();
+    }
     return resp;
 }
 
@@ -247,18 +255,19 @@ function renderingTypeRaster() {
         || 'RASTER';
 }
 
-// Advanced Markers EXIGEM mapId no Map. DEMO_MAP_ID é aceito pelo Google e
-// basta para o carrinho/pulso aparecerem. Sem mapId o OverlayView falhava em
-// vários celulares e o motorista/passageiro não via nada no mapa.
-// NÃO aplicar styles no cliente quando há mapId (Google proíbe e avisa no console).
+// Map ID real (Cloud) → estilo na nuvem + Advanced Markers.
+// DEMO_MAP_ID → sem mapId no Map, para ESTILO_MAPA_CLARO (mapa branco) no cliente.
+// Advanced Markers exigem mapId; no DEMO usamos OverlayView HTML (criarMarcador).
 function mapaIdEfetivo() {
-    return _mapId || 'DEMO_MAP_ID';
+    if (!_mapId || _mapId === 'DEMO_MAP_ID') return null;
+    return _mapId;
 }
 
 function opcoesMapa(opts = {}) {
-    const o = { mapId: mapaIdEfetivo(), ...opts };
-    // mapId sempre (mesmo se opts tentar apagar)
-    o.mapId = mapaIdEfetivo();
+    const o = { ...opts };
+    const mid = mapaIdEfetivo();
+    if (mid) o.mapId = mid;
+    else delete o.mapId;
     // Sempre força raster (evita GetViewportInfo 502 em VECTOR).
     if (o.renderingType == null) o.renderingType = renderingTypeRaster();
     return o;
@@ -813,11 +822,12 @@ function criarMarcador(opts = {}) {
         }
     }
 
-    // Preferir AdvancedMarker (mapId sempre presente). OverlayView só se a lib marker falhar.
+    // Advanced Marker só com Map ID real; DEMO (mapa branco) → OverlayView HTML.
     const zEfetivo = zIndex != null ? zIndex : (iconVariant ? 100 : (content ? 50 : undefined));
+    const usarAdvanced = !!(mapaIdEfetivo() && _AdvancedMarkerElement);
     let mk = null;
     let ov = null;
-    if (_AdvancedMarkerElement) {
+    if (usarAdvanced) {
         mk = new _AdvancedMarkerElement({
             map: map || null,
             position: normalizarLatLng(position),

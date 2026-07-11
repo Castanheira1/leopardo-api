@@ -166,6 +166,8 @@ async function garantirColunasUsuarios() {
     "ativo BOOLEAN DEFAULT TRUE",
     "politica_aceita_em TIMESTAMP",
     "politica_versao VARCHAR(20)",
+    // Uma sessão ativa por conta (bloqueia login simultâneo em 2 aparelhos).
+    "sessao_id VARCHAR(64)",
   ];
   for (const c of colunas) {
     try {
@@ -698,13 +700,47 @@ const upload = multer({
       : cb(new Error("Apenas imagens"), false),
 });
 
-const verificarAuth = (req, res, next) => {
+function gerarSessaoId() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+/** Emite JWT e invalida sessão anterior da mesma conta (1 dispositivo por vez). */
+async function emitirTokenSessao(user) {
+  const sessao_id = gerarSessaoId();
+  await pool.query("UPDATE usuarios SET sessao_id = $1 WHERE id = $2", [sessao_id, user.id]);
+  return jwt.sign(
+    {
+      id: user.id,
+      matricula: user.matricula,
+      is_admin: user.is_admin,
+      projeto_id: user.projeto_id,
+      admin_projeto_id: user.admin_projeto_id,
+      sid: sessao_id,
+    },
+    JWT_SECRET,
+    { expiresIn: "8h" }
+  );
+}
+
+const verificarAuth = async (req, res, next) => {
   const auth = req.headers.authorization || "";
   const tokenHeader = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   const token = tokenHeader || req.query.token;
   if (!token) return res.status(401).json({ error: "Token não fornecido" });
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    // Sessão única: se a conta entrou noutro aparelho, este token deixa de valer.
+    const { rows } = await pool.query(
+      "SELECT sessao_id FROM usuarios WHERE id = $1 AND COALESCE(ativo, TRUE) = TRUE",
+      [payload.id]
+    );
+    if (!rows.length) return res.status(401).json({ error: "Token inválido" });
+    if (!payload.sid || !rows[0].sessao_id || payload.sid !== rows[0].sessao_id) {
+      return res.status(401).json({
+        error: "Sessão encerrada: esta conta entrou em outro dispositivo.",
+      });
+    }
+    req.user = payload;
     next();
   } catch {
     return res.status(401).json({ error: "Token inválido" });
@@ -1638,17 +1674,13 @@ app.post("/api/register", authLimiter, async (req, res) => {
     );
 
     const userFront = await buscarUsuarioFront(rows[0].id);
-    const token = jwt.sign(
-      {
-        id: userFront.id,
-        matricula,
-        is_admin,
-        projeto_id: userFront.projeto_id,
-        admin_projeto_id: userFront.admin_projeto_id,
-      },
-      JWT_SECRET,
-      { expiresIn: "8h" }
-    );
+    const token = await emitirTokenSessao({
+      id: userFront.id,
+      matricula,
+      is_admin,
+      projeto_id: userFront.projeto_id,
+      admin_projeto_id: userFront.admin_projeto_id,
+    });
     res.json({ success: true, token, user: userFront });
   } catch (err) {
     console.error(err);
@@ -1671,18 +1703,8 @@ app.post("/api/login", authLimiter, async (req, res) => {
     const valido = await bcrypt.compare(senha, user.senha_hash);
     if (!valido) return res.status(401).json({ error: "Credenciais inválidas" });
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        matricula: user.matricula,
-        is_admin: user.is_admin,
-        projeto_id: user.projeto_id,
-        admin_projeto_id: user.admin_projeto_id,
-      },
-      JWT_SECRET,
-      { expiresIn: "8h" }
-    );
-
+    // Novo login invalida a sessão do outro aparelho (mesma matrícula).
+    const token = await emitirTokenSessao(user);
     const userFront = await buscarUsuarioFront(user.id);
     res.json({ token, user: userFront });
   } catch (err) {
@@ -5013,7 +5035,8 @@ app.post("/api/admin/chamados/:id/recusar", verificarAuth, carregarAdminEscopo, 
 require("./sim-frota")({
   app, pool, bcrypt, verificarAuth, carregarAdminEscopo,
   porta: PORT,
-  assinarToken: (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" }),
+  // Mesma regra de sessão única (grava sessao_id no usuário fake).
+  assinarToken: (payload) => emitirTokenSessao(payload),
 });
 
 /* ============================ ESTÁTICOS ============================ */

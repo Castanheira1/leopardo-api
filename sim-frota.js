@@ -179,10 +179,12 @@ function montarSimFrota({ app, pool, bcrypt, verificarAuth, carregarAdminEscopo,
   };
   function metInc(k, n = 1) { metricas[k] = (metricas[k] || 0) + n; }
 
-  function tokenDe(uid) {
+  async function tokenDe(uid) {
     const t = tokens.get(uid);
     if (t && t.exp > Date.now()) return t.token;
-    const token = assinarToken({ id: uid, matricula: "99SIM", is_admin: false });
+    const token = await Promise.resolve(
+      assinarToken({ id: uid, matricula: "99SIM", is_admin: false })
+    );
     tokens.set(uid, { token, exp: Date.now() + 6 * 3600 * 1000 });
     return token;
   }
@@ -190,10 +192,11 @@ function montarSimFrota({ app, pool, bcrypt, verificarAuth, carregarAdminEscopo,
   /** @returns {{ ok: boolean, status: number }} */
   async function apiSim(uid, metodo, rota, body) {
     try {
+      const tok = await tokenDe(uid);
       const r = await fetch(`http://127.0.0.1:${porta}${rota}`, {
         method: metodo,
         headers: {
-          Authorization: `Bearer ${tokenDe(uid)}`,
+          Authorization: `Bearer ${tok}`,
           [SIM_HEADER]: "1",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
