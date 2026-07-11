@@ -5065,15 +5065,81 @@
         motoristaPaxRotas.items = {};
     }
 
-    function enquadrarMapaMotorista() {
+    // Chave do último enquadramento — evita fitBounds a cada poll (ping-pong).
+    let _enquadroMotChave = '';
+    let _enquadroMotEm = 0;
+
+    /** Zoom ideal para caber ~distKm na tela (modo online ≤ 600 m). */
+    function zoomIdealEncontroKm(distKm) {
+        const d = Math.max(0.08, Number(distKm) || 0.3); // mín. ~80 m de “folga”
+        if (d <= 0.15) return 17;
+        if (d <= 0.35) return 16;
+        if (d <= 0.65) return 16; // ~600 m: legível na tela do celular
+        if (d <= 1.0) return 15;
+        if (d <= 2.0) return 14;
+        if (d <= 4.0) return 13;
+        return 12;
+    }
+
+    /**
+     * Online sem rota: enquadra MOTORISTA + PASSAGEIRO(s) com o melhor zoom.
+     * NÃO usa destino do passageiro (só o rótulo do pulso mostra o nome).
+     * forcar=true: nova solicitação — sempre aplica.
+     */
+    function enquadrarEncontroOnline(forcar) {
         if (!selOfe?.map || !g?.maps) return;
-        const bounds = new g.maps.LatLngBounds();
-        let tem = false;
+        const mot = selOfe.getOrigem?.();
+        if (!mot || !Number.isFinite(+mot.lat)) return;
+        const paxPts = [];
+        Object.values(pedidoFleet.markers).forEach((mk) => {
+            const p = mk._p;
+            if (p?.origem_lat != null) paxPts.push({ lat: +p.origem_lat, lng: +p.origem_lng });
+        });
+        Object.values(contatoFleet.markers).forEach((mk) => {
+            const c = mk._c;
+            if (c?.origem_lat != null) paxPts.push({ lat: +c.origem_lat, lng: +c.origem_lng });
+        });
+        if (!paxPts.length) return;
+
+        let maxDist = 0;
+        let latSum = +mot.lat;
+        let lngSum = +mot.lng;
+        paxPts.forEach((p) => {
+            latSum += p.lat;
+            lngSum += p.lng;
+            maxDist = Math.max(maxDist, distKmGps(mot, p));
+        });
+        const n = 1 + paxPts.length;
+        const center = { lat: latSum / n, lng: lngSum / n };
+        // Folga ~15% para os dois caberem com a sheet embaixo
+        const zoom = zoomIdealEncontroKm(maxDist * 1.15);
+        const chave = paxPts.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).sort().join('|')
+            + `|${(+mot.lat).toFixed(4)},${(+mot.lng).toFixed(4)}|z${zoom}`;
+
+        // Só reaplica se mudou de verdade ou forçou (nova buzina/pedido).
+        if (!forcar && chave === _enquadroMotChave && Date.now() - _enquadroMotEm < 12000) return;
+        _enquadroMotChave = chave;
+        _enquadroMotEm = Date.now();
+
+        // setCenter + setZoom (1 shot) — sem fitBounds + idle que brigam e geram ping-pong
+        selOfe.map.setOptions({ center, zoom });
+    }
+
+    function enquadrarMapaMotorista(forcar) {
+        if (!selOfe?.map || !g?.maps) return;
         const o = selOfe.getOrigem?.();
         const dest = selOfe.getDestino?.();
-        // Modo amarelo (online sem rota): zoom só motorista + onde o passageiro ESTÁ.
-        // Não inclui destino do passageiro — senão o mapa abre longe e some o ponto de encontro.
         const soOnlineSemRota = motoristaOnlineModo && !dest && !motoristaModoDestino;
+
+        // Modo amarelo: só os dois pontos (você + passageiro), zoom ideal ≤ ~600 m.
+        if (soOnlineSemRota) {
+            enquadrarEncontroOnline(!!forcar);
+            return;
+        }
+
+        // Com rota publicada: bounds motorista + destinos (comportamento anterior).
+        const bounds = new g.maps.LatLngBounds();
+        let tem = false;
         if (o) { bounds.extend(o); tem = true; }
         if (dest) { bounds.extend(dest); tem = true; }
         coletarPassageirosMapaMotorista().forEach(({ p }) => {
@@ -5081,23 +5147,24 @@
                 bounds.extend({ lat: +p.origem_lat, lng: +p.origem_lng });
                 tem = true;
             }
-            if (!soOnlineSemRota && p.destino_lat != null) {
+            if (p.destino_lat != null) {
                 bounds.extend({ lat: +p.destino_lat, lng: +p.destino_lng });
             }
         });
         if (!tem) return;
+        const chave = bounds.toUrlValue?.(6) || String(bounds);
+        if (!forcar && chave === _enquadroMotChave && Date.now() - _enquadroMotEm < 12000) return;
+        _enquadroMotChave = chave;
+        _enquadroMotEm = Date.now();
         selOfe.map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
-        // Evita zoom microscópico quando os dois estão no mesmo quarteirão.
         g.maps.event.addListenerOnce(selOfe.map, 'idle', () => {
-            const z = selOfe.map.getZoom();
-            if (z > 17) selOfe.map.setZoom(17);
-            if (soOnlineSemRota && z < 14) selOfe.map.setZoom(14);
+            if (selOfe.map.getZoom() > 17) selOfe.map.setZoom(17);
         });
     }
 
-    function enquadrarMapaMotoristaDebounced() {
+    function enquadrarMapaMotoristaDebounced(forcar) {
         clearTimeout(enquadrarMapaMotoristaTimer);
-        enquadrarMapaMotoristaTimer = setTimeout(enquadrarMapaMotorista, 350);
+        enquadrarMapaMotoristaTimer = setTimeout(() => enquadrarMapaMotorista(!!forcar), 200);
     }
 
     async function atualizarRotasPassageiroMotorista(map) {
@@ -5164,7 +5231,7 @@
                 delete motoristaPaxRotas.items[key];
             }
         });
-        if (passageiros.length) enquadrarMapaMotoristaDebounced();
+        // NÃO enquadra a cada poll — só quando chega solicitação nova (forcar).
     }
 
     function passageiroIdEmPedidoFleet(passageiroId) {
@@ -5207,6 +5274,10 @@
                 // Buzina só para pedido que CHEGOU depois que o mapa abriu
                 // (a primeira leva é o que já estava lá).
                 if (novos) buzinar();
+                // Nova solicitação: abre o mapa no raio ideal (você + passageiro).
+                if (novos || !pedidoFleet.viuPrimeiraLeva) {
+                    enquadrarMapaMotoristaDebounced(true);
+                }
                 pedidoFleet.viuPrimeiraLeva = true;
                 await atualizarRotasPassageiroMotorista(map);
             } catch (_) {}
@@ -5422,6 +5493,8 @@
         const o = c.origem_lat != null ? { lat: +c.origem_lat, lng: +c.origem_lng } : null;
         const d = c.destino_lat != null ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
         desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: true });
+        // Ao abrir o modal, reforça o mapa de trás nos dois pontos.
+        enquadrarMapaMotorista(true);
     }
     async function oferecerAoContato() {
         const c = contatoSel;
@@ -5582,6 +5655,10 @@
                 if (novos) {
                     buzinar();
                     msg('Passageiro no mapa — toque no pulso para oferecer carona.');
+                }
+                // Nova buzina: enquadra você + passageiro (1x, sem ping-pong).
+                if (novos || !contatoFleet.viuPrimeiraLeva) {
+                    enquadrarMapaMotoristaDebounced(true);
                 }
                 contatoFleet.viuPrimeiraLeva = true;
                 await atualizarRotasPassageiroMotorista(map);
