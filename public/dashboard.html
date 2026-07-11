@@ -2692,10 +2692,17 @@
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
-                : '<p class="cam-hint">Ninguém indo para esse local agora. Toque em <strong>Pedir carona</strong> — avisamos motoristas na rota.</p>';
+                : '<p class="cam-hint">Ninguém com rota para esse local agora. Toque em <strong>Pedir carona</strong> — avisamos motoristas na direção.</p>';
             if (porPerto.length) {
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
+            } else if (!indoDestino.length && contPerto) {
+                contPerto.style.display = 'block';
+                listaPerto.innerHTML = '<p class="cam-hint">Nenhum motorista <strong>online</strong> a menos de <strong>600 m</strong>. '
+                    + 'Confira: mesmo <strong>projeto</strong> no perfil, GPS ligado no celular do motorista, selfie válida (12h).</p>';
+            } else if (contPerto) {
+                contPerto.style.display = 'none';
+                listaPerto.innerHTML = '';
             }
             atualizarFormPedidoRota(
                 indoDestino.some((it) => it.compatRota === 'total'),
@@ -3430,13 +3437,15 @@
             motoristaOnlineModo = true;
             atualizarUiMotoristaOnline();
             iniciarBroadcastLocalizacao(true);
+            // Garante GPS fresco no banco (senão some do mapa do passageiro).
+            await enviarLocalizacaoAgora(true);
             acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
             iniciarPedidosAoVivo(selOfe.map);
             iniciarContatosAoVivo(selOfe.map);
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
-            msg('Você está online. Passageiros perto de você podem te ver.');
+            msg('Você está online. Passageiros do mesmo projeto a até 600 m (com destino marcado) veem seu carro.');
         } catch (_) {
             msg('Erro de conexão. Tente novamente.', 'error');
         } finally {
@@ -5337,19 +5346,28 @@
     // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
     let broadcastTimer = null;
     let broadcastModoOnline = false;
+    async function enviarLocalizacaoAgora(forcarDisponivel) {
+        try {
+            const pos = await obterLocalizacao();
+            const disponivel = forcarDisponivel || broadcastModoOnline || motoristaOnlineModo;
+            await fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pos.lat, lng: pos.lng, disponivel: !!disponivel }),
+            });
+            return pos;
+        } catch (_) { return null; }
+    }
     function iniciarBroadcastLocalizacao(modoOnline) {
         if (modoOnline) broadcastModoOnline = true;
-        if (broadcastTimer) return;
+        if (broadcastTimer) {
+            // Já rodava (ex.: após habilitar): manda um ping já no modo online.
+            if (modoOnline) enviarLocalizacaoAgora(true);
+            return;
+        }
         const intervalo = () => (viagemView ? 2500 : (broadcastModoOnline ? 3500 : 5000));
         async function envia() {
             if (document.hidden && !broadcastModoOnline) return;
-            try {
-                const pos = await obterLocalizacao();
-                await fetchWithAuth('/api/localizacao', {
-                    method: 'POST',
-                    body: JSON.stringify({ lat: pos.lat, lng: pos.lng, disponivel: broadcastModoOnline || motoristaOnlineModo }),
-                });
-            } catch (_) {}
+            await enviarLocalizacaoAgora(false);
         }
         envia();
         broadcastTimer = setInterval(envia, intervalo());

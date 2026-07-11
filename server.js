@@ -1443,9 +1443,36 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     }
   } catch (_) { /* cache DB opcional */ }
 
+  // Fallback em linha reta quando Google falha/estoura cota — evita 502 no app
+  // (passageiro ainda vê o trajeto aproximado; frota usa sim_rotas quando possível).
+  function payloadFallbackReta() {
+    const R = 6371000;
+    const dLat = ((dlat - olat) * Math.PI) / 180;
+    const dLng = ((dlng - olng) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos((olat * Math.PI) / 180) * Math.cos((dlat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    const distanceMeters = Math.round(2 * R * Math.asin(Math.sqrt(a)));
+    const durationMillis = Math.round((distanceMeters / 1000 / 35) * 3600 * 1000);
+    const path = [
+      { lat: olat, lng: olng },
+      { lat: dlat, lng: dlng },
+    ];
+    return {
+      path,
+      distanceMeters,
+      durationMillis,
+      km: Math.round((distanceMeters / 1000) * 100) / 100,
+      fallback: true,
+    };
+  }
+
   if (!rotasGooglePermitida()) {
-    return res.status(429).json({
-      error: "Limite de rotas Google/min atingido (economia de cota). Tente de novo em instantes.",
+    const payload = payloadFallbackReta();
+    ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
+    return res.json({
+      ...payload,
+      cached: false,
+      aviso: "Limite de rotas Google; usando linha reta temporária.",
       stats: { ...rotasGoogleStats, teto_min: ROTAS_GOOGLE_MAX_MIN, teto_dia: ROTAS_GOOGLE_MAX_DIA, usadas_hoje: rotasGoogleDia.n },
     });
   }
@@ -1470,11 +1497,17 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     if (!r.ok) {
       const msg = j?.error?.message || `Routes HTTP ${r.status}`;
       console.warn("POST /api/rotas:", msg);
-      return res.status(502).json({ error: msg });
+      const payload = payloadFallbackReta();
+      ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
+      return res.json({ ...payload, cached: false, aviso: msg });
     }
     const route = j?.routes?.[0];
     const enc = route?.polyline?.encodedPolyline;
-    if (!enc) return res.status(502).json({ error: "sem polyline na resposta" });
+    if (!enc) {
+      const payload = payloadFallbackReta();
+      ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
+      return res.json({ ...payload, cached: false, aviso: "sem polyline na resposta" });
+    }
     const path = decodificarPolylineServer(enc);
     const distanceMeters = Number(route.distanceMeters) || 0;
     let durationMillis = 0;
@@ -1503,7 +1536,9 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     res.json({ ...payload, cached: false });
   } catch (e) {
     console.warn("POST /api/rotas:", e.message);
-    res.status(502).json({ error: e.message || "falha ao calcular rota" });
+    const payload = payloadFallbackReta();
+    ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
+    res.json({ ...payload, cached: false, aviso: e.message || "falha ao calcular rota" });
   }
 });
 
@@ -3287,12 +3322,15 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   const { lat, lng } = req.query;
   try {
     const pid = await projetoDoUsuario(req.user.id);
+    // Sem projeto no cadastro o passageiro não vê ninguém (regra de isolamento).
     if (!pid) return res.json([]);
-    const temPos = lat != null && lng != null;
-    const params = temPos ? [req.user.id, lat, lng, RAIO_ONLINE_KM, RAIO_VISIVEL_KM, pid] : [req.user.id, pid];
+    const temPos = lat != null && lng != null && Number.isFinite(+lat) && Number.isFinite(+lng);
+    const params = temPos
+      ? [req.user.id, +lat, +lng, RAIO_ONLINE_KM, RAIO_VISIVEL_KM, pid]
+      : [req.user.id, pid];
     const distExpr = haversine("lat", "lng", "$2", "$3");
     // Filtro de raio: 600 m modo amarelo (online_desde); 10 km rota publicada (carona).
-    // Passageiro sem destino não consulta o mapa; com destino vê os dois tipos.
+    // Passageiro sem destino não consulta o mapa no front; com destino vê os dois tipos.
     const raio = temPos ? `WHERE (
       (online_desde IS NOT NULL AND ${distExpr} <= $4)
       OR (online_desde IS NULL AND carona_id IS NOT NULL AND ${distExpr} <= $5)
