@@ -1726,7 +1726,8 @@
             } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
         }, 10000);
         let destino = null;
-        const mkDestino = criarMarcador({ map, label: 'B', title: 'Destino' });
+        // Destino sem letra "B" — só pin discreto (a rota já indica o ponto).
+        const mkDestino = criarMarcador({ map, cor: '#EAD298', title: 'Destino' });
         let previewTimer = null;
         let previewSeq = 0;
 
