@@ -442,32 +442,60 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
-function carSvgPaths(variant = 'white') {
+function carSvgPaths(variant = 'yellow-ranger') {
     const gid = 'vap-car-body-' + variant;
-    return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
-        + `<stop offset="0" stop-color="#0e1116"/><stop offset="0.28" stop-color="#2e333b"/>`
-        + `<stop offset="0.72" stop-color="#2e333b"/><stop offset="1" stop-color="#0e1116"/>`
-        + `</linearGradient></defs>`
-        + `<rect x="7.8" y="11" width="3" height="9" rx="1.5" fill="#08090b"/>`
-        + `<rect x="37.2" y="11" width="3" height="9" rx="1.5" fill="#08090b"/>`
-        + `<rect x="7.8" y="42" width="3" height="9" rx="1.5" fill="#08090b"/>`
-        + `<rect x="37.2" y="42" width="3" height="9" rx="1.5" fill="#08090b"/>`
-        + `<path d="M10.6 15.2 C8.4 14.6 7.2 15.5 7.5 17 C7.8 18.3 9.4 18.7 11 18 Z" fill="#15181d"/>`
-        + `<path d="M37.4 15.2 C39.6 14.6 40.8 15.5 40.5 17 C40.2 18.3 38.6 18.7 37 18 Z" fill="#15181d"/>`
-        + `<path d="M24 2.8 C17.2 2.8 12.8 5 11.8 9.6 C11 13.2 10.5 16.6 10.5 21 L10.5 51.5 C10.5 57.2 12.6 60.6 17.2 61.3 L30.8 61.3 C35.4 60.6 37.5 57.2 37.5 51.5 L37.5 21 C37.5 16.6 37 13.2 36.2 9.6 C35.2 5 30.8 2.8 24 2.8 Z" fill="url(#${gid})" stroke="#000000" stroke-width="1"/>`
-        + `<path d="M15 4.6 C20 3.4 28 3.4 33 4.6" fill="none" stroke="#000000" stroke-width="0.9" opacity="0.45"/>`
-        + `<path d="M24 6 L24 12.6" stroke="#0a0c0f" stroke-width="1" opacity="0.6" stroke-linecap="round"/>`
-        + `<ellipse cx="24" cy="9.4" rx="8" ry="2.4" fill="#ffffff" opacity="0.10"/>`
-        + `<path d="M13.6 15.4 C17.2 13.5 30.8 13.5 34.4 15.4 L33.4 23.4 C27 22 21 22 14.6 23.4 Z" fill="#0c1015"/>`
-        + `<path d="M16 16.2 C19 14.9 24 14.7 27 15.2 L15.9 22.4 C15.3 21.8 15.1 20.8 15.3 19.5 Z" fill="#ffffff" opacity="0.08"/>`
-        + `<path d="M11.5 17.4 C12.3 17.2 13 17.3 13.6 17.6 L13.6 39.6 C13 39.9 12.3 40 11.5 39.8 Z" fill="#0c1015"/>`
-        + `<path d="M36.5 17.4 C35.7 17.2 35 17.3 34.4 17.6 L34.4 39.6 C35 39.9 35.7 40 36.5 39.8 Z" fill="#0c1015"/>`
-        + `<rect x="17.8" y="25.2" width="12.4" height="9.6" rx="2" fill="#07080a" stroke="#3a4048" stroke-width="0.6" stroke-opacity="0.5"/>`
-        + `<path d="M15 40.8 C20.4 39.7 27.6 39.7 33 40.8 L32.2 44 C27 43.1 21 43.1 15.8 44 Z" fill="#0c1015"/>`
-        + `<rect x="12.8" y="45.6" width="22.4" height="11.8" rx="1.6" fill="#1e2023" stroke="#000000" stroke-width="0.6"/>`
-        + `<path d="M15.6 47 L15.6 56.4 M18.4 47 L18.4 56.4 M21.2 47 L21.2 56.4 M24 47 L24 56.4 M26.8 47 L26.8 56.4 M29.6 47 L29.6 56.4 M32.4 47 L32.4 56.4" stroke="#0c0d0f" stroke-width="1"/>`
-        + `<path d="M11.8 55.6 C13 56.3 14.4 56.7 15.8 56.9 L15.5 59.4 C14 59.2 12.5 58.7 11.4 58 Z" fill="#e03131"/>`
-        + `<path d="M36.2 55.6 C35 56.3 33.6 56.7 32.2 56.9 L32.5 59.4 C34 59.2 35.5 58.7 36.6 58 Z" fill="#e03131"/>`;
+
+    if (variant === 'yellow-ranger' || variant === 'ranger') {
+        return `<defs>
+<linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#E8B923"/>
+<stop offset="0.35" stop-color="#F4D03F"/>
+<stop offset="0.65" stop-color="#F4D03F"/>
+<stop offset="1" stop-color="#E8B923"/>
+</linearGradient>
+</defs>
+<rect x="8" y="12" width="4" height="9.5" rx="1.6" fill="#111"/>
+<rect x="36" y="12" width="4" height="9.5" rx="1.6" fill="#111"/>
+<rect x="8" y="42.5" width="4" height="9.5" rx="1.6" fill="#111"/>
+<rect x="36" y="42.5" width="4" height="9.5" rx="1.6" fill="#111"/>
+<path d="M9 15.5 Q9 8 13.5 7.5 L34.5 7.5 Q39 8 39 15.5 L39 48.5 Q39 56 34.5 56.5 L13.5 56.5 Q9 56 9 48.5 Z" fill="url(#${gid})" stroke="#111" stroke-width="1.2"/>
+<path d="M12 14.5 Q12 10.5 15.5 10 L32.5 10 Q36 10.5 36 14.5 L36 31 Q36 34 32.5 34.5 L15.5 34.5 Q12 34 12 31 Z" fill="#1a1f26"/>
+<rect x="13.5" y="15.5" width="6" height="15.5" rx="1" fill="#0c1015"/>
+<rect x="20.5" y="15.5" width="7" height="15.5" rx="1" fill="#0c1015"/>
+<rect x="28.5" y="15.5" width="6" height="15.5" rx="1" fill="#0c1015"/>
+<rect x="12" y="37" width="24" height="17" rx="1.8" fill="#1a1f26"/>
+<rect x="13.5" y="39" width="21" height="12.5" rx="1" fill="#111"/>
+<rect x="10.8" y="52.5" width="4" height="3.2" rx="1" fill="#e03131"/>
+<rect x="33.2" y="52.5" width="4" height="3.2" rx="1" fill="#e03131"/>
+<rect x="10.8" y="8" width="3.5" height="2.3" rx="0.8" fill="#f0f0f0"/>
+<rect x="33.7" y="8" width="3.5" height="2.3" rx="0.8" fill="#f0f0f0"/>
+<line x1="12" y1="35.5" x2="36" y2="35.5" stroke="#111" stroke-width="1.3"/>`;
+    }
+
+    return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#0e1116"/><stop offset="0.28" stop-color="#2e333b"/>
+<stop offset="0.72" stop-color="#2e333b"/><stop offset="1" stop-color="#0e1116"/>
+</linearGradient></defs>
+<rect x="7.8" y="11" width="3" height="9" rx="1.5" fill="#08090b"/>
+<rect x="37.2" y="11" width="3" height="9" rx="1.5" fill="#08090b"/>
+<rect x="7.8" y="42" width="3" height="9" rx="1.5" fill="#08090b"/>
+<rect x="37.2" y="42" width="3" height="9" rx="1.5" fill="#08090b"/>
+<path d="M10.6 15.2 C8.4 14.6 7.2 15.5 7.5 17 C7.8 18.3 9.4 18.7 11 18 Z" fill="#15181d"/>
+<path d="M37.4 15.2 C39.6 14.6 40.8 15.5 40.5 17 C40.2 18.3 38.6 18.7 37 18 Z" fill="#15181d"/>
+<path d="M24 2.8 C17.2 2.8 12.8 5 11.8 9.6 C11 13.2 10.5 16.6 10.5 21 L10.5 51.5 C10.5 57.2 12.6 60.6 17.2 61.3 L30.8 61.3 C35.4 60.6 37.5 57.2 37.5 51.5 L37.5 21 C37.5 16.6 37 13.2 36.2 9.6 C35.2 5 30.8 2.8 24 2.8 Z" fill="url(#${gid})" stroke="#000000" stroke-width="1"/>
+<path d="M15 4.6 C20 3.4 28 3.4 33 4.6" fill="none" stroke="#000000" stroke-width="0.9" opacity="0.45"/>
+<path d="M24 6 L24 12.6" stroke="#0a0c0f" stroke-width="1" opacity="0.6" stroke-linecap="round"/>
+<ellipse cx="24" cy="9.4" rx="8" ry="2.4" fill="#ffffff" opacity="0.10"/>
+<path d="M13.6 15.4 C17.2 13.5 30.8 13.5 34.4 15.4 L33.4 23.4 C27 22 21 22 14.6 23.4 Z" fill="#0c1015"/>
+<path d="M16 16.2 C19 14.9 24 14.7 27 15.2 L15.9 22.4 C15.3 21.8 15.1 20.8 15.3 19.5 Z" fill="#ffffff" opacity="0.08"/>
+<path d="M11.5 17.4 C12.3 17.2 13 17.3 13.6 17.6 L13.6 39.6 C13 39.9 12.3 40 11.5 39.8 Z" fill="#0c1015"/>
+<path d="M36.5 17.4 C35.7 17.2 35 17.3 34.4 17.6 L34.4 39.6 C35 39.9 35.7 40 36.5 39.8 Z" fill="#0c1015"/>
+<rect x="17.8" y="25.2" width="12.4" height="9.6" rx="2" fill="#07080a" stroke="#3a4048" stroke-width="0.6" stroke-opacity="0.5"/>
+<path d="M15 40.8 C20.4 39.7 27.6 39.7 33 40.8 L32.2 44 C27 43.1 21 43.1 15.8 44 Z" fill="#0c1015"/>
+<rect x="12.8" y="45.6" width="22.4" height="11.8" rx="1.6" fill="#1e2023" stroke="#000000" stroke-width="0.6"/>
+<path d="M15.6 47 L15.6 56.4 M18.4 47 L18.4 56.4 M21.2 47 L21.2 56.4 M24 47 L24 56.4 M26.8 47 L26.8 56.4 M29.6 47 L29.6 56.4 M32.4 47 L32.4 56.4" stroke="#0c0d0f" stroke-width="1"/>
+<path d="M11.8 55.6 C13 56.3 14.4 56.7 15.8 56.9 L15.5 59.4 C14 59.2 12.5 58.7 11.4 58 Z" fill="#e03131"/>
+<path d="M36.2 55.6 C35 56.3 33.6 56.7 32.2 56.9 L32.5 59.4 C34 59.2 35.5 58.7 36.6 58 Z" fill="#e03131"/>`;
 }
 
 function htmlSvgCarro(variant, w, h) {
