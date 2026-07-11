@@ -2768,10 +2768,20 @@
 
     let listaMotoristasTimer = null;
     let ultimaListaMotoristas = [];
+    // Seq da última busca: resposta antiga NÃO pode sobrescrever a tela (race).
+    let _listaMotSeq = 0;
+    let _listaMotCarregando = false;
+
     // Ao escolher um local no mapa, monta a lista (estilo Uber):
     //   1) caronas indo para o destino (rota publicada);
     //   2) motoristas no modo amarelo por perto (600 m) — buzina/WhatsApp.
     // dest = null -> esconde a lista.
+    //
+    // POR QUE a UI “ficava ruim e voltava”:
+    // a cada poll a lista era ZERADA ("Procurando…") e reescrita. Em rede lenta
+    // ou com 2 fetches em paralelo, o sheet saltava de altura / mostrava texto
+    // velho e depois corrigia. Agora: não apaga se já tem conteúdo; só a
+    // resposta mais nova pinta a tela.
     async function carregarCaronasDestino(dest) {
         const wrap = document.getElementById('motoristasDestinoWrap');
         const contIndo = document.getElementById('motoristasIndoDestino');
@@ -2780,6 +2790,7 @@
         const listaPerto = document.getElementById('listaPorPerto');
         if (!wrap || !listaIndo || !listaPerto) return;
         if (!dest) {
+            _listaMotSeq += 1;
             if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
             if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
             atualizarBtnLimparPed(false);
@@ -2792,15 +2803,22 @@
             return;
         }
         atualizarHintDestinoPed();
-        // Já tem destino: CTA = Pedir carona (não "Escolher local") enquanto busca.
         atualizarFormPedidoRota(false, false);
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         atualizarBtnLimparPed(true);
         wrap.style.display = 'block';
         const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
-        listaIndo.innerHTML = '<p class="cam-hint">Procurando motoristas…</p>';
-        listaPerto.innerHTML = '';
-        if (contPerto) contPerto.style.display = 'none';
+
+        // Só mostra “Procurando…” na 1ª carga (lista vazia). Refresh silencioso
+        // mantém o conteúdo atual → sem pulo de layout / texto feio sumindo.
+        const listaVazia = !listaIndo.innerHTML.trim()
+            || listaIndo.querySelector('.lista-vazia-leve, .cam-hint');
+        if (listaVazia && !ultimaListaMotoristas.length) {
+            listaIndo.innerHTML = '<p class="lista-vazia-leve">Procurando…</p>';
+        }
+
+        const seq = ++_listaMotSeq;
+        _listaMotCarregando = true;
         try {
             const qCaronas = new URLSearchParams();
             if (o) { qCaronas.set('lat', o.lat); qCaronas.set('lng', o.lng); }
@@ -2814,6 +2832,9 @@
                 o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
                 o ? fetchWithAuth('/api/motoristas-rota' + qRota).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
             ]);
+            // Outra busca mais nova já rodou — descarta esta resposta.
+            if (seq !== _listaMotSeq) return;
+
             const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
                 .filter((m) => m.carona_id)
                 .map((m) => [m.id, m.ordem]));
@@ -2861,9 +2882,11 @@
                 if (oa !== ob) return oa - ob;
                 return a.dist - b.dist;
             });
+            porPerto.sort((a, b) => a.dist - b.dist);
+
             sincronizarModalCarroLista(indoDestino);
             ultimaListaMotoristas = [...indoDestino, ...porPerto];
-            porPerto.sort((a, b) => a.dist - b.dist);
+
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
                 : '<p class="lista-vazia-leve">Sem rota para esse destino</p>';
@@ -2882,18 +2905,24 @@
                 indoDestino.length > 0 || porPerto.length > 0,
             );
             if (!listaMotoristasTimer) {
+                // Refresh em silêncio (não zera a lista). Só com sheet colapsado
+                // ou a cada 12s em background — evita “piscar” com a alça aberta.
                 listaMotoristasTimer = setInterval(() => {
+                    if (_listaMotCarregando) return;
                     const d = selPed?.getDestino?.();
-                    const sheet = document.getElementById('acaoSheetPed');
-                    if (sheet && !sheet.classList.contains('collapsed')) return;
-                    if (d && document.getElementById('tabPedir')?.classList.contains('active') && !document.hidden) {
-                        carregarCaronasDestino(d);
-                    }
+                    if (!d || document.hidden) return;
+                    if (!document.getElementById('tabPedir')?.classList.contains('active')) return;
+                    carregarCaronasDestino(d);
                 }, 12000);
             }
         } catch (_) {
-            listaIndo.innerHTML = '<p class="cam-hint">Não foi possível carregar agora.</p>';
+            if (seq !== _listaMotSeq) return;
+            if (!ultimaListaMotoristas.length) {
+                listaIndo.innerHTML = '<p class="lista-vazia-leve">Não foi possível carregar</p>';
+            }
             atualizarFormPedidoRota(false, false);
+        } finally {
+            if (seq === _listaMotSeq) _listaMotCarregando = false;
         }
     }
 
