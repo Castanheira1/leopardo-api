@@ -2041,9 +2041,16 @@
         let rotaDurMsTotal = 0;
 
         function renderRotaInfo(kmTxt, durTxt) {
-            const titulo = destino?.texto ? `<strong>${esc(destino.texto)}</strong><br>` : '';
-            rotaInfo.innerHTML = `${titulo}${ICN.route} ${kmTxt} &nbsp;•&nbsp; ${ICN.clock} ${durTxt}`;
+            const nome = (destino?.texto && String(destino.texto).trim()) || 'Destino no mapa';
+            rotaInfo.innerHTML =
+                `<span class="rota-info-nome">${esc(nome)}</span>`
+                + `<span class="rota-info-meta">${ICN.route} ${esc(kmTxt)} · ${ICN.clock} ${esc(durTxt)}</span>`;
             rotaInfo.style.display = 'block';
+            // Espelha o nome na faixa branca do sheet (passageiro)
+            if (mapId === 'mapPed') {
+                const el = document.getElementById('destFaixaPedNome');
+                if (el) el.textContent = nome;
+            }
         }
 
         // km/ETA restantes derivados da projeção do GPS na rota já traçada (0 chamadas).
@@ -2159,8 +2166,10 @@
             const nomeDestino = (texto && String(texto).trim()) || '';
             destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
             mostrarBtnLimpar(true);
-            // CTA do passageiro muda NA HORA (não espera a lista de motoristas).
+            // Faixa branca no sheet com o nome escolhido (antes mesmo da rota).
             if (mapId === 'mapPed') {
+                const el = document.getElementById('destFaixaPedNome');
+                if (el) el.textContent = nomeDestino || 'Destino no mapa';
                 atualizarHintDestinoPed();
                 atualizarFormPedidoRota(false);
             }
@@ -2183,6 +2192,10 @@
                             // Atualiza a faixa de nome se a prévia satélite ainda estiver aberta.
                             if (nomeLocalEl && nomeLocalEl.style.display !== 'none') {
                                 mostrarNomeLocal(destino.texto);
+                            }
+                            if (mapId === 'mapPed') {
+                                const el = document.getElementById('destFaixaPedNome');
+                                if (el) el.textContent = destino.texto;
                             }
                         }
                     });
