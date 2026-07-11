@@ -268,26 +268,33 @@ function _ehRasterAtual(map, rt) {
     }
 }
 
-/** Aplica RASTER no Map (constructor + setRenderingType + reforço em frames). */
+/** Aplica RASTER uma vez (sem loop pesado — em rede lenta o setInterval joga FPS no chão). */
 function forcarMapaRaster(map) {
     if (!map) return;
-    const aplicar = () => {
-        const rt = renderingTypeRaster();
-        try {
-            if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
-        } catch (_) { /* API antiga */ }
-        try {
-            map.setOptions({ renderingType: rt });
-        } catch (_) { /* ignora */ }
-        return _ehRasterAtual(map, rt);
-    };
-    if (aplicar()) return;
-    // Enum/lib pode chegar atrasado — reforça por ~1,5 s
-    let n = 0;
-    const id = setInterval(() => {
-        n += 1;
-        if (aplicar() || n >= 8) clearInterval(id);
-    }, 200);
+    const rt = renderingTypeRaster();
+    try {
+        if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
+    } catch (_) { /* API antiga */ }
+    try {
+        map.setOptions({ renderingType: rt });
+    } catch (_) { /* ignora */ }
+    if (!_ehRasterAtual(map, rt)) {
+        requestAnimationFrame(() => {
+            try {
+                if (typeof map.setRenderingType === 'function') map.setRenderingType(renderingTypeRaster());
+                map.setOptions({ renderingType: renderingTypeRaster() });
+            } catch (_) { /* ignora */ }
+        });
+    }
+}
+
+// Cache do /api/config — evita N fetches em retry
+let _mapsConfigCache = null;
+async function obterConfigMaps() {
+    if (_mapsConfigCache?.mapsApiKey) return _mapsConfigCache;
+    const cfg = await (await fetch('/api/config')).json();
+    _mapsConfigCache = cfg;
+    return cfg;
 }
 
 // Map ID real (Cloud) → estilo na nuvem + Advanced Markers.
@@ -533,21 +540,21 @@ function instalarMapsBootstrap(apiKey) {
 
     window.__vapMapsBootstrap = (async () => {
         let lastErr = null;
-        for (let t = 0; t < 3; t++) {
+        // 2 tentativas (3× em rede lenta = 40s+ de espera e parece “travado”)
+        for (let t = 0; t < 2; t++) {
             try {
                 if (window.google?.maps?.importLibrary) return window.google;
                 await carregarScript(t);
-                // Confirma API real
                 await Promise.race([
                     window.google.maps.importLibrary('maps'),
-                    _sleepMaps(12000).then(() => { throw new Error('importLibrary maps timeout'); }),
+                    _sleepMaps(10000).then(() => { throw new Error('importLibrary maps timeout'); }),
                 ]);
                 return window.google;
             } catch (err) {
                 lastErr = err;
                 console.warn('Maps bootstrap tentativa', t + 1, err?.message || err);
                 try { delete window.google?.maps?.[('__ib__' + t)]; } catch (_) {}
-                await _sleepMaps(600 * (t + 1));
+                await _sleepMaps(400 * (t + 1));
             }
         }
         window.__vapMapsBootstrap = null;
@@ -557,36 +564,57 @@ function instalarMapsBootstrap(apiKey) {
     return window.__vapMapsBootstrap;
 }
 
-async function _importLibComTimeout(nome, ms = 12000) {
+async function _importLibComTimeout(nome, ms = 10000) {
     return Promise.race([
         google.maps.importLibrary(nome),
         _sleepMaps(ms).then(() => { throw new Error('timeout importLibrary ' + nome); }),
     ]);
 }
 
+/** routes/places em background — mapa e carro não precisam esperar. */
+function _carregarLibsExtrasEmFundo() {
+    if (window.__vapMapsExtrasPromise) return window.__vapMapsExtrasPromise;
+    window.__vapMapsExtrasPromise = (async () => {
+        try {
+            const routesLib = await _importLibComTimeout('routes', 12000);
+            if (routesLib?.Route) _RouteClass = routesLib.Route;
+        } catch (e) {
+            console.warn('routes lib (fundo):', e?.message || e);
+        }
+        try {
+            await _importLibComTimeout('places', 12000);
+        } catch (e) {
+            console.warn('places lib (fundo):', e?.message || e);
+        }
+    })();
+    return window.__vapMapsExtrasPromise;
+}
+
+async function garantirPlacesLib() {
+    if (window.google?.maps?.importLibrary) {
+        try {
+            await _importLibComTimeout('places', 12000);
+        } catch (_) { /* autocomplete tenta depois */ }
+    }
+}
+
 async function carregarMapsOnce() {
-    const cfg = await (await fetch('/api/config')).json();
+    const cfg = await obterConfigMaps();
     if (!cfg.mapsApiKey) throw new Error('Google Maps API key não configurada (.env GOOGLE_MAPS_API_KEY)');
     _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
     await instalarMapsBootstrap(cfg.mapsApiKey);
 
-    // Parallel com fallback sequencial (rede fraca derruba Promise.all)
-    let mapsLib, markerLib, routesLib;
+    // Caminho rápido: só maps + marker (abre mapa/carro). routes/places em paralelo depois.
+    let mapsLib;
+    let markerLib;
     try {
-        const libs = await Promise.all([
-            _importLibComTimeout('maps'),
-            _importLibComTimeout('marker'),
-            _importLibComTimeout('routes'),
-            _importLibComTimeout('places').catch(() => null),
+        [mapsLib, markerLib] = await Promise.all([
+            _importLibComTimeout('maps', 10000),
+            _importLibComTimeout('marker', 10000),
         ]);
-        mapsLib = libs[0];
-        markerLib = libs[1];
-        routesLib = libs[2];
     } catch (_) {
-        mapsLib = await _importLibComTimeout('maps', 15000);
-        markerLib = await _importLibComTimeout('marker', 15000);
-        routesLib = await _importLibComTimeout('routes', 15000);
-        try { await _importLibComTimeout('places', 10000); } catch (__) { /* places opcional */ }
+        mapsLib = await _importLibComTimeout('maps', 12000);
+        markerLib = await _importLibComTimeout('marker', 12000);
     }
 
     _RenderingType = mapsLib.RenderingType
@@ -596,9 +624,12 @@ async function carregarMapsOnce() {
     if (_RenderingType && !window.google.maps.RenderingType) {
         try { window.google.maps.RenderingType = _RenderingType; } catch (_) {}
     }
-    _RouteClass = routesLib.Route;
     _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
     _PinElement = markerLib.PinElement;
+
+    // Não bloqueia o 1º paint do mapa
+    _carregarLibsExtrasEmFundo();
+
     return window.google;
 }
 
@@ -606,15 +637,14 @@ function carregarMaps() {
     if (_mapsPromise) return _mapsPromise;
     _mapsPromise = (async () => {
         let lastErr = null;
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
             try {
                 return await carregarMapsOnce();
             } catch (err) {
                 lastErr = err;
                 console.warn('carregarMaps tentativa', i + 1, err?.message || err);
-                // permite novo bootstrap
                 window.__vapMapsBootstrap = null;
-                await _sleepMaps(700 * (i + 1));
+                await _sleepMaps(500 * (i + 1));
             }
         }
         throw lastErr || new Error('Não foi possível carregar o Google Maps');

@@ -1892,65 +1892,31 @@
         const el = document.getElementById(elId);
         if (!el) throw new Error('mapa: elemento #' + elId + ' não encontrado');
 
+        // Roadmap RASTER leve — hybrid no 1º load é o que mais pesa em rede fraca.
         const baseOpts = {
             zoom: 15,
-            mapTypeId: tipoMapaSalvo() === 'hybrid' ? 'roadmap' : (tipoMapaSalvo() || 'roadmap'),
+            mapTypeId: 'roadmap',
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: false,
             gestureHandling: 'greedy',
             clickableIcons: false,
+            draggable: true,
             ...opts,
         };
-        // Abre sempre em roadmap RASTER (híbrido no load dispara GetViewportInfo/QUIC).
-        // Usuário pode trocar para satélite depois pelo botão.
         if (baseOpts.mapTypeId === 'hybrid' || baseOpts.mapTypeId === 'satellite') {
             baseOpts.mapTypeId = 'roadmap';
         }
 
-        function montar(semMapId) {
-            // Recriar: limpa nós órfãos do Maps no container
-            try { el.innerHTML = ''; } catch (_) {}
-            const map = new g.maps.Map(el, opcoesMapa({
-                ...baseOpts,
-                _semMapId: !!semMapId,
-            }));
-            forcarMapaRaster(map);
-            return map;
-        }
-
-        // Sem mapId no 1º paint se DEMO; com mapId Cloud ainda forçamos RASTER.
-        // Em falha crônica de GetViewportInfo, montar(true) remove mapId.
-        let map = montar(false);
+        const map = new g.maps.Map(el, opcoesMapa(baseOpts));
         forcarMapaRaster(map);
         aplicarEstiloMapa(map, 'roadmap');
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);
-
-        // Recuperação sem destruir marcadores: RASTER + resize/pan (reativa tiles).
-        let tilesOk = false;
+        // Um único reforço RASTER no idle — sem panBy/resize que forçam re-download de tiles
         try {
-            g.maps.event.addListenerOnce(map, 'tilesloaded', () => { tilesOk = true; });
             g.maps.event.addListenerOnce(map, 'idle', () => forcarMapaRaster(map));
         } catch (_) {}
-
-        const reanimarTiles = () => {
-            try {
-                forcarMapaRaster(map);
-                const c = map.getCenter?.();
-                const z = map.getZoom?.() || 15;
-                if (c) {
-                    map.setZoom(z);
-                    map.panBy(1, 0);
-                    map.panBy(-1, 0);
-                }
-                if (g.maps.event?.trigger) g.maps.event.trigger(map, 'resize');
-            } catch (_) { /* ignora */ }
-        };
-        setTimeout(() => { if (!tilesOk) reanimarTiles(); }, 2500);
-        setTimeout(() => { if (!tilesOk) reanimarTiles(); }, 6000);
-
-        // NÃO pré-aquece satélite no open — segundo mapa hybrid gera GetViewportInfo/QUIC.
         return map;
     }
     function vincularBotaoTipoMapa(mapId, map) {
@@ -1969,12 +1935,12 @@
 
     /* -------- seletor de rota (mapa) -------- */
     async function criarSeletor(mapId, inputId, comoCarro, onDestino) {
-        // Rede fraca: carregarMaps já faz 3 tentativas; se ainda falhar, 1 ciclo extra.
+        // carregarMaps já faz retry interno; 2º ciclo só se o 1º morrer de vez.
         try {
             g = await carregarMaps();
         } catch (err1) {
-            console.warn('criarSeletor carregarMaps #1', err1?.message || err1);
-            await new Promise((r) => setTimeout(r, 1000));
+            console.warn('criarSeletor carregarMaps', err1?.message || err1);
+            await new Promise((r) => setTimeout(r, 600));
             g = await carregarMaps();
         }
         // O mapa abre NA HORA na última posição conhecida (ou no polo S11D) e o
@@ -2227,7 +2193,9 @@
 
         const inputEl = document.getElementById(inputId);
         const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
-        const pacDestino = await ligarPlaceAutocomplete(inputEl, {
+        // Places NÃO bloqueia o mapa: autocomplete sobe em paralelo (rede lenta).
+        let pacDestino = null;
+        const pacPronto = ligarPlaceAutocomplete(inputEl, {
             map,
             onFocus: () => {
                 const sheet = document.getElementById(sheetId);
@@ -2244,8 +2212,10 @@
                     if (sheet) sheet.classList.add('collapsed');
                 }
             },
-        });
-        function focarBuscaDestino() {
+        }).then((pac) => { pacDestino = pac; return pac; })
+            .catch((e) => { console.warn('autocomplete places:', e?.message || e); return null; });
+
+        async function focarBuscaDestino() {
             const sheet = document.getElementById(sheetId);
             if (sheet) sheet.classList.remove('collapsed');
             const wrap = inputEl.closest('.map-search-wrap');
@@ -2254,10 +2224,17 @@
                 setTimeout(() => wrap.classList.remove('map-search-atencao'), 3200);
             }
             try {
+                if (!pacDestino) await pacPronto;
+                if (!pacDestino) {
+                    inputEl.focus();
+                    return;
+                }
                 pacDestino.focus();
                 const interno = pacDestino.shadowRoot?.querySelector('input, [role="combobox"]');
                 if (interno) interno.focus();
-            } catch (_) {}
+            } catch (_) {
+                try { inputEl.focus(); } catch (__) {}
+            }
         }
 
         // Atualiza a origem para a localização ATUAL (evita ficar travado num lugar antigo).
