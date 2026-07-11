@@ -1360,15 +1360,95 @@
         if (sheet) sheet.classList.remove('collapsed');
         inicializarQuandoPed();
     }
+    /**
+     * Atividade que impede trocar papel (viagem, busca, online…).
+     * Retorna { tipo, msg } ou null.
+     */
+    function bloqueioTrocaPapel() {
+        if (viagemView && viagemView.status === 'em_andamento') {
+            return {
+                tipo: 'viagem',
+                msg: 'Há uma viagem em andamento. Finalize ou cancele antes de trocar de papel.',
+            };
+        }
+        if (localStorage.getItem('viagemAtiva') && !viagemView) {
+            // Tela perdeu o view mas o id ficou — ainda conta como em curso.
+            return {
+                tipo: 'viagem',
+                msg: 'Há uma viagem em andamento. Aguarde retomar ou finalize/cancele no app.',
+            };
+        }
+        if (document.body.classList.contains('buscando-carona')
+            || document.getElementById('modalChamando')?.style.display === 'flex') {
+            return {
+                tipo: 'busca',
+                msg: 'Você está pedindo carona. Cancele a busca antes de trocar de papel.',
+            };
+        }
+        if (typeof motoristaOnlineModo !== 'undefined' && motoristaOnlineModo) {
+            return {
+                tipo: 'online',
+                msg: 'Você está online como motorista. Fique offline antes de trocar de papel.',
+            };
+        }
+        if (document.getElementById('modalOfertaFila')?.style.display === 'flex') {
+            return {
+                tipo: 'oferta',
+                msg: 'Responda ou feche a solicitação da fila antes de trocar de papel.',
+            };
+        }
+        return null;
+    }
+
+    /** Volta à tela da atividade em curso (viagem / papel atual). */
+    function voltarParaAtividadeAtual() {
+        document.getElementById('telaPapel').style.display = 'none';
+        document.body.classList.remove('aguardando-papel');
+        if (viagemView && viagemView.status === 'em_andamento') {
+            document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
+            document.getElementById('tabViagem')?.classList.add('active');
+            syncMapasAbas('tabViagem');
+            const btn = document.getElementById('btnViagemAndamento');
+            if (btn) btn.style.display = 'inline-block';
+            return;
+        }
+        const papel = localStorage.getItem('papel');
+        if (papel === 'motorista' || papel === 'passageiro') {
+            showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+            garantirUiAcaoVisivel(true);
+        }
+    }
+
     function abrirEscolhaPapel() {
-        localStorage.removeItem('papel');
+        const bloqueio = bloqueioTrocaPapel();
+        if (bloqueio) {
+            msg(bloqueio.msg, 'error');
+            voltarParaAtividadeAtual();
+            // Se perdeu a tela da viagem mas ainda tem id, tenta retomar.
+            if (bloqueio.tipo === 'viagem' && !viagemView) {
+                retomarViagemSeAtiva().catch(() => {});
+            }
+            return;
+        }
+        // Não apaga o papel até escolher outro — se cancelar/voltar, permanece.
         document.body.classList.add('aguardando-papel');
         document.getElementById('telaPapel').style.display = 'flex';
         esconderBootSplash();
     }
     function escolherPapel(papel) {
+        // Com viagem em curso, só aceita o papel já fixado (evita “perder” a corrida).
+        const bloqueio = bloqueioTrocaPapel();
+        if (bloqueio && bloqueio.tipo === 'viagem') {
+            const papelAtual = localStorage.getItem('papel');
+            if (papelAtual && papelAtual !== papel) {
+                msg(bloqueio.msg, 'error');
+                voltarParaAtividadeAtual();
+                retomarViagemSeAtiva().catch(() => {});
+                return;
+            }
+        }
         document.body.classList.remove('aguardando-papel');
-        localStorage.setItem('papel', papel);   // usado só na sessão atual (menu, voltar da viagem)
+        localStorage.setItem('papel', papel);   // persiste: reabrir o app volta aqui
         registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
         document.getElementById('telaPapel').style.display = 'none';
         esconderBootSplash();
@@ -1378,6 +1458,16 @@
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
         document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
         document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
+        // Viagem em curso: não joga pro mapa de pedir/oferecer — mantém/retoma a viagem.
+        if (viagemView && viagemView.status === 'em_andamento') {
+            document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
+            document.getElementById('tabViagem')?.classList.add('active');
+            syncMapasAbas('tabViagem');
+            const btn = document.getElementById('btnViagemAndamento');
+            if (btn) btn.style.display = 'inline-block';
+            atualizarIndicadorModoOperante();
+            return;
+        }
         showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
         // 2 frames: 1º após active na tab, 2º após layout flex — evita tela limpa.
         requestAnimationFrame(() => {
@@ -4967,12 +5057,15 @@
             msg('Sem resposta do servidor ao encerrar. Verifique a conexão.', 'error');
         }
     }
-    // Sai da tela de viagem (concluída) e volta ao mapa do papel atual.
+    // Sai da tela de viagem (concluída/cancelada) e volta ao mapa do papel atual.
+    // NÃO abre o seletor de papel — usuário permanece onde estava.
     function sairDaViagem() {
         if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
         if (trackState && trackState.timer) clearInterval(trackState.timer);
         if (acompTimer) clearInterval(acompTimer);
         if (viagemView?.id) viagensAbertas.delete(viagemKey(viagemView.id));
+        const papelSalvo = localStorage.getItem('papel')
+            || (viagemView?.ehMotorista ? 'motorista' : 'passageiro');
         trackState = null;
         viagemView = null;
         localStorage.removeItem('viagemAtiva');
@@ -4980,7 +5073,14 @@
         // A viagem acabou: a rota antiga não pode ficar presa nos mapas de pedir/oferecer.
         if (selPed) selPed.limparRota();
         if (selOfe) selOfe.limparRota();
-        abrirEscolhaPapel();
+        document.getElementById('telaPapel').style.display = 'none';
+        document.body.classList.remove('aguardando-papel');
+        if (papelSalvo === 'motorista' || papelSalvo === 'passageiro') {
+            localStorage.setItem('papel', papelSalvo);
+            escolherPapel(papelSalvo);
+        } else {
+            abrirEscolhaPapel();
+        }
     }
 
     /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
@@ -6019,19 +6119,65 @@
     // Passageiro acompanha o carro do motorista ao vivo (sem rota de navegação).
     let acompTimer = null;   // timer do acompanhamento do passageiro (passageiroLoop)
 
-    // Só viagem em andamento retoma direto — todo o resto passa pela escolha Pedir/Oferecer.
+    // Retoma viagem em andamento (servidor) e fixa o papel correto.
+    // Se não houver viagem, o init reabre o último papel salvo (não o seletor).
     async function retomarViagemSeAtiva() {
         try {
             const r = await fetchWithAuth('/api/viagens');
-            if (!r?.ok) return false;
-            const ativa = (await r.json()).find((v) => v.status === 'em_andamento');
-            if (!ativa) return false;
-            escolherPapel(String(ativa.motorista_id) === String(user.id) ? 'motorista' : 'passageiro');
-            await abrirViagem(ativa.id);
-            return true;
+            if (!r?.ok) {
+                // Offline: se tem id local, ainda bloqueia troca e tenta abrir.
+                const idLocal = localStorage.getItem('viagemAtiva');
+                if (idLocal) {
+                    const papel = localStorage.getItem('papel') || 'passageiro';
+                    if (papel === 'motorista' || papel === 'passageiro') {
+                        localStorage.setItem('papel', papel);
+                        document.body.classList.remove('aguardando-papel');
+                        document.getElementById('telaPapel').style.display = 'none';
+                        document.getElementById('modoTitulo').textContent =
+                            papel === 'motorista' ? 'Motorista' : 'Passageiro';
+                    }
+                    const ok = await abrirViagem(idLocal);
+                    return !!ok;
+                }
+                return false;
+            }
+            const lista = await r.json();
+            const ativa = (Array.isArray(lista) ? lista : [])
+                .find((v) => v.status === 'em_andamento');
+            if (!ativa) {
+                localStorage.removeItem('viagemAtiva');
+                return false;
+            }
+            const papel = String(ativa.motorista_id) === String(user.id) ? 'motorista' : 'passageiro';
+            localStorage.setItem('papel', papel);
+            localStorage.setItem('viagemAtiva', String(ativa.id));
+            // Monta chrome do papel sem trocar de aba para pedir/oferecer (escolherPapel
+            // já detecta viagem e fica em tabViagem se view existir).
+            document.body.classList.remove('aguardando-papel');
+            document.getElementById('telaPapel').style.display = 'none';
+            document.getElementById('modoTitulo').textContent =
+                papel === 'motorista' ? 'Motorista' : 'Passageiro';
+            document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
+            document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
+            document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
+            document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
+            esconderBootSplash();
+            const ok = await abrirViagem(ativa.id);
+            if (ok) atualizarIndicadorModoOperante();
+            return !!ok;
         } catch (_) {
             return false;
         }
+    }
+
+    /** Reabre o último papel (sem seletor) — online/pedidos retomam no verificar*. */
+    function retomarPapelSalvo() {
+        const papel = localStorage.getItem('papel');
+        if (papel === 'motorista' || papel === 'passageiro') {
+            escolherPapel(papel);
+            return true;
+        }
+        return false;
     }
 
     async function carregarAppEmSegundoPlano() {
@@ -6059,6 +6205,11 @@
                 garantirUiAcaoVisivel(false);
                 pollPropostas();
                 pollOfertaFila();
+                // Se a viagem sumiu da tela (troca de papel / reload parcial), retoma.
+                if (!viagemView || viagemView.status !== 'em_andamento') {
+                    const id = localStorage.getItem('viagemAtiva');
+                    if (id) retomarViagemSeAtiva().catch(() => {});
+                }
                 if (document.getElementById('tabPedir')?.classList.contains('active')) {
                     if (horaPedModoAgenda) atualizarMinQuandoPed();
                     else tickQuandoPed();
@@ -6117,10 +6268,20 @@
         }
         const telaPapel = document.getElementById('telaPapel');
         if (telaPapel && telaPapel.style.display === 'flex') {
-            return true;   // botão voltar não fecha a escolha de papel
+            // Já tem papel salvo: voltar cancela o seletor e restaura a atividade.
+            if (localStorage.getItem('papel')) {
+                voltarParaAtividadeAtual();
+                return true;
+            }
+            return true;   // 1ª escolha: não fecha sem definir papel
         }
         const tabViagem = document.getElementById('tabViagem');
         if (tabViagem && tabViagem.classList.contains('active')) {
+            // Em viagem: não “some” a corrida — só avisa. Botão Em andamento volta.
+            if (viagemView && viagemView.status === 'em_andamento') {
+                msg('Viagem em andamento — use Cancelar ou Finalizar para sair.', 'error');
+                return true;
+            }
             showTab(localStorage.getItem('papel') === 'motorista' ? 'tabOferecer' : 'tabPedir');
             return true;
         }
@@ -6170,10 +6331,15 @@
         carregarMaps().catch(() => {});
         iniciarTransmissaoPassageiro();
 
-        // Escolha de papel na hora: só espera checar viagem em andamento (1 request).
+        // 1) Viagem em andamento → volta direto nela (papel certo).
+        // 2) Senão, último papel salvo (passageiro/motorista) — não perde o modo.
+        // 3) Só então mostra o seletor Pedir/Oferecer.
         const retomouViagem = await retomarViagemSeAtiva();
-        if (!retomouViagem) abrirEscolhaPapel();
-        else garantirUiAcaoVisivel(true);
+        if (retomouViagem) {
+            garantirUiAcaoVisivel(true);
+        } else if (!retomarPapelSalvo()) {
+            abrirEscolhaPapel();
+        }
 
         // Perfil, habilitação, propostas etc. rodam em paralelo — não seguram a tela.
         carregarAppEmSegundoPlano();
