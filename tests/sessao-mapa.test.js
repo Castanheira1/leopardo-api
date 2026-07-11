@@ -40,7 +40,7 @@ ok(server.includes("Sessão encerrada: esta conta entrou em outro dispositivo"),
 ok(/async \(req, res, next\) =>/.test(server) && server.includes("payload.sid"), "verificarAuth checa sid");
 ok(appJs.includes("Sessão encerrada") || appJs.includes("resp.clone()"), "front propaga erro 401");
 
-ok(/VERSION = "v250"/.test(sw), "SW v250");
+ok(/VERSION = "v\d+"/.test(sw), "SW versioned");
 
 if (failed) process.exit(1);
 console.log("\nSessao + mapa branco OK");

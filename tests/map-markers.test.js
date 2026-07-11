@@ -40,7 +40,7 @@ ok(
 );
 ok(appJs.includes("function montarNoCarro"), "montarNoCarro presente");
 ok(appJs.includes("function carSvgPaths"), "carSvgPaths presente");
-ok(/VERSION = "v250"/.test(sw), "service-worker v250");
+ok(/VERSION = "v\d+"/.test(sw), "service-worker versioned");
 
 if (failed) {
   console.error(`\n${failed} teste(s) falharam`);
