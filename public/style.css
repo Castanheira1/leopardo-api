@@ -1028,26 +1028,32 @@ body.theme-dark {
 /* ===== Solicitação recebida estilo Uber (bottom sheet) ===== */
 .sol-box { text-align: center; }
 .sol-badge { display: inline-block; background: #EAD298; color: #0F3D3E; font-weight: 700; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 10px; }
-/* Avatar do passageiro no modal do motorista (selfie de validação) */
+/* Foto real do passageiro (sem zoom/crop pesado — object-fit: contain) */
 .sol-avatar-wrap {
     display: flex;
     justify-content: center;
-    margin: 6px auto 4px;
+    margin: 8px auto 6px;
 }
 .sol-selfie {
-    width: 104px;
-    height: 104px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #EAD298;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-    background: #1a1b1e;
+    width: 160px;
+    height: 200px;
+    max-width: 72vw;
+    border-radius: 14px;
+    object-fit: contain; /* foto inteira, sem “zoom” do cover */
+    object-position: center center;
+    border: 2px solid rgba(234, 210, 152, 0.55);
+    background: #0e0f12;
+    /* sem filter, blur, scale — imagem natural */
+    filter: none;
+    transform: none;
+    image-orientation: from-image;
 }
 .sol-selfie-ph {
-    width: 104px;
-    height: 104px;
-    border-radius: 50%;
-    border: 3px solid rgba(234, 210, 152, 0.45);
+    width: 160px;
+    height: 200px;
+    max-width: 72vw;
+    border-radius: 14px;
+    border: 2px solid rgba(234, 210, 152, 0.35);
     background: #1a1b1e;
     color: #EAD298;
     font-size: 2rem;
@@ -2152,10 +2158,15 @@ body.aguardando-papel .navbar {
     width: 100%;
     height: 100%;
     max-height: none;
-    object-fit: cover;
+    /* contain = enquadramento real (sem zoom/crop do cover) */
+    object-fit: contain;
+    object-position: center center;
     border-radius: 14px;
+    background: #000;
+    filter: none;
 }
-.cam-video-espelho { transform: scaleX(-1); }   /* selfie: espelha como o usuário espera */
+/* Selfie SEM espelho: o que aparece é o que grava (foto real, sem efeito). */
+.cam-video-espelho { transform: none; }
 .cam-live .cam-hint {
     position: absolute;
     left: 0;

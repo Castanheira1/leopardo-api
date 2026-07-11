@@ -1174,8 +1174,8 @@ function capturarFoto(opts = {}) {
             <div class="cam-box">
                 <h3>${titulo}</h3>
                 <div class="cam-video-wrap">
-                    <video class="cam-video ${facing === 'user' ? 'cam-video-espelho' : ''}" autoplay playsinline muted></video>
-                    <p class="cam-hint">${hintTexto} • só câmera ao vivo (galeria bloqueada)</p>
+                    <video class="cam-video" autoplay playsinline muted></video>
+                    <p class="cam-hint">${hintTexto} • foto real (sem zoom/espelho) · só câmera ao vivo</p>
                 </div>
                 <div class="cam-status"></div>
                 <div class="cam-actions">
@@ -1258,11 +1258,18 @@ function capturarFoto(opts = {}) {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 return falhaCamera('Câmera ao vivo indisponível neste navegador.');
             }
-            const tentativas = [
-                { video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 960 } }, audio: false },
-                { video: { facingMode: facing }, audio: false },
-                { video: true, audio: false },
-            ];
+            // Selfie: resolução moderada sem “ideal” que force crop digital no sensor.
+            const tentativas = facing === 'user'
+                ? [
+                    { video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                    { video: { facingMode: 'user' }, audio: false },
+                    { video: true, audio: false },
+                ]
+                : [
+                    { video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                    { video: { facingMode: facing }, audio: false },
+                    { video: true, audio: false },
+                ];
             for (const opts of tentativas) {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia(opts);
