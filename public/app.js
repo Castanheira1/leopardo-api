@@ -492,7 +492,14 @@ function carregarMaps() {
             google.maps.importLibrary('routes'),
             google.maps.importLibrary('places'),
         ]);
-        _RenderingType = mapsLib.RenderingType || window.google?.maps?.RenderingType || null;
+        _RenderingType = mapsLib.RenderingType
+            || mapsLib.Map?.RenderingType
+            || window.google?.maps?.RenderingType
+            || null;
+        // Garante enum global se a lib expôs só no mapsLib
+        if (_RenderingType && !window.google.maps.RenderingType) {
+            try { window.google.maps.RenderingType = _RenderingType; } catch (_) {}
+        }
         _RouteClass = routesLib.Route;
         _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
         _PinElement = markerLib.PinElement;
@@ -828,28 +835,30 @@ function criarMarcador(opts = {}) {
             wrapEl = img;
         }
     } else if (label || cor) {
-        if (_PinElement) {
-            const pinOpts = {
-                background: cor || '#EA4335',
-                borderColor: '#fff',
-                glyphColor: '#fff',
-                scale: label ? 1.1 : 0.85,
-            };
-            if (label) pinOpts.glyphText = label;
-            pinEl = new _PinElement(pinOpts);
-            // PinElement vira content do AdvancedMarker (append sozinho falha em alguns builds)
-            content = pinEl.element || pinEl;
-        } else {
-            const d = document.createElement('div');
-            d.style.cssText = 'width:18px;height:18px;border-radius:50%;background:'
-                + (cor || '#EA4335') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);';
-            if (label) {
-                d.style.cssText = 'min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:'
-                    + (cor || '#EA4335') + ';border:2px solid #fff;color:#fff;font:700 11px/18px system-ui,sans-serif;'
-                    + 'text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.35);';
-                d.textContent = label;
-            }
-            content = d;
+        // Pin HTML (evita pin.element deprecado e é mais rápido no DEMO/OverlayView)
+        const d = document.createElement('div');
+        d.style.cssText = 'width:18px;height:18px;border-radius:50%;background:'
+            + (cor || '#EA4335') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);';
+        if (label) {
+            d.style.cssText = 'min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:'
+                + (cor || '#EA4335') + ';border:2px solid #fff;color:#fff;font:700 11px/18px system-ui,sans-serif;'
+                + 'text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.35);';
+            d.textContent = label;
+        }
+        content = d;
+        // Com Map ID real ainda pode usar PinElement nativo (sem .element)
+        if (_PinElement && mapaIdEfetivo()) {
+            try {
+                const pinOpts = {
+                    background: cor || '#EA4335',
+                    borderColor: '#fff',
+                    glyphColor: '#fff',
+                    scale: label ? 1.1 : 0.85,
+                };
+                if (label) pinOpts.glyphText = label;
+                pinEl = new _PinElement(pinOpts);
+                content = pinEl;
+            } catch (_) { /* mantém HTML */ }
         }
     }
 

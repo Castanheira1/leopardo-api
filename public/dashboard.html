@@ -1780,9 +1780,7 @@
                 keyboardShortcuts: false,
                 clickableIcons: false,
             }));
-            try {
-                if (typeof warm.setRenderingType === 'function') warm.setRenderingType(renderingTypeRaster());
-            } catch (_) {}
+            forcarMapaRaster(warm);
             const limpar = () => { try { el.remove(); } catch (_) {} };
             gmaps.maps.event.addListenerOnce(warm, 'tilesloaded', () => setTimeout(limpar, 1500));
             setTimeout(limpar, 8000); // segurança se tilesloaded nunca vier
@@ -4262,6 +4260,11 @@
         // Rota no mapa para os dois: motorista navega; passageiro vê para onde está indo.
         const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 });
 
+        // Já mostra o passageiro no ponto de embarque (não espera GPS/poll de 2–12s).
+        const posPaxInicial = (ehMotorista && embarque && (v.fase || 'encontro') === 'encontro')
+            ? { ...embarque }
+            : null;
+
         viagemView = {
             id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
             embarque, destino, map, rotaCtrl,
@@ -4270,12 +4273,15 @@
             embarqueReal: (v.fase === 'destino' && embarque) ? { ...embarque } : null,
             chegadaDestino: false, chegadaDestinoDesde: null, autoFinalizarTimer: null,
             passageiroSexo: v.passageiro_sexo,
-            posMotorista: null, posPassageiro: null,   // posições ao vivo dos dois lados
+            posMotorista: null,
+            posPassageiro: posPaxInicial,
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
             rotaPath: null, rotaKmTotal: 0, rotaDurMsTotal: 0,
             seguir: true,   // motorista segue a si; passageiro segue o carro
         };
         atualizarCabecalhoViagem();
+        // Desenha pulso do passageiro na hora (embarque conhecido).
+        if (posPaxInicial) renderViagem();
 
         // Arrastar o mapa pausa o "seguir" (deixa olhar em volta); o botão recentraliza.
         map.addListener('dragstart', () => { if (viagemView) viagemView.seguir = false; });
@@ -4564,10 +4570,8 @@
         trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null, kmTela: 0 };
         localStorage.setItem('viagemAtiva', vv.id);
 
-        // 1) GPS próprio → grava trajeto só após embarque (fase destino), >= 25 m.
-        let ultimoEnvioLoc = 0;
-        trackState.watchId = navigator.geolocation.watchPosition((pos) => {
-            const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const aplicarGpsProprio = (pt) => {
+            if (!vv || vv.status !== 'em_andamento') return;
             if (vv.ehMotorista) {
                 vv.posMotorista = pt;
                 if (vv.fase === 'destino') {
@@ -4580,15 +4584,47 @@
                         trackState.ultimoPonto = pt;
                     }
                 }
-            } else vv.posPassageiro = pt;
-            renderViagem();
-            if (Date.now() - ultimoEnvioLoc > 2000) {
-                ultimoEnvioLoc = Date.now();
-                fetchWithAuth('/api/localizacao', { method: 'POST', body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }) }).catch(() => {});
+            } else {
+                vv.posPassageiro = pt;
             }
-        }, (e) => console.warn('GPS:', e.message), { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 });
+            renderViagem();
+        };
 
-        // 2) Posição do outro + fase/status (a cada 4s).
+        // 1) GPS: 1ª posição rápida (cache/rede), depois alta precisão.
+        // Timeout 12s + highAccuracy travava e o passageiro sumia do mapa.
+        let ultimoEnvioLoc = 0;
+        const enviarLoc = (pt) => {
+            if (Date.now() - ultimoEnvioLoc < 1500) return;
+            ultimoEnvioLoc = Date.now();
+            fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }),
+            }).catch(() => {});
+        };
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    aplicarGpsProprio(pt);
+                    enviarLoc(pt);
+                },
+                () => {},
+                { enableHighAccuracy: false, maximumAge: 30000, timeout: 2500 },
+            );
+            trackState.watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    aplicarGpsProprio(pt);
+                    enviarLoc(pt);
+                },
+                (e) => console.warn('GPS:', e.message),
+                // maximumAge maior + timeout menor = menos "Timeout expired" no Chrome
+                { enableHighAccuracy: true, maximumAge: 8000, timeout: 6000 },
+            );
+        }
+
+        // 2) Posição do outro + fase/status — poll mais rápido no começo.
+        let ticksRapidos = 0;
         async function tick() {
             try {
                 const r = await fetchWithAuth('/api/viagens/' + vv.id + '/localizacao');
@@ -4612,12 +4648,24 @@
                 }
                 // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
                 if (!vv.ehMotorista && d.motorista) vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
-                if (vv.ehMotorista && d.passageiro) vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
+                if (vv.ehMotorista && d.passageiro) {
+                    vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
+                } else if (vv.ehMotorista && !vv.posPassageiro && vv.embarque && vv.fase === 'encontro') {
+                    // Mantém embarque até o GPS do passageiro chegar ao servidor
+                    vv.posPassageiro = { ...vv.embarque };
+                }
                 renderViagem();
             } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+            ticksRapidos++;
+            // Após ~12s, desacelera o poll (economia de bateria/rede)
+            if (ticksRapidos === 8 && acompTimer) {
+                clearInterval(acompTimer);
+                acompTimer = setInterval(tick, VIAGEM_POLL_MS);
+            }
         }
         tick();
-        acompTimer = setInterval(tick, VIAGEM_POLL_MS);
+        // 1,2 s nos primeiros segundos — passageiro aparece rápido após aceite
+        acompTimer = setInterval(tick, 1200);
         if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
     }
     // Motorista chegou ao passageiro: muda para a fase de destino e reinicia medição de km.
@@ -5341,6 +5389,7 @@
                 disableDefaultUI: true, gestureHandling: 'none',
                 keyboardShortcuts: false, clickableIcons: false, mapTypeId: 'roadmap',
             }));
+            forcarMapaRaster(map);
             const rotaCtrl = criarRotaControle(map, { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.95 });
             mm = _miniMapas[elId] = { map, rotaCtrl, mkO: null, mkD: null, mkMot: null };
         }
