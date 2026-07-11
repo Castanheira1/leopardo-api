@@ -165,7 +165,7 @@
                                 <div id="listaIndoDestino"></div>
                             </div>
                             <div id="motoristasPorPerto" style="display:none;margin-top:10px;">
-                                <strong class="painel-tit">Por perto (sem rota publicada)</strong>
+                                <strong class="painel-tit">Online por perto (sem destino fixo)</strong>
                                 <div id="listaPorPerto"></div>
                             </div>
                         </div>
@@ -177,10 +177,10 @@
                 </div>
             </div>
 
-            <!-- ============ OFERECER CARONA (motorista) ============ -->
+            <!-- ============ MOTORISTA ONLINE ============ -->
             <div id="tabOferecer" class="tab-content">
                 <div class="map-stage">
-                    <input id="destOfeInput" class="map-search-hidden" placeholder="Para onde vamos">
+                    <input id="destOfeInput" class="map-search-hidden" placeholder="Destino (opcional)">
                     <div id="mapOfe" class="map-stage-map"></div>
                     <div class="map-stage-controls" id="mapOfeControls">
                         <button type="button" class="map-tipo-btn" id="btnTipoMapaOfe" aria-label="Alternar satélite ou mapa leve" title="Alternar satélite ou mapa leve">
@@ -190,21 +190,26 @@
                     <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe collapsed">
                         <div class="acao-grip" id="gripOfe">
                             <span class="acao-accent" aria-hidden="true"></span>
-                            <span class="acao-titulo">Oferecer carona</span>
+                            <span class="acao-titulo">Ficar online</span>
                             <span class="acao-handle" aria-hidden="true"></span>
                         </div>
                         <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
-                            <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar rota</button>
+                            <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar destino</button>
                         </div>
                         <div class="acao-sheet-body">
+                        <p id="hintMotoristaOnline" class="cam-hint" style="margin:0 0 10px;">
+                            Informe as <strong>vagas</strong> e toque em <strong>Ficar online</strong>.
+                            Passageiros só veem você depois de escolherem o destino deles.
+                            Destino no mapa é opcional.
+                        </p>
                         <div class="form-row" id="vagasOfeWrap">
                             <div class="form-group">
-                                <label>Vagas disponíveis</label>
+                                <label>Vagas no carro</label>
                                 <input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric">
                             </div>
                         </div>
                         <div id="statusMotoristaOnline" class="ios-banner" style="display:none;" role="status" aria-live="polite">
-                            <span class="ios-banner__icon" aria-hidden="true">V</span>
+                            <span class="ios-banner__icon" aria-hidden="true">●</span>
                             <span class="ios-banner__body">
                                 <strong class="ios-banner__title"></strong>
                                 <span class="ios-banner__sub"></span>
@@ -212,7 +217,7 @@
                         </div>
                         </div>
                         <div class="acao-sheet-footer">
-                            <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="toggleModoMotoristaOnline()">Oferecer carona</button>
+                            <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="toggleModoMotoristaOnline()">Ficar online</button>
                         </div>
                     </div>
                 </div>
@@ -577,7 +582,7 @@
             </button>
             <button type="button" class="papel-opt" onclick="escolherPapel('motorista')">
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="#EAD298"/><circle cx="16.5" cy="16" r="1.2" fill="#EAD298"/></svg>
-                <span class="papel-tit">Oferecer carona</span>
+                <span class="papel-tit">Ficar online</span>
                 <span class="papel-sub">Sou motorista</span>
             </button>
         </div>
@@ -3230,12 +3235,17 @@
         const st = document.getElementById('statusMotoristaOnline');
         const vagasWrap = document.getElementById('vagasOfeWrap');
         const vagasEl = document.getElementById('vagasOfe');
+        const hint = document.getElementById('hintMotoristaOnline');
+        const tituloSheet = document.querySelector('#acaoSheetOfe .acao-titulo');
+        if (tituloSheet) tituloSheet.textContent = motoristaOnlineModo ? 'Você está online' : 'Ficar online';
+        if (hint) hint.style.display = motoristaOnlineModo ? 'none' : '';
         if (btn) {
-            btn.textContent = motoristaOnlineModo ? 'Encerrar' : 'Oferecer carona';
+            btn.textContent = motoristaOnlineModo ? 'Ficar offline' : 'Ficar online';
             btn.classList.toggle('btn-danger', motoristaOnlineModo);
             btn.classList.toggle('btn-primary', !motoristaOnlineModo);
             btn.disabled = false;
         }
+        // Vagas ficam editáveis só offline; online o valor já foi publicado.
         if (vagasWrap) vagasWrap.style.display = motoristaOnlineModo ? 'none' : '';
         if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
         if (st) {
@@ -3249,16 +3259,19 @@
                 st.classList.toggle('ios-banner--destino', !!motoristaModoDestino);
                 st.classList.toggle('ios-banner--amarelo', !motoristaModoDestino);
                 if (motoristaModoDestino) {
-                    if (tit) tit.textContent = dest?.texto ? 'Rota publicada' : 'Carona ativa';
+                    if (tit) tit.textContent = 'Online com destino';
                     if (sub) {
                         sub.style.display = '';
                         sub.textContent = dest?.texto
-                            ? (dest.texto + ' · visível em 10 km')
-                            : 'Visível em 10 km para passageiros';
+                            ? (dest.texto + ' · passageiros veem sua rota (até 10 km)')
+                            : 'Passageiros veem sua rota (até 10 km)';
                     }
                 } else {
-                    if (tit) tit.textContent = 'Você está online num raio de 600 m.';
-                    if (sub) { sub.textContent = ''; sub.style.display = 'none'; }
+                    if (tit) tit.textContent = 'Online · sem destino fixo';
+                    if (sub) {
+                        sub.style.display = '';
+                        sub.textContent = 'Visível para quem pediu carona perto de você (até 600 m)';
+                    }
                 }
             }
         }
@@ -3298,9 +3311,9 @@
         if (dest) return oferecerCarona();
         if (!selOfe.origemConfiavel()) {
             selOfe.recentrar();
-            return msg('Ative sua localização (GPS) para oferecer carona.', 'error');
+            return msg('Ative sua localização (GPS) para ficar online.', 'error');
         }
-        const soltar = travarBotao('btnCtaOferecer', 'Conectando…');
+        const soltar = travarBotao('btnCtaOferecer', 'Entrando…');
         if (!soltar) return;
         try {
             const origem = selOfe.getOrigem();
@@ -3321,6 +3334,7 @@
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
+            msg('Você está online. Passageiros perto de você podem te ver.');
         } catch (_) {
             msg('Erro de conexão. Tente novamente.', 'error');
         } finally {
@@ -3350,7 +3364,7 @@
         if (selOfe && selOfe.limparRota) selOfe.limparRota();
         atualizarIndicadorModoOperante();
         await liberarWakeLock();
-        if (!silencioso) msg('Modo online encerrado.');
+        if (!silencioso) msg('Você ficou offline.');
     }
 
     async function toggleModoMotoristaOnline() {
@@ -3366,7 +3380,7 @@
         if (!dest) return msg('Defina um destino no mapa', 'error');
         if (!selOfe.origemConfiavel()) {
             selOfe.recentrar();
-            return msg('Ative sua localização (GPS) para oferecer carona.', 'error');
+            return msg('Ative sua localização (GPS) para ficar online.', 'error');
         }
         const origem = selOfe.getOrigem();
         const soltar = travarBotao('btnCtaOferecer', 'Publicando…');
@@ -3393,7 +3407,7 @@
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_destino', { vagas, destino: dest.texto || null });
-            msg('Publicado! Visível em 10 km para quem pede carona nessa direção.');
+            msg('Online com destino. Visível em até 10 km nessa direção.');
             document.getElementById('acaoSheetOfe').classList.add('collapsed');
         } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
         finally {
