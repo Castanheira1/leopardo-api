@@ -1087,32 +1087,33 @@ body.theme-dark {
     color: #9aa0a6;
     line-height: 1.35;
 }
-/* Destino do passageiro em destaque (nome do local) — sem forçar zoom no mapa */
+/* Destino do passageiro em destaque — mesma família do app (sans, limpa) */
 .sol-destino-destaque {
     margin: 10px 0 12px;
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: #f4f1ea;
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     text-align: center;
 }
 .sol-destino-label {
     display: block;
-    font-size: 0.72rem;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.68rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: #5c5346;
+    color: #9aa0a6;
     margin-bottom: 4px;
 }
 .sol-destino-nome {
     display: block;
-    color: #0a0a0a;
-    font-family: Georgia, "Times New Roman", "Palatino Linotype", serif;
-    font-size: 1.22rem;
+    color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 1.05rem;
     font-weight: 700;
     line-height: 1.3;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.01em;
     word-break: break-word;
 }
 .sol-msg { color: #9aa0a6; font-style: italic; margin: 0; min-height: 0; }
@@ -1669,17 +1670,17 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
 .map-pulse .mp-rotulo {
     position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
     white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;
-    /* Nome do destino: legível em preto (não some no mapa branco) */
-    background: #f7f3ea;
-    color: #0a0a0a;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    /* Mesma tipografia do app — sans limpa (sem serif “jornal”) */
+    background: rgba(11, 11, 13, 0.9);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 999px;
     padding: 4px 11px;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
     z-index: 3; pointer-events: none;
 }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
