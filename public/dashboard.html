@@ -22,15 +22,38 @@
     <title>VAP - Carona</title>
     <link rel="stylesheet" href="style.css">
     <style>
+        /* Destino selecionado — faixa branca / letra preta (estilo Uber) */
         .rota-info {
-            margin: 8px 0 4px;
-            padding: 10px 14px;
-            background: #0F3D3E;
-            color: #EAD298;
+            margin: 8px 10px 6px;
+            padding: 12px 14px;
+            background: #fff;
+            color: #111;
             font-weight: 600;
-            font-size: 14px;
-            border-radius: 10px;
-            text-align: center;
+            font-size: 0.88rem;
+            border-radius: 14px;
+            text-align: left;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            line-height: 1.35;
+        }
+        .rota-info .rota-info-nome {
+            display: block;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: #0a0a0a;
+            letter-spacing: -0.01em;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
+        .rota-info .rota-info-meta {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #5c6168;
+        }
+        .rota-info .rota-info-meta svg {
+            vertical-align: -2px;
+            opacity: 0.75;
         }
         /* Favoritos (lista leve, estilo Uber) */
         .fav-filtro {
@@ -139,8 +162,14 @@
                             <span class="acao-handle" aria-hidden="true"></span>
                             <span class="acao-titulo">Pedir carona</span>
                         </div>
-                        <div id="limparRotaPedWrap" class="limpar-rota-bar" style="display:none;">
-                            <button type="button" id="btnLimparPed" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar rota</button>
+                        <div id="limparRotaPedWrap" class="limpar-rota-bar dest-faixa-wrap" style="display:none;">
+                            <div class="dest-faixa" role="status">
+                                <div class="dest-faixa-txt">
+                                    <span class="dest-faixa-label">Destino</span>
+                                    <span id="destFaixaPedNome" class="dest-faixa-nome">—</span>
+                                </div>
+                                <button type="button" id="btnLimparPed" class="dest-faixa-limpar" title="Limpar destino">Limpar</button>
+                            </div>
                         </div>
                         <div class="acao-sheet-body">
                         <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
