@@ -1028,7 +1028,40 @@ body.theme-dark {
 /* ===== Solicitação recebida estilo Uber (bottom sheet) ===== */
 .sol-box { text-align: center; }
 .sol-badge { display: inline-block; background: #EAD298; color: #0F3D3E; font-weight: 700; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 10px; }
-.sol-selfie { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #EAD298; margin: 4px auto 10px; }
+/* Avatar do passageiro no modal do motorista (selfie de validação) */
+.sol-avatar-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 6px auto 4px;
+}
+.sol-selfie {
+    width: 104px;
+    height: 104px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #EAD298;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    background: #1a1b1e;
+}
+.sol-selfie-ph {
+    width: 104px;
+    height: 104px;
+    border-radius: 50%;
+    border: 3px solid rgba(234, 210, 152, 0.45);
+    background: #1a1b1e;
+    color: #EAD298;
+    font-size: 2rem;
+    font-weight: 800;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.04em;
+}
+.sol-selfie-hint {
+    margin: 0 0 8px;
+    font-size: 0.75rem;
+    color: #9aa0a6;
+    letter-spacing: 0.02em;
+}
 .sol-box h3 { color: #fff; margin: 0 0 2px; }
 .sol-rota { color: #e8eaed; font-size: 0.95rem; margin: 10px 0; }
 .sol-msg { color: #9aa0a6; font-style: italic; margin: 0; min-height: 0; }

@@ -454,8 +454,13 @@
     <div id="modalPedido" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPedido()">
         <div class="cam-box sol-box">
             <div class="sol-badge">Pedindo carona</div>
-            <img id="pedidoSelfie" class="sol-selfie" alt="" style="display:none;">
+            <!-- Selfie de validação: referência visual de quem está pedindo -->
+            <div class="sol-avatar-wrap">
+                <img id="pedidoSelfie" class="sol-selfie" alt="Foto do passageiro" style="display:none;">
+                <div id="pedidoSelfiePh" class="sol-selfie-ph" style="display:none;" aria-hidden="true">?</div>
+            </div>
             <h3 id="pedidoNome">Passageiro</h3>
+            <p id="pedidoSelfieHint" class="sol-selfie-hint" style="display:none;">Foto de validação</p>
             <div id="pedidoRota" class="sol-rota"></div>
             <div id="pedidoMapa" class="mini-mapa" style="display:none;"></div>
             <div class="sol-actions">
@@ -5226,17 +5231,63 @@
     // Motorista toca num passageiro que está chamando e oferece a carona.
     let pedidoSel = null;
     let contatoSel = null;
+
+    /** Selfie de validação no modal — o motorista precisa ver quem está pedindo. */
+    function iniciaisNome(nome) {
+        const p = (nome || 'P').trim().split(/\s+/).filter(Boolean);
+        if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+        return (p[0]?.[0] || 'P').toUpperCase();
+    }
+    function aplicarSelfieNoModalPedido(url, nome) {
+        const sf = document.getElementById('pedidoSelfie');
+        const ph = document.getElementById('pedidoSelfiePh');
+        const hint = document.getElementById('pedidoSelfieHint');
+        if (!sf) return;
+        const limpa = () => {
+            sf.onload = null;
+            sf.onerror = null;
+            sf.removeAttribute('src');
+            sf.style.display = 'none';
+        };
+        if (url) {
+            if (ph) ph.style.display = 'none';
+            if (hint) { hint.style.display = 'block'; hint.textContent = 'Foto de validação'; }
+            sf.onerror = () => {
+                limpa();
+                if (ph) {
+                    ph.textContent = iniciaisNome(nome);
+                    ph.style.display = 'flex';
+                }
+                if (hint) { hint.style.display = 'block'; hint.textContent = 'Sem foto — confira o nome'; }
+            };
+            sf.onload = () => { sf.style.display = 'block'; };
+            sf.alt = 'Foto de ' + (nome || 'passageiro');
+            sf.src = url;
+            sf.style.display = 'block';
+        } else {
+            limpa();
+            if (ph) {
+                ph.textContent = iniciaisNome(nome);
+                ph.style.display = 'flex';
+            }
+            if (hint) {
+                hint.style.display = 'block';
+                hint.textContent = 'Sem selfie de validação neste pedido';
+            }
+        }
+    }
+
     function mostrarPedido(p) {
         contatoSel = null;
         pedidoSel = p;
+        const nome = p.passageiro_nome || 'Passageiro';
         document.querySelector('#modalPedido .sol-badge').textContent = 'Pedindo carona';
-        document.getElementById('pedidoNome').textContent = p.passageiro_nome || 'Passageiro';
+        document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
             `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
             + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(p.destino_texto || 'Destino no mapa')}</div>`
             + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${p.pessoas || 1} pessoa(s)</div>`;
-        const sf = document.getElementById('pedidoSelfie');
-        if (p.selfie_url) { sf.src = p.selfie_url; sf.style.display = 'block'; } else { sf.style.display = 'none'; }
+        aplicarSelfieNoModalPedido(p.selfie_url, nome);
         document.getElementById('modalPedido').style.display = 'flex';
         const o = p.origem_lat != null ? { lat: +p.origem_lat, lng: +p.origem_lng } : null;
         const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
@@ -5274,14 +5325,15 @@
     function mostrarContato(c) {
         contatoSel = c;
         pedidoSel = null;
+        const nome = c.passageiro_nome || 'Passageiro';
         document.querySelector('#modalPedido .sol-badge').textContent = 'Quer carona';
-        document.getElementById('pedidoNome').textContent = c.passageiro_nome || 'Passageiro';
+        document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
             `<div style="margin-bottom:6px;">${ICN.pin} <b>Onde está:</b> ${esc(c.origem_texto || 'Local do passageiro')}</div>`
             + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(c.destino_texto || 'Destino no mapa')}</div>`
             + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${c.pessoas || 1} pessoa(s)</div>`;
-        const sf = document.getElementById('pedidoSelfie');
-        sf.style.display = 'none';
+        // Mesma selfie de validação do pedido (API já manda selfie_url).
+        aplicarSelfieNoModalPedido(c.selfie_url, nome);
         document.getElementById('modalPedido').style.display = 'flex';
         const o = c.origem_lat != null ? { lat: +c.origem_lat, lng: +c.origem_lng } : null;
         const d = c.destino_lat != null ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;

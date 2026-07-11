@@ -332,6 +332,8 @@ async function garantirColunasContatosMotorista() {
     "destino_texto TEXT",
     "pessoas INTEGER DEFAULT 1",
     "compat_rota VARCHAR(10)",
+    // Selfie do passageiro (referência visual para o motorista no modal "Quer carona").
+    "selfie_url TEXT",
   ];
   for (const col of colunas) {
     try {
@@ -339,6 +341,28 @@ async function garantirColunasContatosMotorista() {
     } catch (e) {
       console.warn("garantirColunasContatosMotorista:", e.message);
     }
+  }
+}
+
+/** Última selfie de validação do passageiro (pedido / proposta). */
+async function selfieRecentePassageiro(passageiroId) {
+  if (!passageiroId) return null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT selfie_url FROM (
+         SELECT selfie_url, created_at FROM pedidos
+         WHERE passageiro_id = $1 AND selfie_url IS NOT NULL AND selfie_url <> ''
+         UNION ALL
+         SELECT selfie_url, created_at FROM propostas
+         WHERE de_usuario_id = $1 AND selfie_url IS NOT NULL AND selfie_url <> ''
+       ) s
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [passageiroId]
+    );
+    return rows[0]?.selfie_url || null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -3536,6 +3560,10 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
       [motoristaId, req.user.id]
     )).rows[0];
 
+    // Selfie de validação: body (se o app mandar) ou última selfie de pedido/proposta.
+    const selfieBody = req.body?.selfie_url ? String(req.body.selfie_url).slice(0, 800) : null;
+    const selfieUrl = selfieBody || (await selfieRecentePassageiro(req.user.id));
+
     const vals = [
       mensagem,
       origem_lat != null ? +origem_lat : null,
@@ -3546,6 +3574,7 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
       destinoPax,
       npessoas,
       compatContato !== "none" ? compatContato : null,
+      selfieUrl,
     ];
 
     let contatoRow;
@@ -3554,8 +3583,9 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         `UPDATE contatos_motorista SET
            mensagem = $1, origem_lat = $2, origem_lng = $3, origem_texto = $4,
            destino_lat = $5, destino_lng = $6, destino_texto = $7, pessoas = $8,
-           compat_rota = $9, created_at = NOW(), lido = FALSE
-         WHERE id = $10 RETURNING id`,
+           compat_rota = $9, selfie_url = COALESCE($10, selfie_url),
+           created_at = NOW(), lido = FALSE
+         WHERE id = $11 RETURNING id`,
         [...vals, prev.id]
       )).rows[0];
       await pool.query(
@@ -3568,8 +3598,8 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
         `INSERT INTO contatos_motorista
            (motorista_id, passageiro_id, mensagem,
             origem_lat, origem_lng, origem_texto,
-            destino_lat, destino_lng, destino_texto, pessoas, compat_rota)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+            destino_lat, destino_lng, destino_texto, pessoas, compat_rota, selfie_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
         [motoristaId, req.user.id, ...vals]
       )).rows[0];
     }
@@ -3603,9 +3633,15 @@ app.get("/api/motorista/contatos/novos", verificarAuth, async (req, res) => {
       `SELECT c.id, c.mensagem, c.created_at,
               c.origem_lat, c.origem_lng, c.origem_texto,
               c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas,
-              u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo
+              u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo,
+              COALESCE(c.selfie_url, ps.selfie_url) AS selfie_url
        FROM contatos_motorista c
        JOIN usuarios u ON u.id = c.passageiro_id
+       LEFT JOIN LATERAL (
+         SELECT selfie_url FROM pedidos
+         WHERE passageiro_id = c.passageiro_id AND selfie_url IS NOT NULL AND selfie_url <> ''
+         ORDER BY created_at DESC LIMIT 1
+       ) ps ON TRUE
        WHERE c.motorista_id = $1 AND c.lido = FALSE AND c.id > $2
        ORDER BY c.id ASC
        LIMIT 20`,
@@ -3628,7 +3664,8 @@ app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
               c.destino_lat, c.destino_lng, c.destino_texto, c.pessoas, c.compat_rota,
               ca.destino_texto AS destino_motorista_texto,
               ${haversine("ca.destino_lat", "ca.destino_lng", "c.destino_lat", "c.destino_lng")} AS dist_dest_km,
-              u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo
+              u.nome AS passageiro_nome, u.telefone AS passageiro_telefone, u.sexo AS passageiro_sexo,
+              COALESCE(c.selfie_url, ps.selfie_url) AS selfie_url
        FROM contatos_motorista c
        JOIN usuarios u ON u.id = c.passageiro_id
        LEFT JOIN LATERAL (
@@ -3637,6 +3674,11 @@ app.get("/api/motorista/contatos/mapa", verificarAuth, async (req, res) => {
          WHERE motorista_id = c.motorista_id AND status = 'ativa'
          ORDER BY created_at DESC LIMIT 1
        ) ca ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT selfie_url FROM pedidos
+         WHERE passageiro_id = c.passageiro_id AND selfie_url IS NOT NULL AND selfie_url <> ''
+         ORDER BY created_at DESC LIMIT 1
+       ) ps ON TRUE
        WHERE c.motorista_id = $1
          AND c.lido = FALSE
          AND c.origem_lat IS NOT NULL
