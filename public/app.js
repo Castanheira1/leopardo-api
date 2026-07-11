@@ -442,10 +442,15 @@ function carregarMaps() {
     return _mapsPromise;
 }
 
-function carSvgPaths(variant = 'yellow-ranger') {
+// Ícone top-down no mapa. O dashboard passa 'gold' (modo amarelo / online)
+// e 'white' (rota publicada). Sem mapear esses nomes, o fallback preto
+// sempre vencia — a pickup amarela só existia como 'yellow-ranger'.
+function carSvgPaths(variant = 'gold') {
     const gid = 'vap-car-body-' + variant;
+    const amarela = variant === 'gold' || variant === 'yellow'
+        || variant === 'yellow-ranger' || variant === 'ranger';
 
-    if (variant === 'yellow-ranger' || variant === 'ranger') {
+    if (amarela) {
         return `<defs>
 <linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
 <stop offset="0" stop-color="#E8B923"/>
@@ -472,6 +477,7 @@ function carSvgPaths(variant = 'yellow-ranger') {
 <line x1="12" y1="35.5" x2="36" y2="35.5" stroke="#111" stroke-width="1.3"/>`;
     }
 
+    // 'white' e demais: pickup escura (rota publicada / carro próprio)
     return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
 <stop offset="0" stop-color="#0e1116"/><stop offset="0.28" stop-color="#2e333b"/>
 <stop offset="0.72" stop-color="#2e333b"/><stop offset="1" stop-color="#0e1116"/>
