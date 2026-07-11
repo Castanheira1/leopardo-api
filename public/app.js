@@ -319,6 +319,8 @@ function respostaRotaFallback(o, d) {
     return {
         routes: [{ legs: [{ distance: { text: distText }, duration: { text: min + ' min' }, steps: [] }] }],
         _fallbackLine: [o, d],
+        _path: [o, d],
+        _durationMillis: min * 60000,
         km: Math.round(distKm * 100) / 100,
     };
 }
@@ -341,8 +343,52 @@ async function calcularRotaServidor(o, d) {
     return {
         routes: [{ legs: [{ distance: { text: distText }, duration: { text: durText }, steps: [] }] }],
         _fallbackLine: j.path,
+        _path: j.path,
+        _durationMillis: j.durationMillis || 0,
         km: j.km != null ? j.km : Math.round(((j.distanceMeters || 0) / 1000) * 100) / 100,
     };
+}
+
+/* -------- Economia Google Routes: acompanhar a rota SEM recalcular --------
+   A rota é calculada uma vez; enquanto o GPS seguir em cima da polyline, o
+   progresso (km restantes, ETA) é derivado localmente por projeção do ponto na
+   linha. Só um desvio real (sair da rota) justifica nova chamada paga. */
+
+// Distância (km) de um ponto p ao segmento a-b, em projeção plana local
+// (suficiente para decidir "está na rota?" em escala urbana).
+function distKmPontoSegmento(p, a, b) {
+    const kmLat = 111.32;
+    const kmLng = 111.32 * Math.cos((p.lat * Math.PI) / 180);
+    const ax = (a.lng - p.lng) * kmLng, ay = (a.lat - p.lat) * kmLat;
+    const bx = (b.lng - p.lng) * kmLng, by = (b.lat - p.lat) * kmLat;
+    const abx = bx - ax, aby = by - ay;
+    const len2 = abx * abx + aby * aby;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, (-ax * abx - ay * aby) / len2)) : 0;
+    const cx = ax + abx * t, cy = ay + aby * t;
+    return Math.sqrt(cx * cx + cy * cy);
+}
+
+// Projeta a posição na rota: {distKm: afastamento da linha, kmRestante: da
+// projeção até o fim}. null se a rota não tem pelo menos 2 pontos.
+function progressoNaRota(pos, path) {
+    if (!pos || !Array.isArray(path) || path.length < 2) return null;
+    let melhor = { distKm: Infinity, seg: 0 };
+    for (let i = 1; i < path.length; i++) {
+        const d = distKmPontoSegmento(pos, path[i - 1], path[i]);
+        if (d < melhor.distKm) melhor = { distKm: d, seg: i };
+    }
+    let kmRestante = haversineKmApp(pos.lat, pos.lng, path[melhor.seg].lat, path[melhor.seg].lng);
+    for (let i = melhor.seg + 1; i < path.length; i++) {
+        kmRestante += haversineKmApp(path[i - 1].lat, path[i - 1].lng, path[i].lat, path[i].lng);
+    }
+    return { distKm: melhor.distKm, kmRestante: Math.round(kmRestante * 100) / 100 };
+}
+
+// Saiu da rota? (afastamento acima do corredor de ~80 m)
+const FORA_DA_ROTA_KM = 0.08;
+function foraDaRota(pos, path) {
+    const p = progressoNaRota(pos, path);
+    return !p || p.distKm > FORA_DA_ROTA_KM;
 }
 
 function instalarMapsBootstrap(apiKey) {
