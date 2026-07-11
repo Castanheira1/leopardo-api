@@ -269,9 +269,9 @@
                 </button>
                 <div class="perfil-secao">
                     <p id="habStatusPerfil" class="hab-status" style="display:none;" role="status"></p>
-                    <div class="hab-actions">
-                        <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm">Ativar para oferecer carona</button>
-                        <button onclick="ativarMotorista(true)" id="btnTrocarVeic" class="btn btn-secondary btn-sm">Trocar veículo</button>
+                    <div class="hab-actions" id="habActionsPerfil">
+                        <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm" style="display:none;">Ativar para oferecer carona</button>
+                        <button onclick="ativarMotorista(true)" id="btnTrocarVeic" class="btn btn-secondary btn-sm" style="display:none;">Trocar veículo</button>
                     </div>
                 </div>
                 <div class="cam-actions">
@@ -1269,10 +1269,29 @@
         const sheet = document.getElementById('acaoSheetPed');
         if (sheet) sheet.classList.add('collapsed');
     }
-    function limparDestinoMotorista() {
+    async function limparDestinoMotorista() {
         limparBuscaDestino('mapOfe');
         if (selOfe?.limparRota) selOfe.limparRota();
         atualizarBtnLimparOfe(false);
+        // Se estava online COM destino (carona publicada), cancela a rota no
+        // servidor e volta ao online sem destino — senão banner/servidor mentem.
+        if (motoristaModoDestino && motoristaCaronaId) {
+            await fetchWithAuth('/api/caronas/' + motoristaCaronaId, { method: 'DELETE' }).catch(() => {});
+            motoristaCaronaId = null;
+            motoristaModoDestino = false;
+            if (motoristaOnlineModo && selOfe?.getOrigem) {
+                try {
+                    const origem = selOfe.getOrigem();
+                    await fetchWithAuth('/api/motorista/online', {
+                        method: 'POST',
+                        body: JSON.stringify({ lat: origem.lat, lng: origem.lng, vagas: lerVagasOfe() }),
+                    });
+                } catch (_) { /* mantém flags locais; próximo tick tenta de novo */ }
+            }
+        } else {
+            motoristaModoDestino = false;
+        }
+        atualizarUiMotoristaOnline();
         const sheet = document.getElementById('acaoSheetOfe');
         if (sheet) sheet.classList.remove('collapsed');
     }
@@ -1463,7 +1482,7 @@
         const ativo = !!(habHoje && selfieAindaValida(habHoje));
         if (nav) {
             nav.innerHTML = ativo
-                ? '<span style="color:#22c55e">●</span> Motorista ativo'
+                ? '<span style="color:#22c55e">●</span> Habilitado (perfil)'
                 : 'Ativar no Perfil';
         }
         if (st) {
@@ -1472,7 +1491,8 @@
                 const tag = habHoje.tag ? String(habHoje.tag) : '';
                 const veic = [tag, placa].filter(Boolean).join(' · ') || 'veículo ok';
                 st.style.display = 'block';
-                st.innerHTML = `<span style="color:#22c55e">●</span> <strong>Modo motorista ativo</strong><br><small>${esc(veic)} · selfie válida por 12h</small>`;
+                st.innerHTML = `<span style="color:#22c55e">●</span> <strong>Habilitado para motorista</strong>`
+                    + `<br><small>${esc(veic)} · selfie 12h · use <b>Ficar online</b> no mapa</small>`;
             } else {
                 st.style.display = 'none';
                 st.innerHTML = '';
@@ -1488,6 +1508,13 @@
             btnTroca.style.display = ativo ? '' : 'none';
             btnTroca.disabled = false;
         }
+    }
+
+    async function garantirHabilitacaoMotorista() {
+        if (!habHoje || !selfieAindaValida(habHoje)) {
+            try { await carregarHabilitacao(); } catch (_) {}
+        }
+        return !!(habHoje && selfieAindaValida(habHoje));
     }
 
     async function carregarHabilitacao() {
@@ -1936,6 +1963,11 @@
             const nomeDestino = (texto && String(texto).trim()) || '';
             destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
             mostrarBtnLimpar(true);
+            // CTA do passageiro muda NA HORA (não espera a lista de motoristas).
+            if (mapId === 'mapPed') {
+                atualizarHintDestinoPed();
+                atualizarFormPedidoRota(false, false);
+            }
             // Abaixa o sheet NA HORA: com ele suspenso, a pré-visualização do
             // destino (busca, Locais, toque no mapa) ficava escondida atrás.
             const sheetEl = document.getElementById(sheetId);
@@ -2089,6 +2121,16 @@
     let horaPedModoAgenda = false;   // true = usuário escolheu horário futuro; não sobrescreve o relógio
     let pedidoTemCaronaNaRota = false;   // carona publicada indo ao destino → pedido imediato
 
+    function tituloSheetPed() {
+        const dest = selPed?.getDestino?.();
+        if (!dest) return 'Pedir carona';
+        if (pedidoTemCaronaNaRota) return 'Pedir agora';
+        return 'Pedir carona';
+    }
+    function atualizarTituloSheetPed() {
+        const el = document.querySelector('#acaoSheetPed .acao-titulo');
+        if (el) el.textContent = tituloSheetPed();
+    }
     function atualizarFormPedidoRota(temCarona, temMotoristasVisiveis) {
         pedidoTemCaronaNaRota = !!temCarona;
         const horaWrap = document.getElementById('horaPedWrap');
@@ -2100,6 +2142,7 @@
         // "Pedir carona" antes de escolher o destino dava a sensação de pedido
         // já feito — e o toque só rendia um alerta de erro.
         const ctaHtmlEscolherLocal = 'Escolher local';
+        const temDest = !!selPed?.getDestino?.();
         if (temCarona) {
             horaPedModoAgenda = false;
             if (horaWrap) horaWrap.classList.add('form-slot-reservado');
@@ -2108,7 +2151,7 @@
         } else {
             if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
-            if (btn) btn.textContent = selPed?.getDestino?.() ? ctaHtmlPedirCarona : ctaHtmlEscolherLocal;
+            if (btn) btn.textContent = temDest ? ctaHtmlPedirCarona : ctaHtmlEscolherLocal;
             if (!horaPedModoAgenda) tickQuandoPed();
         }
         // Com motoristas na lista, a ação fica no card — mantém o footer para não mexer o peek.
@@ -2117,6 +2160,7 @@
             btn.style.visibility = temMotoristasVisiveis ? 'hidden' : 'visible';
             btn.style.pointerEvents = temMotoristasVisiveis ? 'none' : 'auto';
         }
+        atualizarTituloSheetPed();
     }
 
     function parseDatetimeLocalValue(v) {
@@ -2326,6 +2370,7 @@
         const horarioEnviar = ehAgendado && hor.local ? formatDatetimeLocal(hor.local) : null;
         const soltar = travarBotao('btnCtaPedir', 'Abrindo a câmera…');
         if (!soltar) return;   // já tem um pedido em andamento
+        let eraAgendado = false;
         try {
             const selfie = await obterSelfieSeguranca('Selfie (segurança da viagem)');
             const origemTexto = await geocodeReverso(origem);   // nome do ponto de embarque
@@ -2339,7 +2384,7 @@
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
-            const eraAgendado = !!d.agendado_futuro;
+            eraAgendado = !!d.agendado_futuro;
             limparQuandoPed();
             fecharChamando();
             if (eraAgendado) {
@@ -2355,7 +2400,13 @@
                 mostrarChamando({ pedidoId: d.id, pessoas: body.pessoas });   // entra no modo chamada (procurando agora)
             }
         } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
-        finally { soltar(); }
+        finally {
+            soltar();
+            // soltar() restaura o label antigo do botão; reaplica o estado real.
+            const temDest = !!selPed?.getDestino?.();
+            atualizarFormPedidoRota(eraAgendado ? false : pedidoTemCaronaNaRota, false);
+            if (!temDest) atualizarFormPedidoRota(false, false);
+        }
     }
 
     async function matchCaronas(pedidoId) {
@@ -2574,6 +2625,8 @@
             return;
         }
         atualizarHintDestinoPed();
+        // Já tem destino: CTA = Pedir carona (não "Escolher local") enquanto busca.
+        atualizarFormPedidoRota(false, false);
         if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
         atualizarBtnLimparPed(true);
         wrap.style.display = 'block';
@@ -2639,7 +2692,7 @@
             porPerto.sort((a, b) => a.dist - b.dist);
             listaIndo.innerHTML = indoDestino.length
                 ? indoDestino.map(cardMotoristaDisponivel).join('')
-                : '<p class="cam-hint">Ninguém indo para esse local agora. Toque em <strong>Pedir agora</strong> — avisamos motoristas na rota.</p>';
+                : '<p class="cam-hint">Ninguém indo para esse local agora. Toque em <strong>Pedir carona</strong> — avisamos motoristas na rota.</p>';
             if (porPerto.length) {
                 if (contPerto) contPerto.style.display = 'block';
                 listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
@@ -3244,26 +3297,34 @@
         const el = document.getElementById('indicadorModoMotorista');
         if (!el) return;
         const ehMotorista = document.getElementById('modoTitulo')?.textContent === 'Motorista';
-        if (!ehMotorista) { el.style.display = 'none'; return; }
+        // Só acende quando está ONLINE de verdade (não só habilitado no perfil).
+        if (!ehMotorista || !motoristaOnlineModo) {
+            el.style.display = 'none';
+            return;
+        }
         el.style.display = 'inline-block';
         el.removeAttribute('aria-hidden');
-        const dest = selOfe && selOfe.getDestino ? selOfe.getDestino() : null;
-        const modoDestino = motoristaModoDestino || !!(dest && dest.lat != null);
+        const modoDestino = !!motoristaModoDestino;
         el.classList.toggle('modo-indicador--geral', !modoDestino);
         el.classList.toggle('modo-indicador--destino', modoDestino);
     }
 
-    // Motorista já online no modo amarelo (600 m): ao escolher destino no mapa,
-    // publica a carona automaticamente — senão o servidor mantém online_desde e o
-    // passageiro não vê rota nem carro fora do raio de 600 m.
+    // Motorista já online: ao escolher destino no mapa, publica (ou republica) a
+    // carona — senão o servidor mantém só online_desde e o passageiro não vê rota.
     async function onDestinoMotorista(dest) {
         atualizarIndicadorModoOperante();
-        if (!dest || !motoristaOnlineModo || motoristaModoDestino || publicandoCaronaAuto) return;
+        if (!dest || !motoristaOnlineModo || publicandoCaronaAuto) return;
         publicandoCaronaAuto = true;
         try {
+            if (motoristaCaronaId) {
+                await fetchWithAuth('/api/caronas/' + motoristaCaronaId, { method: 'DELETE' }).catch(() => {});
+                motoristaCaronaId = null;
+                motoristaModoDestino = false;
+            }
             await oferecerCarona();
         } finally {
             publicandoCaronaAuto = false;
+            atualizarUiMotoristaOnline();
         }
     }
 
@@ -3342,7 +3403,11 @@
 
     async function entrarModoMotoristaOnline() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
-        if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para continuar', 'error');
+            abrirPerfil();
+            return;
+        }
         if (!selOfe) await initMapOferecer();
         const dest = selOfe.getDestino();
         if (dest) return oferecerCarona();
@@ -3412,7 +3477,11 @@
     /* -------- oferecer carona com destino (visível em 10 km) -------- */
     async function oferecerCarona() {
         if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
-        if (!habHoje) { msg('Ative o modo motorista no Perfil para continuar', 'error'); abrirPerfil(); return; }
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para continuar', 'error');
+            abrirPerfil();
+            return;
+        }
         const dest = selOfe && selOfe.getDestino();
         if (!dest) return msg('Defina um destino no mapa', 'error');
         if (!selOfe.origemConfiavel()) {
@@ -4207,7 +4276,7 @@
                 : (vv.chegadaDestino ? 'Chegou ao destino — aguardando motorista finalizar'
                     : 'Viagem em andamento — acompanhe no mapa');
             ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>'
-                + btnViagem('outline', 'Encerrar viagem', `cancelarViagem(${vv.id})`);
+                + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`);
         }
     }
     // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
@@ -5056,7 +5125,11 @@
         const p = pedidoSel;
         fecharPedido();
         if (!p) return;
-        if (!habHoje) { msg('Ative o modo motorista no Perfil para oferecer.', 'error'); abrirPerfil(); return; }
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para oferecer.', 'error');
+            abrirPerfil();
+            return;
+        }
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: p.id }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
@@ -5085,7 +5158,11 @@
         const c = contatoSel;
         fecharPedido();
         if (!c) return;
-        if (!habHoje) { msg('Ative o modo motorista no Perfil para oferecer.', 'error'); abrirPerfil(); return; }
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para oferecer.', 'error');
+            abrirPerfil();
+            return;
+        }
         const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ contato_id: c.id }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Erro', 'error');
