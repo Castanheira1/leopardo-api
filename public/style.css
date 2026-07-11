@@ -1129,64 +1129,94 @@ body.theme-dark {
 .foto-meta { color: #9aa0a6; font-size: 0.78rem; }
 .carro-foto { width: 100%; max-height: 160px; object-fit: cover; border-radius: 12px; margin: 0 auto 10px; display: block; }
 
-/* ===== Perfil do motorista (passageiro) ===== */
-.drv-overlay { align-items: flex-end; background: rgba(0, 0, 0, 0.72); }
+/* ===== Perfil do motorista (passageiro) — layout leve ===== */
+.drv-overlay {
+    align-items: flex-end;
+    justify-content: center;
+    /* Sobe o sheet um pouco do fundo (home bar / borda do phone) */
+    padding: 0 10px max(18px, calc(12px + env(safe-area-inset-bottom, 0px)));
+    background: rgba(0, 0, 0, 0.55);
+}
 .drv-sheet {
     position: relative;
     width: 100%;
-    max-width: 560px;
-    max-height: min(92vh, calc(var(--appvh, 1vh) * 92));
+    max-width: 440px;
+    max-height: min(78vh, calc(var(--appvh, 1vh) * 78));
     overflow-y: auto;
-    background: linear-gradient(180deg, #1c1d21 0%, #121316 100%);
-    border: 1px solid rgba(234, 210, 152, 0.28);
-    border-bottom: none;
-    border-radius: 22px 22px 0 0;
-    padding: 18px 18px calc(16px + env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
+    background: #16171a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 6px 16px 14px;
     text-align: left;
-    animation: sheetUp 0.24s ease-out;
-    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+    animation: sheetUp 0.22s ease-out;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.drv-grip {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0 8px;
+}
+.drv-grip span {
+    width: 36px;
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.22);
 }
 .drv-close {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 36px;
-    height: 36px;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
     border: none;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.08);
-    color: #e8eaed;
-    font-size: 1.45rem;
+    color: #cfd2d6;
+    font-size: 1.3rem;
     line-height: 1;
     cursor: pointer;
     z-index: 2;
 }
 .drv-close:active { background: rgba(255, 255, 255, 0.14); }
+/* Badge padrão: preto + letra branca (menos cansaço que dourado cheio) */
 .drv-badge {
     display: inline-block;
-    background: #EAD298;
-    color: #0F3D3E;
-    font-weight: 800;
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
+    background: #0b0b0d;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.65rem;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    padding: 6px 14px;
-    border-radius: 20px;
-    margin-bottom: 14px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    margin: 0 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.drv-badge--rota {
+    background: #0b0b0d;
+    color: #fff;
+}
+.drv-badge--parcial,
+.drv-badge--proximo {
+    background: #1a1b1e;
+    color: #e8eaed;
+    border-color: rgba(255, 255, 255, 0.14);
 }
 .drv-header {
     display: flex;
-    gap: 14px;
+    gap: 12px;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+    padding-right: 28px;
 }
 .drv-avatar-wrap { position: relative; flex-shrink: 0; }
 .drv-avatar {
-    width: 72px;
-    height: 72px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid #EAD298;
+    border: 2px solid rgba(255, 255, 255, 0.14);
     display: block;
 }
 .drv-avatar--ph {
@@ -1194,156 +1224,144 @@ body.theme-dark {
     align-items: center;
     justify-content: center;
     background: #25262a;
-    color: #EAD298;
+    color: #cfd2d6;
     font-weight: 800;
-    font-size: 1.25rem;
+    font-size: 1.05rem;
 }
 .drv-verified {
     position: absolute;
     right: -2px;
     bottom: -2px;
-    width: 26px;
-    height: 26px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    background: #EAD298;
-    color: #0F3D3E;
+    background: #22c55e;
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid #121316;
+    border: 2px solid #16171a;
 }
 .drv-meta { flex: 1; min-width: 0; }
 .drv-nome {
-    margin: 0 0 4px;
-    font-size: 1.15rem;
-    font-weight: 800;
+    margin: 0 0 2px;
+    font-size: 1.05rem;
+    font-weight: 700;
     color: #fff;
     line-height: 1.25;
     word-break: break-word;
 }
-.drv-role { margin: 0 0 4px; font-size: 0.82rem; color: #9aa0a6; }
-.drv-stats { margin: 0; font-size: 0.8rem; color: #EAD298; font-weight: 600; }
+.drv-role { margin: 0 0 2px; font-size: 0.78rem; color: #9aa0a6; }
+.drv-stats { margin: 0; font-size: 0.78rem; color: #a8adb4; font-weight: 500; }
 .drv-vehicle {
     display: grid;
-    grid-template-columns: 1fr minmax(108px, 42%);
-    gap: 10px;
-    align-items: end;
-    margin-bottom: 14px;
-    padding: 14px 12px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 16px;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #1c1d21;
+    border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.06);
 }
+.drv-vehicle--sem-foto { grid-template-columns: 1fr; }
 .drv-vehicle-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 1rem;
+    gap: 7px;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #fff;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
-.drv-car-icn { color: #EAD298; display: flex; }
-.drv-vehicle-sub { margin: 0 0 10px; font-size: 0.82rem; color: #9aa0a6; }
-.drv-placa-wrap { margin-bottom: 10px; }
-.drv-placa-label {
-    display: block;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #9aa0a6;
-    margin-bottom: 4px;
-}
+.drv-car-icn { color: #9aa0a6; display: flex; }
+.drv-vehicle-sub { margin: 0 0 8px; font-size: 0.78rem; color: #9aa0a6; }
+.drv-placa-wrap { margin-bottom: 8px; }
 .drv-placa {
     display: inline-block;
     background: #f4f5f7;
     color: #111;
     font-weight: 800;
-    font-size: 0.95rem;
-    letter-spacing: 0.12em;
-    padding: 6px 12px;
-    border-radius: 8px;
+    font-size: 0.88rem;
+    letter-spacing: 0.1em;
+    padding: 5px 10px;
+    border-radius: 7px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .drv-eta {
-    margin: 0 0 8px;
-    font-size: 0.84rem;
+    margin: 0 0 4px;
+    font-size: 0.82rem;
     color: #EAD298;
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 }
-.drv-rota { font-size: 0.84rem; color: #cfd2d6; line-height: 1.45; }
-.drv-rota b { color: #fff; font-weight: 600; }
-.drv-vehicle-visual { position: relative; min-height: 88px; }
+.drv-rota { font-size: 0.8rem; color: #9aa0a6; line-height: 1.4; }
+.drv-rota b { color: #e8eaed; font-weight: 600; }
+.drv-vehicle-visual { width: 96px; flex-shrink: 0; }
 .drv-vehicle-img {
-    width: 100%;
-    max-height: 120px;
+    width: 96px;
+    height: 72px;
     object-fit: cover;
-    border-radius: 12px;
+    border-radius: 10px;
     display: block;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    background: #121316;
 }
 .drv-vehicle-ph {
-    width: 100%;
-    height: 100px;
-    border-radius: 12px;
-    background: #1a1b1e;
-    border: 1px dashed rgba(234, 210, 152, 0.25);
+    width: 96px;
+    height: 72px;
+    border-radius: 10px;
+    background: #121316;
+    border: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(234, 210, 152, 0.45);
+    color: rgba(255, 255, 255, 0.2);
 }
-.drv-trust {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+.drv-cta {
+    margin-bottom: 8px;
+    padding: 13px;
+    font-size: 0.95rem;
+    font-weight: 700;
     border-radius: 12px;
 }
-.drv-shield { color: #EAD298; flex-shrink: 0; margin-top: 2px; }
-.drv-trust strong { display: block; color: #fff; font-size: 0.88rem; margin-bottom: 2px; }
-.drv-trust p { margin: 0; font-size: 0.78rem; color: #9aa0a6; }
-.drv-cta { margin-bottom: 10px; padding: 15px; font-size: 1rem; font-weight: 700; }
-.drv-actions { margin-bottom: 10px; }
-.drv-contact-wrap { display: flex; flex-direction: column; gap: 10px; }
+.drv-actions { margin-bottom: 4px; }
+.drv-contact-wrap { display: flex; flex-direction: column; gap: 8px; }
 .drv-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     width: 100%;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border-radius: 12px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
-    border: 1.5px solid rgba(234, 210, 152, 0.55);
-    background: transparent;
-    color: #EAD298;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #1c1d21;
+    color: #e8eaed;
 }
-.drv-btn:active { background: rgba(234, 210, 152, 0.1); }
-.drv-btn--whats { border-color: rgba(234, 210, 152, 0.7); }
-.drv-contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.drv-btn:active { background: #25262a; }
+/* WhatsApp em destaque sólido (ação principal) */
+.drv-btn--whats {
+    background: #128C7E;
+    border-color: #128C7E;
+    color: #fff;
+}
+.drv-btn--whats:active { background: #0e7368; }
+.drv-contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .drv-privacy {
-    margin: 8px 0 0;
+    margin: 10px 0 2px;
     text-align: center;
-    font-size: 0.74rem;
-    color: #6b7280;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    font-size: 0.7rem;
+    color: #5c6168;
 }
 @media (max-width: 380px) {
     .drv-vehicle { grid-template-columns: 1fr; }
-    .drv-vehicle-visual { order: -1; }
-    .drv-vehicle-img, .drv-vehicle-ph { max-height: 140px; height: auto; }
+    .drv-vehicle-visual { width: 100%; }
+    .drv-vehicle-img, .drv-vehicle-ph { width: 100%; height: 100px; max-height: 100px; }
 }
 
 /* Prévia da rota (origem -> destino) dentro dos modais de pedido/carona. */

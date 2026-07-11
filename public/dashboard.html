@@ -386,23 +386,24 @@
         </div>
     </div>
 
-    <!-- Perfil do motorista (passageiro toca no carro no mapa ou na lista) -->
+    <!-- Perfil do motorista (lista ou clique no carro — uma tela só, mais leve) -->
     <div id="modalCarro" class="cam-overlay drv-overlay" style="display:none;" onclick="if(event.target===this) fecharCarro()">
         <div class="drv-sheet" role="dialog" aria-labelledby="carroNome">
+            <div class="drv-grip" aria-hidden="true"><span></span></div>
             <button type="button" class="drv-close" onclick="fecharCarro()" aria-label="Fechar">×</button>
-            <div id="carroBadge" class="drv-badge">Rota publicada</div>
+            <div id="carroBadge" class="drv-badge">Motorista por perto</div>
 
             <div class="drv-header">
                 <div class="drv-avatar-wrap">
                     <img id="carroSelfie" class="drv-avatar" alt="" style="display:none;">
                     <span id="carroIniciais" class="drv-avatar drv-avatar--ph" style="display:none;"></span>
-                    <span class="drv-verified" title="Motorista verificado" aria-hidden="true">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L4.8 8.2l5-.7z"/></svg>
+                    <span class="drv-verified" title="Verificado" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L19 7"/></svg>
                     </span>
                 </div>
                 <div class="drv-meta">
                     <h2 id="carroNome" class="drv-nome">Motorista</h2>
-                    <p id="carroRole" class="drv-role">Motorista parceiro VAP</p>
+                    <p id="carroRole" class="drv-role">Parceiro VAP</p>
                     <p id="carroStats" class="drv-stats"></p>
                 </div>
             </div>
@@ -411,42 +412,28 @@
                 <div class="drv-vehicle-info">
                     <div class="drv-vehicle-title">
                         <span class="drv-car-icn" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg>
                         </span>
                         <span id="carroVeiculo">Veículo</span>
                     </div>
                     <p id="carroSub" class="drv-vehicle-sub"></p>
                     <div id="carroPlacaWrap" class="drv-placa-wrap" style="display:none;">
-                        <span class="drv-placa-label">Placa</span>
                         <span id="carroPlaca" class="drv-placa"></span>
                     </div>
                     <p id="carroEta" class="drv-eta"></p>
                     <div id="carroRota" class="drv-rota"></div>
                 </div>
-                <div class="drv-vehicle-visual">
+                <div class="drv-vehicle-visual" id="carroFotoWrap">
                     <img id="carroFoto" class="drv-vehicle-img" alt="" style="display:none;">
                     <div id="carroFotoPh" class="drv-vehicle-ph" style="display:none;" aria-hidden="true">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg>
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg>
                     </div>
-                </div>
-            </div>
-
-            <div class="drv-trust">
-                <span class="drv-shield" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
-                </span>
-                <div>
-                    <strong>Motorista verificado pela VAP</strong>
-                    <p>Sua segurança é a nossa prioridade</p>
                 </div>
             </div>
 
             <button type="button" class="btn btn-primary btn-block drv-cta" id="btnPedirCarroMapa" onclick="pedirCaronaDoCarro()" style="display:none;">Solicitar vaga</button>
             <div id="carroContatos" class="drv-actions"></div>
-            <p class="drv-privacy">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-                Seus dados estão protegidos com a gente
-            </p>
+            <p class="drv-privacy">Dados protegidos · VAP</p>
         </div>
     </div>
 
@@ -3345,22 +3332,29 @@
         const proximo = m.compatRota === 'proximo';
         const badge = document.getElementById('carroBadge');
         if (badge) {
-            badge.textContent = temRota
-                ? (parcial ? 'Rota parcial' : (proximo ? 'Passa perto' : 'Rota publicada'))
-                : 'Motorista por perto';
+            let label = 'Motorista por perto';
+            let mod = '';
+            if (temRota) {
+                if (parcial) { label = 'Rota parcial'; mod = ' drv-badge--parcial'; }
+                else if (proximo) { label = 'Passa perto'; mod = ' drv-badge--proximo'; }
+                else { label = 'Rota publicada'; mod = ' drv-badge--rota'; }
+            }
+            badge.className = 'drv-badge' + mod;
+            badge.textContent = label;
         }
         const nome = m.nome || m.motorista_nome || 'Motorista';
         document.getElementById('carroNome').textContent = nome;
         const role = document.getElementById('carroRole');
-        if (role) role.textContent = m.empresa_nome && m.empresa_nome !== nome
-            ? `${m.empresa_nome} · Motorista parceiro VAP`
-            : 'Motorista parceiro VAP';
+        if (role) {
+            const emp = m.empresa_nome && m.empresa_nome !== nome ? m.empresa_nome + ' · ' : '';
+            role.textContent = emp + 'Parceiro VAP';
+        }
         const vagas = m.carona_vagas || m.vagas || 1;
         const stats = document.getElementById('carroStats');
         if (stats) {
             stats.textContent = temRota
-                ? `✓ Verificado · ${vagas} vaga(s) disponível(is)`
-                : '✓ Verificado · combine o destino pelo contato';
+                ? `Verificado · ${vagas} vaga(s)`
+                : 'Verificado · combine o destino';
         }
         const selfie = document.getElementById('carroSelfie');
         const iniciais = document.getElementById('carroIniciais');
@@ -3400,19 +3394,25 @@
             eta.innerHTML = etaTxt;
             eta.style.display = etaTxt ? 'flex' : 'none';
         }
-        document.getElementById('carroRota').innerHTML = temRota
-            ? `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(m.origem_texto || 'Local do motorista')}</div>`
-              + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(m.destino_texto || 'Destino no mapa')}</div>`
-            : `<div>Disponível na sua região. Use o contato abaixo para combinar o destino.</div>`;
+        const rotaEl = document.getElementById('carroRota');
+        if (rotaEl) {
+            rotaEl.innerHTML = temRota
+                ? `<b>Destino:</b> ${esc(m.destino_texto || 'no mapa')}`
+                : 'Use WhatsApp, ligação ou buzina para combinar.';
+        }
         const foto = document.getElementById('carroFoto');
         const fotoPh = document.getElementById('carroFotoPh');
+        const veicBox = document.querySelector('.drv-vehicle');
         if (m.foto_carro_url) {
             foto.src = m.foto_carro_url;
             foto.style.display = 'block';
             if (fotoPh) fotoPh.style.display = 'none';
+            if (veicBox) veicBox.classList.remove('drv-vehicle--sem-foto');
         } else {
             foto.style.display = 'none';
-            if (fotoPh) fotoPh.style.display = 'flex';
+            // Sem foto: não mostra caixa cinza vazia (cansa a vista)
+            if (fotoPh) fotoPh.style.display = 'none';
+            if (veicBox) veicBox.classList.add('drv-vehicle--sem-foto');
         }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
         const destMotTxt = m.destino_texto || 'destino do motorista';
