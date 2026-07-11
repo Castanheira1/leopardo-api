@@ -5071,15 +5071,28 @@
         let tem = false;
         const o = selOfe.getOrigem?.();
         const dest = selOfe.getDestino?.();
+        // Modo amarelo (online sem rota): zoom só motorista + onde o passageiro ESTÁ.
+        // Não inclui destino do passageiro — senão o mapa abre longe e some o ponto de encontro.
+        const soOnlineSemRota = motoristaOnlineModo && !dest && !motoristaModoDestino;
         if (o) { bounds.extend(o); tem = true; }
         if (dest) { bounds.extend(dest); tem = true; }
         coletarPassageirosMapaMotorista().forEach(({ p }) => {
-            bounds.extend({ lat: +p.origem_lat, lng: +p.origem_lng });
-            bounds.extend({ lat: +p.destino_lat, lng: +p.destino_lng });
-            tem = true;
+            if (p.origem_lat != null) {
+                bounds.extend({ lat: +p.origem_lat, lng: +p.origem_lng });
+                tem = true;
+            }
+            if (!soOnlineSemRota && p.destino_lat != null) {
+                bounds.extend({ lat: +p.destino_lat, lng: +p.destino_lng });
+            }
         });
         if (!tem) return;
         selOfe.map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
+        // Evita zoom microscópico quando os dois estão no mesmo quarteirão.
+        g.maps.event.addListenerOnce(selOfe.map, 'idle', () => {
+            const z = selOfe.map.getZoom();
+            if (z > 17) selOfe.map.setZoom(17);
+            if (soOnlineSemRota && z < 14) selOfe.map.setZoom(14);
+        });
     }
 
     function enquadrarMapaMotoristaDebounced() {
@@ -5095,10 +5108,15 @@
         const passageiros = coletarPassageirosMapaMotorista();
         const vistos = {};
         const motorPos = selOfe?.getOrigem?.();
+        const destMot = selOfe?.getDestino?.();
+        // Online amarelo: só linha até o passageiro (não abre mapa no destino longe).
+        const soOnlineSemRota = !destMot && !motoristaModoDestino;
         for (const { key, p } of passageiros) {
             vistos[key] = true;
             const origem = { lat: +p.origem_lat, lng: +p.origem_lng };
-            const destino = { lat: +p.destino_lat, lng: +p.destino_lng };
+            const destino = p.destino_lat != null
+                ? { lat: +p.destino_lat, lng: +p.destino_lng }
+                : null;
             let item = motoristaPaxRotas.items[key];
             if (!item) {
                 item = motoristaPaxRotas.items[key] = {
@@ -5108,18 +5126,23 @@
                     embarquePath: null, embarqueCalculando: false,
                 };
             }
-            const paxChave = `${origem.lat},${origem.lng}|${destino.lat},${destino.lng}`;
-            if (item.paxChave !== paxChave && !item.paxCalculando) {
-                item.paxCalculando = true;
-                try {
-                    await item.rotaPax.calcular(origem, destino);
-                    item.paxChave = paxChave;
-                } catch (_) { /* sem rota do passageiro */ }
-                finally { item.paxCalculando = false; }
+            // Rota completa do passageiro (origem→destino) só com carona/rota do motorista.
+            if (soOnlineSemRota) {
+                if (item.rotaPax) item.rotaPax.limpar();
+                item.paxChave = null;
+            } else if (destino) {
+                const paxChave = `${origem.lat},${origem.lng}|${destino.lat},${destino.lng}`;
+                if (item.paxChave !== paxChave && !item.paxCalculando) {
+                    item.paxCalculando = true;
+                    try {
+                        await item.rotaPax.calcular(origem, destino);
+                        item.paxChave = paxChave;
+                    } catch (_) { /* sem rota do passageiro */ }
+                    finally { item.paxCalculando = false; }
+                }
             }
             if (motorPos) {
-                // Indo buscar o passageiro: recalcula só se o motorista sair do
-                // corredor da rota traçada (seguir a rota = 0 chamadas Google).
+                // Linha dourada: motorista → onde o passageiro está (encontro).
                 if ((!item.embarquePath || foraDaRota(motorPos, item.embarquePath)) && !item.embarqueCalculando) {
                     item.embarqueCalculando = true;
                     try {
@@ -5197,35 +5220,92 @@
         if (mk) { mk.setMap(null); delete pedidoFleet.markers[pedidoId]; }
         if (selOfe?.map) atualizarRotasPassageiroMotorista(selOfe.map);
     }
-    // Prévia da rota (origem -> destino) dentro de um modal. Reaproveita o mapa por
-    // container e mostra a linha preta da rota; sem rota disponível, só enquadra os 2 pontos.
+    // Mini-mapa do modal: prioriza ENCONTRO (motorista + passageiro) com zoom útil.
+    // Destino do passageiro fica no texto (não no fitBounds), para não “abrir” o mapa.
     const _miniMapas = {};
-    function desenharRotaMini(elId, o, d) {
+    function limparMiniMapa(elId) {
+        const mm = _miniMapas[elId];
+        if (!mm) return;
+        if (mm.mkO) { mm.mkO.setMap(null); mm.mkO = null; }
+        if (mm.mkD) { mm.mkD.setMap(null); mm.mkD = null; }
+        if (mm.mkMot) { mm.mkMot.setMap(null); mm.mkMot = null; }
+        if (mm.rotaCtrl) mm.rotaCtrl.limpar();
+    }
+    function enquadrarMiniPontos(map, pontos, pad = 48) {
+        const pts = (pontos || []).filter((p) => p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng));
+        if (!pts.length) return;
+        if (pts.length === 1) {
+            map.setCenter(pts[0]);
+            map.setZoom(16);
+            return;
+        }
+        const b = new g.maps.LatLngBounds();
+        pts.forEach((p) => b.extend(p));
+        map.fitBounds(b, pad);
+        g.maps.event.addListenerOnce(map, 'idle', () => {
+            const z = map.getZoom();
+            if (z > 17) map.setZoom(17);
+            if (z < 14) map.setZoom(14);
+        });
+    }
+    /**
+     * @param {string} elId
+     * @param {{ lat, lng }|null} paxPos  onde o passageiro está
+     * @param {{ lat, lng }|null} destPos destino (opcional; NÃO entra no zoom de encontro)
+     * @param {{ lat, lng }|null} motPos  GPS do motorista (modo online)
+     * @param {{ modoEncontro?: boolean }} opts  true = zoom só nos dois; sem rota longa
+     */
+    function desenharRotaMini(elId, paxPos, destPos, motPos, opts = {}) {
         const el = document.getElementById(elId);
-        if (!el || !g || !g.maps || !o || !d) { if (el) el.style.display = 'none'; return; }
+        if (!el || !g || !g.maps) { if (el) el.style.display = 'none'; return; }
+        const pax = paxPos && Number.isFinite(+paxPos.lat) ? { lat: +paxPos.lat, lng: +paxPos.lng } : null;
+        const dest = destPos && Number.isFinite(+destPos.lat) ? { lat: +destPos.lat, lng: +destPos.lng } : null;
+        const mot = motPos && Number.isFinite(+motPos.lat) ? { lat: +motPos.lat, lng: +motPos.lng } : null;
+        if (!pax && !mot) { el.style.display = 'none'; return; }
         el.style.display = 'block';
+        const modoEncontro = !!opts.modoEncontro || (!!mot && !!pax);
         let mm = _miniMapas[elId];
         if (!mm) {
             const map = new g.maps.Map(el, opcoesMapa({
-                zoom: 13, center: o, disableDefaultUI: true, gestureHandling: 'none',
+                zoom: 15, center: pax || mot,
+                disableDefaultUI: true, gestureHandling: 'none',
                 keyboardShortcuts: false, clickableIcons: false, mapTypeId: 'roadmap',
             }));
-            const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.9 });
-            mm = _miniMapas[elId] = { map, rotaCtrl, mkO: null, mkD: null };
+            const rotaCtrl = criarRotaControle(map, { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.95 });
+            mm = _miniMapas[elId] = { map, rotaCtrl, mkO: null, mkD: null, mkMot: null };
         }
+        limparMiniMapa(elId);
         const { map, rotaCtrl } = mm;
-        if (mm.mkO) mm.mkO.setMap(null);
-        if (mm.mkD) mm.mkD.setMap(null);
-        mm.mkO = criarMarcador({ position: o, map, cor: '#22c55e', title: 'Embarque', zIndex: 2 });
-        mm.mkD = criarMarcador({ position: d, map, cor: '#EAD298', title: 'Destino', zIndex: 2 });
+        if (pax) mm.mkO = criarMarcador({ position: pax, map, cor: '#3d8bff', title: 'Passageiro', zIndex: 3 });
+        if (mot) mm.mkMot = criarMarcador({
+            position: mot, map, iconVariant: 'gold', iconW: 28, iconH: 36, title: 'Você', zIndex: 4,
+        });
+        // Destino: só pin se NÃO for modo encontro (com rota do motorista / pedido completo).
+        if (dest && !modoEncontro) {
+            mm.mkD = criarMarcador({ position: dest, map, cor: '#EAD298', title: 'Destino', zIndex: 2 });
+        }
         setTimeout(() => {
             g.maps.event.trigger(map, 'resize');
-            rotaCtrl.calcular(o, d).catch(() => {
-                rotaCtrl.limpar();
-                const b = new g.maps.LatLngBounds(); b.extend(o); b.extend(d);
-                map.fitBounds(b, 40);
-            });
+            if (modoEncontro && mot && pax) {
+                // Linha curta você → passageiro; zoom nos dois.
+                rotaCtrl.calcular(mot, pax).catch(() => rotaCtrl.limpar());
+                enquadrarMiniPontos(map, [mot, pax], 56);
+            } else if (pax && dest && !modoEncontro) {
+                rotaCtrl.calcular(pax, dest).catch(() => {
+                    rotaCtrl.limpar();
+                    enquadrarMiniPontos(map, [pax, dest], 40);
+                });
+            } else {
+                enquadrarMiniPontos(map, [mot, pax, dest].filter(Boolean), 48);
+            }
         }, 60);
+    }
+    function htmlDestinoDestaque(texto) {
+        const t = (texto && String(texto).trim()) || 'Destino no mapa';
+        return `<div class="sol-destino-destaque" title="${esc(t)}">`
+            + `<span class="sol-destino-label">Quer ir para</span>`
+            + `<span class="sol-destino-nome">${esc(t)}</span>`
+            + `</div>`;
     }
 
     // Motorista toca num passageiro que está chamando e oferece a carona.
@@ -5281,17 +5361,20 @@
         contatoSel = null;
         pedidoSel = p;
         const nome = p.passageiro_nome || 'Passageiro';
+        const motPos = selOfe?.getOrigem?.() || null;
+        const semRotaMot = motoristaOnlineModo && !selOfe?.getDestino?.() && !motoristaModoDestino;
         document.querySelector('#modalPedido .sol-badge').textContent = 'Pedindo carona';
         document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
-            `<div style="margin-bottom:6px;">${ICN.pin} <b>Origem:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
-            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(p.destino_texto || 'Destino no mapa')}</div>`
-            + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${p.pessoas || 1} pessoa(s)</div>`;
+            htmlDestinoDestaque(p.destino_texto)
+            + `<div class="sol-meta">${ICN.pin} <b>Onde está:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
+            + `<div class="sol-meta">${p.pessoas || 1} pessoa(s)</div>`;
         aplicarSelfieNoModalPedido(p.selfie_url, nome);
         document.getElementById('modalPedido').style.display = 'flex';
         const o = p.origem_lat != null ? { lat: +p.origem_lat, lng: +p.origem_lng } : null;
         const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
-        desenharRotaMini('pedidoMapa', o, d);
+        // Online amarelo: mini-mapa = você + passageiro (perto). Destino só no texto.
+        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: semRotaMot });
     }
     function fecharPedido() {
         if (contatoSel?.id) marcarContatoLido(contatoSel.id);
@@ -5326,18 +5409,19 @@
         contatoSel = c;
         pedidoSel = null;
         const nome = c.passageiro_nome || 'Passageiro';
+        const motPos = selOfe?.getOrigem?.() || null;
+        // Buzina no carro amarelo = sempre modo encontro no mini-mapa.
         document.querySelector('#modalPedido .sol-badge').textContent = 'Quer carona';
         document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
-            `<div style="margin-bottom:6px;">${ICN.pin} <b>Onde está:</b> ${esc(c.origem_texto || 'Local do passageiro')}</div>`
-            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(c.destino_texto || 'Destino no mapa')}</div>`
-            + `<div style="margin-top:6px;font-size:.9rem;color:#9aa0a6;">${c.pessoas || 1} pessoa(s)</div>`;
-        // Mesma selfie de validação do pedido (API já manda selfie_url).
+            htmlDestinoDestaque(c.destino_texto)
+            + `<div class="sol-meta">${ICN.pin} <b>Onde está:</b> ${esc(c.origem_texto || 'Perto de você no mapa')}</div>`
+            + `<div class="sol-meta">${c.pessoas || 1} pessoa(s)</div>`;
         aplicarSelfieNoModalPedido(c.selfie_url, nome);
         document.getElementById('modalPedido').style.display = 'flex';
         const o = c.origem_lat != null ? { lat: +c.origem_lat, lng: +c.origem_lng } : null;
         const d = c.destino_lat != null ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
-        desenharRotaMini('pedidoMapa', o, d);
+        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: true });
     }
     async function oferecerAoContato() {
         const c = contatoSel;

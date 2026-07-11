@@ -1069,10 +1069,50 @@ body.theme-dark {
     letter-spacing: 0.02em;
 }
 .sol-box h3 { color: #fff; margin: 0 0 2px; }
-.sol-rota { color: #e8eaed; font-size: 0.95rem; margin: 10px 0; }
+.sol-rota { color: #e8eaed; font-size: 0.95rem; margin: 10px 0; text-align: left; }
+.sol-meta {
+    margin-top: 6px;
+    font-size: 0.88rem;
+    color: #9aa0a6;
+    line-height: 1.35;
+}
+/* Destino do passageiro em destaque (nome do local) — sem forçar zoom no mapa */
+.sol-destino-destaque {
+    margin: 10px 0 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #f4f1ea;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    text-align: center;
+}
+.sol-destino-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5c5346;
+    margin-bottom: 4px;
+}
+.sol-destino-nome {
+    display: block;
+    color: #0a0a0a;
+    font-family: Georgia, "Times New Roman", "Palatino Linotype", serif;
+    font-size: 1.22rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    word-break: break-word;
+}
 .sol-msg { color: #9aa0a6; font-style: italic; margin: 0; min-height: 0; }
 .sol-actions { display: flex; gap: 12px; margin-top: 18px; }
 .sol-actions .btn { flex: 1; padding: 15px; font-size: 1rem; }
+/* Mini-mapa do modal: foco no encontro (mais alto, legível) */
+.sol-box .mini-mapa {
+    height: 180px;
+    margin-top: 12px;
+    border: 1px solid rgba(234, 210, 152, 0.25);
+}
 .fila-cronometro {
     font-size: 2rem;
     font-weight: 800;
@@ -1599,9 +1639,18 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
 .map-pulse .mp-ring:nth-child(2) { animation-delay: 0.9s; }
 .map-pulse .mp-rotulo {
     position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
-    white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis;
-    background: rgba(15, 61, 62, 0.92); color: #fff; border: 1px solid rgba(234, 210, 152, 0.55);
-    border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600;
+    white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+    /* Nome do destino: legível em preto (não some no mapa branco) */
+    background: #f7f3ea;
+    color: #0a0a0a;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 999px;
+    padding: 4px 11px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
     z-index: 3; pointer-events: none;
 }
 @keyframes mpExpand { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(3.4); opacity: 0; } }
