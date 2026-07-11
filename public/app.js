@@ -953,7 +953,15 @@ function criarMarcador(opts = {}) {
 // Rotas: SOMENTE via /api/rotas (cache no servidor). Não chama Routes no browser
 // (cada computeRoutes do client = cobrança extra + falha comum).
 function criarRotaControle(map, polylineOptions = {}) {
-    const estilo = { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95, ...polylineOptions };
+    const estilo = {
+        strokeColor: '#000000',
+        strokeWeight: 6,
+        strokeOpacity: 0.95,
+        geodesic: true,
+        zIndex: 40,
+        clickable: false,
+        ...polylineOptions,
+    };
     let polylines = [];
 
     function desenharLinha(pontos) {
@@ -972,7 +980,11 @@ function criarRotaControle(map, polylineOptions = {}) {
 
             try {
                 const resp = await calcularRotaServidor(o, d);
-                if (resp._fallbackLine?.length >= 2 && map) desenharLinha(resp._fallbackLine);
+                // path e fallbackLine vêm iguais do servidor; desenha sempre que houver.
+                const pts = (resp._path && resp._path.length >= 2)
+                    ? resp._path
+                    : (resp._fallbackLine || null);
+                if (pts?.length >= 2 && map) desenharLinha(pts);
                 return resp;
             } catch (err) {
                 // Sem Google: linha reta local (não gera cota).
@@ -984,6 +996,12 @@ function criarRotaControle(map, polylineOptions = {}) {
         limpar() {
             polylines.forEach((pl) => pl.setMap(null));
             polylines = [];
+        },
+        /** true se há polyline viva no mapa (evita “path em memória, linha sumiu”). */
+        temLinha() {
+            return polylines.some((pl) => {
+                try { return pl.getMap() != null; } catch (_) { return false; }
+            });
         },
         // Traça uma polyline já conhecida (ex.: rota do simulador vinda do
         // servidor) — nenhuma chamada à Routes API.
@@ -1004,8 +1022,11 @@ function criarRotaControle(map, polylineOptions = {}) {
                     if (pl.setOptions) pl.setOptions(estilo);
                     pl.setMap(map);
                 });
-            } else if (resp?._fallbackLine) {
-                desenharLinha(resp._fallbackLine);
+            } else {
+                const pts = (resp?._path && resp._path.length >= 2)
+                    ? resp._path
+                    : resp?._fallbackLine;
+                if (pts?.length >= 2) desenharLinha(pts);
             }
         },
     };
