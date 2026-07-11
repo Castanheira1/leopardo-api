@@ -1590,6 +1590,21 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     background: rgba(11, 11, 13, 0.85); color: #fff; border: 1px solid rgba(234, 210, 152, 0.45);
     border-radius: 999px; padding: 3px 10px; font-size: 0.72rem; font-weight: 600; }
 .viagem-sheet { position: absolute; left: 0; right: 0; bottom: var(--sheet-kbd, 0px); z-index: 18; background: #121316; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.55); padding: 2px 16px calc(18px + env(safe-area-inset-bottom)); transition: transform 0.22s ease, bottom 0.22s ease; touch-action: none; overscroll-behavior: contain; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+/* Nome do destino na viagem — passageiro precisa ver para onde está sendo levado */
+.sheet-destino {
+    margin: 2px 0 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #EAD298;
+    line-height: 1.3;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+}
 .viagem-sheet.teclado-aberto { max-height: calc(var(--appvh, 1vh) * 72); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .viagem-sheet.collapsed { transform: translateY(calc(100% - 64px)); }
 .sheet-grip { display: flex; justify-content: center; padding: 8px 0 10px; cursor: grab; touch-action: none; }
