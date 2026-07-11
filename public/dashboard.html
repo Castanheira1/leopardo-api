@@ -1678,18 +1678,20 @@
     // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
     // satélite alterna de novo e a escolha fica salva normalmente.
     function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
-    // Com Map ID real (Cloud Console) o Google manda o estilo pela nuvem e
-    // proíbe styles no cliente. Com DEMO_MAP_ID + RASTER aplicamos o JSON local
-    // (mapa branco sem POIs) — necessário para o visual Uber do app.
+    // Com Map ID real o Google proíbe styles no cliente (aviso no console).
+    // mapaIdEfetivo() devolve null no DEMO → Map sem mapId → styles locais OK.
+    // NUNCA chamar setOptions({ styles }) se o Map tiver mapId.
     function mapaUsaEstiloLocal() {
+        if (typeof mapaIdEfetivo === 'function') return !mapaIdEfetivo();
         return !_mapId || _mapId === 'DEMO_MAP_ID';
     }
     function aplicarEstiloMapa(map, tipo) {
+        // Guardia absoluta: com mapId o Google ignora styles e só polui o console.
+        if (!mapaUsaEstiloLocal()) return;
         if (tipo !== 'roadmap') {
             try { map.setOptions({ styles: null }); } catch (_) {}
             return;
         }
-        if (!mapaUsaEstiloLocal()) return; // estilo vem do Cloud Map ID
         try { map.setOptions({ styles: ESTILO_MAPA_CLARO }); } catch (_) {}
     }
     function aplicarTipoMapa(map, tipo) {
@@ -4862,12 +4864,18 @@
             _PulseClass = class extends g.maps.OverlayView {
                 constructor(p, s, cb, t, r) { super(); this.pos = p; this.sexo = s; this.cb = cb; this.titulo = t; this.rotulo = r; this.div = null; }
                 onAdd() {
+                    if (this.div) return;
+                    const panes = this.getPanes();
+                    if (!panes) return;
+                    const pane = panes.overlayMouseTarget || panes.floatPane || panes.overlayLayer;
+                    if (!pane) return;
                     // Tons mais vivos: destacam no mapa híbrido (satélite escuro).
                     const cor = this.sexo === 'F' ? '#ff2f92' : this.sexo === 'M' ? '#3d8bff' : '#b0b6bf';
                     const d = document.createElement('div');
                     d.className = 'map-pulse';
                     d.title = this.titulo || '';
                     d.style.setProperty('--cor', cor);
+                    d.style.zIndex = '120';
                     d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
                     // Rótulo (ex.: destino do pedido) abaixo do ponto — textContent
                     // porque o texto vem do usuário.
@@ -4882,11 +4890,16 @@
                     if (this.cb) d.addEventListener('click', (e) => { e.stopPropagation(); this.cb(); });
                     else d.style.pointerEvents = 'none';
                     this.div = d;
-                    this.getPanes().overlayMouseTarget.appendChild(d);
+                    pane.appendChild(d);
                 }
                 draw() {
-                    if (!this.div) return;
-                    const pt = this.getProjection().fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+                    if (!this.div) {
+                        try { this.onAdd(); } catch (_) { return; }
+                    }
+                    if (!this.div || !this.pos) return;
+                    const proj = this.getProjection();
+                    if (!proj) return;
+                    const pt = proj.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
                     if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
                 }
                 setPosition(p) { this.pos = p; this.draw(); }

@@ -247,15 +247,21 @@ function renderingTypeRaster() {
         || 'RASTER';
 }
 
-// Advanced Markers EXIGEM mapId no Map. DEMO_MAP_ID vale para dev/prod sem
-// Map ID próprio. (Remover o mapId quebrava carrinho e pinos no mapa.)
+// Map ID "de verdade" (Cloud Console) → estilo vem da nuvem.
+// DEMO_MAP_ID → sem mapId no Map, para o JSON ESTILO_MAPA_CLARO funcionar
+// (mapa branco sem ícones de loja). Advanced Markers exigem mapId; com DEMO
+// usamos OverlayView HTML (criarMarcador) que não precisa de mapId.
 function mapaIdEfetivo() {
-    return _mapId || 'DEMO_MAP_ID';
+    if (!_mapId || _mapId === 'DEMO_MAP_ID') return null;
+    return _mapId;
 }
 
 function opcoesMapa(opts = {}) {
-    const o = { mapId: mapaIdEfetivo(), ...opts };
-    // Sempre força raster (evita GetViewportInfo 502 em VECTOR).
+    const o = { ...opts };
+    const mid = mapaIdEfetivo();
+    if (mid) o.mapId = mid;
+    else delete o.mapId;
+    // Sempre força raster (não depende do enum estar em google.maps).
     if (o.renderingType == null) o.renderingType = renderingTypeRaster();
     return o;
 }
@@ -638,7 +644,89 @@ function removerMarcadorCarro(map, marker) {
     if (set) set.delete(marker);
 }
 
-// Marcador moderno (AdvancedMarkerElement) — mapId obrigatório no Map (DEMO_MAP_ID ok).
+// Overlay HTML no mapa (não precisa de mapId — libera ESTILO_MAPA_CLARO local).
+// Classe cacheada: recriar `class extends OverlayView` a cada marcador quebra
+// o ciclo de vida do Maps em alguns browsers e o carrinho/pulso some.
+let _VapHtmlMarkerClass = null;
+function obterVapHtmlMarkerClass() {
+    if (_VapHtmlMarkerClass) return _VapHtmlMarkerClass;
+    const Overlay = google.maps.OverlayView;
+    _VapHtmlMarkerClass = class VapHtmlMarker extends Overlay {
+        constructor(position, content, zIndex, title) {
+            super();
+            this.pos = normalizarLatLng(position);
+            this._content = content || null;
+            this.div = null;
+            this._z = zIndex;
+            this._title = title || '';
+            this._listeners = [];
+        }
+        onAdd() {
+            if (this.div) return;
+            const panes = this.getPanes();
+            // getPanes() pode ser null se o mapa ainda não montou — sem isso o
+            // append lança e o marcador some para sempre.
+            if (!panes) return;
+            const pane = panes.overlayMouseTarget || panes.floatPane || panes.overlayLayer;
+            if (!pane) return;
+            const div = document.createElement('div');
+            div.className = 'vap-html-marker';
+            div.style.cssText = 'position:absolute;transform:translate(-50%,-50%);cursor:pointer;'
+                + 'background:transparent;border:0;padding:0;line-height:0;user-select:none;'
+                + 'pointer-events:auto;will-change:left,top;';
+            if (this._z != null) div.style.zIndex = String(this._z);
+            if (this._title) div.title = this._title;
+            if (this._content) div.appendChild(this._content);
+            this.div = div;
+            pane.appendChild(div);
+            this._listeners.forEach(({ ev, fn }) => div.addEventListener(ev, fn));
+        }
+        draw() {
+            // Se onAdd falhou (panes null), tenta de novo no draw.
+            if (!this.div) {
+                try { this.onAdd(); } catch (_) { return; }
+            }
+            if (!this.div || !this.pos) return;
+            const proj = this.getProjection();
+            if (!proj) return;
+            const pt = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.pos.lat, this.pos.lng));
+            if (!pt) return;
+            this.div.style.left = pt.x + 'px';
+            this.div.style.top = pt.y + 'px';
+        }
+        onRemove() {
+            if (this.div?.parentNode) this.div.parentNode.removeChild(this.div);
+            this.div = null;
+        }
+        setPosition(p) {
+            this.pos = normalizarLatLng(p);
+            this.draw();
+        }
+        getPosition() {
+            if (!this.pos) return null;
+            return { lat: () => this.pos.lat, lng: () => this.pos.lng };
+        }
+        setTitle(t) {
+            this._title = t || '';
+            if (this.div) this.div.title = this._title;
+        }
+        addDomListener(ev, fn) {
+            this._listeners.push({ ev, fn });
+            if (this.div) this.div.addEventListener(ev, fn);
+            return { remove: () => this.div && this.div.removeEventListener(ev, fn) };
+        }
+    };
+    return _VapHtmlMarkerClass;
+}
+
+function criarOverlayHtml(map, position, content, zIndex, title) {
+    const Cls = obterVapHtmlMarkerClass();
+    const ov = new Cls(position, content, zIndex, title);
+    ov.setMap(map || null);
+    return ov;
+}
+
+// Marcador moderno: AdvancedMarkerElement (com Map ID real) ou OverlayView (DEMO + estilo local).
 function criarMarcador(opts = {}) {
     const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading, iconVariant } = opts;
     let pinEl = null;
@@ -702,41 +790,82 @@ function criarMarcador(opts = {}) {
             wrapEl = img;
         }
     } else if (label || cor) {
-        const pinOpts = {
-            background: cor || '#EA4335',
-            borderColor: '#fff',
-            glyphColor: '#fff',
-            scale: label ? 1.1 : 0.85,
-        };
-        if (label) pinOpts.glyphText = label;
-        pinEl = new _PinElement(pinOpts);
+        if (_PinElement && mapaIdEfetivo()) {
+            const pinOpts = {
+                background: cor || '#EA4335',
+                borderColor: '#fff',
+                glyphColor: '#fff',
+                scale: label ? 1.1 : 0.85,
+            };
+            if (label) pinOpts.glyphText = label;
+            pinEl = new _PinElement(pinOpts);
+        } else {
+            // Pin simples em HTML (sem mapId / AdvancedMarker)
+            const d = document.createElement('div');
+            d.style.cssText = 'width:18px;height:18px;border-radius:50%;background:'
+                + (cor || '#EA4335') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);';
+            if (label) {
+                d.style.cssText = 'min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:'
+                    + (cor || '#EA4335') + ';border:2px solid #fff;color:#fff;font:700 11px/18px system-ui,sans-serif;'
+                    + 'text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.35);';
+                d.textContent = label;
+            }
+            content = d;
+        }
     }
-    const mk = new _AdvancedMarkerElement({
-        map: map || null,
-        position: normalizarLatLng(position),
-        title: title || '',
-        content: content || null,
-        zIndex,
-    });
-    if (pinEl) mk.append(pinEl);
+
+    const usarAdvanced = !!(mapaIdEfetivo() && _AdvancedMarkerElement);
+    // Carrinho/pulso precisam ficar acima das tiles; sem zIndex o overlay some
+    // atrás de controles em alguns zoom/browsers.
+    const zEfetivo = zIndex != null ? zIndex : (iconVariant ? 100 : (content || pinEl ? 50 : undefined));
+    let mk = null;
+    let ov = null;
+    if (usarAdvanced) {
+        mk = new _AdvancedMarkerElement({
+            map: map || null,
+            position: normalizarLatLng(position),
+            title: title || '',
+            content: content || null,
+            zIndex: zEfetivo,
+        });
+        if (pinEl) mk.append(pinEl);
+    } else {
+        // DEMO_MAP_ID / sem mapId: OverlayView (permite mapa branco estilizado)
+        if (pinEl && !content) content = pinEl.element || pinEl;
+        ov = criarOverlayHtml(map, position, content, zEfetivo, title);
+    }
+
     let _headingDeg = heading != null ? Number(heading) || 0 : 0;
     const aplicarRotacao = () => {
         if (!rotEl || rotEl.dataset.semGiro) return;
         rotEl.style.transform = `rotate(${_headingDeg}deg) translateZ(0)`;
     };
     if (_headingDeg) aplicarRotacao();
+
     const api = {
-        setPosition(p) { mk.position = normalizarLatLng(p); },
-        getPosition() { return posicaoLegada(mk); },
+        setPosition(p) {
+            const pos = normalizarLatLng(p);
+            if (mk) mk.position = pos;
+            else if (ov) ov.setPosition(pos);
+        },
+        getPosition() {
+            if (mk) return posicaoLegada(mk);
+            if (ov) return ov.getPosition();
+            return null;
+        },
         setMap(m) {
             if (!m && mapRef && iconVariant) removerMarcadorCarro(mapRef, api);
-            mk.map = m;
+            if (mk) mk.map = m;
+            else if (ov) ov.setMap(m || null);
             if (m) {
                 mapRef = m;
                 if (iconVariant) registrarMarcadorCarro(m, api);
             }
         },
-        setTitle(t) { mk.title = t || ''; },
+        setTitle(t) {
+            if (mk) mk.title = t || '';
+            else if (ov) ov.setTitle(t || '');
+        },
         getHeading() { return _headingDeg; },
         setHeading(h) {
             if (!rotEl && !imgEl) return;
@@ -760,13 +889,17 @@ function criarMarcador(opts = {}) {
             }
         },
         addListener(ev, fn) {
-            const e = ev === 'click' ? 'gmp-click' : ev;
-            if (e === 'gmp-click') mk.gmpClickable = true;
-            if (typeof mk.addEventListener === 'function') {
-                mk.addEventListener(e, fn);
-                return { remove: () => mk.removeEventListener(e, fn) };
+            if (mk) {
+                const e = ev === 'click' ? 'gmp-click' : ev;
+                if (e === 'gmp-click') mk.gmpClickable = true;
+                if (typeof mk.addEventListener === 'function') {
+                    mk.addEventListener(e, fn);
+                    return { remove: () => mk.removeEventListener(e, fn) };
+                }
+                return mk.addListener(e, fn);
             }
-            return mk.addListener(e, fn);
+            const domEv = ev === 'gmp-click' ? 'click' : ev;
+            return ov.addDomListener(domEv, fn);
         },
     };
     if (mapRef && iconVariant) registrarMarcadorCarro(mapRef, api);
