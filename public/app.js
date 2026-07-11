@@ -247,7 +247,7 @@ let _AdvancedMarkerElement = null;
 let _PinElement = null;
 let _RenderingType = null; // preenchido em carregarMaps() via importLibrary('maps')
 
-// VECTOR chama GetViewportInfo → 502/CORS intermitente no Maps.
+// VECTOR chama GetViewportInfo → 502/CORS/QUIC intermitente no Maps.
 // SEMPRE RASTER (enum da lib ou string). Nunca deixar o default VECTOR.
 function renderingTypeRaster() {
     const RT = _RenderingType
@@ -257,38 +257,44 @@ function renderingTypeRaster() {
     return 'RASTER';
 }
 
-/** Aplica RASTER no Map logo após criar (constructor + setRenderingType + setOptions). */
+function _ehRasterAtual(map, rt) {
+    try {
+        if (typeof map.getRenderingType !== 'function') return true;
+        const atual = map.getRenderingType();
+        return atual === rt || atual === 'RASTER'
+            || String(atual || '').toUpperCase().includes('RASTER');
+    } catch (_) {
+        return false;
+    }
+}
+
+/** Aplica RASTER no Map (constructor + setRenderingType + reforço em frames). */
 function forcarMapaRaster(map) {
     if (!map) return;
-    const rt = renderingTypeRaster();
-    try {
-        if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
-    } catch (_) { /* API antiga */ }
-    try {
-        map.setOptions({ renderingType: rt });
-    } catch (_) { /* ignora */ }
-    // Se ainda estiver VECTOR, tenta de novo no próximo frame (enum pode ter chegado).
-    try {
-        if (typeof map.getRenderingType === 'function') {
-            const atual = map.getRenderingType();
-            const ehRaster = atual === rt || atual === 'RASTER'
-                || String(atual).toUpperCase().includes('RASTER');
-            if (!ehRaster) {
-                requestAnimationFrame(() => {
-                    try {
-                        const rt2 = renderingTypeRaster();
-                        if (typeof map.setRenderingType === 'function') map.setRenderingType(rt2);
-                        map.setOptions({ renderingType: rt2 });
-                    } catch (_) { /* ignora */ }
-                });
-            }
-        }
-    } catch (_) { /* ignora */ }
+    const aplicar = () => {
+        const rt = renderingTypeRaster();
+        try {
+            if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
+        } catch (_) { /* API antiga */ }
+        try {
+            map.setOptions({ renderingType: rt });
+        } catch (_) { /* ignora */ }
+        return _ehRasterAtual(map, rt);
+    };
+    if (aplicar()) return;
+    // Enum/lib pode chegar atrasado — reforça por ~1,5 s
+    let n = 0;
+    const id = setInterval(() => {
+        n += 1;
+        if (aplicar() || n >= 8) clearInterval(id);
+    }, 200);
 }
 
 // Map ID real (Cloud) → estilo na nuvem + Advanced Markers.
 // DEMO_MAP_ID → sem mapId no Map, para ESTILO_MAPA_CLARO (mapa branco) no cliente.
 // Advanced Markers exigem mapId; no DEMO usamos OverlayView HTML (criarMarcador).
+// Em rede frágil, mapId costuma forçar VECTOR/GetViewportInfo — se falhar, o
+// criador do mapa pode recriar sem mapId (ver novoMapa).
 function mapaIdEfetivo() {
     if (!_mapId || _mapId === 'DEMO_MAP_ID') return null;
     return _mapId;
@@ -296,12 +302,20 @@ function mapaIdEfetivo() {
 
 function opcoesMapa(opts = {}) {
     const o = { ...opts };
-    const mid = mapaIdEfetivo();
+    const semMapId = !!o._semMapId;
+    delete o._semMapId;
+    const mid = semMapId ? null : mapaIdEfetivo();
     if (mid) o.mapId = mid;
     else delete o.mapId;
-    // Sempre RASTER — nunca VECTOR (GetViewportInfo 502).
+    // Sempre RASTER — nunca VECTOR (GetViewportInfo 502/QUIC).
     o.renderingType = renderingTypeRaster();
+    // Evita extras que disparam RPC extra no load
+    if (o.isFractionalZoomEnabled == null) o.isFractionalZoomEnabled = false;
     return o;
+}
+
+function _sleepMaps(ms) {
+    return new Promise((r) => setTimeout(r, ms));
 }
 
 function normalizarLatLng(pos) {
@@ -448,63 +462,164 @@ function foraDaRota(pos, path) {
     return !p || p.distKm > FORA_DA_ROTA_KM;
 }
 
+/**
+ * Bootstrap do Maps com timeout + retry.
+ * Rede fraca/QUIC costuma derrubar o 1º script; o 2º/3º costuma passar.
+ */
 function instalarMapsBootstrap(apiKey) {
-    if (window.google?.maps?.importLibrary) return Promise.resolve();
+    if (window.google?.maps?.importLibrary) return Promise.resolve(window.google);
     if (window.__vapMapsBootstrap) return window.__vapMapsBootstrap;
-    window.__vapMapsBootstrap = new Promise((resolve, reject) => {
+
+    const carregarScript = (tentativa) => new Promise((resolve, reject) => {
         try {
-            (g => {
-                var h, a, k, p = 'The Google Maps JavaScript API', c = 'google', l = 'importLibrary', q = '__ib__', m = document, b = window;
-                b = b[c] || (b[c] = {});
-                var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams,
-                    u = () => h || (h = new Promise(async (f, n) => {
-                        await (a = m.createElement('script'));
-                        e.set('libraries', [...r] + '');
-                        for (k in g) e.set(k.replace(/[A-Z]/g, t => '_' + t[0].toLowerCase()), g[k]);
-                        e.set('callback', c + '.maps.' + q);
-                        a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
-                        d[q] = f;
-                        a.onerror = () => n(new Error(p + ' could not load.'));
-                        a.nonce = m.querySelector('script[nonce]')?.nonce || '';
-                        m.head.append(a);
-                    }));
-                d[l] ? null : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
-            // quarterly = canal estável (weekly costuma quebrar com GetViewportInfo).
-            })({ key: apiKey, v: 'quarterly' });
-            google.maps.importLibrary('maps').then(resolve).catch(reject);
+            // Remove script morto de tentativas anteriores
+            document.querySelectorAll('script[data-vap-maps-boot]').forEach((s) => {
+                try { s.remove(); } catch (_) {}
+            });
+            // Limpa estado parcial do loader
+            try {
+                if (window.google && !window.google.maps?.importLibrary) {
+                    delete window.google.maps;
+                }
+            } catch (_) {}
+
+            const g = {
+                key: apiKey,
+                // quarterly = estável; GetViewportInfo some menos que weekly
+                v: 'quarterly',
+            };
+            const c = 'google';
+            const l = 'importLibrary';
+            const q = '__ib__' + (tentativa || 0);
+            const m = document;
+            const b = window;
+            b[c] = b[c] || {};
+            const d = b[c].maps = b[c].maps || {};
+            const r = new Set();
+            const e = new URLSearchParams();
+            let h = null;
+            const u = () => h || (h = new Promise(async (f, n) => {
+                const a = m.createElement('script');
+                a.setAttribute('data-vap-maps-boot', '1');
+                a.async = true;
+                a.defer = true;
+                e.set('libraries', [...r] + '');
+                for (const k in g) {
+                    e.set(k.replace(/[A-Z]/g, (t) => '_' + t[0].toLowerCase()), g[k]);
+                }
+                e.set('callback', c + '.maps.' + q);
+                // cache-bust por tentativa (evita script quebrado em cache intermediário)
+                if (tentativa > 0) e.set('_vap', String(Date.now()));
+                a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
+                const tmo = setTimeout(() => {
+                    n(new Error('Maps bootstrap timeout'));
+                }, 14000);
+                d[q] = () => { clearTimeout(tmo); f(); };
+                a.onerror = () => {
+                    clearTimeout(tmo);
+                    n(new Error('Maps script onerror'));
+                };
+                a.nonce = m.querySelector('script[nonce]')?.nonce || '';
+                m.head.append(a);
+            }));
+            d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n));
+            u().then(() => resolve(window.google)).catch(reject);
         } catch (err) {
             reject(err);
         }
     });
+
+    window.__vapMapsBootstrap = (async () => {
+        let lastErr = null;
+        for (let t = 0; t < 3; t++) {
+            try {
+                if (window.google?.maps?.importLibrary) return window.google;
+                await carregarScript(t);
+                // Confirma API real
+                await Promise.race([
+                    window.google.maps.importLibrary('maps'),
+                    _sleepMaps(12000).then(() => { throw new Error('importLibrary maps timeout'); }),
+                ]);
+                return window.google;
+            } catch (err) {
+                lastErr = err;
+                console.warn('Maps bootstrap tentativa', t + 1, err?.message || err);
+                try { delete window.google?.maps?.[('__ib__' + t)]; } catch (_) {}
+                await _sleepMaps(600 * (t + 1));
+            }
+        }
+        window.__vapMapsBootstrap = null;
+        throw lastErr || new Error('Maps bootstrap falhou');
+    })();
+
     return window.__vapMapsBootstrap;
+}
+
+async function _importLibComTimeout(nome, ms = 12000) {
+    return Promise.race([
+        google.maps.importLibrary(nome),
+        _sleepMaps(ms).then(() => { throw new Error('timeout importLibrary ' + nome); }),
+    ]);
+}
+
+async function carregarMapsOnce() {
+    const cfg = await (await fetch('/api/config')).json();
+    if (!cfg.mapsApiKey) throw new Error('Google Maps API key não configurada (.env GOOGLE_MAPS_API_KEY)');
+    _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
+    await instalarMapsBootstrap(cfg.mapsApiKey);
+
+    // Parallel com fallback sequencial (rede fraca derruba Promise.all)
+    let mapsLib, markerLib, routesLib;
+    try {
+        const libs = await Promise.all([
+            _importLibComTimeout('maps'),
+            _importLibComTimeout('marker'),
+            _importLibComTimeout('routes'),
+            _importLibComTimeout('places').catch(() => null),
+        ]);
+        mapsLib = libs[0];
+        markerLib = libs[1];
+        routesLib = libs[2];
+    } catch (_) {
+        mapsLib = await _importLibComTimeout('maps', 15000);
+        markerLib = await _importLibComTimeout('marker', 15000);
+        routesLib = await _importLibComTimeout('routes', 15000);
+        try { await _importLibComTimeout('places', 10000); } catch (__) { /* places opcional */ }
+    }
+
+    _RenderingType = mapsLib.RenderingType
+        || mapsLib.Map?.RenderingType
+        || window.google?.maps?.RenderingType
+        || null;
+    if (_RenderingType && !window.google.maps.RenderingType) {
+        try { window.google.maps.RenderingType = _RenderingType; } catch (_) {}
+    }
+    _RouteClass = routesLib.Route;
+    _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+    _PinElement = markerLib.PinElement;
+    return window.google;
 }
 
 function carregarMaps() {
     if (_mapsPromise) return _mapsPromise;
     _mapsPromise = (async () => {
-        const cfg = await (await fetch('/api/config')).json();
-        if (!cfg.mapsApiKey) throw new Error('Google Maps API key não configurada (.env GOOGLE_MAPS_API_KEY)');
-        _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
-        await instalarMapsBootstrap(cfg.mapsApiKey);
-        const [mapsLib, markerLib, routesLib] = await Promise.all([
-            google.maps.importLibrary('maps'),
-            google.maps.importLibrary('marker'),
-            google.maps.importLibrary('routes'),
-            google.maps.importLibrary('places'),
-        ]);
-        _RenderingType = mapsLib.RenderingType
-            || mapsLib.Map?.RenderingType
-            || window.google?.maps?.RenderingType
-            || null;
-        // Garante enum global se a lib expôs só no mapsLib
-        if (_RenderingType && !window.google.maps.RenderingType) {
-            try { window.google.maps.RenderingType = _RenderingType; } catch (_) {}
+        let lastErr = null;
+        for (let i = 0; i < 3; i++) {
+            try {
+                return await carregarMapsOnce();
+            } catch (err) {
+                lastErr = err;
+                console.warn('carregarMaps tentativa', i + 1, err?.message || err);
+                // permite novo bootstrap
+                window.__vapMapsBootstrap = null;
+                await _sleepMaps(700 * (i + 1));
+            }
         }
-        _RouteClass = routesLib.Route;
-        _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
-        _PinElement = markerLib.PinElement;
-        return window.google;
-    })().catch((err) => { _mapsPromise = null; throw err; });
+        throw lastErr || new Error('Não foi possível carregar o Google Maps');
+    })().catch((err) => {
+        _mapsPromise = null;
+        throw err;
+    });
     return _mapsPromise;
 }
 

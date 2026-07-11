@@ -891,9 +891,15 @@
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
             if (!selPed) {
-                initMapPedir().catch((err) => {
+                initMapPedir().catch(async (err) => {
                     console.error('initMapPedir falhou:', err);
-                    msg('Não foi possível carregar o mapa. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    try {
+                        await new Promise((r) => setTimeout(r, 1200));
+                        await initMapPedir();
+                    } catch (e2) {
+                        console.error('initMapPedir retry:', e2);
+                        msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    }
                 }).finally(() => garantirUiAcaoVisivel(true));
             } else {
                 iniciarFrotaAoVivo(selPed.map);
@@ -906,9 +912,15 @@
         if (id === 'tabOferecer') {
             if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
             if (!selOfe) {
-                initMapOferecer().catch((err) => {
+                initMapOferecer().catch(async (err) => {
                     console.error('initMapOferecer falhou:', err);
-                    msg('Não foi possível carregar o mapa. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    try {
+                        await new Promise((r) => setTimeout(r, 1200));
+                        await initMapOferecer();
+                    } catch (e2) {
+                        console.error('initMapOferecer retry:', e2);
+                        msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    }
                 }).finally(() => garantirUiAcaoVisivel(true));
             } else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
@@ -1878,22 +1890,67 @@
     }
     function novoMapa(elId, opts) {
         const el = document.getElementById(elId);
-        const map = new g.maps.Map(el, opcoesMapa({
-            zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
-            fullscreenControl: false, gestureHandling: 'greedy', clickableIcons: false, ...opts,
-        }));
-        // RASTER obrigatório — evita GetViewportInfo 502/CORS (VECTOR).
+        if (!el) throw new Error('mapa: elemento #' + elId + ' não encontrado');
+
+        const baseOpts = {
+            zoom: 15,
+            mapTypeId: tipoMapaSalvo() === 'hybrid' ? 'roadmap' : (tipoMapaSalvo() || 'roadmap'),
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'greedy',
+            clickableIcons: false,
+            ...opts,
+        };
+        // Abre sempre em roadmap RASTER (híbrido no load dispara GetViewportInfo/QUIC).
+        // Usuário pode trocar para satélite depois pelo botão.
+        if (baseOpts.mapTypeId === 'hybrid' || baseOpts.mapTypeId === 'satellite') {
+            baseOpts.mapTypeId = 'roadmap';
+        }
+
+        function montar(semMapId) {
+            // Recriar: limpa nós órfãos do Maps no container
+            try { el.innerHTML = ''; } catch (_) {}
+            const map = new g.maps.Map(el, opcoesMapa({
+                ...baseOpts,
+                _semMapId: !!semMapId,
+            }));
+            forcarMapaRaster(map);
+            return map;
+        }
+
+        // Sem mapId no 1º paint se DEMO; com mapId Cloud ainda forçamos RASTER.
+        // Em falha crônica de GetViewportInfo, montar(true) remove mapId.
+        let map = montar(false);
         forcarMapaRaster(map);
-        g.maps.event.addListenerOnce(map, 'idle', () => forcarMapaRaster(map));
-        aplicarEstiloMapa(map, tipoMapaSalvo());
+        aplicarEstiloMapa(map, 'roadmap');
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);
-        // Warm satélite da área (leve, fora da tela) depois do primeiro idle.
-        g.maps.event.addListenerOnce(map, 'idle', () => {
-            forcarMapaRaster(map);
-            const c = map.getCenter();
-            if (c) preaquecerSatelite(g, { lat: c.lat(), lng: c.lng() });
-        });
+
+        // Recuperação sem destruir marcadores: RASTER + resize/pan (reativa tiles).
+        let tilesOk = false;
+        try {
+            g.maps.event.addListenerOnce(map, 'tilesloaded', () => { tilesOk = true; });
+            g.maps.event.addListenerOnce(map, 'idle', () => forcarMapaRaster(map));
+        } catch (_) {}
+
+        const reanimarTiles = () => {
+            try {
+                forcarMapaRaster(map);
+                const c = map.getCenter?.();
+                const z = map.getZoom?.() || 15;
+                if (c) {
+                    map.setZoom(z);
+                    map.panBy(1, 0);
+                    map.panBy(-1, 0);
+                }
+                if (g.maps.event?.trigger) g.maps.event.trigger(map, 'resize');
+            } catch (_) { /* ignora */ }
+        };
+        setTimeout(() => { if (!tilesOk) reanimarTiles(); }, 2500);
+        setTimeout(() => { if (!tilesOk) reanimarTiles(); }, 6000);
+
+        // NÃO pré-aquece satélite no open — segundo mapa hybrid gera GetViewportInfo/QUIC.
         return map;
     }
     function vincularBotaoTipoMapa(mapId, map) {
@@ -1912,14 +1969,29 @@
 
     /* -------- seletor de rota (mapa) -------- */
     async function criarSeletor(mapId, inputId, comoCarro, onDestino) {
-        g = await carregarMaps();
+        // Rede fraca: carregarMaps já faz 3 tentativas; se ainda falhar, 1 ciclo extra.
+        try {
+            g = await carregarMaps();
+        } catch (err1) {
+            console.warn('criarSeletor carregarMaps #1', err1?.message || err1);
+            await new Promise((r) => setTimeout(r, 1000));
+            g = await carregarMaps();
+        }
         // O mapa abre NA HORA na última posição conhecida (ou no polo S11D) e o
         // GPS ajusta quando responder — esperar o GPS aqui segurava o download
         // das imagens e o mapa parecia lento. A origem continua sendo SEMPRE a
         // posição real do GPS: sem ele, pedir/oferecer segue bloqueado.
         let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
         const estado = { gpsOk: false };
-        const map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
+        let map;
+        try {
+            map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
+        } catch (errMap) {
+            console.warn('criarSeletor novoMapa', errMap?.message || errMap);
+            await new Promise((r) => setTimeout(r, 800));
+            g = await carregarMaps();
+            map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
+        }
 
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
