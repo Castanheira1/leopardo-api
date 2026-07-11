@@ -2042,6 +2042,27 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     flex-direction: column;
     gap: 10px;
 }
+.ride-card--tap {
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ride-card--tap:active {
+    opacity: 0.92;
+}
+.ride-card--tap:focus-visible {
+    outline: 2px solid rgba(234, 210, 152, 0.55);
+    outline-offset: 2px;
+}
+.ride-card__chev {
+    flex-shrink: 0;
+    align-self: center;
+    color: #EAD298;
+    font-size: 1.4rem;
+    font-weight: 300;
+    line-height: 1;
+    opacity: 0.75;
+    padding-left: 4px;
+}
 .ride-card__head {
     display: flex;
     gap: 12px;

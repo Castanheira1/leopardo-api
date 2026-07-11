@@ -2178,17 +2178,22 @@
         // NOME dele como destino — muito mais fácil que decorar o endereço de rua.
         // O destino também pode ser definido pela busca "Para onde vamos".
         let placesSvc = null;
-        map.addListener('click', (e) => {
+        map.addListener('click', async (e) => {
             if (!e.placeId) return;   // toque no vazio não marca nada (evita destino/rota acidental)
             if (e.stop) e.stop();     // não abre o infowindow padrão do Google
-            placesSvc = placesSvc || new g.maps.places.PlacesService(map);
-            placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
-                if (status === 'OK' && det && det.geometry) {
-                    setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
-                } else {
-                    setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-                }
-            });
+            try {
+                if (!g.maps.places) await garantirPlacesLib();
+                placesSvc = placesSvc || new g.maps.places.PlacesService(map);
+                placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
+                    if (status === 'OK' && det && det.geometry) {
+                        setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
+                    } else {
+                        setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                    }
+                });
+            } catch (_) {
+                setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+            }
         });
 
         const inputEl = document.getElementById(inputId);
@@ -2730,6 +2735,8 @@
     }
 
     function cardMotoristaDisponivel(it) {
+        // Lista = só resumo. Ações (WhatsApp/Ligar/Buzinar/Solicitar) ficam no
+        // MESMO modal do clique no carro no mapa — uma tela só.
         const km = it.dist != null && isFinite(it.dist) && it.dist >= 0.1 ? `${Number(it.dist).toFixed(1)} km` : '';
         const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
         const empresa = esc(it.nome || 'Motorista');
@@ -2738,12 +2745,6 @@
         const parcial = it.compatRota === 'parcial';
         const proximo = it.compatRota === 'proximo';
         const destMot = esc(it.destinoMotorista || it.destino || 'destino do motorista');
-        const avisoParcial = parcial
-            ? `<p class="ride-aviso-parcial">Motorista vai só até <strong>${destMot}</strong> — seu destino é mais longe.</p>`
-            : '';
-        const avisoProximo = proximo
-            ? `<p class="ride-aviso-proximo">Passa perto — motorista vai até <strong>${destMot}</strong>. Não é obrigado a levar até o seu destino.</p>`
-            : '';
         const aoVivo = !it.caronaId
             ? '<span class="ride-badge ride-badge--amarelo">Por perto · 600 m</span>'
             : (it.online
@@ -2755,40 +2756,25 @@
                         : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')));
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
-            : `${ICN.car} Disponível por perto — combine o destino`;
+            : `${ICN.car} Disponível por perto — toque para ver e contatar`;
         const foto = it.foto
             ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
             : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
-        const pessoas = lerPessoasPed();
-        const vagasDisp = it.vagas || 1;
-        const vagasOk = !it.caronaId || pessoas <= vagasDisp;
-        const acaoPrincipal = it.caronaId
-            ? (vagasOk
-                ? (parcial
-                    ? `<button type="button" class="btn btn-secondary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Pedir até ${destMot}</button>`
-                    : (proximo
-                        ? `<p class="ride-hint-proximo">Combine pelo WhatsApp ou buzina — embarque só se o motorista concordar.</p>`
-                        : `<button type="button" class="btn btn-primary btn-block ride-card__cta" onclick="pedirVaga(${it.caronaId}, ${vagasDisp})">Solicitar vaga</button>`))
-                : `<p class="ride-erro-vagas">Você pediu ${pessoas} — só há ${vagasDisp} vaga(s).</p>`)
-            : '';
         const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
-        // Mesmo destino/rota publicada: o caminho correto é "Solicitar vaga".
-        // Buzina/WhatsApp ficam para carro amarelo, passa-perto ou parcial.
-        const mostrarContato = !it.caronaId || proximo || parcial;
-        return `<article class="ride-card${cardMod}">
-            <div class="ride-card__head" role="button" tabindex="0" onclick="abrirPerfilDaLista(${it.id})" onkeydown="if(event.key==='Enter')abrirPerfilDaLista(${it.id})">
+        return `<article class="ride-card ride-card--tap${cardMod}" role="button" tabindex="0"
+            onclick="abrirPerfilDaLista(${it.id})"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();abrirPerfilDaLista(${it.id});}"
+            aria-label="Ver perfil de ${empresa}">
+            <div class="ride-card__head">
                 ${foto}
                 <div class="ride-card__body">
                     <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
                     <div class="ride-card__sub">${carro}</div>
                     <div class="ride-card__route">${linha}</div>
-                    ${avisoParcial}
-                    ${avisoProximo}
-                    ${km ? `<div class="ride-card__dist">${km} de você</div>` : ''}
+                    ${km ? `<div class="ride-card__dist">${km} de você · toque para abrir</div>` : '<div class="ride-card__dist">Toque para ver perfil e contato</div>'}
                 </div>
+                <span class="ride-card__chev" aria-hidden="true">›</span>
             </div>
-            ${acaoPrincipal}
-            ${mostrarContato ? botoesContato(it.id, false) : ''}
         </article>`;
     }
 
@@ -2850,12 +2836,16 @@
                 const item = {
                     id: c.motorista_id, caronaId: c.id,
                     nome: c.motorista_empresa || c.motorista_nome, placa: c.placa, tag: c.tag,
-                    foto: c.foto_carro_url, vagas: c.vagas, destino: c.destino_texto,
+                    foto: c.foto_carro_url, selfie: c.selfie_url || null,
+                    vagas: c.vagas, destino: c.destino_texto,
                     dist: c.dist_origem != null ? Number(c.dist_origem) : Infinity,
                     ordem: ordemPorId.has(c.motorista_id) ? ordemPorId.get(c.motorista_id) : null,
                     online: !!c.motorista_online,
                     compatRota: c.compat_rota || 'total',
                     destinoMotorista: c.destino_texto,
+                    lat: c.lat != null ? +c.lat : (c.origem_lat != null ? +c.origem_lat : null),
+                    lng: c.lng != null ? +c.lng : (c.origem_lng != null ? +c.origem_lng : null),
+                    empresa: c.motorista_empresa || null,
                 };
                 const prev = porMotorista.get(c.motorista_id);
                 if (!prev || item.caronaId > prev.caronaId) porMotorista.set(c.motorista_id, item);
@@ -2871,6 +2861,9 @@
                     foto: m.foto_carro_url, selfie: m.selfie_url,
                     vagas: m.vagas || 1, destino: null, dist, ordem: null, online: true,
                     compatRota: 'total', destinoMotorista: null,
+                    lat: m.lat != null ? +m.lat : null,
+                    lng: m.lng != null ? +m.lng : null,
+                    empresa: m.empresa_nome || null,
                 });
             });
             indoDestino.sort((a, b) => {
@@ -3306,16 +3299,20 @@
         return {
             id: it.id,
             nome: it.nome,
+            motorista_nome: it.nome,
+            empresa_nome: it.empresa || it.empresa_nome || null,
             carona_id: it.caronaId,
             placa: it.placa,
             tag: it.tag,
             foto_carro_url: it.foto,
             selfie_url: it.selfie,
-            destino_texto: it.destino,
+            destino_texto: it.destino || it.destinoMotorista || null,
             carona_vagas: it.vagas,
             vagas: it.vagas,
             compatRota: it.compatRota,
             dist: it.dist,
+            lat: it.lat,
+            lng: it.lng,
         };
     }
     function abrirPerfilDaLista(id) {
@@ -3418,10 +3415,22 @@
             if (fotoPh) fotoPh.style.display = 'flex';
         }
         const btnPedir = document.getElementById('btnPedirCarroMapa');
-        const mostrarSolicitar = temRota && !parcial && !proximo;
+        const destMotTxt = m.destino_texto || 'destino do motorista';
+        // Rota total → Solicitar. Parcial → pedir até a parada. Amarelo/próximo → só contato.
+        let mostrarSolicitar = false;
+        let labelSolicitar = 'Solicitar vaga';
+        if (temRota && !proximo) {
+            if (parcial) {
+                mostrarSolicitar = true;
+                labelSolicitar = 'Pedir até ' + destMotTxt;
+            } else {
+                mostrarSolicitar = true;
+                labelSolicitar = 'Solicitar vaga';
+            }
+        }
         if (btnPedir) {
             btnPedir.style.display = mostrarSolicitar ? 'block' : 'none';
-            btnPedir.textContent = 'Solicitar vaga';
+            btnPedir.textContent = labelSolicitar;
         }
         document.getElementById('carroContatos').innerHTML =
             (!temRota || parcial || proximo) ? botoesContatoPerfil(m.id) : '';
