@@ -1646,7 +1646,7 @@
         const mkOrigem = criarMarcador({
             position: origem, map, invisivel: !comoCarro,
             iconW: comoCarro ? 30 : undefined, iconH: comoCarro ? 40 : undefined,
-            iconVariant: comoCarro ? 'white' : undefined,
+            iconVariant: comoCarro ? 'gold' : undefined,
             title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
         });
         let pulseOrigem = null;
@@ -4094,7 +4094,7 @@
             } else {
                 vv.carMarker = criarMarcador({
                     position: vv.posMotorista, map: vv.map,
-                    iconW: 30, iconH: 40, iconVariant: 'white', title: 'Motorista', zIndex: 999,
+                    iconW: 30, iconH: 40, iconVariant: 'gold', title: 'Motorista', zIndex: 999,
                 });
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
@@ -4568,7 +4568,7 @@
                             item.rotaPath = null;
                         }
                     } else {
-                        const iconVariant = (m.carona_id && !m.online_desde) ? 'white' : 'gold';
+                        const iconVariant = 'gold';
                         const car = criarMarcador({
                             position: pos, map,
                             iconW: 30, iconH: 40, iconVariant,
@@ -4954,7 +4954,7 @@
                 selfCar.marker = criarMarcador({
                     position: pos, map,
                     iconW: 30, iconH: 40,
-                    iconVariant: motoristaModoDestino ? 'white' : 'gold',
+                    iconVariant: 'gold',
                     title: 'Você', zIndex: 999,
                 });
                 selfCar.emprestado = false;
