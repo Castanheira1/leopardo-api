@@ -1789,21 +1789,20 @@
         } catch (_) { /* sem warm: preview ainda funciona, só carrega na hora */ }
     }
     function novoMapa(elId, opts) {
-        const map = new g.maps.Map(document.getElementById(elId), opcoesMapa({
+        const el = document.getElementById(elId);
+        const map = new g.maps.Map(el, opcoesMapa({
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
             fullscreenControl: false, gestureHandling: 'greedy', clickableIcons: false, ...opts,
         }));
-        // Reforço: se a lib ainda não tinha o enum na 1ª opção, aplica depois.
-        try {
-            const rt = renderingTypeRaster();
-            if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
-            else map.setOptions({ renderingType: rt });
-        } catch (_) { /* API antiga: ignora */ }
+        // RASTER obrigatório — evita GetViewportInfo 502/CORS (VECTOR).
+        forcarMapaRaster(map);
+        g.maps.event.addListenerOnce(map, 'idle', () => forcarMapaRaster(map));
         aplicarEstiloMapa(map, tipoMapaSalvo());
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);
         // Warm satélite da área (leve, fora da tela) depois do primeiro idle.
         g.maps.event.addListenerOnce(map, 'idle', () => {
+            forcarMapaRaster(map);
             const c = map.getCenter();
             if (c) preaquecerSatelite(g, { lat: c.lat(), lng: c.lng() });
         });
@@ -5446,6 +5445,7 @@
         const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
         // Online amarelo: mini-mapa = você + passageiro (perto). Destino só no texto.
         desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: semRotaMot });
+        if (semRotaMot) enquadrarMapaMotorista(true);
     }
     function fecharPedido() {
         if (contatoSel?.id) marcarContatoLido(contatoSel.id);

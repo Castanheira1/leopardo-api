@@ -247,12 +247,43 @@ let _AdvancedMarkerElement = null;
 let _PinElement = null;
 let _RenderingType = null; // preenchido em carregarMaps() via importLibrary('maps')
 
-// Com mapId o Maps tende a VECTOR, que chama GetViewportInfo (502/CORS intermitente).
-// RASTER evita esse RPC. A string 'RASTER' funciona mesmo se o enum ainda não carregou.
+// VECTOR chama GetViewportInfo → 502/CORS intermitente no Maps.
+// SEMPRE RASTER (enum da lib ou string). Nunca deixar o default VECTOR.
 function renderingTypeRaster() {
-    return _RenderingType?.RASTER
-        || window.google?.maps?.RenderingType?.RASTER
-        || 'RASTER';
+    const RT = _RenderingType
+        || window.google?.maps?.RenderingType
+        || null;
+    if (RT && RT.RASTER != null) return RT.RASTER;
+    return 'RASTER';
+}
+
+/** Aplica RASTER no Map logo após criar (constructor + setRenderingType + setOptions). */
+function forcarMapaRaster(map) {
+    if (!map) return;
+    const rt = renderingTypeRaster();
+    try {
+        if (typeof map.setRenderingType === 'function') map.setRenderingType(rt);
+    } catch (_) { /* API antiga */ }
+    try {
+        map.setOptions({ renderingType: rt });
+    } catch (_) { /* ignora */ }
+    // Se ainda estiver VECTOR, tenta de novo no próximo frame (enum pode ter chegado).
+    try {
+        if (typeof map.getRenderingType === 'function') {
+            const atual = map.getRenderingType();
+            const ehRaster = atual === rt || atual === 'RASTER'
+                || String(atual).toUpperCase().includes('RASTER');
+            if (!ehRaster) {
+                requestAnimationFrame(() => {
+                    try {
+                        const rt2 = renderingTypeRaster();
+                        if (typeof map.setRenderingType === 'function') map.setRenderingType(rt2);
+                        map.setOptions({ renderingType: rt2 });
+                    } catch (_) { /* ignora */ }
+                });
+            }
+        }
+    } catch (_) { /* ignora */ }
 }
 
 // Map ID real (Cloud) → estilo na nuvem + Advanced Markers.
@@ -268,8 +299,8 @@ function opcoesMapa(opts = {}) {
     const mid = mapaIdEfetivo();
     if (mid) o.mapId = mid;
     else delete o.mapId;
-    // Sempre força raster (evita GetViewportInfo 502 em VECTOR).
-    if (o.renderingType == null) o.renderingType = renderingTypeRaster();
+    // Sempre RASTER — nunca VECTOR (GetViewportInfo 502).
+    o.renderingType = renderingTypeRaster();
     return o;
 }
 
