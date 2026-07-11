@@ -1562,9 +1562,10 @@
     }
 
     /* -------- mapa: criação central + alternador Satélite/Mapa leve -------- */
-    // Padrão = satélite (hybrid): em mineração/campo as vias oficiais somem e
-    // a imagem real do terreno ajuda. Quem preferir mapa leve (branco, sem POI)
-    // troca no botão de camadas; a escolha fica salva.
+    // Satélite é pesado em internet fraca. O tipo escolhido fica salvo; o modo
+    // padrão é o mapa CLARO (branco, estilo Uber): ruas brancas, quadras e
+    // prédios em cinza suave — carrega muito mais rápido. Os carros/pulsos/
+    // rotas continuam ao vivo igual.
     // Mapa leve (branco, estilo Uber): ruas brancas, fundo claro, SEM ícones
     // coloridos de loja/restaurante/POI — só ruas + nomes essenciais.
     const ESTILO_MAPA_CLARO = [
@@ -1605,14 +1606,9 @@
     // centro e uns 2-3 quarteirões em volta. Usado ao abrir o mapa, recentrar
     // e sempre que o foco volta da pré-visualização do destino.
     const ZOOM_FOCO_ORIGEM = 17;
-    // V3: padrão satélite (mineração). Quem já escolheu mapa leve em V2/V3 mantém.
-    function tipoMapaSalvo() {
-        try {
-            return localStorage.getItem('tipoMapaV3')
-                || localStorage.getItem('tipoMapaV2')
-                || 'hybrid';
-        } catch (_) { return 'hybrid'; }
-    }
+    // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
+    // satélite alterna de novo e a escolha fica salva normalmente.
+    function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
     // Com Map ID real (Cloud Console) o Google manda o estilo pela nuvem e
     // proíbe styles no cliente. Com DEMO_MAP_ID + RASTER aplicamos o JSON local
     // (mapa branco sem POIs) — necessário para o visual Uber do app.
@@ -1663,10 +1659,7 @@
         rotulo();
         b.onclick = () => {
             const novo = tipoMapaSalvo() === 'hybrid' ? 'roadmap' : 'hybrid';
-            try {
-                localStorage.setItem('tipoMapaV3', novo);
-                localStorage.setItem('tipoMapaV2', novo);
-            } catch (_) {}
+            try { localStorage.setItem('tipoMapaV2', novo); } catch (_) {}
             aplicarTipoMapa(map, novo);
             rotulo();
         };
@@ -1733,8 +1726,7 @@
             } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
         }, 10000);
         let destino = null;
-        // Sem pin "B": o destino aparece só na rota preta + texto da barra/info.
-        // Em app de mineração o pin vermelho polui o satélite e confunde.
+        const mkDestino = criarMarcador({ map, label: 'B', title: 'Destino' });
         let previewTimer = null;
         let previewSeq = 0;
 
@@ -1771,7 +1763,7 @@
                 rotaDurMsTotal = resp._durationMillis || 0;
                 const leg = resp.routes[0].legs[0];
                 renderRotaInfo(leg.distance.text, leg.duration.text);
-            } catch (_) { /* sem rota disponível: mantém destino em memória */ }
+            } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
         }
 
         function preVisualizarDestino(pos) {
@@ -1816,6 +1808,7 @@
             rotaDurMsTotal = 0;
             previewSeq++;
             if (previewTimer) clearTimeout(previewTimer);
+            mkDestino.setMap(null);
             rotaCtrl.setMap(null);
             rotaInfo.style.display = 'none';
             mostrarBtnLimpar(false);
@@ -1827,6 +1820,9 @@
             const nomeDestino = (texto && String(texto).trim()) || '';
             destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
             mostrarBtnLimpar(true);
+            mkDestino.setMap(map);
+            mkDestino.setPosition(pos);
+            if (nomeDestino) mkDestino.setTitle(nomeDestino);
             // Abaixa o sheet NA HORA: com ele suspenso, a pré-visualização do
             // destino (busca, Locais, toque no mapa) ficava escondida atrás.
             const sheetEl = document.getElementById(sheetId);
