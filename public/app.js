@@ -487,6 +487,8 @@ function instalarMapsBootstrap(apiKey) {
                 key: apiKey,
                 // quarterly = estável; GetViewportInfo some menos que weekly
                 v: 'quarterly',
+                // Best practice Google: evita warning "loaded without loading=async"
+                loading: 'async',
             };
             const c = 'google';
             const l = 'importLibrary';
