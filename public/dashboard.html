@@ -4385,12 +4385,23 @@
     const FLEET_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
     const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
     const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
-    const ROTA_RECALC_KM = 0.04;         // ~40 m — redesenha rota restante
-    const ROTA_RECALC_MS = 5000;         // no máximo a cada 5 s (Routes API)
+    // Economia Google Routes: frota NÃO redesenha rota de todos os carros.
+    // Só o carro SELECIONADO (modal) recalcula, e bem mais raro.
+    const ROTA_RECALC_KM = 0.35;         // ~350 m
+    const ROTA_RECALC_MS = 45000;        // no máximo a cada 45 s
 
-    // Rota restante: do carro AGORA até o destino (não deixa rastro do trecho já percorrido).
+    // Rota no mapa da frota: só para o carro do modal aberto (evita N×Routes/min).
     async function atualizarRotaFrota(item, map, pos, destino) {
         if (!destino || !pos) {
+            if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
+            item.rotaUltimaPos = null;
+            item.rotaUltimaEm = 0;
+            return;
+        }
+        // Sem modal nesse carro: limpa linha (não gasta API).
+        const selId = carroSel && (carroSel.id != null ? carroSel.id : carroSel.motorista_id);
+        const itemId = item.m && item.m.id;
+        if (selId == null || itemId == null || String(selId) !== String(itemId)) {
             if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
             item.rotaUltimaPos = null;
             item.rotaUltimaEm = 0;
