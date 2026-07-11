@@ -4260,8 +4260,9 @@
         // Rota no mapa para os dois: motorista navega; passageiro vê para onde está indo.
         const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6 });
 
-        // Já mostra o passageiro no ponto de embarque (não espera GPS/poll de 2–12s).
-        const posPaxInicial = (ehMotorista && embarque && (v.fase || 'encontro') === 'encontro')
+        // Embarque conhecido já no open: motorista vê o pax; pax vê o próprio pulso
+        // (localizar-se no mapa enquanto aguarda o carro).
+        const posPaxInicial = (embarque && (v.fase || 'encontro') === 'encontro')
             ? { ...embarque }
             : null;
 
@@ -4272,7 +4273,7 @@
             origemTexto: (v.origem_texto && String(v.origem_texto).trim()) || '',
             embarqueReal: (v.fase === 'destino' && embarque) ? { ...embarque } : null,
             chegadaDestino: false, chegadaDestinoDesde: null, autoFinalizarTimer: null,
-            passageiroSexo: v.passageiro_sexo,
+            passageiroSexo: v.passageiro_sexo || (ehMotorista ? null : user?.sexo) || null,
             posMotorista: null,
             posPassageiro: posPaxInicial,
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
@@ -4429,10 +4430,20 @@
                 vv.carPosAnterior = { ...vv.posMotorista };
             }
         }
-        // Pulso do passageiro: só no mapa do motorista (fase encontro).
-        if (vv.ehMotorista && vv.posPassageiro && vv.fase === 'encontro') {
-            if (vv.pessoaMarker) vv.pessoaMarker.setPosition(vv.posPassageiro);
-            else vv.pessoaMarker = criarPulse(vv.map, vv.posPassageiro, vv.passageiroSexo, null, 'Passageiro');
+        // Pulso do passageiro:
+        // - motorista: vê o pax na fase encontro
+        // - passageiro: mantém o próprio pulso para se localizar no mapa (aguarda o carro)
+        const mostrarPulsoPax = !!vv.posPassageiro && (
+            vv.ehMotorista ? vv.fase === 'encontro' : true
+        );
+        if (mostrarPulsoPax) {
+            const sexoPulso = vv.passageiroSexo || user?.sexo || null;
+            const titPulso = vv.ehMotorista ? 'Passageiro' : 'Você';
+            if (vv.pessoaMarker) {
+                vv.pessoaMarker.setPosition(vv.posPassageiro);
+            } else {
+                vv.pessoaMarker = criarPulse(vv.map, vv.posPassageiro, sexoPulso, null, titPulso);
+            }
         } else if (vv.pessoaMarker) {
             vv.pessoaMarker.setMap(null); vv.pessoaMarker = null;
         }
