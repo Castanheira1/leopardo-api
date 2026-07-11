@@ -12,6 +12,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="VAP">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/icon-192.png" type="image/png">
     <!-- Conexão pré-aquecida com os servidores do mapa: as imagens começam
          a chegar mais cedo em internet fraca. -->
     <link rel="preconnect" href="https://maps.googleapis.com" crossorigin>
@@ -1592,16 +1594,22 @@
     // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
     // satélite alterna de novo e a escolha fica salva normalmente.
     function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
+    // Com mapId (Cloud-based maps), o Google proíbe styles no cliente
+    // (warning no console). Estilo claro fica no Map ID do Cloud Console.
+    function aplicarEstiloMapa(map, tipo) {
+        if (_mapId) return;
+        map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_CLARO : null });
+    }
     function aplicarTipoMapa(map, tipo) {
         map.setMapTypeId(tipo);
-        map.setOptions({ styles: tipo === 'roadmap' ? ESTILO_MAPA_CLARO : null });
+        aplicarEstiloMapa(map, tipo);
     }
     function novoMapa(elId, opts) {
         const map = new g.maps.Map(document.getElementById(elId), opcoesMapa({
             zoom: 15, mapTypeId: tipoMapaSalvo(), streetViewControl: false, mapTypeControl: false,
             fullscreenControl: false, gestureHandling: 'greedy', ...opts,
         }));
-        if (tipoMapaSalvo() === 'roadmap') map.setOptions({ styles: ESTILO_MAPA_CLARO });
+        aplicarEstiloMapa(map, tipoMapaSalvo());
         vincularBotaoTipoMapa(elId, map);
         vincularZoomCarros(map);
         return map;
