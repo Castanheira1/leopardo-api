@@ -1726,8 +1726,8 @@
             } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
         }, 10000);
         let destino = null;
-        // Destino sem letra "B" — só pin discreto (a rota já indica o ponto).
-        const mkDestino = criarMarcador({ map, cor: '#EAD298', title: 'Destino' });
+        // Sem pin de destino (nem letra B nem bolinha): igual Uber — só a rota
+        // e o texto "Para onde vamos" / info de km. O ponto final é o fim da linha.
         let previewTimer = null;
         let previewSeq = 0;
 
@@ -1764,7 +1764,7 @@
                 rotaDurMsTotal = resp._durationMillis || 0;
                 const leg = resp.routes[0].legs[0];
                 renderRotaInfo(leg.distance.text, leg.duration.text);
-            } catch (_) { /* sem rota disponível: mantém os marcadores A/B */ }
+            } catch (_) { /* sem rota disponível: mantém destino em memória */ }
         }
 
         function preVisualizarDestino(pos) {
