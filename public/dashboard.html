@@ -5823,7 +5823,10 @@
                 lista.forEach((p) => {
                     vistos[p.id] = true;
                     const pos = { lat: +p.origem_lat, lng: +p.origem_lng };
-                    const rotulo = rotuloPulsoPedido(p);
+                    // Sem rótulo de destino no mapa do MOTORISTA: poluía a tela e ele
+                    // já tem a linha preta da rota (e toca no pulso pra ver detalhes).
+                    // O nome do destino aparece só pro passageiro.
+                    const rotulo = '';
                     if (pedidoFleet.markers[p.id]) {
                         pedidoFleet.markers[p.id].setPosition(pos);
                         pedidoFleet.markers[p.id]._p = p;
@@ -6202,7 +6205,9 @@
                     if (passageiroIdEmPedidoFleet(c.passageiro_id)) return;
                     vistos[key] = true;
                     const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
-                    const rotulo = rotuloPulsoContato(c);
+                    // Sem rótulo de destino no mapa do motorista (só o pulso + a linha
+                    // preta da rota). O destino aparece só pro passageiro.
+                    const rotulo = '';
                     const existente = contatoFleet.markers[key];
                     if (existente) {
                         existente.setPosition(pos);
