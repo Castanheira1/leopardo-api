@@ -2484,27 +2484,27 @@ body.aguardando-papel .navbar {
     text-align: center;
     color: #9aa0a6;
 }
-/* Busca: placeholder BRANCO (era cinza) e cara de "buscador" do Uber. Vence o
+/* Busca: campo BRANCO por dentro, texto do placeholder cinza. Vence o
    .theme-dark input por especificidade (2 classes). */
 .painel-locais .fav-filtro-topo {
-    background: #1f2024;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 12px;
     padding: 13px 14px;
-    color: #fff;
+    color: #111;
     font-size: 15px;
 }
-.painel-locais .fav-filtro-topo::placeholder { color: #fff; opacity: 0.92; }
+.painel-locais .fav-filtro-topo::placeholder { color: #6b7280; opacity: 1; }
 .painel-locais .fav-filtro-topo:focus {
-    border-color: rgba(234, 210, 152, 0.7);
+    border-color: rgba(234, 210, 152, 0.9);
     outline: none;
 }
-/* Fechar: preto com texto branco. */
+/* Fechar: branco com letra preta. */
 .painel-locais .sol-actions .btn-secondary,
 .painel-locais .sol-actions .btn-secondary:hover {
-    background: #000;
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: #fff;
+    color: #111;
+    border: 1px solid rgba(0, 0, 0, 0.12);
     font-weight: 700;
 }
 
