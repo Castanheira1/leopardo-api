@@ -2,7 +2,7 @@
 // Objetivo: o app NÃO é offline, mas não pode quebrar sem internet — ele abre e
 // mostra a última versão carregada. O cache é FIXO (só o "esqueleto" do app),
 // sobrescreve em vez de acumular, e os dados de API nunca são cacheados.
-const VERSION = "v275";
+const VERSION = "v276";
 const CACHE = `vagao-shell-${VERSION}`;
 
 // Lista fixa de arquivos do app (o cache nunca cresce além disto).
@@ -85,14 +85,23 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// Toque na notificação: foca uma aba já aberta ou abre o app.
+// Toque na notificação: foca uma aba já aberta ou abre o app. Também AVISA a
+// página (postMessage) pra ela mostrar a oferta/solicitação na hora — focar uma
+// aba que já estava visível não dispara 'visibilitychange', então sem isto o
+// modal in-app não aparecia (só sobrava a notificação do sistema).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const alvo = (event.notification.data && event.notification.data.url) || "/dashboard.html";
+  const data = event.notification.data || {};
+  const alvo = data.url || "/dashboard.html";
+  const acao = data.action || null;
+  const avisar = (c) => {
+    if (!acao) return;
+    try { c.postMessage({ action: acao, contato_id: data.contato_id || null }); } catch (_) {}
+  };
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientes) => {
       for (const c of clientes) {
-        if (c.url.includes(alvo) && "focus" in c) return c.focus();
+        if (c.url.includes(alvo) && "focus" in c) { avisar(c); return c.focus(); }
       }
       if (self.clients.openWindow) return self.clients.openWindow(alvo);
     })

@@ -40,7 +40,7 @@ const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
 const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
-const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 25);
+const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 60);
 // Dois limites de GPS, para não punir sinal instável (túnel, iOS em background):
 //  - FRESH: some do MAPA na hora (mata fantasma visualmente), mas a publicação
 //    continua no banco — o motorista reaparece quando o GPS volta.
