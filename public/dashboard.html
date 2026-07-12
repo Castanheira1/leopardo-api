@@ -4598,9 +4598,11 @@
             return vv.destinoTexto ? `Chegou: ${vv.destinoTexto}` : 'Chegou ao destino';
         }
         if (vv.ehMotorista) {
+            // Motorista está LEVANDO o passageiro.
             if (vv.fase === 'encontro') return 'Buscando passageiro';
-            return vv.destinoTexto ? `Indo para ${vv.destinoTexto}` : 'Indo ao destino';
+            return vv.destinoTexto ? `Levando para ${vv.destinoTexto}` : 'Levando ao destino';
         }
+        // Passageiro está SENDO LEVADO.
         if (vv.fase === 'encontro') return 'Motorista a caminho';
         return vv.destinoTexto ? `Indo para ${vv.destinoTexto}` : 'Viagem em andamento';
     }
@@ -4609,13 +4611,15 @@
         const el = document.getElementById('viagemDestinoTxt');
         const vv = viagemView;
         if (!el) return;
-        if (!vv || vv.status !== 'em_andamento' || !vv.destinoTexto) {
+        // Na fase "destino" o título já diz "Levando para/Indo para X" — não repete
+        // a linha (era ela que ficava igual e, pro passageiro, dizia "Levando para").
+        if (!vv || vv.status !== 'em_andamento' || !vv.destinoTexto || vv.fase !== 'encontro') {
             el.style.display = 'none';
             el.textContent = '';
             return;
         }
         el.style.display = 'block';
-        el.textContent = (vv.fase === 'encontro' ? 'Destino da carona: ' : 'Levando para: ') + vv.destinoTexto;
+        el.textContent = (vv.ehMotorista ? 'Destino da carona: ' : 'Seu destino: ') + vv.destinoTexto;
     }
 
     function btnViagem(tipo, rotulo, acao) {
