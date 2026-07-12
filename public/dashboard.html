@@ -621,17 +621,26 @@
     let trackState = null;    // { viagemId, watchId, buffer, timer }
     let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
 
-    /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
-    function tornarSheetAcaoArrastavel(sheet, grip) {
-        if (!sheet || !grip || sheet._acaoDragReady) return;
-        sheet._acaoDragReady = true;
+    /* -------- alça arrastável dos sheets (abre/colapsa) -------- */
+    // Robusto a interrupções: se o app vai a 2º plano NO MEIO de um toque na alça
+    // (troca de app, sombra de notificação, chamada), o navegador dispara
+    // `touchcancel` — NÃO `touchend`. Sem tratar isso, o `up` nunca rodava e o
+    // estado `dragging` ficava preso em true. Ao voltar, `up`/`move` estão no
+    // window (disparam em QUALQUER toque): o próximo toque — inclusive no botão do
+    // sheet — era lido como fim-de-arraste (togglava `collapsed`, escondendo os
+    // botões na hora do clique) e o `move` chamava preventDefault engolindo o
+    // gesto -> o botão ficava "sem resposta" e só destravava sozinho no toque
+    // seguinte. Aqui zeramos o arraste em touchcancel/pointercancel/blur/aba
+    // oculta, e só o toque que REALMENTE começou na alça togglea o sheet.
+    function bindGripArrasto(sheet, grip) {
+        if (!sheet || !grip) return;
         let startY = 0, moved = 0, dragging = false;
-        const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
+        const yOf = (e) => (e.touches ? (e.touches[0] || e.changedTouches[0]).clientY : e.clientY);
         const down = (e) => { dragging = true; moved = 0; startY = yOf(e); };
         const move = (e) => {
             if (!dragging) return;
             moved = yOf(e) - startY;
-            if (e.cancelable) e.preventDefault();
+            if (Math.abs(moved) > 4 && e.cancelable) e.preventDefault();
         };
         const up = () => {
             if (!dragging) return;
@@ -640,12 +649,24 @@
             else if (moved > 28) sheet.classList.add('collapsed');
             else if (moved < -28) sheet.classList.remove('collapsed');
         };
+        // Interrupção: NÃO é um toque -> só destrava, sem togglar nada.
+        const cancel = () => { dragging = false; moved = 0; };
         grip.addEventListener('mousedown', down);
         grip.addEventListener('touchstart', down, { passive: true });
         grip.addEventListener('touchmove', move, { passive: false });
         window.addEventListener('mousemove', move);
         window.addEventListener('mouseup', up);
         window.addEventListener('touchend', up);
+        window.addEventListener('touchcancel', cancel);
+        window.addEventListener('pointercancel', cancel);
+        window.addEventListener('blur', cancel);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
+    }
+    /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
+    function tornarSheetAcaoArrastavel(sheet, grip) {
+        if (!sheet || !grip || sheet._acaoDragReady) return;
+        sheet._acaoDragReady = true;
+        bindGripArrasto(sheet, grip);
     }
 
     function sheetAcaoExpandido() {
@@ -4956,27 +4977,7 @@
     function tornarArrastavel(sheet, grip) {
         if (!sheet || !grip || sheet._dragReady) return;
         sheet._dragReady = true;
-        let startY = 0, moved = 0, dragging = false;
-        const yOf = (e) => (e.touches ? e.touches[0].clientY : e.clientY);
-        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); };
-        const move = (e) => {
-            if (!dragging) return;
-            moved = yOf(e) - startY;
-            if (e.cancelable) e.preventDefault();
-        };
-        const up = () => {
-            if (!dragging) return;
-            dragging = false;
-            if (Math.abs(moved) < 10) sheet.classList.toggle('collapsed');
-            else if (moved > 28) sheet.classList.add('collapsed');
-            else if (moved < -28) sheet.classList.remove('collapsed');
-        };
-        grip.addEventListener('mousedown', down);
-        grip.addEventListener('touchstart', down, { passive: true });
-        grip.addEventListener('touchmove', move, { passive: false });
-        window.addEventListener('mousemove', move);
-        window.addEventListener('mouseup', up);
-        window.addEventListener('touchend', up);
+        bindGripArrasto(sheet, grip);
     }
     function initSheetDrag() {
         const sheet = document.getElementById('viagemSheet');
