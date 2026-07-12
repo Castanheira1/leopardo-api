@@ -673,7 +673,7 @@
             sheet.style.bottom = '';
             if (abrirCta) sheet.classList.remove('collapsed');
         });
-        compensarTeclado();
+        reassentarAltura();
     }
     function expandirSheetAcao(qual) {
         const ids = qual === 'pedir' ? ['acaoSheetPed']
@@ -736,6 +736,21 @@
             _kbdAnt = inset;
         }
     }
+    // Entrada/volta do app: a barra do navegador/status bar ainda anima e
+    // visualViewport.height vem transitório, gravando um --appvh errado que só se
+    // corrige no próximo resize espontâneo (a UI "quebra e volta sozinha"). Aqui
+    // remedimos a altura algumas vezes por ~1,2s, zerando o throttle (_appvhAnt)
+    // p/ FORÇAR a reescrita até a altura assentar. Janela curta e só em
+    // entrada/retorno/expandir — não reintroduz o "botão escorregando" (que vinha
+    // de reescrever a cada micro-evento do viewport durante o uso).
+    let _settleTimers = [];
+    function reassentarAltura() {
+        _settleTimers.forEach(clearTimeout);
+        _settleTimers = [];
+        const aplicar = () => { _appvhAnt = null; compensarTeclado(); };
+        requestAnimationFrame(aplicar);
+        [60, 160, 320, 550, 850, 1200].forEach((ms) => _settleTimers.push(setTimeout(aplicar, ms)));
+    }
     function rolarCampoNoSheet(sheet, el) {
         if (!sheet || !el) return;
         const scrollEl = sheet.querySelector('.acao-sheet-body') || sheet;
@@ -781,6 +796,9 @@
         window.visualViewport.addEventListener('resize', compensarTeclado);
         window.visualViewport.addEventListener('scroll', compensarTeclado);
     }
+    // Entrada (cold) e volta via bfcache (back/forward): remede enquanto assenta.
+    reassentarAltura();
+    window.addEventListener('pageshow', reassentarAltura);
     document.addEventListener('focusin', (e) => {
         if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
             const overlay = e.target.closest('.cam-overlay');
