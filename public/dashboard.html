@@ -3176,12 +3176,35 @@
         wrap.querySelectorAll('span').forEach((s, i) => s.classList.toggle('ativo', i === anuncioIdx));
     }
 
+    // Só conta anúncio cuja FOTO realmente carrega. Sem foto publicada (ou imagem
+    // quebrada), o painel some e o mapa fica livre.
+    function fotoAnuncioCarrega(url) {
+        return new Promise((resolve) => {
+            if (!url) return resolve(false);
+            const img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = url;
+        });
+    }
+    async function filtrarAnunciosComFoto(ads) {
+        const arr = Array.isArray(ads) ? ads : [];
+        const oks = await Promise.all(arr.map((a) => fotoAnuncioCarrega(a.imagem_url)));
+        return arr.filter((_, i) => oks[i]);
+    }
+
     async function iniciarAnunciosEspera() {
         pararAnunciosEspera();
-        const ads = await carregarAnunciosEspera();
         const box = document.getElementById('chamandoAds');
-        // Só na busca por motorista (pedido aberto) e se ainda estiver procurando.
-        if (!chamandoPedidoId || !ads.length) { box.style.display = 'none'; return; }
+        const dots = document.getElementById('chamandoAdDots');
+        if (!chamandoPedidoId) { if (box) box.style.display = 'none'; return; }
+        // Só mostra o painel se houver foto publicada que carregue — senão mapa livre.
+        const ads = await filtrarAnunciosComFoto(await carregarAnunciosEspera());
+        if (!chamandoPedidoId || !ads.length) {
+            if (box) box.style.display = 'none';
+            if (dots) dots.innerHTML = '';
+            return;
+        }
         anuncioIdx = 0;
         box.style.display = 'flex';
         montarDotsAnuncio(ads.length);
