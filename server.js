@@ -2435,6 +2435,10 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
            WHERE p.status = 'aberto'
              AND COALESCE(u.ativo, TRUE) = TRUE
              AND (p.horario IS NULL OR p.horario <= NOW())
+             -- Pedido em busca automática por proximidade (fila sequencial): só
+             -- o motorista da vez responde, pelos endpoints /api/pedido-fila.
+             -- Não vira pulso no mapa dos outros — oferecer nele daria 400.
+             AND NOT EXISTS (SELECT 1 FROM pedido_fila f WHERE f.pedido_id = p.id)
              AND u.projeto_id = $4
          ) s
          WHERE s.dist_origem <= $3
@@ -2475,6 +2479,8 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
        WHERE p.status = 'aberto'
          AND COALESCE(u.ativo, TRUE) = TRUE
          AND (p.horario IS NULL OR p.horario <= NOW())
+         -- Mesma regra do mapa: esconde pedidos em fila por proximidade.
+         AND NOT EXISTS (SELECT 1 FROM pedido_fila f WHERE f.pedido_id = p.id)
          ${filtroProj}
        ORDER BY p.created_at DESC`,
       params
