@@ -4204,6 +4204,9 @@
     }
     function mostrarSolicitacao(p) {
         buzinar();   // chegou gente pedindo: toca e vibra
+        // O passageiro pode estar vendo o perfil do motorista (modalCarro): fecha,
+        // senão a oferta (Aceitar/Recusar) abre ATRÁS dele e ele nem vê o chamado.
+        try { fecharCarro(); } catch (_) {}
         solicitacaoAtual = p;
         const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
         const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
@@ -4555,28 +4558,33 @@
         // Traça logo a linha preta (embarque→destino/parada) para não ficar mapa “vazio”
         // enquanto o GPS do carro chega. renderViagem atualiza com a posição ao vivo.
         (async () => {
-            const alvo0 = (paradaMot && destino && distKmGps(paradaMot, destino) > 0.12)
-                ? paradaMot
-                : (destino || null);
-            const de0 = embarque || null;
-            if (de0 && alvo0 && rotaCtrl) {
-                try {
-                    const resp = await rotaCtrl.calcular(de0, alvo0);
-                    if (viagemView && viagemView.id === viagemId) {
-                        viagemView.rotaPath = resp._path || resp._fallbackLine || null;
-                        viagemView.rotaKmTotal = resp.km || 0;
-                        viagemView.rotaDurMsTotal = resp._durationMillis || 0;
-                        viagemView.ultimaRota = Date.now();
-                    }
-                } catch (_) { /* ok: loop tenta de novo */ }
-            }
-            if (paradaMot && destino && distKmGps(paradaMot, destino) > 0.12 && rotaCtrlExtra) {
-                try {
-                    await rotaCtrlExtra.calcular(paradaMot, destino);
-                    if (viagemView && viagemView.id === viagemId) {
-                        viagemView.rotaExtraChave = `${paradaMot.lat},${paradaMot.lng}|${destino.lat},${destino.lng}`;
-                    }
-                } catch (_) { /* trecho dourado opcional */ }
+            // Placeholder embarque→destino SÓ depois do embarque (fase 'destino'). Na
+            // fase de ENCONTRO isso mostrava a rota da VIAGEM em vez do carro vindo
+            // buscar o passageiro; a linha certa (carro→passageiro) vem do renderViagem.
+            if ((v.fase || 'encontro') === 'destino') {
+                const alvo0 = (paradaMot && destino && distKmGps(paradaMot, destino) > 0.12)
+                    ? paradaMot
+                    : (destino || null);
+                const de0 = embarque || null;
+                if (de0 && alvo0 && rotaCtrl) {
+                    try {
+                        const resp = await rotaCtrl.calcular(de0, alvo0);
+                        if (viagemView && viagemView.id === viagemId) {
+                            viagemView.rotaPath = resp._path || resp._fallbackLine || null;
+                            viagemView.rotaKmTotal = resp.km || 0;
+                            viagemView.rotaDurMsTotal = resp._durationMillis || 0;
+                            viagemView.ultimaRota = Date.now();
+                        }
+                    } catch (_) { /* ok: loop tenta de novo */ }
+                }
+                if (paradaMot && destino && distKmGps(paradaMot, destino) > 0.12 && rotaCtrlExtra) {
+                    try {
+                        await rotaCtrlExtra.calcular(paradaMot, destino);
+                        if (viagemView && viagemView.id === viagemId) {
+                            viagemView.rotaExtraChave = `${paradaMot.lat},${paradaMot.lng}|${destino.lat},${destino.lng}`;
+                        }
+                    } catch (_) { /* trecho dourado opcional */ }
+                }
             }
             if (posPaxInicial || destino || embarque) renderViagem();
         })();
