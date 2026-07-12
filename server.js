@@ -594,6 +594,13 @@ async function garantirColunasViagens() {
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_maps NUMERIC(10,2)");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_tela NUMERIC(10,2)");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_fonte VARCHAR(20)");
+    // Carona parcial (motorista só vai até um ponto no caminho, ex.: Portaria): o
+    // destino_* segue sendo o destino FINAL do passageiro; a parada do motorista
+    // (onde ele desembarca e pega outra carona) fica em destino_motorista_*. A tela
+    // de viagem já desenha preto até a parada + dourado da parada ao destino.
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS destino_motorista_texto TEXT");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS destino_motorista_lat NUMERIC(10,6)");
+    await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS destino_motorista_lng NUMERIC(10,6)");
     // Oferta a um contato ("quer carona"/buzina): guarda de qual contato veio, pra
     // a viagem herdar embarque/destino do passageiro e desenhar a rota.
     await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS contato_id INTEGER");
@@ -2798,8 +2805,10 @@ async function criarViagemDaProposta(propostaId) {
   if (existente) return existente;
 
   // Ponto de encontro (embarque) e destino. O encontro é SEMPRE onde o passageiro
-  // está; o destino é para onde ele quer ir.
+  // está; o destino é para onde ele quer ir. paradaMotorista só é usada na carona
+  // parcial (motorista deixa o passageiro num ponto do caminho, ex.: Portaria).
   let motorista_id, passageiro_id, embarque, destino;
+  let paradaMotorista = null;
   if (pr.carona_id) {
     motorista_id = pr.para_usuario_id; passageiro_id = pr.de_usuario_id;
     const car = (await pool.query("SELECT * FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
@@ -2811,6 +2820,25 @@ async function criarViagemDaProposta(propostaId) {
     const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
     embarque = { texto: ped?.origem_texto, lat: ped?.origem_lat, lng: ped?.origem_lng };
     destino = { texto: ped?.destino_texto, lat: ped?.destino_lat, lng: ped?.destino_lng };
+    // Carona parcial: o motorista tem rota publicada que passa por um ponto do
+    // caminho do passageiro mas NÃO chega ao destino final dele. O destino da
+    // viagem continua sendo o do passageiro; a parada do motorista (desembarque)
+    // fica registrada pra tela desenhar preto→parada + dourado→destino final.
+    const car = (await pool.query(
+      `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto
+       FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
+       ORDER BY created_at DESC LIMIT 1`,
+      [motorista_id]
+    )).rows[0];
+    if (car && car.destino_lat != null && ped?.destino_lat != null) {
+      const compat = compatRotaPassageiro(
+        ped.destino_lat, ped.destino_lng,
+        car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng
+      );
+      if (compat === "parcial") {
+        paradaMotorista = { texto: car.destino_texto, lat: car.destino_lat, lng: car.destino_lng };
+      }
+    }
   } else {
     // Motorista ofereceu a um contato ("quer carona"/buzina). Embarque e destino
     // vêm do contato do passageiro — senão a viagem nasce sem coordenadas e a rota
@@ -2833,13 +2861,15 @@ async function criarViagemDaProposta(propostaId) {
   const { rows } = await pool.query(
     `INSERT INTO viagens
        (proposta_id, carona_id, pedido_id, motorista_id, passageiro_id, habilitacao_id,
-        origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng,
+        destino_motorista_texto, destino_motorista_lat, destino_motorista_lng)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
     [
       pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
       embarque.texto || null, embarque.lat || null, embarque.lng || null,
       destino.texto || null, destino.lat || null, destino.lng || null,
+      paradaMotorista?.texto || null, paradaMotorista?.lat || null, paradaMotorista?.lng || null,
     ]
   );
   // Cada aceite ocupa 1 vaga. A carona só fecha (concluida) quando as vagas
@@ -3061,11 +3091,14 @@ app.post("/api/pedido-fila/:id/aceitar", verificarAuth, async (req, res) => {
       [oferta.pedido_id, oferta.id]
     );
 
-    res.json({ proposta_id: proposta.id, viagem_id: viagem.id });
+    const parcial = !!viagem.destino_motorista_texto;
+    res.json({ proposta_id: proposta.id, viagem_id: viagem.id, parcial });
 
     enviarPush(ped.passageiro_id, {
       title: "Carona confirmada!",
-      body: "Um motorista aceitou sua solicitação. Toque para acompanhar ao vivo.",
+      body: parcial
+        ? `O motorista vai até ${viagem.destino_motorista_texto}. Desembarque lá e peça outra carona.`
+        : "Um motorista aceitou sua solicitação. Toque para acompanhar ao vivo.",
       url: "/dashboard.html",
     });
   } catch (err) {

@@ -4764,13 +4764,19 @@
         } else {
             // Passageiro: sempre deixa claro o destino marcado (nome + rota no mapa).
             const dest = vv.destinoTexto || 'destino no mapa';
+            const parcial = ehViagemParcial(vv);
+            const parada = vv.paradaMotTexto || 'a parada do motorista';
             let hint;
             if (vv.fase === 'encontro') {
-                hint = `Motorista a caminho. Destino da carona: <strong>${esc(dest)}</strong>`;
+                hint = parcial
+                    ? `Motorista a caminho. Ele vai até <strong>${esc(parada)}</strong> — desembarque lá e peça outra carona até <strong>${esc(dest)}</strong>.`
+                    : `Motorista a caminho. Destino da carona: <strong>${esc(dest)}</strong>`;
             } else if (vv.chegadaDestino) {
                 hint = `Chegou em <strong>${esc(dest)}</strong> — aguardando motorista finalizar`;
             } else {
-                hint = `Você está sendo levado para <strong>${esc(dest)}</strong>`;
+                hint = parcial
+                    ? `A caminho de <strong>${esc(parada)}</strong>. De lá, peça outra carona até <strong>${esc(dest)}</strong>.`
+                    : `Você está sendo levado para <strong>${esc(dest)}</strong>`;
             }
             // Sem "Cancelar viagem" pro passageiro: um cancelamento acidental dele,
             // já embarcado e a caminho, perderia a medição de km que o admin usa.
