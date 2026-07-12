@@ -1770,6 +1770,20 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
 /* "Tocando" no carro: a bolinha pulsa maior, tipo batendo no vidro. */
 .bolinha-busca.tocando .bb-dot { animation: bolinhaToque 0.45s ease-in-out infinite alternate; }
 @keyframes bolinhaToque { from { transform: scale(1); } to { transform: scale(1.65); } }
+/* Bandeirinha fincada quando a bolinha acha o motorista (balança ao vento). Só
+   aparece no "tocando" — a bolinha chegou no alvo. */
+.bolinha-busca .bb-flag { position: absolute; left: 0; top: 0; width: 22px; height: 24px;
+    opacity: 0; transform: translate(-3.5px, -22px) scale(0.6);
+    transform-origin: 3.5px 20px; pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    transition: opacity 0.18s ease; }
+.bolinha-busca .bb-flag svg { display: block; }
+.bolinha-busca.tocando .bb-flag { opacity: 1; animation: bbFlagWave 1.4s ease-in-out infinite; }
+@keyframes bbFlagWave {
+    0%, 100% { transform: translate(-3.5px, -22px) rotate(-6deg) skewX(0deg); }
+    35% { transform: translate(-3.5px, -22px) rotate(5deg) skewX(-5deg); }
+    70% { transform: translate(-3.5px, -22px) rotate(3deg) skewX(4deg); }
+}
 /* Balãozinho em cima da bolinha narrando a busca (Indo até…, Chamando…). */
 .bolinha-busca .bb-rotulo { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
     white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;

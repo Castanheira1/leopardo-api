@@ -3138,9 +3138,12 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
       return res.status(403).json({ error: "Sem permissão" });
     }
     const atual = (await pool.query(
-      `SELECT motorista_id, ordem FROM pedido_fila
-       WHERE pedido_id = $1 AND status = 'ofertada' AND expira_em > NOW()
-       ORDER BY ofertada_em DESC LIMIT 1`,
+      `SELECT f.motorista_id, f.ordem, u.nome, lo.lat, lo.lng
+       FROM pedido_fila f
+       JOIN usuarios u ON u.id = f.motorista_id
+       LEFT JOIN localizacoes_online lo ON lo.usuario_id = f.motorista_id
+       WHERE f.pedido_id = $1 AND f.status = 'ofertada' AND f.expira_em > NOW()
+       ORDER BY f.ofertada_em DESC LIMIT 1`,
       [ped.id]
     )).rows[0] || null;
     const tot = (await pool.query(
@@ -3151,13 +3154,54 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
     )).rows[0];
     res.json({
       status: ped.status,
-      atual: atual ? { motorista_id: atual.motorista_id, ordem: atual.ordem } : null,
+      atual: atual ? {
+        motorista_id: atual.motorista_id,
+        ordem: atual.ordem,
+        nome: atual.nome,
+        lat: atual.lat != null ? Number(atual.lat) : null,
+        lng: atual.lng != null ? Number(atual.lng) : null,
+      } : null,
       total: tot?.total || 0,
       restantes: tot?.restantes || 0,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao consultar busca" });
+  }
+});
+
+// Robô (bolinha) chegou no motorista escolhido: reforça o aviso pra ele (push),
+// mas SÓ se ele é mesmo o da vez na fila — sem abrir margem pra spam/abuso.
+app.post("/api/pedidos/:id/reofertar-motorista", verificarAuth, async (req, res) => {
+  try {
+    const pedidoId = parseInt(req.params.id, 10);
+    const motoristaId = parseInt(req.body?.motorista_id, 10);
+    if (!pedidoId || !motoristaId) return res.status(400).json({ error: "Dados inválidos" });
+    const ped = (await pool.query(
+      "SELECT id, passageiro_id, destino_texto, status FROM pedidos WHERE id = $1",
+      [pedidoId]
+    )).rows[0];
+    if (!ped) return res.status(404).json({ error: "Pedido não encontrado" });
+    if (ped.passageiro_id !== req.user.id) return res.status(403).json({ error: "Sem permissão" });
+    if (ped.status !== "aberto") return res.json({ success: true, ignorado: true });
+    const ofertada = (await pool.query(
+      `SELECT 1 FROM pedido_fila
+       WHERE pedido_id = $1 AND motorista_id = $2 AND status = 'ofertada' AND expira_em > NOW()
+       LIMIT 1`,
+      [pedidoId, motoristaId]
+    )).rows[0];
+    if (!ofertada) return res.json({ success: true, ignorado: true });
+    const pax = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [ped.passageiro_id])).rows[0];
+    enviarPush(motoristaId, {
+      title: "Passageiro chamando você",
+      body: `${pax?.nome || "Um passageiro"} está te chamando${ped.destino_texto ? ` para ${ped.destino_texto}` : ""}. Responda rápido.`,
+      url: "/dashboard.html",
+      action: "nova_oferta_fila",
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao reofertar" });
   }
 });
 

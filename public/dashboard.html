@@ -3250,11 +3250,18 @@
     // Motorista que o servidor está chamando AGORA na fila (a bolinha vai até ele
     // de verdade). null = ainda sem oferta ativa → bolinha patrulha/insiste.
     let bolinhaAlvoId = null;
+    let bolinhaAlvoPos = null;    // posição ao vivo do motorista chamado (vem da fila)
+    let bolinhaAlvoNome = null;
     let filaStatusTimer = null;
     function alvoRealDaFila() {
         if (bolinhaAlvoId == null) return null;
+        // Carro no campo de visão (600 m) → posição ao vivo do marcador. Se estiver
+        // além disso, usa a posição que a fila devolveu — a bolinha acha do mesmo
+        // jeito o motorista que o sistema escolheu.
         const it = fleet.markers[bolinhaAlvoId];
-        return (it && it.lastPos && it.m) ? it : null;
+        if (it && it.lastPos && it.m) return it;
+        if (bolinhaAlvoPos) return { lastPos: bolinhaAlvoPos, m: { id: bolinhaAlvoId, nome: bolinhaAlvoNome || 'o motorista' } };
+        return null;
     }
     // Acompanha a fila real do pedido: quem está sendo chamado, se acabou a busca.
     async function pollFilaStatus() {
@@ -3265,6 +3272,9 @@
             const d = await r.json();
             if (!chamandoPedidoId) return;   // busca fechou enquanto esperava
             bolinhaAlvoId = d.atual ? +d.atual.motorista_id : null;
+            bolinhaAlvoPos = (d.atual && d.atual.lat != null && d.atual.lng != null)
+                ? { lat: +d.atual.lat, lng: +d.atual.lng } : null;
+            bolinhaAlvoNome = d.atual?.nome || null;
             // Pedido expirou/foi cancelado (10 min sem aceite): encerra a busca com
             // aviso. Aceite vira 'atendido' → viagem, tratado por pollPropostas.
             if (d.status === 'cancelado') {
@@ -3282,6 +3292,9 @@
     function pararPollFilaStatus() {
         if (filaStatusTimer) { clearInterval(filaStatusTimer); filaStatusTimer = null; }
         bolinhaAlvoId = null;
+        bolinhaAlvoPos = null;
+        bolinhaAlvoNome = null;
+        try { bolinhaAvisados.clear(); } catch (_) {}
     }
     function criarBolinhaOverlay(map, pos) {
         const ov = new g.maps.OverlayView();
@@ -3289,7 +3302,8 @@
         ov.onAdd = function () {
             const d = document.createElement('div');
             d.className = 'bolinha-busca';
-            d.innerHTML = '<span class="bb-ring"></span><span class="bb-ring"></span><span class="bb-dot"></span>';
+            d.innerHTML = '<span class="bb-ring"></span><span class="bb-ring"></span><span class="bb-dot"></span>'
+                + '<span class="bb-flag" aria-hidden="true">' + SVG_BANDEIRA_SVG + '</span>';
             this.div = d;
             this.getPanes().overlayMouseTarget.appendChild(d);
         };
@@ -3308,6 +3322,19 @@
         const div = st.ov && st.ov.div;
         if (!div) return;
         div.classList.toggle('tocando', !!st.tocando);
+        div.classList.toggle('achou', !!st.alvoEncontrado);   // finca a bandeira
+    }
+    // A bolinha chegou no motorista escolhido: garante o aviso (buzina) — ele vê o
+    // pulso com bandeira no mapa dele + push. Uma vez por motorista (sem spam).
+    const bolinhaAvisados = new Set();
+    function avisarMotoristaBolinha(id) {
+        if (id == null) return;
+        const k = String(id);
+        if (bolinhaAvisados.has(k)) return;
+        bolinhaAvisados.add(k);
+        fetchWithAuth('/api/pedidos/' + chamandoPedidoId + '/reofertar-motorista', {
+            method: 'POST', body: JSON.stringify({ motorista_id: +id }),
+        }).catch(() => {});
     }
     function statusBuscaRodape(txt) {
         const el = document.getElementById('chamandoMotoristasTxt');
@@ -3401,12 +3428,14 @@
             const key = 'id:' + bolinhaAlvoId;
             const pertoCarro = distKmGps(st.pos, real.lastPos) * 1000 < 35;
             st.tocando = pertoCarro;
+            st.alvoEncontrado = pertoCarro;   // achou o motorista escolhido → finca a bandeira
             if (pertoCarro) {
                 // Encostou: gruda de leve no carro (ele pode andar) e espera resposta.
                 st.pos = { lat: st.pos.lat + (real.lastPos.lat - st.pos.lat) * 0.18,
                            lng: st.pos.lng + (real.lastPos.lng - st.pos.lng) * 0.18 };
                 st.path = null;
                 st.destKey = key;
+                avisarMotoristaBolinha(bolinhaAlvoId);   // garante que o motorista foi avisado
                 statusBuscaRodape('Chamando ' + primeiroNome(real.m) + '…');
             } else {
                 const reached = !st.path || st.segIdx >= st.path.length - 1;
@@ -3421,7 +3450,8 @@
         } else {
             // Sem motorista específico na fila: a bolinha vai até os carros online
             // visíveis (anda pelas ruas), um a um. Só passeia se NÃO houver carro
-            // nenhum no mapa.
+            // nenhum no mapa. Sem alvo real → sem bandeira (ainda não achou).
+            st.alvoEncontrado = false;
             const carros = carrosDaBusca();
             if (carros.length) {
                 if (!st.visitados) st.visitados = new Set();
