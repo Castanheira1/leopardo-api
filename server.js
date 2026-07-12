@@ -3675,6 +3675,31 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
   }
 });
 
+// Passageiro limpou a rota / cancelou: some do mapa do motorista (pulso da buzina).
+// Marca como lido os contatos abertos deste passageiro (opcionalmente só de 1 motorista).
+app.post("/api/motoristas-online/contato/cancelar", verificarAuth, async (req, res) => {
+  try {
+    const motoristaId = parseInt(req.body?.motorista_id, 10) || null;
+    if (motoristaId) {
+      await pool.query(
+        `UPDATE contatos_motorista SET lido = TRUE
+         WHERE passageiro_id = $1 AND motorista_id = $2 AND lido = FALSE`,
+        [req.user.id, motoristaId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE contatos_motorista SET lido = TRUE
+         WHERE passageiro_id = $1 AND lido = FALSE`,
+        [req.user.id]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao cancelar contato" });
+  }
+});
+
 app.get("/api/motorista/contatos/novos", verificarAuth, async (req, res) => {
   const desde = parseInt(req.query.desde, 10) || 0;
   try {

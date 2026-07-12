@@ -1373,6 +1373,10 @@
     function limparDestinoPassageiro() {
         if (carroSel) fecharCarro();
         if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+        // Some do mapa do motorista: cancela a buzina/solicitação pendente.
+        fetchWithAuth('/api/motoristas-online/contato/cancelar', {
+            method: 'POST', body: JSON.stringify({}),
+        }).catch(() => {});
         limparBuscaDestino('mapPed');
         if (selPed?.limparRota) selPed.limparRota();
         carregarCaronasDestino(null);
@@ -2830,26 +2834,35 @@
                         : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')));
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
-            : `${ICN.car} Disponível por perto — toque para ver e contatar`;
+            : `${ICN.car} Disponível por perto — use os botões abaixo`;
         const foto = it.foto
             ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
             : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
         const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
         // Uma tela só: o contato (WhatsApp/Ligar/Buzinar) fica direto no card. O
         // cabeçalho continua abrindo o perfil completo; o "Pedir carona" segue no rodapé.
-        return `<article class="ride-card${cardMod}">
-            <div class="ride-card__head ride-card--tap" role="button" tabindex="0"
+        // Modo amarelo: card auto-suficiente (sem abrir perfil separado). Carona
+        // publicada: cabeçalho abre o perfil com "Solicitar vaga".
+        const tapavel = !!it.caronaId;
+        const headAttrs = tapavel
+            ? `class="ride-card__head ride-card--tap" role="button" tabindex="0"
                 onclick="abrirPerfilDaLista(${it.id})"
                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();abrirPerfilDaLista(${it.id});}"
-                aria-label="Ver perfil de ${empresa}">
+                aria-label="Ver perfil de ${empresa}"`
+            : `class="ride-card__head"`;
+        const distLinha = tapavel
+            ? (km ? `<div class="ride-card__dist">${km} de você · toque para ver perfil</div>` : '<div class="ride-card__dist">Toque para ver o perfil</div>')
+            : (km ? `<div class="ride-card__dist">${km} de você</div>` : '');
+        return `<article class="ride-card${cardMod}">
+            <div ${headAttrs}>
                 ${foto}
                 <div class="ride-card__body">
                     <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
                     <div class="ride-card__sub">${carro}</div>
                     <div class="ride-card__route">${linha}</div>
-                    ${km ? `<div class="ride-card__dist">${km} de você · toque para ver perfil</div>` : '<div class="ride-card__dist">Toque para ver o perfil</div>'}
+                    ${distLinha}
                 </div>
-                <span class="ride-card__chev" aria-hidden="true">›</span>
+                ${tapavel ? '<span class="ride-card__chev" aria-hidden="true">›</span>' : ''}
             </div>
             ${botoesContato(it.id, true)}
         </article>`;
@@ -3454,6 +3467,14 @@
     function mostrarCaronaDoCarro(m) {
         if (!selPed?.getDestino?.()) {
             exigirDestinoPassageiro('ver e falar com motoristas');
+            return;
+        }
+        // Modo amarelo (sem rota publicada): não abre tela de perfil separada — o
+        // card dourado da lista já traz foto, veículo e os contatos. Evita a tela
+        // duplicada; só leva o card à vista.
+        if (!m.carona_id) {
+            const cont = document.getElementById('motoristasPorPerto');
+            if (cont) cont.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
         carroSel = m;
