@@ -6173,12 +6173,9 @@
     }
 
     function rotuloPulsoContato(c) {
-        const destPax = c.destino_texto || 'destino no mapa';
-        if (c.compat_rota === 'proximo' || c.compat_rota === 'parcial') {
-            const dm = c.destino_motorista_texto || 'seu destino';
-            return `→ ${destPax} (você vai até ${dm})`;
-        }
-        return '→ ' + destPax;
+        // Só pra onde o passageiro quer ir (limpo). Sem o "(você vai até seu destino)"
+        // que poluía e repetia o destino do próprio motorista.
+        return '→ ' + (c.destino_texto || 'destino no mapa');
     }
 
     let contatoTickFn = null;
@@ -6205,9 +6202,8 @@
                     if (passageiroIdEmPedidoFleet(c.passageiro_id)) return;
                     vistos[key] = true;
                     const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
-                    // Sem rótulo de destino no mapa do motorista (só o pulso + a linha
-                    // preta da rota). O destino aparece só pro passageiro.
-                    const rotulo = '';
+                    // Buzina: a bolinha pulsando mostra pra onde o passageiro quer ir.
+                    const rotulo = rotuloPulsoContato(c);
                     const existente = contatoFleet.markers[key];
                     if (existente) {
                         existente.setPosition(pos);
