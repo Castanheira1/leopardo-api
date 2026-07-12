@@ -3781,6 +3781,30 @@ app.post("/api/motorista/contatos/:id/lido", verificarAuth, async (req, res) => 
   }
 });
 
+// Motorista recusa a buzina/solicitação: some do mapa (lido) e avisa o passageiro.
+app.post("/api/motorista/contatos/:id/recusar", verificarAuth, async (req, res) => {
+  try {
+    const row = (await pool.query(
+      `UPDATE contatos_motorista SET lido = TRUE
+       WHERE id = $1 AND motorista_id = $2 RETURNING passageiro_id`,
+      [req.params.id, req.user.id]
+    )).rows[0];
+    if (!row) return res.status(404).json({ error: "Solicitação não encontrada" });
+    const mot = (await pool.query("SELECT nome FROM usuarios WHERE id = $1", [req.user.id])).rows[0];
+    enviarPush(row.passageiro_id, {
+      title: "Carona recusada",
+      body: `${mot?.nome || "O motorista"} não pode levar agora. Chame outro motorista por perto.`,
+      url: "/dashboard.html",
+      action: "contato_recusado",
+    });
+    await registrarEventoUso(req.user.id, "contato_recusado", { passageiro_id: row.passageiro_id });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao recusar" });
+  }
+});
+
 app.post("/api/eventos-uso", verificarAuth, async (req, res) => {
   const { evento, detalhes } = req.body;
   if (!evento) return res.status(400).json({ error: "evento obrigatório" });

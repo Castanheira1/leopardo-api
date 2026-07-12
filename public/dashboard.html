@@ -480,7 +480,7 @@
             <div id="pedidoRota" class="sol-rota"></div>
             <div id="pedidoMapa" class="mini-mapa" style="display:none;"></div>
             <div class="sol-actions">
-                <button type="button" class="btn btn-secondary" onclick="fecharPedido()">Fechar</button>
+                <button type="button" id="btnRecusarPedido" class="btn btn-secondary" onclick="acaoSecundariaPedido()">Fechar</button>
                 <button type="button" class="btn btn-primary" onclick="oferecerAoPedido()">Oferecer carona</button>
             </div>
         </div>
@@ -6041,6 +6041,8 @@
         const motPos = selOfe?.getOrigem?.() || null;
         const semRotaMot = motoristaOnlineModo && !selOfe?.getDestino?.() && !motoristaModoDestino;
         document.querySelector('#modalPedido .sol-badge').textContent = 'Pedindo carona';
+        const btnSec = document.getElementById('btnRecusarPedido');
+        if (btnSec) btnSec.textContent = 'Fechar';
         document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
             htmlDestinoDestaque(p.destino_texto)
@@ -6058,6 +6060,25 @@
         if (contatoSel?.id) marcarContatoLido(contatoSel.id);
         document.getElementById('modalPedido').style.display = 'none';
         contatoSel = null;
+    }
+    // Botão da esquerda: numa buzina (contato) vira "Recusar" e avisa o passageiro;
+    // num pedido normal segue como "Fechar".
+    function acaoSecundariaPedido() {
+        if (contatoSel) return recusarContato();
+        fecharPedido();
+    }
+    async function recusarContato() {
+        const c = contatoSel;
+        contatoSel = null;
+        document.getElementById('modalPedido').style.display = 'none';
+        if (!c?.id) return;
+        removerPulsoContato(c.passageiro_id);   // some do mapa do motorista
+        try {
+            await fetchWithAuth('/api/motorista/contatos/' + c.id + '/recusar', { method: 'POST' });
+            msg('Solicitação recusada. O passageiro foi avisado.');
+        } catch (_) {
+            msg('Não foi possível recusar. Tente de novo.', 'error');
+        }
     }
     async function marcarContatoLido(contatoId) {
         if (!contatoId) return;
@@ -6090,6 +6111,8 @@
         const motPos = selOfe?.getOrigem?.() || null;
         // Buzina no carro amarelo = sempre modo encontro no mini-mapa.
         document.querySelector('#modalPedido .sol-badge').textContent = 'Quer carona';
+        const btnSec = document.getElementById('btnRecusarPedido');
+        if (btnSec) btnSec.textContent = 'Recusar';
         document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
             htmlDestinoDestaque(c.destino_texto)
