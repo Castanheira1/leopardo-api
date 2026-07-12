@@ -5564,13 +5564,17 @@
     // Passageiros pedindo carona: pulso radar no mapa do MOTORISTA.
     // Usa AdvancedMarkerElement (mesmo caminho do carrinho) — OverlayView sumia
     // no celular. Azul = homem, rosa = mulher, cinza = não informado.
-    function montarConteudoPulse(sexo, titulo, rotulo) {
+    // Bandeirinha quadriculada (chegada/pedido): mostra no pulso do passageiro no
+    // mapa do MOTORISTA que ali tem alguém pedindo carona.
+    const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true"><svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#fff" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg></span>';
+    function montarConteudoPulse(sexo, titulo, rotulo, comBandeira) {
         const cor = sexo === 'F' ? '#ff2f92' : sexo === 'M' ? '#3d8bff' : '#b0b6bf';
         const d = document.createElement('div');
-        d.className = 'map-pulse';
+        d.className = 'map-pulse' + (comBandeira ? ' map-pulse--flag' : '');
         d.title = titulo || '';
         d.style.setProperty('--cor', cor);
-        d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>';
+        d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>'
+            + (comBandeira ? SVG_BANDEIRA : '');
         if (rotulo) {
             const r = document.createElement('span');
             r.className = 'mp-rotulo';
@@ -5579,9 +5583,9 @@
         }
         return d;
     }
-    function criarPulse(map, pos, sexo, onClick, titulo, rotulo) {
+    function criarPulse(map, pos, sexo, onClick, titulo, rotulo, comBandeira) {
         const posN = { lat: Number(pos.lat), lng: Number(pos.lng) };
-        const div = montarConteudoPulse(sexo, titulo, rotulo);
+        const div = montarConteudoPulse(sexo, titulo, rotulo, comBandeira);
         // Advanced Marker só com Map ID real; DEMO (mapa branco) → OverlayView.
         if (typeof mapaIdEfetivo === 'function' && mapaIdEfetivo()
             && typeof _AdvancedMarkerElement === 'function' && _AdvancedMarkerElement) {
@@ -5923,7 +5927,7 @@
                         atualizarRotuloPulso(pedidoFleet.markers[p.id], rotulo);
                     } else {
                         const titulo = (p.passageiro_nome || 'Passageiro') + ' — pedindo carona';
-                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo, rotulo);
+                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo, rotulo, true);
                         mk._p = p;
                         pedidoFleet.markers[p.id] = mk;
                         if (pedidoFleet.viuPrimeiraLeva) novos++;
@@ -6324,7 +6328,7 @@
                         atualizarRotuloPulso(existente, rotulo);
                     } else {
                         const titulo = (c.passageiro_nome || 'Passageiro') + ' — quer carona';
-                        const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo, rotulo);
+                        const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo, rotulo, true);
                         mk._c = c;
                         contatoFleet.markers[key] = mk;
                     }
