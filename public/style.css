@@ -2289,10 +2289,13 @@ body.aguardando-papel .navbar {
     justify-content: center;
     z-index: 9999;
 }
-/* Perfil, locais e favoritos: painel mais alto (não colado na base do celular) */
+/* Perfil, locais e favoritos: painel mais alto (não colado na base do celular).
+   Fundo SÓLIDO (não translúcido): estes são "telas" cheias — sem o backdrop 0.6
+   deixava a UI de trás (ex.: o botão "Escolher local" do sheet) vazar embaixo. */
 .cam-overlay.cam-overlay-alto {
     align-items: flex-start;
     justify-content: center;
+    background: #0b0b0d;
     padding: max(24px, calc(env(safe-area-inset-top) + 12px)) 10px max(12px, env(safe-area-inset-bottom));
 }
 .cam-overlay.cam-overlay-alto.teclado-aberto {
@@ -2469,6 +2472,40 @@ body.aguardando-papel .navbar {
 .painel-locais .sol-actions {
     margin-top: auto;
     padding-top: 14px;
+}
+/* --- Locais: acabamento estilo app (título ao centro, busca clara, Fechar preto) --- */
+.painel-locais #favTitulo {
+    text-align: center;
+    font-size: 1.35rem;
+    letter-spacing: -0.01em;
+    margin: 2px 0 12px;
+}
+.painel-locais #favSubtitulo {
+    text-align: center;
+    color: #9aa0a6;
+}
+/* Busca: placeholder BRANCO (era cinza) e cara de "buscador" do Uber. Vence o
+   .theme-dark input por especificidade (2 classes). */
+.painel-locais .fav-filtro-topo {
+    background: #1f2024;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 13px 14px;
+    color: #fff;
+    font-size: 15px;
+}
+.painel-locais .fav-filtro-topo::placeholder { color: #fff; opacity: 0.92; }
+.painel-locais .fav-filtro-topo:focus {
+    border-color: rgba(234, 210, 152, 0.7);
+    outline: none;
+}
+/* Fechar: preto com texto branco. */
+.painel-locais .sol-actions .btn-secondary,
+.painel-locais .sol-actions .btn-secondary:hover {
+    background: #000;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    font-weight: 700;
 }
 
 /* Histórico - fotos de segurança */
