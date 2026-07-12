@@ -479,6 +479,7 @@
             <p id="pedidoSelfieHint" class="sol-selfie-hint" style="display:none;">Foto de validação</p>
             <div id="pedidoRota" class="sol-rota"></div>
             <div id="pedidoMapa" class="mini-mapa" style="display:none;"></div>
+            <div id="pedidoDistancia" class="mini-mapa-metric" style="display:none;"></div>
             <div class="sol-actions">
                 <button type="button" id="btnRecusarPedido" class="btn btn-secondary" onclick="acaoSecundariaPedido()">Fechar</button>
                 <button type="button" class="btn btn-primary" onclick="oferecerAoPedido()">Oferecer carona</button>
@@ -5566,7 +5567,8 @@
     // no celular. Azul = homem, rosa = mulher, cinza = não informado.
     // Bandeirinha quadriculada (chegada/pedido): mostra no pulso do passageiro no
     // mapa do MOTORISTA que ali tem alguém pedindo carona.
-    const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true"><svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#fff" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg></span>';
+    const SVG_BANDEIRA_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#fff" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg>';
+    const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true">' + SVG_BANDEIRA_SVG + '</span>';
     function montarConteudoPulse(sexo, titulo, rotulo, comBandeira) {
         const cor = sexo === 'F' ? '#ff2f92' : sexo === 'M' ? '#3d8bff' : '#b0b6bf';
         const d = document.createElement('div');
@@ -5984,12 +5986,36 @@
             if (z < 14) map.setZoom(14);
         });
     }
+    // Bandeirinha do passageiro no mini-mapa (balança ao vento). OverlayView simples
+    // (sem depender de Map ID) — funciona nos mini-mapas raster.
+    function criarFlagMini(map, pos) {
+        const ov = new g.maps.OverlayView();
+        ov.pos = { lat: +pos.lat, lng: +pos.lng };
+        ov.onAdd = function () {
+            const d = document.createElement('div');
+            d.className = 'mini-flag';
+            d.innerHTML = SVG_BANDEIRA_SVG;
+            this.div = d;
+            const panes = this.getPanes();
+            (panes?.overlayMouseTarget || panes?.floatPane)?.appendChild(d);
+        };
+        ov.draw = function () {
+            if (!this.div) return;
+            const proj = this.getProjection();
+            if (!proj) return;
+            const pt = proj.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+            if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
+        };
+        ov.onRemove = function () { if (this.div?.parentNode) this.div.parentNode.removeChild(this.div); };
+        ov.setMap(map);
+        return ov;
+    }
     /**
      * @param {string} elId
      * @param {{ lat, lng }|null} paxPos  onde o passageiro está
      * @param {{ lat, lng }|null} destPos destino (opcional; NÃO entra no zoom de encontro)
      * @param {{ lat, lng }|null} motPos  GPS do motorista (modo online)
-     * @param {{ modoEncontro?: boolean }} opts  true = zoom só nos dois; sem rota longa
+     * @param {{ modoEncontro?: boolean, metricElId?: string }} opts
      */
     function desenharRotaMini(elId, paxPos, destPos, motPos, opts = {}) {
         const el = document.getElementById(elId);
@@ -6013,7 +6039,8 @@
         }
         limparMiniMapa(elId);
         const { map, rotaCtrl } = mm;
-        if (pax) mm.mkO = criarMarcador({ position: pax, map, cor: '#3d8bff', title: 'Passageiro', zIndex: 3 });
+        // Passageiro = bandeirinha (balança ao vento). Motorista = carrinho dourado.
+        if (pax) mm.mkO = criarFlagMini(map, pax);
         if (mot) mm.mkMot = criarMarcador({
             position: mot, map, iconVariant: 'gold', iconW: 28, iconH: 36, title: 'Você', zIndex: 4,
         });
@@ -6021,11 +6048,33 @@
         if (dest && !modoEncontro) {
             mm.mkD = criarMarcador({ position: dest, map, cor: '#EAD298', title: 'Destino', zIndex: 2 });
         }
+        // Distância/tempo entre motorista e a bandeirinha (métrica que faltava).
+        const metricEl = opts.metricElId ? document.getElementById(opts.metricElId) : null;
+        const mostrarMetric = (km, min) => {
+            if (!metricEl) return;
+            if (!(km >= 0)) { metricEl.style.display = 'none'; metricEl.textContent = ''; return; }
+            const distTxt = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+            const minTxt = min ? ` · ~${min} min` : '';
+            metricEl.innerHTML = `${ICN.pin} <strong>${distTxt}</strong> até o passageiro${minTxt}`;
+            metricEl.style.display = 'block';
+        };
+        if (metricEl) {
+            if (mot && pax) {
+                const kmReta = distKmGps(mot, pax);
+                mostrarMetric(kmReta, Math.max(1, Math.round((kmReta / 22) * 60)));
+            } else { mostrarMetric(-1); }
+        }
         setTimeout(() => {
             g.maps.event.trigger(map, 'resize');
             if (modoEncontro && mot && pax) {
-                // Linha curta você → passageiro; zoom nos dois.
-                rotaCtrl.calcular(mot, pax).catch(() => rotaCtrl.limpar());
+                // Linha curta você → passageiro; zoom nos dois. Usa a distância REAL
+                // da rota (ruas) na métrica quando o cálculo volta.
+                rotaCtrl.calcular(mot, pax).then((resp) => {
+                    if (resp && resp.km >= 0) {
+                        const min = resp._durationMillis ? Math.round(resp._durationMillis / 60000) : 0;
+                        mostrarMetric(resp.km, min);
+                    }
+                }).catch(() => rotaCtrl.limpar());
                 enquadrarMiniPontos(map, [mot, pax], 56);
             } else if (pax && dest && !modoEncontro) {
                 rotaCtrl.calcular(pax, dest).catch(() => {
@@ -6113,7 +6162,7 @@
         const o = p.origem_lat != null ? { lat: +p.origem_lat, lng: +p.origem_lng } : null;
         const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
         // Online amarelo: mini-mapa = você + passageiro (perto). Destino só no texto.
-        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: semRotaMot });
+        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: semRotaMot, metricElId: 'pedidoDistancia' });
         if (semRotaMot) enquadrarMapaMotorista(true);
     }
     function fecharPedido() {
@@ -6199,7 +6248,7 @@
         document.getElementById('modalPedido').style.display = 'flex';
         const o = c.origem_lat != null ? { lat: +c.origem_lat, lng: +c.origem_lng } : null;
         const d = c.destino_lat != null ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
-        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: true });
+        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: true, metricElId: 'pedidoDistancia' });
         // Ao abrir o modal, reforça o mapa de trás nos dois pontos.
         enquadrarMapaMotorista(true);
     }

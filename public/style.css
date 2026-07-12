@@ -1722,6 +1722,36 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     0%, 100% { transform: translate(-3.5px, -22px) rotate(-3deg); }
     50% { transform: translate(-3.5px, -22px) rotate(3deg); }
 }
+/* Bandeirinha do passageiro no mini-mapa (modal do motorista): balança ao vento. */
+.mini-flag {
+    position: absolute;
+    width: 22px; height: 24px;
+    transform: translate(-3.5px, -22px);
+    transform-origin: 3.5px 20px;
+    pointer-events: none; z-index: 5;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+    animation: miniFlagWave 1.8s ease-in-out infinite;
+}
+.mini-flag svg { display: block; }
+@keyframes miniFlagWave {
+    0%, 100% { transform: translate(-3.5px, -22px) rotate(-5deg) skewX(0deg); }
+    35% { transform: translate(-3.5px, -22px) rotate(4deg) skewX(-4deg); }
+    70% { transform: translate(-3.5px, -22px) rotate(2deg) skewX(3deg); }
+}
+/* Métrica de distância abaixo do mini-mapa (motorista → passageiro). */
+.mini-mapa-metric {
+    margin-top: 8px;
+    text-align: center;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #EAD298;
+    background: rgba(234, 210, 152, 0.10);
+    border: 1px solid rgba(234, 210, 152, 0.28);
+    border-radius: 10px;
+    padding: 7px 12px;
+}
+.mini-mapa-metric strong { color: #fff; font-weight: 700; }
+.mini-mapa-metric svg { vertical-align: -2px; }
 .vap-car-rot, .vap-html-marker {
     display: block;
     overflow: visible;
