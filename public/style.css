@@ -784,10 +784,14 @@ gmp-place-autocomplete.map-search-float {
 .map-stage {
     position: relative;
     margin: 0 -16px;
-    height: calc(100vh - 150px);    /* fallback */
-    height: calc(100dvh - 150px);   /* barra dinâmica iPhone/Android */
-    height: calc(var(--appvh, 1vh) * 100 - 150px);   /* altura real medida por JS */
-    min-height: 440px;
+    /* Preenche o espaço REAL sobrando no flex (tab-content), em vez de um
+       "100dvh - 150px" com o cabeçalho CHUTADO em 150px — que não batia com o
+       cabeçalho real e empurrava o sheet/CTA para fora da área visível. Assim o
+       rodapé do sheet (bottom:0) fica SEMPRE no fundo visível, sem corte.
+       min-height evita colapsar a 0 no boot, antes de o flex resolver. */
+    flex: 1 1 auto;
+    height: auto;
+    min-height: min(58svh, 440px);
     overflow: hidden;
     background: #1b1b1b;
     isolation: isolate;
@@ -983,9 +987,13 @@ body.theme-dark { background: #0b0b0d; }
 /* ===== Dashboard = tela FIXA estilo app: nada rola, só o MAPA panela. =====
    Sem isso a página inteira subia ao arrastar e a busca cobria o menu. */
 body.theme-dark {
-    height: 100vh;
-    height: calc(var(--appvh, 1vh) * 100);   /* altura REAL medida por JS (navegador sem dvh) */
-    height: 100dvh;
+    height: 100vh;                            /* fallback antigo (sem svh) */
+    height: calc(var(--appvh, 1svh) * 100);   /* navegador sem svh, mas com JS medindo */
+    /* App NÃO rola: a barra do navegador nunca retrai, então 100dvh (que assume a
+       barra retraída) sobra ~1 barra e CORTA o CTA embaixo. 100svh = viewport
+       MENOR (barra visível) = o que realmente aparece -> nunca sobra p/ cortar.
+       Fica por ÚLTIMO (vence) e é independente do teclado, como o 100dvh antigo. */
+    height: 100svh;
     overflow: hidden;
     overscroll-behavior: none;   /* sem pull-to-refresh acidental arrastando o mapa */
     display: flex;
@@ -1010,8 +1018,12 @@ body.theme-dark {
 .theme-dark .tab-content { min-height: 0; }
 .theme-dark .tab-content.active {
     flex: 1 1 auto;
+    /* Coluna flex: o .map-stage (flex:1) preenche exatamente o espaço abaixo do
+       cabeçalho — o rodapé/CTA do sheet nunca fica cortado nem sobra. */
+    display: flex;
+    flex-direction: column;
     /* Nunca 0: se o flex ainda não calculou, o sheet (botão) sumia da tela */
-    min-height: min(70dvh, 520px);
+    min-height: min(70svh, 520px);
     position: relative;
     overflow: hidden;
 }
@@ -1019,11 +1031,11 @@ body.theme-dark {
    de usuário — tela preta limpa sem botão até o Maps disparar resize. */
 .theme-dark .map-stage {
     height: 100%;
-    min-height: min(60dvh, 440px);
+    min-height: min(60svh, 440px);
 }
 .theme-dark .viagem-wrap {
     height: 100%;
-    min-height: min(60dvh, 440px);
+    min-height: min(60svh, 440px);
 }
 
 .theme-dark .navbar { background: #0b0b0d; box-shadow: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
