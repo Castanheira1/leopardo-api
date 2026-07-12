@@ -40,7 +40,7 @@ const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
 const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
-const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 60);
+const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 120);
 // Dois limites de GPS, para não punir sinal instável (túnel, iOS em background):
 //  - FRESH: some do MAPA na hora (mata fantasma visualmente), mas a publicação
 //    continua no banco — o motorista reaparece quando o GPS volta.
@@ -1355,13 +1355,14 @@ if (process.env.RENDER_EXTERNAL_URL) {
 }
 
 // Marca pedidos antigos como cancelados (limpeza leve): "para agora" parados há mais
-// de 3h, e agendados cujo horário já passou há mais de 3h.
+// de 10 min (o passageiro esqueceu a busca aberta), e agendados cujo horário já
+// passou há mais de 3h.
 setInterval(async () => {
   try {
     await pool.query(`
       UPDATE pedidos p SET status = 'cancelado'
       WHERE p.status = 'aberto' AND (
-        (p.horario IS NULL AND p.created_at < NOW() - INTERVAL '3 hours')
+        (p.horario IS NULL AND p.created_at < NOW() - INTERVAL '10 minutes')
         OR (p.horario IS NOT NULL AND p.horario < NOW() - INTERVAL '3 hours')
         -- Passageiro já está numa viagem em andamento: encerra o pedido pendente
         -- dele (não some só da vista — sai de vez, pra não voltar).

@@ -160,7 +160,7 @@
                     <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped">
                         <div class="acao-grip" id="gripPed">
                             <span class="acao-handle" aria-hidden="true"></span>
-                            <span class="acao-titulo">Pedir carona</span>
+                            <span class="acao-titulo">Solicitar carona</span>
                         </div>
                         <div id="limparRotaPedWrap" class="limpar-rota-bar dest-faixa-wrap" style="display:none;">
                             <div class="dest-faixa" role="status">
@@ -599,7 +599,7 @@
             <h2>O que você quer fazer?</h2>
             <button type="button" class="papel-opt" onclick="escolherPapel('passageiro')">
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
-                <span class="papel-tit">Pedir carona</span>
+                <span class="papel-tit">Solicitar carona</span>
                 <span class="papel-sub">Sou passageiro</span>
             </button>
             <button type="button" class="papel-opt" onclick="escolherPapel('motorista')">
@@ -2392,10 +2392,7 @@
     let pedidoTemCaronaNaRota = false;   // carona publicada indo ao destino → pedido imediato
 
     function tituloSheetPed() {
-        const dest = selPed?.getDestino?.();
-        if (!dest) return 'Pedir carona';
-        if (pedidoTemCaronaNaRota) return 'Pedir agora';
-        return 'Pedir carona';
+        return 'Solicitar carona';
     }
     function atualizarTituloSheetPed() {
         const el = document.querySelector('#acaoSheetPed .acao-titulo');
@@ -2407,42 +2404,29 @@
      * “Pedir carona” dourado piscando (mostra → some após o fetch).
      * Contato do amarelo: modal do carro. Pedido geral: botão sempre estável.
      */
-    function atualizarFormPedidoRota(temCarona, modoAmarelo) {
+    function atualizarFormPedidoRota(temCarona) {
         pedidoTemCaronaNaRota = !!temCarona;
         const horaWrap = document.getElementById('horaPedWrap');
         const hint = document.getElementById('hintPedidoImediato');
         const btn = document.getElementById('btnCtaPedir');
         const temDest = !!selPed?.getDestino?.();
-        // Modo amarelo (só motoristas por perto, sem rota): quem decide é o
-        // motorista. O passageiro buzina/chama — não existe "Pedir carona" aqui.
-        if (modoAmarelo) {
-            if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
-            if (hint) hint.style.display = 'none';
-            if (btn) btn.style.display = 'none';
-            atualizarTituloSheetPed();
-            return;
-        }
+        // Método único: com destino, o botão é sempre "Solicitar carona" (dispara a
+        // busca automática — robozinho + fila, mais perto primeiro). Sem destino,
+        // "Escolher local". O rótulo "Pedir agora" foi aposentado.
         if (temCarona) {
             horaPedModoAgenda = false;
             if (horaWrap) horaWrap.classList.add('form-slot-reservado');
             if (hint) hint.style.display = 'block';
-            if (btn) {
-                btn.textContent = 'Pedir agora';
-                btn.style.display = '';
-                btn.style.visibility = '';
-                btn.style.pointerEvents = '';
-            }
         } else {
             if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
             if (hint) hint.style.display = 'none';
-            if (btn) {
-                // Sem destino → Escolher local; com destino → Pedir carona (sempre visível)
-                btn.textContent = temDest ? 'Pedir carona' : 'Escolher local';
-                btn.style.display = '';
-                btn.style.visibility = '';
-                btn.style.pointerEvents = '';
-            }
             if (!horaPedModoAgenda) tickQuandoPed();
+        }
+        if (btn) {
+            btn.textContent = temDest ? 'Solicitar carona' : 'Escolher local';
+            btn.style.display = '';
+            btn.style.visibility = '';
+            btn.style.pointerEvents = '';
         }
         atualizarTituloSheetPed();
     }
@@ -2843,27 +2827,17 @@
                         : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')));
         const linha = it.caronaId
             ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
-            : `${ICN.car} Disponível por perto — use os botões abaixo`;
+            : `${ICN.car} Disponível por perto`;
         const foto = it.foto
             ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
             : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
         const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
-        // Uma tela só: o contato (WhatsApp/Ligar/Buzinar) fica direto no card. O
-        // cabeçalho continua abrindo o perfil completo; o "Pedir carona" segue no rodapé.
-        // Modo amarelo: card auto-suficiente (sem abrir perfil separado). Carona
-        // publicada: cabeçalho abre o perfil com "Solicitar vaga".
-        const tapavel = !!it.caronaId;
-        const headAttrs = tapavel
-            ? `class="ride-card__head ride-card--tap" role="button" tabindex="0"
-                onclick="abrirPerfilDaLista(${it.id})"
-                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();abrirPerfilDaLista(${it.id});}"
-                aria-label="Ver perfil de ${empresa}"`
-            : `class="ride-card__head"`;
-        const distLinha = tapavel
-            ? (km ? `<div class="ride-card__dist">${km} de você · toque para ver perfil</div>` : '<div class="ride-card__dist">Toque para ver o perfil</div>')
-            : (km ? `<div class="ride-card__dist">${km} de você</div>` : '');
+        // Card só informativo: mostra quem está por perto/na rota. Sem contato
+        // direto e sem abrir perfil — o único método é "Solicitar carona" no
+        // rodapé, que dispara a busca automática (robozinho + fila).
+        const distLinha = km ? `<div class="ride-card__dist">${km} de você</div>` : '';
         return `<article class="ride-card${cardMod}">
-            <div ${headAttrs}>
+            <div class="ride-card__head">
                 ${foto}
                 <div class="ride-card__body">
                     <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
@@ -2871,9 +2845,7 @@
                     <div class="ride-card__route">${linha}</div>
                     ${distLinha}
                 </div>
-                ${tapavel ? '<span class="ride-card__chev" aria-hidden="true">›</span>' : ''}
             </div>
-            ${botoesContato(it.id, true)}
         </article>`;
     }
 
@@ -3011,11 +2983,9 @@
                 contPerto.style.display = 'none';
                 listaPerto.innerHTML = '';
             }
-            // "Pedir agora" só com carona TOTAL na rota. Sem rota + motoristas por
-            // perto = modo amarelo: sem "Pedir carona" (quem decide é o motorista).
-            const temTotal = indoDestino.some((it) => it.compatRota === 'total');
-            const soAmarelo = !temTotal && porPerto.length > 0;
-            atualizarFormPedidoRota(temTotal, soAmarelo);
+            // Botão "Solicitar carona" é o método único (dispara a fila/robozinho).
+            // temCarona só decide o textinho de "pedido imediato" no formulário.
+            atualizarFormPedidoRota(indoDestino.some((it) => it.compatRota === 'total'));
             if (!listaMotoristasTimer) {
                 // Refresh em silêncio (não zera a lista). Só com sheet colapsado
                 // ou a cada 12s em background — evita “piscar” com a alça aberta.
@@ -3479,14 +3449,6 @@
     function mostrarCaronaDoCarro(m) {
         if (!selPed?.getDestino?.()) {
             exigirDestinoPassageiro('ver e falar com motoristas');
-            return;
-        }
-        // Modo amarelo (sem rota publicada): não abre tela de perfil separada — o
-        // card dourado da lista já traz foto, veículo e os contatos. Evita a tela
-        // duplicada; só leva o card à vista.
-        if (!m.carona_id) {
-            const cont = document.getElementById('motoristasPorPerto');
-            if (cont) cont.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
         carroSel = m;
@@ -5479,7 +5441,12 @@
                             title: m.nome + (m.placa ? ' • ' + m.placa : '')
                                 + (m.carona_id && m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
-                        const abrir = () => mostrarCaronaDoCarro(fleet.markers[m.id].m);
+                        // Método único = botão "Solicitar carona". Clicar no carro não
+                        // abre mais tela de escolha/contato; só leva a lista à vista.
+                        const abrir = () => {
+                            const cont = document.getElementById('motoristasDestinoWrap');
+                            if (cont) cont.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        };
                         car.addListener('click', abrir);
                         // Rota real (ruas) só para carona publicada (nunca modo amarelo).
                         let destinoMk = null;
