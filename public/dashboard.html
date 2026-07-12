@@ -5911,7 +5911,7 @@
                 const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
                 const r = await fetchWithAuth('/api/pedidos' + q);
                 if (!r || !r.ok) return;
-                const lista = (await r.json()).filter(p => p.passageiro_id !== user.id && p.origem_lat != null);
+                const lista = (await r.json()).filter(p => p.passageiro_id !== user.id && p.origem_lat != null && !pedidosRecusadosMot.has(p.id));
                 const vistos = {};
                 let novos = 0;
                 lista.forEach((p) => {
@@ -6102,7 +6102,7 @@
         const semRotaMot = motoristaOnlineModo && !selOfe?.getDestino?.() && !motoristaModoDestino;
         document.querySelector('#modalPedido .sol-badge').textContent = 'Pedindo carona';
         const btnSec = document.getElementById('btnRecusarPedido');
-        if (btnSec) btnSec.textContent = 'Fechar';
+        if (btnSec) btnSec.textContent = 'Recusar';
         document.getElementById('pedidoNome').textContent = nome;
         document.getElementById('pedidoRota').innerHTML =
             htmlDestinoDestaque(p.destino_texto)
@@ -6121,11 +6121,28 @@
         document.getElementById('modalPedido').style.display = 'none';
         contatoSel = null;
     }
-    // Botão da esquerda: numa buzina (contato) vira "Recusar" e avisa o passageiro;
-    // num pedido normal segue como "Fechar".
+    // Botão da esquerda: sempre "Recusar". Numa buzina (contato) avisa o passageiro;
+    // num pedido, tira o motorista da fila e o robô segue pro próximo motorista.
     function acaoSecundariaPedido() {
         if (contatoSel) return recusarContato();
+        if (pedidoSel) return recusarPedidoMotorista();
         fecharPedido();
+    }
+    // Motoristas que já recusaram um pedido: o pulso não volta a aparecer no mapa.
+    const pedidosRecusadosMot = new Set();
+    async function recusarPedidoMotorista() {
+        const p = pedidoSel;
+        pedidoSel = null;
+        document.getElementById('modalPedido').style.display = 'none';
+        if (!p?.id) return;
+        pedidosRecusadosMot.add(p.id);
+        removerPulsoPedido(p.id);   // some do mapa do motorista
+        try {
+            await fetchWithAuth('/api/pedidos/' + p.id + '/recusar-motorista', { method: 'POST' });
+            msg('Pedido recusado. Buscando outro motorista para o passageiro.');
+        } catch (_) {
+            msg('Não foi possível recusar. Tente de novo.', 'error');
+        }
     }
     async function recusarContato() {
         const c = contatoSel;

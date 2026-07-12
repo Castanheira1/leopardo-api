@@ -3161,6 +3161,35 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
   }
 });
 
+// Motorista recusa um pedido (viu pelo pulso/modal): sai da fila desse pedido e,
+// se era o motorista da vez, o robô do passageiro segue na hora pro próximo.
+app.post("/api/pedidos/:id/recusar-motorista", verificarAuth, async (req, res) => {
+  try {
+    const pedidoId = parseInt(req.params.id, 10);
+    if (!pedidoId) return res.status(400).json({ error: "Pedido inválido" });
+    const alvo = (await pool.query(
+      `WITH alvo AS (
+         SELECT id, status FROM pedido_fila
+         WHERE pedido_id = $1 AND motorista_id = $2 AND status IN ('aguardando', 'ofertada')
+         ORDER BY status = 'ofertada' DESC LIMIT 1
+         FOR UPDATE
+       ),
+       upd AS (
+         UPDATE pedido_fila SET status = 'recusada', respondida_em = NOW()
+         WHERE id = (SELECT id FROM alvo) RETURNING id
+       )
+       SELECT alvo.status AS antes FROM alvo`,
+      [pedidoId, req.user.id]
+    )).rows[0];
+    // Era o motorista da vez: avança o robô pro próximo agora mesmo.
+    if (alvo?.antes === "ofertada") await ofertarProximo(pedidoId);
+    res.json({ success: true, avancou: alvo?.antes === "ofertada" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao recusar pedido" });
+  }
+});
+
 app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
