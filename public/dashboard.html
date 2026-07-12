@@ -3098,6 +3098,7 @@
         document.getElementById('modalChamando').style.display = 'flex';
         iniciarAnunciosEspera();
         iniciarBolinhaBusca();
+        iniciarPollFilaStatus();
     }
     function fecharChamando() {
         chamandoId = null;
@@ -3105,6 +3106,7 @@
         pararAnunciosEspera();
         pararCronometroChamando();
         pararBolinhaBusca();
+        pararPollFilaStatus();
         document.body.classList.remove('buscando-carona');
         document.getElementById('modalChamando').style.display = 'none';
     }
@@ -3221,6 +3223,42 @@
     const BOLINHA_RESULT_MS = 1500;   // mostra que este não topou ainda
     const BOLINHA_PAUSA_MS = 1300;    // respiro antes de recomeçar a rodada
     let bolinha = null;
+    // Motorista que o servidor está chamando AGORA na fila (a bolinha vai até ele
+    // de verdade). null = ainda sem oferta ativa → bolinha patrulha/insiste.
+    let bolinhaAlvoId = null;
+    let filaStatusTimer = null;
+    function alvoRealDaFila() {
+        if (bolinhaAlvoId == null) return null;
+        const it = fleet.markers[bolinhaAlvoId];
+        return (it && it.lastPos && it.m) ? it : null;
+    }
+    // Acompanha a fila real do pedido: quem está sendo chamado, se acabou a busca.
+    async function pollFilaStatus() {
+        if (!chamandoPedidoId) return;
+        try {
+            const r = await fetchWithAuth('/api/pedidos/' + chamandoPedidoId + '/fila-status');
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!chamandoPedidoId) return;   // busca fechou enquanto esperava
+            bolinhaAlvoId = d.atual ? +d.atual.motorista_id : null;
+            // Pedido expirou/foi cancelado (10 min sem aceite): encerra a busca com
+            // aviso. Aceite vira 'atendido' → viagem, tratado por pollPropostas.
+            if (d.status === 'cancelado') {
+                fecharChamando();
+                msg('Ninguém disponível agora. Tente novamente em instantes.', 'info');
+            }
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    function iniciarPollFilaStatus() {
+        pararPollFilaStatus();
+        if (!chamandoPedidoId) return;
+        pollFilaStatus();
+        filaStatusTimer = setInterval(pollFilaStatus, 3000);
+    }
+    function pararPollFilaStatus() {
+        if (filaStatusTimer) { clearInterval(filaStatusTimer); filaStatusTimer = null; }
+        bolinhaAlvoId = null;
+    }
     function criarBolinhaOverlay(map, pos) {
         const ov = new g.maps.OverlayView();
         ov.pos = pos;
@@ -3281,6 +3319,7 @@
                 ov: null,
                 visitados: new Set(),
                 alvo: null,
+                alvoRealId: null,
                 fase: 'escolher',
                 iniFase: 0,
                 posIni: null,
@@ -3300,8 +3339,35 @@
         if (!st || st.aguardando) return;
         if (!st.ultimo) st.ultimo = agora;
         const carros = carrosDaBusca();
+        // O servidor trocou o motorista chamado (recusou/venceu → próximo, ou
+        // acabou): a bolinha larga o alvo atual e re-mira no novo.
+        if (st.alvoRealId != null && String(bolinhaAlvoId) !== st.alvoRealId) {
+            st.alvo = null;
+            st.alvoRealId = null;
+            if (st.fase === 'indo' || st.fase === 'tocando') {
+                st.fase = 'escolher';
+                rotuloBolinha('Tentando o próximo…');
+                statusBuscaRodape('Tentando o próximo…');
+            }
+        }
         switch (st.fase) {
             case 'escolher': {
+                // Busca REAL: se o servidor está chamando alguém e o carro dele está
+                // no mapa, a bolinha vai direto até ele (não é enfeite).
+                const real = alvoRealDaFila();
+                if (real) {
+                    st.alvo = real;
+                    st.alvoRealId = String(bolinhaAlvoId);
+                    st.posIni = { ...st.pos };
+                    st.iniFase = agora;
+                    const distR = distKmGps(st.pos, real.lastPos);
+                    st.dur = Math.max(900, Math.min(2600, 900 + distR * 900));
+                    st.fase = 'indo';
+                    rotuloBolinha('Indo até ' + primeiroNome(real.m) + '…');
+                    statusBuscaRodape('Chamando ' + primeiroNome(real.m));
+                    break;
+                }
+                st.alvoRealId = null;
                 if (!carros.length) {
                     st.fase = 'patrulha';
                     rotuloBolinha('Procurando motoristas na região…');
@@ -3331,7 +3397,7 @@
             }
             case 'indo': {
                 const item = st.alvo && fleet.markers[st.alvo.m.id];
-                if (!item) { st.alvo = null; st.fase = 'escolher'; break; }   // o carro saiu do ar
+                if (!item) { st.alvo = null; st.alvoRealId = null; st.fase = 'escolher'; break; }   // o carro saiu do ar
                 const t = Math.min(1, (agora - st.iniFase) / st.dur);
                 const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;   // easeInOut
                 st.pos = {
@@ -3349,6 +3415,11 @@
             case 'tocando': {
                 const item = st.alvo && fleet.markers[st.alvo.m.id];
                 if (item) st.pos = { ...item.lastPos };   // gruda no carro (ele anda)
+                else if (st.alvoRealId != null) { st.alvo = null; st.alvoRealId = null; st.fase = 'escolher'; break; }
+                // Busca real: fica chamando esse motorista até o servidor trocar
+                // (o bloco de re-mira no topo detecta a troca). O timer só vale pro
+                // modo enfeite (sem alvo real ainda).
+                if (st.alvoRealId != null) break;
                 if (agora - st.iniFase >= BOLINHA_TOQUE_MS) {
                     st.fase = 'resultado';
                     st.iniFase = agora;

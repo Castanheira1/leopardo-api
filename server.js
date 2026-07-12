@@ -3092,6 +3092,42 @@ app.post("/api/pedido-fila/:id/recusar", verificarAuth, async (req, res) => {
   }
 });
 
+// Passageiro acompanha a busca (robozinho): qual motorista está sendo chamado
+// agora, quantos faltam. Alimenta a animação da bolinha e detecta fim da busca.
+app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
+  try {
+    const ped = (await pool.query(
+      "SELECT id, passageiro_id, status FROM pedidos WHERE id = $1",
+      [req.params.id]
+    )).rows[0];
+    if (!ped) return res.status(404).json({ error: "Pedido não encontrado" });
+    if (ped.passageiro_id !== req.user.id && !req.user.is_admin) {
+      return res.status(403).json({ error: "Sem permissão" });
+    }
+    const atual = (await pool.query(
+      `SELECT motorista_id, ordem FROM pedido_fila
+       WHERE pedido_id = $1 AND status = 'ofertada' AND expira_em > NOW()
+       ORDER BY ofertada_em DESC LIMIT 1`,
+      [ped.id]
+    )).rows[0] || null;
+    const tot = (await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status IN ('aguardando', 'ofertada'))::int AS restantes
+       FROM pedido_fila WHERE pedido_id = $1`,
+      [ped.id]
+    )).rows[0];
+    res.json({
+      status: ped.status,
+      atual: atual ? { motorista_id: atual.motorista_id, ordem: atual.ordem } : null,
+      total: tot?.total || 0,
+      restantes: tot?.restantes || 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao consultar busca" });
+  }
+});
+
 app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
