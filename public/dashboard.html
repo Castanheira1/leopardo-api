@@ -521,19 +521,19 @@
                 <div class="chamando-info-item">
                     <span class="chamando-info-ico" id="chamandoIcoMotoristas"></span>
                     <span class="chamando-info-corpo">
-                        <span class="chamando-info-rotulo">Motoristas</span>
+                        <span class="chamando-info-rotulo" id="chamandoRotuloMeio">Motoristas</span>
                         <span class="chamando-info-valor" id="chamandoMotoristasTxt">Procurando…</span>
                     </span>
                 </div>
                 <div class="chamando-info-item" id="chamandoPessoasWrap" style="display:none;">
                     <span class="chamando-info-ico" id="chamandoIcoPessoas"></span>
                     <span class="chamando-info-corpo">
-                        <span class="chamando-info-rotulo">Você é</span>
+                        <span class="chamando-info-rotulo" id="chamandoRotuloPessoas">Você é</span>
                         <span class="chamando-info-valor" id="chamandoPessoasTxt">1 passageiro</span>
                     </span>
                 </div>
             </div>
-            <button type="button" class="btn btn-block chamando-cancelar" onclick="cancelarChamando()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg> Cancelar busca</button>
+            <button type="button" class="btn btn-block chamando-cancelar" onclick="cancelarChamando()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg> <span id="chamandoCancelarTxt">Cancelar busca</span></button>
         </div>
     </div>
 
@@ -3043,18 +3043,32 @@
     function pararCronometroChamando() {
         if (chamandoCronoTimer) { clearInterval(chamandoCronoTimer); chamandoCronoTimer = null; }
     }
-    function mostrarChamando({ nome, propostaId, pedidoId, pessoas } = {}) {
+    function mostrarChamando({ nome, propostaId, pedidoId, pessoas, souMotorista } = {}) {
         chamandoId = propostaId || null;
         chamandoPedidoId = pedidoId || null;
-        document.getElementById('chamandoTitulo').textContent = pedidoId ? 'Procurando motorista…' : 'Chamando…';
-        document.getElementById('chamandoSub').innerHTML = pedidoId
-            ? 'Avisamos os motoristas perto de você'
-            : `Aguardando <strong>${esc(nome || 'o motorista')}</strong> aceitar`;
-        document.getElementById('chamandoMotoristasTxt').textContent = pedidoId ? 'Procurando…' : 'Aguardando aceite';
+        // souMotorista: o MOTORISTA ofereceu e espera o passageiro aceitar. A tela é
+        // a mesma, mas os rótulos mudam de lado (ele não é "1 passageiro").
+        const souMot = !!souMotorista;
+        document.getElementById('chamandoTitulo').textContent = souMot
+            ? 'Aguardando o passageiro'
+            : (pedidoId ? 'Procurando motorista…' : 'Chamando…');
+        document.getElementById('chamandoSub').innerHTML = souMot
+            ? `Aguardando <strong>${esc(nome || 'o passageiro')}</strong> aceitar sua carona`
+            : (pedidoId
+                ? 'Avisamos os motoristas perto de você'
+                : `Aguardando <strong>${esc(nome || 'o motorista')}</strong> aceitar`);
+        document.getElementById('chamandoRotuloMeio').textContent = souMot ? 'Passageiro' : 'Motoristas';
+        document.getElementById('chamandoMotoristasTxt').textContent =
+            souMot ? 'Aguardando aceite' : (pedidoId ? 'Procurando…' : 'Aguardando aceite');
+        const cancTxt = document.getElementById('chamandoCancelarTxt');
+        if (cancTxt) cancTxt.textContent = souMot ? 'Cancelar oferta' : 'Cancelar busca';
         const n = Number(pessoas) || 0;
         const pessoasWrap = document.getElementById('chamandoPessoasWrap');
+        document.getElementById('chamandoRotuloPessoas').textContent = souMot ? 'Passageiros' : 'Você é';
         if (n > 0) {
-            document.getElementById('chamandoPessoasTxt').textContent = n + (n > 1 ? ' passageiros' : ' passageiro');
+            document.getElementById('chamandoPessoasTxt').textContent = souMot
+                ? String(n)
+                : n + (n > 1 ? ' passageiros' : ' passageiro');
             pessoasWrap.style.display = '';
         } else {
             pessoasWrap.style.display = 'none';
@@ -6027,7 +6041,7 @@
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (navigator.vibrate) navigator.vibrate(80);   // vibrasinha curta ao aceitar
         removerPulsoPedido(p.id);                        // o círculo pulsando some
-        mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id, pessoas: p.pessoas });
+        mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id, pessoas: p.pessoas, souMotorista: true });
     }
 
     function mostrarContato(c) {
@@ -6065,7 +6079,7 @@
         if (navigator.vibrate) navigator.vibrate(80);
         await marcarContatoLido(c.id);
         removerPulsoContato(c.passageiro_id);
-        mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id, pessoas: c.pessoas });
+        mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id, pessoas: c.pessoas, souMotorista: true });
     }
 
     // Mostra o próprio carro no mapa (atualiza a cada 5s). Se marcadorEmprestado for
