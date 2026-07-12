@@ -3333,8 +3333,11 @@
                 path: null,        // rota (pontos de rua) que a bolinha está andando
                 segIdx: 0,         // segmento atual da rota
                 destino: null,     // ponto final da rota atual
-                destKey: null,     // 'id:<motorista>' ou 'wander:<ts>'
+                destKey: null,     // 'id:<motorista>' | 'carro:<id>' | 'wander:<ts>'
                 calculando: false, // rota sendo buscada (evita spam)
+                visitados: new Set(),  // carros já "tocados" na rodada (sem alvo de fila)
+                carroAlvoId: null, // carro visível que a bolinha está visitando agora
+                tocandoDesde: 0,   // início do "encostou" (dwell antes de ir pro próximo)
                 tocando: false,    // encostou no carro chamado (pulso "chamando")
                 speedMs: 0.032,    // metros por ms (~32 m/s) — busca ágil
                 ultimo: 0,
@@ -3426,15 +3429,58 @@
                 statusBuscaRodape('Indo até ' + primeiroNome(real.m) + '…');
             }
         } else {
-            // Ninguém sendo chamado: a bolinha viaja pelo mapa (passeio por ruas).
-            st.tocando = false;
-            const reached = !st.path || st.segIdx >= st.path.length - 1;
-            const eraAlvo = st.destKey && st.destKey.startsWith('id:');
-            if ((reached || eraAlvo) && !st.calculando) {
-                recomputarPathBolinha(st, pontoWanderBolinha(st), 'wander:' + agora);
+            // Sem motorista específico na fila: a bolinha vai até os carros online
+            // visíveis (anda pelas ruas), um a um. Só passeia se NÃO houver carro
+            // nenhum no mapa.
+            const carros = carrosDaBusca();
+            if (carros.length) {
+                if (!st.visitados) st.visitados = new Set();
+                let alvoCarro = st.carroAlvoId != null ? fleet.markers[st.carroAlvoId] : null;
+                if (!alvoCarro || !alvoCarro.lastPos) {
+                    let livres = carros.filter((c) => !st.visitados.has(String(c.m.id)));
+                    if (!livres.length) { st.visitados.clear(); livres = carros; }
+                    livres.sort((a, b) => distKmGps(st.pos, a.lastPos) - distKmGps(st.pos, b.lastPos));
+                    alvoCarro = livres[0];
+                    st.carroAlvoId = String(alvoCarro.m.id);
+                    st.path = null;
+                }
+                const pertoCarro = distKmGps(st.pos, alvoCarro.lastPos) * 1000 < 35;
+                if (pertoCarro) {
+                    st.tocando = true;
+                    if (!st.tocandoDesde) st.tocandoDesde = agora;
+                    st.pos = { lat: st.pos.lat + (alvoCarro.lastPos.lat - st.pos.lat) * 0.18,
+                               lng: st.pos.lng + (alvoCarro.lastPos.lng - st.pos.lng) * 0.18 };
+                    // Encostou um instante ("chamando") e parte pro próximo carro.
+                    if (agora - st.tocandoDesde > 1200) {
+                        st.visitados.add(String(alvoCarro.m.id));
+                        st.carroAlvoId = null;
+                        st.path = null;
+                        st.tocandoDesde = 0;
+                    }
+                } else {
+                    st.tocando = false;
+                    st.tocandoDesde = 0;
+                    const key = 'carro:' + st.carroAlvoId;
+                    const reached = !st.path || st.segIdx >= st.path.length - 1;
+                    const carroAndou = st.destino && distKmGps(st.destino, alvoCarro.lastPos) * 1000 > 45;
+                    if ((st.destKey !== key || reached || carroAndou) && !st.calculando) {
+                        recomputarPathBolinha(st, { ...alvoCarro.lastPos }, key);
+                    }
+                    avancarNaPath(st, dt);
+                }
+                statusBuscaRodape(carros.length + ' por perto');
+            } else {
+                // Mapa vazio: a bolinha viaja pelo mapa (passeio por ruas).
+                st.tocando = false;
+                st.carroAlvoId = null;
+                const reached = !st.path || st.segIdx >= st.path.length - 1;
+                const eraAlvo = st.destKey && !st.destKey.startsWith('wander');
+                if ((reached || eraAlvo) && !st.calculando) {
+                    recomputarPathBolinha(st, pontoWanderBolinha(st), 'wander:' + agora);
+                }
+                avancarNaPath(st, dt);
+                statusBuscaRodape('Procurando motoristas…');
             }
-            avancarNaPath(st, dt);
-            statusBuscaRodape('Procurando motoristas…');
         }
 
         // A tela acompanha a bolinha (pan suave, sem brigar com cada frame).
