@@ -1359,10 +1359,14 @@ if (process.env.RENDER_EXTERNAL_URL) {
 setInterval(async () => {
   try {
     await pool.query(`
-      UPDATE pedidos SET status = 'cancelado'
-      WHERE status = 'aberto' AND (
-        (horario IS NULL AND created_at < NOW() - INTERVAL '3 hours')
-        OR (horario IS NOT NULL AND horario < NOW() - INTERVAL '3 hours')
+      UPDATE pedidos p SET status = 'cancelado'
+      WHERE p.status = 'aberto' AND (
+        (p.horario IS NULL AND p.created_at < NOW() - INTERVAL '3 hours')
+        OR (p.horario IS NOT NULL AND p.horario < NOW() - INTERVAL '3 hours')
+        -- Passageiro já está numa viagem em andamento: encerra o pedido pendente
+        -- dele (não some só da vista — sai de vez, pra não voltar).
+        OR EXISTS (SELECT 1 FROM viagens v
+                   WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
       )
     `);
   } catch (err) {
@@ -2438,6 +2442,12 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
            WHERE p.status = 'aberto'
              AND COALESCE(u.ativo, TRUE) = TRUE
              AND (p.horario IS NULL OR p.horario <= NOW())
+             -- Solicitação vencida: pedido "para agora" (ou agendado que já disparou)
+             -- parado há mais de 30 min é velho — não aparece mais pro motorista.
+             AND COALESCE(p.horario, p.created_at) > NOW() - INTERVAL '30 minutes'
+             -- Passageiro já embarcado/em viagem: o pedido antigo dele não reaparece.
+             AND NOT EXISTS (SELECT 1 FROM viagens v
+                             WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
              -- Pedido em busca automática por proximidade (fila sequencial): só
              -- o motorista da vez responde, pelos endpoints /api/pedido-fila.
              -- Não vira pulso no mapa dos outros — oferecer nele daria 400.
@@ -2482,7 +2492,11 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
        WHERE p.status = 'aberto'
          AND COALESCE(u.ativo, TRUE) = TRUE
          AND (p.horario IS NULL OR p.horario <= NOW())
-         -- Mesma regra do mapa: esconde pedidos em fila por proximidade.
+         -- Mesmas regras do mapa: sem solicitação vencida (30 min), sem pedido de
+         -- passageiro já em viagem, e sem pedido em fila por proximidade.
+         AND COALESCE(p.horario, p.created_at) > NOW() - INTERVAL '30 minutes'
+         AND NOT EXISTS (SELECT 1 FROM viagens v
+                         WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
          AND NOT EXISTS (SELECT 1 FROM pedido_fila f WHERE f.pedido_id = p.id)
          ${filtroProj}
        ORDER BY p.created_at DESC`,
@@ -2840,6 +2854,12 @@ async function criarViagemDaProposta(propostaId) {
     );
   }
   if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
+  // Passageiro entrou numa viagem: qualquer OUTRO pedido aberto dele vira passado —
+  // senão ele volta a aparecer no mapa dos motoristas enquanto já está sendo levado.
+  await pool.query(
+    "UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto' AND id <> COALESCE($2, -1)",
+    [passageiro_id, pr.pedido_id || null]
+  );
   return rows[0];
 }
 
