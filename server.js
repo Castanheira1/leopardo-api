@@ -2937,7 +2937,11 @@ async function iniciarFilaPedido(pedidoId) {
     { lat: ped.destino_lat, lng: ped.destino_lng },
     pid, ped.passageiro_id
   );
-  if (!candidatos.length) return;
+  // Ninguém na MESMA rota (ex.: motorista perto indo para outro destino): não deixa
+  // o pedido no vácuo. Avisa os motoristas disponíveis num raio (mesmo aviso do
+  // "buzina"/pedido sem fila), pra eles decidirem — senão "pedir carona" não avisa
+  // ninguém enquanto o buzina avisa.
+  if (!candidatos.length) { await notificarMotoristasProximos(ped); return; }
   const values = candidatos.map((c, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
   const params = [pedidoId];
   candidatos.forEach((c, i) => params.push(c.motorista_id, i, c.dist_km));
