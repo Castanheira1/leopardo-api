@@ -2407,12 +2407,21 @@
      * “Pedir carona” dourado piscando (mostra → some após o fetch).
      * Contato do amarelo: modal do carro. Pedido geral: botão sempre estável.
      */
-    function atualizarFormPedidoRota(temCarona) {
+    function atualizarFormPedidoRota(temCarona, modoAmarelo) {
         pedidoTemCaronaNaRota = !!temCarona;
         const horaWrap = document.getElementById('horaPedWrap');
         const hint = document.getElementById('hintPedidoImediato');
         const btn = document.getElementById('btnCtaPedir');
         const temDest = !!selPed?.getDestino?.();
+        // Modo amarelo (só motoristas por perto, sem rota): quem decide é o
+        // motorista. O passageiro buzina/chama — não existe "Pedir carona" aqui.
+        if (modoAmarelo) {
+            if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
+            if (hint) hint.style.display = 'none';
+            if (btn) btn.style.display = 'none';
+            atualizarTituloSheetPed();
+            return;
+        }
         if (temCarona) {
             horaPedModoAgenda = false;
             if (horaWrap) horaWrap.classList.add('form-slot-reservado');
@@ -3002,8 +3011,11 @@
                 contPerto.style.display = 'none';
                 listaPerto.innerHTML = '';
             }
-            // Só "Pedir agora" se houver carona TOTAL na rota (não esconde CTA por amarelo)
-            atualizarFormPedidoRota(indoDestino.some((it) => it.compatRota === 'total'));
+            // "Pedir agora" só com carona TOTAL na rota. Sem rota + motoristas por
+            // perto = modo amarelo: sem "Pedir carona" (quem decide é o motorista).
+            const temTotal = indoDestino.some((it) => it.compatRota === 'total');
+            const soAmarelo = !temTotal && porPerto.length > 0;
+            atualizarFormPedidoRota(temTotal, soAmarelo);
             if (!listaMotoristasTimer) {
                 // Refresh em silêncio (não zera a lista). Só com sheet colapsado
                 // ou a cada 12s em background — evita “piscar” com a alça aberta.
