@@ -131,6 +131,7 @@ CREATE TABLE propostas (
     para_usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     carona_id INTEGER REFERENCES caronas(id) ON DELETE CASCADE,
     pedido_id INTEGER REFERENCES pedidos(id) ON DELETE CASCADE,
+    contato_id INTEGER REFERENCES contatos_motorista(id) ON DELETE SET NULL,
     selfie_url TEXT,
     selfie_lat NUMERIC(10,6),
     selfie_lng NUMERIC(10,6),

@@ -594,6 +594,9 @@ async function garantirColunasViagens() {
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_maps NUMERIC(10,2)");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_tela NUMERIC(10,2)");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS km_fonte VARCHAR(20)");
+    // Oferta a um contato ("quer carona"/buzina): guarda de qual contato veio, pra
+    // a viagem herdar embarque/destino do passageiro e desenhar a rota.
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS contato_id INTEGER");
   } catch (e) {
     console.warn("garantirColunasViagens:", e.message);
   }
@@ -2701,12 +2704,12 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
 
     const { rows } = await pool.query(
       `INSERT INTO propostas
-         (de_usuario_id, para_usuario_id, carona_id, pedido_id, mensagem,
+         (de_usuario_id, para_usuario_id, carona_id, pedido_id, contato_id, mensagem,
           selfie_url, selfie_lat, selfie_lng, selfie_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING *`,
       [
-        req.user.id, para_usuario_id, carona_id || null, pedido_id || null, mensagem || null,
+        req.user.id, para_usuario_id, carona_id || null, pedido_id || null, contato_id || null, mensagem || null,
         dadosSelfie.selfie_url || null, dadosSelfie.selfie_lat || null,
         dadosSelfie.selfie_lng || null, dadosSelfie.selfie_em || null,
       ]
@@ -2788,11 +2791,27 @@ async function criarViagemDaProposta(propostaId) {
     // passageiro pediu vaga: o embarque é a posição dele (selfie do pedido de vaga)
     embarque = { texto: "Embarque do passageiro", lat: pr.selfie_lat || car?.origem_lat, lng: pr.selfie_lng || car?.origem_lng };
     destino = { texto: car?.destino_texto, lat: car?.destino_lat, lng: car?.destino_lng };
-  } else {
+  } else if (pr.pedido_id) {
     motorista_id = pr.de_usuario_id; passageiro_id = pr.para_usuario_id;
     const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pr.pedido_id])).rows[0];
     embarque = { texto: ped?.origem_texto, lat: ped?.origem_lat, lng: ped?.origem_lng };
     destino = { texto: ped?.destino_texto, lat: ped?.destino_lat, lng: ped?.destino_lng };
+  } else {
+    // Motorista ofereceu a um contato ("quer carona"/buzina). Embarque e destino
+    // vêm do contato do passageiro — senão a viagem nasce sem coordenadas e a rota
+    // não é desenhada. Usa o contato_id gravado; cai no mais recente entre os dois
+    // como fallback (propostas antigas, sem a coluna).
+    motorista_id = pr.de_usuario_id; passageiro_id = pr.para_usuario_id;
+    const cont = pr.contato_id
+      ? (await pool.query("SELECT * FROM contatos_motorista WHERE id = $1", [pr.contato_id])).rows[0]
+      : (await pool.query(
+          `SELECT * FROM contatos_motorista
+           WHERE motorista_id = $1 AND passageiro_id = $2
+           ORDER BY created_at DESC LIMIT 1`,
+          [motorista_id, passageiro_id]
+        )).rows[0];
+    embarque = { texto: cont?.origem_texto, lat: cont?.origem_lat, lng: cont?.origem_lng };
+    destino = { texto: cont?.destino_texto, lat: cont?.destino_lat, lng: cont?.destino_lng };
   }
   const hab = await habilitacaoAtiva(motorista_id);
 

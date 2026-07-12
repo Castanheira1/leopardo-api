@@ -4673,8 +4673,10 @@
             } else {
                 hint = `Você está sendo levado para <strong>${esc(dest)}</strong>`;
             }
-            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>'
-                + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`);
+            // Sem "Cancelar viagem" pro passageiro: um cancelamento acidental dele,
+            // já embarcado e a caminho, perderia a medição de km que o admin usa.
+            // Só o motorista controla finalizar/cancelar.
+            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>';
         }
     }
     // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
