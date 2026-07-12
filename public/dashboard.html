@@ -3357,27 +3357,17 @@
         const R = 0.004 + Math.random() * 0.004;   // ~0,45–0,9 km em graus
         return { lat: st.origem.lat + Math.sin(ang) * R, lng: st.origem.lng + Math.cos(ang) * R * 1.25 };
     }
-    // Busca a rota (ruas) da posição atual até o destino e passa a andar por ela.
-    async function recomputarPathBolinha(st, destino, key) {
-        if (st.calculando) return;
-        st.calculando = true;
-        const partida = { ...st.pos };
-        try {
-            let path = null;
-            if (typeof calcularRotaServidor === 'function') {
-                const resp = await calcularRotaServidor(partida, destino).catch(() => null);
-                if (resp && Array.isArray(resp._path) && resp._path.length >= 2) path = resp._path;
-            }
-            if (!path) path = [partida, destino];   // sem Routes: segue reto
-            if (bolinha === st && chamandoPedidoId) {
-                st.path = path.map((p) => ({ lat: +p.lat, lng: +p.lng }));
-                st.segIdx = 0;
-                st.destino = { ...destino };
-                st.destKey = key;
-            }
-        } finally {
-            st.calculando = false;
-        }
+    // Caminho local até o destino, SEM consumir API de rotas: um "L" (vira uma
+    // esquina) — na malha urbana isso já dá a sensação de seguir ruas. Reseta o
+    // segmento pra 0, então cada alvo só recalcula uma vez (sem jitter).
+    function recomputarPathBolinha(st, destino, key) {
+        const a = { ...st.pos };
+        const b = { lat: +destino.lat, lng: +destino.lng };
+        const corner = Math.random() < 0.5 ? { lat: a.lat, lng: b.lng } : { lat: b.lat, lng: a.lng };
+        st.path = [a, corner, b];
+        st.segIdx = 0;
+        st.destino = b;
+        st.destKey = key;
     }
     // Anda "dt" ms pela rota atual, seguindo os segmentos de rua.
     function avancarNaPath(st, dt) {
