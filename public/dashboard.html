@@ -247,13 +247,11 @@
                         <div class="acao-sheet-footer">
                             <!-- Botão real (oculto): mantém o guard de duplo-envio de travarBotao('btnCtaOferecer'). -->
                             <button id="btnCtaOferecer" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="toggleModoMotoristaOnline()" style="display:none;">Ficar online</button>
-                            <div id="slideOferecer" class="slide-confirm" role="button" tabindex="0" aria-label="Deslize para ficar online">
-                                <div class="slide-fill"></div>
+                            <div id="slideOferecer" class="slide-toggle" role="switch" aria-checked="false" tabindex="0" aria-label="Alternar online e offline">
+                                <span class="slide-state" id="slideOferecerLabel">Offline</span>
                                 <div class="slide-knob" id="slideOferecerKnob">
                                     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>
                                 </div>
-                                <span class="slide-label" id="slideOferecerLabel">Arrasta para ficar Online</span>
-                                <span class="slide-arrows" aria-hidden="true">›››</span>
                             </div>
                         </div>
                     </div>
@@ -2379,7 +2377,7 @@
         initOfePromise = (async () => {
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, onDestinoMotorista);
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
-            initSlideConfirm(document.getElementById('slideOferecer'), document.getElementById('slideOferecerKnob'), toggleModoMotoristaOnline);
+            initSlideToggle(document.getElementById('slideOferecer'), document.getElementById('slideOferecerKnob'), toggleModoMotoristaOnline);
             expandirSheetAcao('oferecer');
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
@@ -3799,28 +3797,21 @@
         }
     }
 
-    // Botão de correr (slide-to-confirm): arrasta o knob até o fim p/ confirmar.
-    // Robusto a interrupções (pointercancel/blur/aba oculta) — não trava.
-    function initSlideConfirm(track, knob, onConfirm) {
+    // Toggle deslizante: UM botão. Knob à esquerda = offline, à direita = online.
+    // Arraste (ou toque) o knob p/ o outro lado e ele FICA lá. Chama onToggle()
+    // quando muda de lado. Robusto a interrupções (pointercancel/blur/aba oculta).
+    function initSlideToggle(track, knob, onToggle) {
         if (!track || !knob || track._slideReady) return;
         track._slideReady = true;
-        const fill = track.querySelector('.slide-fill');
-        let dragging = false, startX = 0, x = 0, max = 0, pid = null;
+        let dragging = false, startX = 0, moved = 0, startLeft = 0, max = 0, pid = null;
         const maxX = () => Math.max(0, track.clientWidth - knob.offsetWidth - 10);
-        const setX = (v) => {
-            x = Math.min(max, Math.max(0, v));
-            knob.style.left = (5 + x) + 'px';
-            if (fill) fill.style.width = (x + knob.offsetWidth) + 'px';
-        };
-        const reset = () => {
-            track.classList.remove('dragging');
-            knob.style.left = ''; x = 0;
-            if (fill) fill.style.width = '0';
-        };
+        const ligado = () => track.classList.contains('online');
+        const posAtual = () => (ligado() ? maxX() : 0);
         const down = (e) => {
             if (track.classList.contains('processing')) return;
-            dragging = true; max = maxX();
+            dragging = true; moved = 0; max = maxX();
             startX = (e.touches ? e.touches[0].clientX : e.clientX);
+            startLeft = posAtual();
             track.classList.add('dragging');
             pid = e.pointerId;
             if (pid != null && knob.setPointerCapture) { try { knob.setPointerCapture(pid); } catch (_) {} }
@@ -3828,27 +3819,36 @@
         const move = (e) => {
             if (!dragging) return;
             const cx = (e.touches ? e.touches[0].clientX : e.clientX);
-            setX(cx - startX);
+            moved = cx - startX;
+            const v = Math.min(max, Math.max(0, startLeft + moved));
+            knob.style.left = (5 + v) + 'px';
             if (e.cancelable) e.preventDefault();
         };
-        const up = async () => {
+        const finalizar = async (irParaDireita) => {
+            const querLigar = irParaDireita;
+            const flip = querLigar !== ligado();
+            track.classList.remove('dragging');
+            if (!flip) { knob.style.left = ''; return; }   // volta pro lado atual (transição CSS)
+            // Otimista: prende o knob no lado alvo enquanto a ação roda.
+            knob.style.left = querLigar ? (5 + maxX()) + 'px' : '5px';
+            track.classList.add('processing');
+            try { await onToggle(); } catch (_) {}
+            track.classList.remove('processing');
+            knob.style.left = '';   // estado real definido em atualizarUiMotoristaOnline()
+        };
+        const up = () => {
             if (!dragging) return;
             dragging = false;
-            const confirmar = max > 0 && x >= max * 0.85;
-            if (confirmar) {
-                setX(max);
-                track.classList.add('processing');
-                try { await onConfirm(); } catch (_) {}
-                track.classList.remove('processing');
-            }
-            reset();
+            const v = Math.min(max, Math.max(0, startLeft + moved));
+            // Toque (quase sem arrasto) inverte; arrasto decide pelo lado onde soltou.
+            const irDireita = Math.abs(moved) < 6 ? !ligado() : (v >= max / 2);
+            finalizar(irDireita);
         };
-        const cancel = () => { if (!dragging) return; dragging = false; reset(); };
+        const cancel = () => { if (!dragging) return; dragging = false; track.classList.remove('dragging'); knob.style.left = ''; };
         knob.addEventListener('pointerdown', down);
         knob.addEventListener('pointermove', move);
         knob.addEventListener('pointerup', up);
         knob.addEventListener('pointercancel', cancel);
-        // Fallback p/ navegadores sem Pointer Events.
         if (!window.PointerEvent) {
             knob.addEventListener('touchstart', down, { passive: true });
             knob.addEventListener('touchmove', move, { passive: false });
@@ -3862,7 +3862,7 @@
         document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
         track.addEventListener('keydown', (e) => {
             if ((e.key === 'Enter' || e.key === ' ') && !track.classList.contains('processing')) {
-                e.preventDefault(); onConfirm();
+                e.preventDefault(); finalizar(!ligado());
             }
         });
     }
@@ -3882,18 +3882,16 @@
             btn.classList.toggle('btn-primary', !motoristaOnlineModo);
             btn.disabled = false;
         }
-        // Botão deslizante: verde/"ficar online" offline, dourado/"confirmar offline" online.
+        // Toggle deslizante: knob à esquerda=Offline, à direita=Online (e fica lá).
         const slide = document.getElementById('slideOferecer');
         const slideLabel = document.getElementById('slideOferecerLabel');
         if (slide) {
             slide.classList.toggle('online', motoristaOnlineModo);
-            slide.setAttribute('aria-label', motoristaOnlineModo ? 'Deslize para confirmar offline' : 'Deslize para ficar online');
+            slide.setAttribute('aria-checked', motoristaOnlineModo ? 'true' : 'false');
             const k = document.getElementById('slideOferecerKnob');
-            if (k) k.style.left = '';
-            const f = slide.querySelector('.slide-fill');
-            if (f) f.style.width = '0';
+            if (k) k.style.left = '';   // posição final vem do CSS (.online)
         }
-        if (slideLabel) slideLabel.textContent = motoristaOnlineModo ? 'Arrasta para confirmar Offline' : 'Arrasta para ficar Online';
+        if (slideLabel) slideLabel.textContent = motoristaOnlineModo ? 'Online' : 'Offline';
         // Vagas ficam editáveis só offline; online o valor já foi publicado.
         if (vagasWrap) vagasWrap.style.display = motoristaOnlineModo ? 'none' : '';
         if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
