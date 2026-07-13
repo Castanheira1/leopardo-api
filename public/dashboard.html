@@ -1389,7 +1389,18 @@
         const alc = document.getElementById('alcanceOfeWrap');
         if (alc) alc.style.display = visivel ? 'block' : 'none';
         if (typeof atualizarRaioCarro === 'function') atualizarRaioCarro();
+        if (visivel) agendarDescerSheet(); else cancelarDescerSheet();
     }
+    // Se o motorista não mexer na barra em ~10 s, desce a alça (colapsa) sozinho.
+    let _alcanceIdleTimer = null;
+    function agendarDescerSheet() {
+        clearTimeout(_alcanceIdleTimer);
+        _alcanceIdleTimer = setTimeout(() => {
+            const sheet = document.getElementById('acaoSheetOfe');
+            if (sheet && !sheet.classList.contains('collapsed') && raioCircle) ajustarMapaAoRaio();
+        }, 10000);
+    }
+    function cancelarDescerSheet() { clearTimeout(_alcanceIdleTimer); }
     /* -------- alcance ajustável da vaga com destino (barra 1–25 km) -------- */
     function lerAlcanceOfe() {
         const el = document.getElementById('alcanceOfe');
@@ -1406,6 +1417,7 @@
     }
     let _alcanceTimer = null;
     function onAlcanceInput(v) {
+        cancelarDescerSheet();   // mexeu na barra: o onchange cuida de descer
         const km = Math.min(25, Math.max(1, Math.round(+v) || 10));
         localStorage.setItem('alcanceOfeKm', km);
         const lab = document.getElementById('alcanceOfeVal');
@@ -3964,27 +3976,17 @@
         if (st) {
             const tit = st.querySelector('.ios-banner__title');
             const sub = st.querySelector('.ios-banner__sub');
-            const dest = selOfe && selOfe.getDestino ? selOfe.getDestino() : null;
-            if (!motoristaOnlineModo) {
+            // Com destino a barra de alcance já diz tudo — some com o box redundante.
+            if (!motoristaOnlineModo || motoristaModoDestino) {
                 st.style.display = 'none';
             } else {
                 st.style.display = 'flex';
-                st.classList.toggle('ios-banner--destino', !!motoristaModoDestino);
-                st.classList.toggle('ios-banner--amarelo', !motoristaModoDestino);
-                if (motoristaModoDestino) {
-                    if (tit) tit.textContent = 'Online com destino';
-                    if (sub) {
-                        sub.style.display = '';
-                        sub.textContent = dest?.texto
-                            ? (dest.texto + ` · passageiros veem sua rota (até ${lerAlcanceOfe()} km)`)
-                            : `Passageiros veem sua rota (até ${lerAlcanceOfe()} km)`;
-                    }
-                } else {
-                    if (tit) tit.textContent = 'Recebendo todas as chamadas';
-                    if (sub) {
-                        sub.style.display = '';
-                        sub.textContent = 'Visível para quem pediu carona perto de você (até 600 m)';
-                    }
+                st.classList.remove('ios-banner--destino');
+                st.classList.add('ios-banner--amarelo');
+                if (tit) tit.textContent = 'Recebendo todas as chamadas';
+                if (sub) {
+                    sub.style.display = '';
+                    sub.textContent = 'Visível para quem pediu carona perto de você (até 600 m)';
                 }
             }
         }
@@ -4128,8 +4130,9 @@
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_destino', { vagas, destino: dest.texto || null });
-            msg(`Online com destino. Visível em até ${lerAlcanceOfe()} km nessa direção.`);
-            document.getElementById('acaoSheetOfe').classList.add('collapsed');
+            // Não colapsa na hora: deixa a barra de alcance à mão. Se não mexerem em
+            // ~10 s, agendarDescerSheet() (via barra visível) baixa a alça sozinho.
+            agendarDescerSheet();
         } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
         finally {
             soltar();
@@ -4817,7 +4820,8 @@
         if (paradaMotEarly && destino && distKmGps(paradaMotEarly, destino) > 0.12) {
             criarMarcador({ position: paradaMotEarly, map, cor: '#9aa0a6', title: paradaMotTxtEarly });
         }
-        if (destino) criarMarcador({ position: destino, map, cor: '#EAD298', title: destTitulo });
+        // Destino da viagem: bandeira quadriculada (fica até concluir), nos dois lados.
+        if (destino) criarMarcador({ position: destino, map, icon: FLAG_ICON, iconW: 28, iconH: 30, title: destTitulo });
 
         // Rota preta no mapa (dois lados). Parcial: preta até parada do motorista + dourada só o resto.
         const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 });
@@ -5597,10 +5601,9 @@
             item.extraChave = null;
             return;
         }
-        // Sem modal nesse carro: limpa linha (não gasta API).
-        const selId = carroSel && (carroSel.id != null ? carroSel.id : carroSel.motorista_id);
-        const itemId = item.m && item.m.id;
-        if (selId == null || itemId == null || String(selId) !== String(itemId)) {
+        // Flightradar: a linha só existe se o passageiro TOCOU no carro (rotaVisivel).
+        // Sem isso, só o carrinho + a bandeira do destino — evita N linhas no mapa.
+        if (!item.rotaVisivel) {
             if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
             if (item.rotaExtra) { item.rotaExtra.limpar(); item.rotaExtra = null; }
             item.rotaPath = null;
@@ -5651,24 +5654,12 @@
             try {
                 const o = selPed ? selPed.getOrigem() : null;
                 const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
-                // Sem destino do passageiro: não mostra carros (modo amarelo some do mapa).
-                if (!dest) {
-                    const removidos = Object.keys(fleet.markers);
-                    removidos.forEach((id) => {
-                        const it = fleet.markers[id];
-                        it.car.setMap(null);
-                        if (it.rotaCtrl) it.rotaCtrl.limpar();
-                        if (it.rotaExtra) it.rotaExtra.limpar();
-                        if (it.destinoMk) it.destinoMk.setMap(null);
-                        delete fleet.markers[id];
-                    });
-                    if (removidos.length) sincronizarModalCarroAoVivo([], removidos);
-                    return;
-                }
-                // Com destino: carros dourados (600 m) + brancos com rota (10 km).
                 const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
                 if (!r.ok) return;
-                const lista = await r.json();
+                let lista = await r.json();
+                // SEM destino do passageiro: mostra só quem tem ROTA publicada (carro +
+                // bandeira no destino). COM destino: mostra todos (inclui amarelos 600 m).
+                if (!dest) lista = (Array.isArray(lista) ? lista : []).filter((m) => m.carona_id);
                 if (o && dest) {
                     // Fila/ordem muda devagar: consulta a rota a cada ~9 s e reusa entre ticks.
                     const agora = Date.now();
@@ -5708,44 +5699,34 @@
                         const prev = item.lastPos;
                         atualizarPosicaoCarro(item.car, pos, prev);
                         item.lastPos = pos;
-                        if (destCarona) {
-                            atualizarRotaFrota(item, map, pos, destCarona);
-                        } else if (item.rotaCtrl || item.rotaExtra || item.destinoMk) {
-                            if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
-                            if (item.rotaExtra) { item.rotaExtra.limpar(); item.rotaExtra = null; }
-                            if (item.destinoMk) { item.destinoMk.setMap(null); item.destinoMk = null; }
-                            item.rotaPath = null;
-                            item.extraChave = null;
-                        }
+                        // Só redesenha a linha se estiver alternada (rotaVisivel); senão limpa.
+                        atualizarRotaFrota(item, map, pos, destCarona);
                     } else {
-                        const iconVariant = 'gold';
                         const car = criarMarcador({
                             position: pos, map,
-                            iconW: 30, iconH: 40, iconVariant,
+                            iconW: 30, iconH: 40, iconVariant: 'gold',
                             badge: seloFilaCarro(m),
                             title: m.nome + (m.placa ? ' • ' + m.placa : '')
                                 + (m.carona_id && m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
                         });
-                        // Método único = botão "Solicitar carona". Clicar no carro não
-                        // abre mais tela de escolha/contato; só leva a lista à vista.
-                        const abrir = () => {
-                            const cont = document.getElementById('motoristasDestinoWrap');
-                            if (cont) cont.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        };
-                        car.addListener('click', abrir);
-                        // Rota real (ruas) só para carona publicada (nunca modo amarelo).
-                        let destinoMk = null;
                         const novo = { m, car, rotaCtrl: null, rotaExtra: null, destinoMk: null, lastPos: pos,
-                            rotaPath: null, rotaCalculando: false, extraChave: null, extraCalculando: false };
+                            rotaPath: null, rotaCalculando: false, extraChave: null, extraCalculando: false,
+                            rotaVisivel: false };
                         fleet.markers[m.id] = novo;
+                        // Flightradar: toca no carro (ou na bandeira) → mostra a linha da
+                        // rota; toca de novo → apaga. Nada de rota automática.
+                        const toggleRota = () => {
+                            novo.rotaVisivel = !novo.rotaVisivel;
+                            atualizarRotaFrota(novo, map, novo.lastPos, destinoPublicadoCarro(novo.m));
+                        };
+                        car.addListener('click', toggleRota);
                         if (destCarona) {
-                            destinoMk = criarMarcador({
-                                position: destCarona, map, cor: '#EAD298',
+                            const destinoMk = criarMarcador({
+                                position: destCarona, map, icon: FLAG_ICON, iconW: 28, iconH: 30,
                                 title: 'Destino: ' + (m.destino_texto || ''),
                             });
-                            destinoMk.addListener('click', abrir);
+                            destinoMk.addListener('click', toggleRota);
                             novo.destinoMk = destinoMk;
-                            atualizarRotaFrota(novo, map, pos, destCarona);
                         }
                     }
                 });
@@ -5776,6 +5757,8 @@
     // mapa do MOTORISTA que ali tem alguém pedindo carona.
     const SVG_BANDEIRA_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#fff" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg>';
     const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true">' + SVG_BANDEIRA_SVG + '</span>';
+    // Bandeira quadriculada como ícone de mapa (destino publicado / destino da viagem).
+    const FLAG_ICON = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_BANDEIRA_SVG);
     function montarConteudoPulse(sexo, titulo, rotulo, comBandeira) {
         const cor = sexo === 'F' ? '#ff2f92' : sexo === 'M' ? '#3d8bff' : '#b0b6bf';
         const d = document.createElement('div');
