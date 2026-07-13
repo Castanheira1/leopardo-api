@@ -1429,13 +1429,18 @@
         if (!raioCircle || !selOfe || !selOfe.map || !g || !g.maps) return;
         const bounds = raioCircle.getBounds && raioCircle.getBounds();
         if (!bounds) return;
+        const map = selOfe.map;
         const sheet = document.getElementById('acaoSheetOfe');
         if (sheet) sheet.classList.add('collapsed');   // baixa o sheet -> mapa maior
-        // Espera o mapa reassentar (sheet colapsou) e enquadra o círculo com o
-        // MAIOR zoom que ainda mostra ele inteiro. Padding: busca no topo + alça.
+        // Zoom fracionário: sem isto o Maps (raster) arredonda pra um nível inteiro
+        // pra baixo e sobra quase o dobro de folga — o círculo ficava pequeno. Com
+        // fracionário + padding curto, ele enche a tela e encosta sem estourar.
+        try { map.setOptions({ isFractionalZoomEnabled: true }); } catch (_) {}
+        // Espera o mapa reassentar (sheet colapsou) e enquadra o círculo no MAIOR
+        // zoom possível. Padding só p/ não sumir atrás da busca (topo) e da alça.
         setTimeout(() => {
-            g.maps.event.trigger(selOfe.map, 'resize');
-            selOfe.map.fitBounds(bounds, { top: 72, bottom: 80, left: 30, right: 30 });
+            g.maps.event.trigger(map, 'resize');
+            map.fitBounds(bounds, { top: 62, bottom: 54, left: 10, right: 10 });
         }, 90);
     }
     function limparDestinoPassageiro() {
