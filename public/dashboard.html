@@ -1388,6 +1388,7 @@
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
         const alc = document.getElementById('alcanceOfeWrap');
         if (alc) alc.style.display = visivel ? 'block' : 'none';
+        if (typeof atualizarRaioCarro === 'function') atualizarRaioCarro();
     }
     /* -------- alcance ajustável da vaga com destino (barra 1–25 km) -------- */
     function lerAlcanceOfe() {
@@ -1409,6 +1410,7 @@
         localStorage.setItem('alcanceOfeKm', km);
         const lab = document.getElementById('alcanceOfeVal');
         if (lab) lab.textContent = km + ' km';
+        atualizarRaioCarro();   // redimensiona o círculo do alcance
         if (motoristaOnlineModo) atualizarUiMotoristaOnline();   // atualiza "(até X km)"
         // Já online com carona: aplica ao vivo (debounced), sem recriar a carona.
         if (motoristaModoDestino && motoristaCaronaId) {
@@ -6456,6 +6458,29 @@
     // passado (ex.: mkOrigem do criarSeletor), reutiliza o mesmo ícone — evita dois
     // carrinhos no mesmo GPS com rotações diferentes (efeito "hélice").
     let selfCar = { marker: null, timer: null, watchId: null, lastPos: null, emprestado: false };
+    // Círculo do alcance (só o motorista vê): raio = barra, centrado no carro e
+    // acompanha ele. Aparece quando há destino marcado no mapa de oferecer.
+    let raioCircle = null;
+    function atualizarRaioCarro() {
+        const map = selOfe && selOfe.map;
+        if (!map || !g || !g.maps) return;
+        const temDest = !!(selOfe.getDestino && selOfe.getDestino());
+        const pos = selfCar.lastPos
+            || (selOfe.origemConfiavel && selOfe.origemConfiavel() && selOfe.getOrigem ? selOfe.getOrigem() : null);
+        if (!temDest || !pos) { if (raioCircle) raioCircle.setMap(null); return; }
+        const raioM = lerAlcanceOfe() * 1000;
+        if (!raioCircle) {
+            raioCircle = new g.maps.Circle({
+                map, center: pos, radius: raioM,
+                strokeColor: '#EAD298', strokeOpacity: 0.9, strokeWeight: 2,
+                fillColor: '#EAD298', fillOpacity: 0.08, clickable: false, zIndex: 1,
+            });
+        } else {
+            raioCircle.setMap(map);
+            raioCircle.setCenter(pos);
+            raioCircle.setRadius(raioM);
+        }
+    }
     function acompanharProprioCarro(map, marcadorEmprestado) {
         if (selfCar.watchId != null) navigator.geolocation.clearWatch(selfCar.watchId);
         if (selfCar.timer) clearInterval(selfCar.timer);
@@ -6478,6 +6503,7 @@
                 selfCar.emprestado = false;
             }
             selfCar.lastPos = pos;
+            atualizarRaioCarro();   // círculo do alcance segue o carro
         }
         selfCar.watchId = navigator.geolocation.watchPosition(
             (p) => aplicarPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
