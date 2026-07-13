@@ -230,7 +230,7 @@
                                 <span id="alcanceOfeVal" class="alcance-val">10 km</span>
                             </div>
                             <input type="range" id="alcanceOfe" class="alcance-range" min="1" max="25" step="1" value="10"
-                                   aria-label="Alcance em quilômetros" oninput="onAlcanceInput(this.value)">
+                                   aria-label="Alcance em quilômetros" oninput="onAlcanceInput(this.value)" onchange="onAlcanceChange(this.value)">
                             <div class="alcance-hint">Passageiros até essa distância veem sua rota — e você recebe os pedidos deles.</div>
                         </div>
                         <div class="acao-sheet-body">
@@ -1419,6 +1419,24 @@
                 fetchWithAuth('/api/caronas/raio', { method: 'POST', body: JSON.stringify({ raio_km: km }) }).catch(() => {});
             }, 500);
         }
+    }
+    // Ao SOLTAR a barra: colapsa o sheet e dá zoom pra caber o círculo inteiro.
+    function onAlcanceChange(v) {
+        onAlcanceInput(v);
+        ajustarMapaAoRaio();
+    }
+    function ajustarMapaAoRaio() {
+        if (!raioCircle || !selOfe || !selOfe.map || !g || !g.maps) return;
+        const bounds = raioCircle.getBounds && raioCircle.getBounds();
+        if (!bounds) return;
+        const sheet = document.getElementById('acaoSheetOfe');
+        if (sheet) sheet.classList.add('collapsed');   // baixa o sheet -> mapa maior
+        // Espera o mapa reassentar (sheet colapsou) e enquadra o círculo com o
+        // MAIOR zoom que ainda mostra ele inteiro. Padding: busca no topo + alça.
+        setTimeout(() => {
+            g.maps.event.trigger(selOfe.map, 'resize');
+            selOfe.map.fitBounds(bounds, { top: 72, bottom: 80, left: 30, right: 30 });
+        }, 90);
     }
     function limparDestinoPassageiro() {
         if (carroSel) fecharCarro();
