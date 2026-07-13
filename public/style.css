@@ -1502,6 +1502,31 @@ body.theme-dark {
     color: #fff;
 }
 .drv-btn--whats:active { background: #0e7368; }
+/* Ícone discreto do WhatsApp (card da vaga / perfil com CTA) */
+.whats-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(37, 211, 102, 0.35);
+    background: rgba(18, 140, 126, 0.14);
+    color: #25D366;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.whats-mini:active { background: rgba(18, 140, 126, 0.3); }
+.ride-card__head .whats-mini { align-self: center; margin-left: 4px; }
+.drv-whats-discreto {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 2px 0 4px;
+}
+.drv-whats-hint { font-size: 0.78rem; color: #9aa0a6; }
 .drv-contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .drv-privacy {
     margin: 10px 0 2px;

@@ -933,6 +933,29 @@
         clearTimeout(window._msgTimer);
         window._msgTimer = setTimeout(() => { m.style.display = 'none'; }, ms);
     }
+    // Notificação estilo iPhone: desce do topo, frosted, com ícone do app e some
+    // sozinha (ou ao toque). status: 'on' (verde) | 'off' (cinza) | null.
+    function notificarTopo(titulo, corpo, opts = {}) {
+        document.querySelectorAll('.notif-topo').forEach((n) => { clearTimeout(n._t); n.remove(); });
+        const el = document.createElement('div');
+        el.className = 'notif-topo';
+        const dot = opts.status ? `<span class="notif-dot ${opts.status === 'on' ? 'on' : 'off'}"></span>` : '';
+        el.innerHTML = `<div class="notif-ico"><img src="logo-vap.png" alt="VAP" onerror="this.style.display='none'">${dot}</div>`
+            + `<div class="notif-corpo"><div class="notif-tit">${esc(titulo)}</div>`
+            + (corpo ? `<div class="notif-sub">${esc(corpo)}</div>` : '') + `</div>`;
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('show'));
+        const fechar = () => {
+            clearTimeout(el._t);
+            el.classList.remove('show');
+            el.classList.add('hide');
+            setTimeout(() => el.remove(), 340);
+        };
+        el.addEventListener('click', fechar);
+        el._t = setTimeout(fechar, opts.ms || 4200);
+        if (navigator.vibrate) { try { navigator.vibrate(12); } catch (_) {} }
+        return el;
+    }
     function atualizarHintDestinoPed() {
         const hint = document.getElementById('hintEscolherDestino');
         const dest = selPed?.getDestino?.();
@@ -2870,6 +2893,11 @@
             </div>
         </div>`;
     }
+    // Ícone discreto do WhatsApp (canal direto sem ocupar a tela).
+    function btnWhatsDiscreto(id) {
+        return `<button type="button" class="whats-mini" title="Chamar no WhatsApp" aria-label="WhatsApp"
+            onclick="event.stopPropagation();whatsappMotorista(${id})">${ICN.whats}</button>`;
+    }
     function botoesContatoPerfil(id) {
         return `<div class="drv-contact-wrap" role="group" aria-label="Falar com motorista">
             <button type="button" class="drv-btn drv-btn--whats" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
@@ -2935,6 +2963,7 @@
                     <div class="ride-card__route">${linha}</div>
                     ${distLinha}
                 </div>
+                ${btnWhatsDiscreto(it.id)}
             </div>
         </article>`;
     }
@@ -3773,8 +3802,12 @@
             btnPedir.style.display = mostrarSolicitar ? 'block' : 'none';
             btnPedir.textContent = labelSolicitar;
         }
+        // WhatsApp sempre presente: botões completos sem CTA; com CTA "Solicitar
+        // vaga", fica só o ícone discreto do WhatsApp ao lado do botão.
         document.getElementById('carroContatos').innerHTML =
-            (!temRota || parcial || proximo) ? botoesContatoPerfil(m.id) : '';
+            (!temRota || parcial || proximo)
+                ? botoesContatoPerfil(m.id)
+                : `<div class="drv-whats-discreto">${btnWhatsDiscreto(m.id)}<span class="drv-whats-hint">Combinar pelo WhatsApp</span></div>`;
         document.getElementById('modalCarro').style.display = 'flex';
     }
     function fecharCarro() {
@@ -5126,9 +5159,10 @@
                 atualizarPosicaoCarro(vv.carMarker, vv.posMotorista, prev);
                 vv.carPosAnterior = { ...vv.posMotorista };
             } else {
+                // Carona aceita: carro laranja com preto (não mais o de partes brancas).
                 vv.carMarker = criarMarcador({
                     position: vv.posMotorista, map: vv.map,
-                    iconW: 30, iconH: 40, iconVariant: 'gold', title: 'Motorista', zIndex: 999,
+                    iconW: 30, iconH: 40, iconVariant: 'laranja', title: 'Motorista', zIndex: 999,
                 });
                 vv.carPosAnterior = { ...vv.posMotorista };
             }

@@ -661,21 +661,23 @@ function carregarMaps() {
 function carSvgPaths(variant = 'gold') {
     const gid = 'vap-car-body-' + variant;
     const preta = variant === 'black' || variant === 'dark';
-    // Mostarda da foto / preto legado
-    const body = preta ? '#2e333b' : '#E4B429';
-    const bodyEdge = preta ? '#0e1116' : '#C9921A';
-    const stroke = preta ? '#000000' : '#8A6A12';
-    const glass = preta ? '#0c1015' : '#2C2C2E';
-    const glassSide = preta ? '#15181d' : '#3A3A3C';
-    const roof = preta ? '#1e2023' : '#D9A61F';
-    const bed = preta ? '#12151a' : '#1C1C1E';
-    const detail = preta ? '#0a0c0f' : '#B88918';
+    const laranja = variant === 'laranja' || variant === 'orange';
+    // Mostarda da foto / preto legado / laranja com preto (carona aceita)
+    const body = preta ? '#2e333b' : laranja ? '#E8641B' : '#E4B429';
+    const bodyEdge = preta ? '#0e1116' : laranja ? '#B84A0D' : '#C9921A';
+    const stroke = preta ? '#000000' : laranja ? '#161616' : '#8A6A12';
+    const glass = preta ? '#0c1015' : laranja ? '#121417' : '#2C2C2E';
+    const glassSide = preta ? '#15181d' : laranja ? '#1b1e23' : '#3A3A3C';
+    const roof = preta ? '#1e2023' : laranja ? '#D4560F' : '#D9A61F';
+    const bed = preta ? '#12151a' : laranja ? '#101214' : '#1C1C1E';
+    const detail = preta ? '#0a0c0f' : laranja ? '#8F3A08' : '#B88918';
     const tire = '#15181b';
-    const mirror = preta ? '#15181d' : '#1A1A1A';
-    const head = preta ? '#d8dde3' : '#F0F0F2';
-    const grille = preta ? '#0a0c0f' : '#2A2A2A';
+    const mirror = preta ? '#15181d' : laranja ? '#141414' : '#1A1A1A';
+    // Laranja: farol âmbar (sem branco) — "menos branco" no carro da viagem.
+    const head = preta ? '#d8dde3' : laranja ? '#F2A93B' : '#F0F0F2';
+    const grille = preta ? '#0a0c0f' : laranja ? '#141414' : '#2A2A2A';
     const tail = '#e03131';
-    const shine = preta ? '0.08' : '0.22';
+    const shine = preta ? '0.08' : laranja ? '0.06' : '0.22';
 
     return `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
         + `<stop offset="0" stop-color="${bodyEdge}"/><stop offset="0.22" stop-color="${body}"/>`
@@ -699,13 +701,13 @@ function carSvgPaths(variant = 'gold') {
         + `<ellipse cx="24" cy="9.4" rx="7.2" ry="2" fill="#ffffff" opacity="${shine}"/>`
         // para-brisa
         + `<path d="M13.8 14.2 C17.6 12.1 30.4 12.1 34.2 14.2 L35 21.8 C28.4 20.2 19.6 20.2 13 21.8 Z" fill="${glass}"/>`
-        + `<path d="M16.2 14.8 C19.2 13.5 24.4 13.3 27.4 14 L15.6 20.4 C15.1 19.5 15 18.2 15.3 17 Z" fill="#ffffff" opacity="0.12"/>`
+        + `<path d="M16.2 14.8 C19.2 13.5 24.4 13.3 27.4 14 L15.6 20.4 C15.1 19.5 15 18.2 15.3 17 Z" fill="#ffffff" opacity="${laranja ? '0.05' : '0.12'}"/>`
         // retrovisores
         + `<path d="M9.6 16.4 C7.7 15.7 6.5 16.5 6.8 17.9 C7.1 19.1 8.6 19.5 10.2 18.8 Z" fill="${mirror}"/>`
         + `<path d="M38.4 16.4 C40.3 15.7 41.5 16.5 41.2 17.9 C40.9 19.1 39.4 19.5 37.8 18.8 Z" fill="${mirror}"/>`
         // teto da cabine (amarelo / escuro — NÃO vidro inteiro)
         + `<path d="M13.4 22.6 C19.2 20.9 28.8 20.9 34.6 22.6 L33.8 34.8 C28.4 33.5 19.6 33.5 14.2 34.8 Z" fill="${roof}"/>`
-        + `<ellipse cx="24" cy="26" rx="6.2" ry="1.5" fill="#ffffff" opacity="${preta ? '0.05' : '0.14'}"/>`
+        + `<ellipse cx="24" cy="26" rx="6.2" ry="1.5" fill="#ffffff" opacity="${(preta || laranja) ? '0.05' : '0.14'}"/>`
         // vidros laterais das portas
         + `<path d="M11.5 23.8 C12.4 23.3 13.3 23.2 14 23.5 L13.6 33.2 C12.8 33.6 11.9 33.7 11.3 33.3 Z" fill="${glassSide}"/>`
         + `<path d="M36.5 23.8 C35.6 23.3 34.7 23.2 34 23.5 L34.4 33.2 C35.2 33.6 36.1 33.7 36.7 33.3 Z" fill="${glassSide}"/>`
