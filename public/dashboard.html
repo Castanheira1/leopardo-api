@@ -2116,7 +2116,7 @@
         let pulseOrigem = null;
         if (!comoCarro) {
             try {
-                pulseOrigem = criarPulse(map, origem, user.sexo, null, 'Você');
+                pulseOrigem = criarPulse(map, origem, user.sexo, null, 'Você', null, true);
             } catch (_) { /* sem pulso: segue só com o marcador */ }
         }
         // Primeiro fix do GPS: chega e posiciona (o mapa já está carregando desde
@@ -2734,7 +2734,10 @@
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
                 horario: horarioEnviar, pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
-                usar_fila: true,   // chama os motoristas da rota um de cada vez, mais perto primeiro
+                // Broadcast (não fila sequencial): o pedido vira PULSO (bandeira dourada)
+                // no mapa dos motoristas próximos e qualquer um pode aceitar — estilo
+                // Flightradar. A fila escondia o pedido do mapa e só oferecia 1 a 1.
+                usar_fila: false,
             };
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
@@ -5756,8 +5759,11 @@
     // Bandeirinha quadriculada (chegada/pedido): mostra no pulso do passageiro no
     // mapa do MOTORISTA que ali tem alguém pedindo carona.
     const SVG_BANDEIRA_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#fff" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg>';
-    const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true">' + SVG_BANDEIRA_SVG + '</span>';
-    // Bandeira quadriculada como ícone de mapa (destino publicado / destino da viagem).
+    // Variante DOURADA+PRETA: pulso do PEDIDO do passageiro (o "botão pulsante").
+    const SVG_BANDEIRA_OURO_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#EAD298" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg>';
+    // No pulso do passageiro a bandeira é dourada+preta (pedido); o destino usa a preta+branca.
+    const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true">' + SVG_BANDEIRA_OURO_SVG + '</span>';
+    // Bandeira quadriculada (preta+branca) como ícone de mapa: DESTINO da rota/viagem.
     const FLAG_ICON = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_BANDEIRA_SVG);
     function montarConteudoPulse(sexo, titulo, rotulo, comBandeira) {
         const cor = sexo === 'F' ? '#ff2f92' : sexo === 'M' ? '#3d8bff' : '#b0b6bf';
