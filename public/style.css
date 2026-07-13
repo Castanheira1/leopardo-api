@@ -507,6 +507,12 @@ body {
 .ios-banner--amarelo .ios-banner__body {
     justify-content: center;
 }
+/* Status do motorista online: pill neutro centralizado (igual ao modelo) */
+#statusMotoristaOnline { text-align: center; margin-bottom: 12px; }
+#statusMotoristaOnline .ios-banner__icon { display: none; }
+#statusMotoristaOnline .ios-banner__body { align-items: center; gap: 3px; }
+#statusMotoristaOnline .ios-banner__title { font-size: 0.98rem; font-weight: 700; }
+#statusMotoristaOnline .ios-banner__sub { font-size: 0.8rem; }
 .ios-banner--amarelo .ios-banner__title {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     font-size: 0.9rem;
@@ -875,6 +881,82 @@ html.teclado-aberto {
     box-shadow: 0 8px 22px rgba(234, 210, 152, 0.28);
     touch-action: manipulation;
 }
+/* ===== Botão deslizante (ficar online / confirmar offline) ===== */
+.slide-confirm {
+    position: relative;
+    height: 62px;
+    max-width: 420px;
+    margin: 0 auto;
+    border-radius: 31px;
+    background: linear-gradient(90deg, #0f3d3e, #1f6f5c);   /* offline: verde "ir online" */
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+    outline: none;
+}
+.slide-confirm.online {
+    background: linear-gradient(90deg, #c19a4f, #ecd9a3);    /* online: dourado, confirmar offline */
+}
+.slide-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: rgba(255, 255, 255, 0.12);
+    pointer-events: none;
+}
+.slide-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px 0 60px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.98rem;
+    letter-spacing: -0.01em;
+    text-align: center;
+    pointer-events: none;
+}
+.slide-confirm.online .slide-label { color: #3a2d10; }
+.slide-arrows {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.15rem;
+    letter-spacing: 3px;
+    color: rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+    animation: slideArrows 1.4s ease-in-out infinite;
+}
+.slide-confirm.online .slide-arrows { color: rgba(58, 45, 16, 0.55); }
+@keyframes slideArrows { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.95; } }
+.slide-knob {
+    position: absolute;
+    left: 5px;
+    top: 5px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #161719;
+    color: #EAD298;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+    touch-action: none;
+    cursor: grab;
+    z-index: 2;
+    transition: left 0.18s ease;
+}
+.slide-knob:active { cursor: grabbing; }
+.slide-confirm.dragging .slide-knob { transition: none; }
+.slide-confirm.dragging .slide-label,
+.slide-confirm.dragging .slide-arrows { opacity: 0.2; }
+.slide-confirm.processing { opacity: 0.7; pointer-events: none; }
 .acao-sheet.teclado-aberto {
     max-height: calc(var(--appvh, 1vh) * 72);
     overflow: hidden;
