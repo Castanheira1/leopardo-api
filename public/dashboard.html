@@ -2734,7 +2734,10 @@
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
                 horario: horarioEnviar, pessoas: +document.getElementById('pessoasPed').value || 1,
                 selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
-                usar_fila: true,   // chama os motoristas da rota um de cada vez, mais perto primeiro
+                // Broadcast (não fila sequencial): o pedido vira PULSO (bandeira dourada)
+                // no mapa dos motoristas próximos e qualquer um pode aceitar — estilo
+                // Flightradar. A fila escondia o pedido do mapa e só oferecia 1 a 1.
+                usar_fila: false,
             };
             const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
