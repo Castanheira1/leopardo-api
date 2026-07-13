@@ -3874,7 +3874,7 @@
         const vagasEl = document.getElementById('vagasOfe');
         const hint = document.getElementById('hintMotoristaOnline');
         const tituloSheet = document.querySelector('#acaoSheetOfe .acao-titulo');
-        if (tituloSheet) tituloSheet.textContent = motoristaOnlineModo ? 'Você está online' : 'Ficar online';
+        if (tituloSheet) tituloSheet.textContent = motoristaOnlineModo ? '' : 'Ficar online';
         if (hint) hint.style.display = motoristaOnlineModo ? 'none' : '';
         if (btn) {
             btn.textContent = motoristaOnlineModo ? 'Ficar offline' : 'Ficar online';
@@ -3987,7 +3987,6 @@
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
-            msg('Você está online. Passageiros do mesmo projeto a até 600 m (com destino marcado) veem seu carro.');
         } catch (_) {
             msg('Erro de conexão. Tente novamente.', 'error');
         } finally {
@@ -4017,7 +4016,6 @@
         if (selOfe && selOfe.limparRota) selOfe.limparRota();
         atualizarIndicadorModoOperante();
         await liberarWakeLock();
-        if (!silencioso) msg('Você ficou offline.');
     }
 
     async function toggleModoMotoristaOnline() {
