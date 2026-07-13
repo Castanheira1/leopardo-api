@@ -1155,7 +1155,8 @@ function parseKmMedicao(val) {
 }
 
 // Escolhe a melhor medição disponível (GPS pós-embarque, Maps ou km acumulado na tela).
-function resolverKmMedicaoViagem(viagem, calcGps, kmMapsBody, kmTelaBody) {
+function resolverKmMedicaoViagem(viagem, calcGps, kmMapsBody, kmTelaBody, opts = {}) {
+  const noDestino = !!opts.noDestino;
   const maps = parseKmMedicao(kmMapsBody);
   const tela = parseKmMedicao(kmTelaBody);
   const candidatos = [];
@@ -1173,9 +1174,15 @@ function resolverKmMedicaoViagem(viagem, calcGps, kmMapsBody, kmTelaBody) {
   } else if (tela > 0) {
     candidatos.push({ km: tela, valido: false, prio: 1, fonte: "tela" });
   }
-  if (maps >= KM_MINIMO_VIAGEM) {
+  // km do Maps é rota PLANEJADA (vem do app): só entra como medição se algo
+  // independente confirmar o deslocamento — GPS/tela com movimento real ou o
+  // carro reconhecido no destino. Finalizar parado não conta km.
+  const mapsCorroborado = noDestino
+    || calcGps.kmBruto >= KM_MINIMO_VIAGEM * 0.4
+    || tela >= KM_MINIMO_VIAGEM * 0.4;
+  if (mapsCorroborado && maps >= KM_MINIMO_VIAGEM) {
     candidatos.push({ km: maps, valido: true, prio: 2, fonte: "maps" });
-  } else if (maps > 0) {
+  } else if (mapsCorroborado && maps > 0) {
     candidatos.push({ km: maps, valido: false, prio: 1, fonte: "maps" });
   }
 
@@ -1201,7 +1208,9 @@ function resolverKmMedicaoViagem(viagem, calcGps, kmMapsBody, kmTelaBody) {
     };
   }
 
-  if (viagem?.embarque_em && viagem.destino_lat != null && viagem.origem_lat != null) {
+  // Linha reta origem→destino: último recurso para GPS que falhou por completo,
+  // e só quando o carro chegou de fato no destino (senão parado contaria km).
+  if (noDestino && viagem?.embarque_em && viagem.destino_lat != null && viagem.origem_lat != null) {
     const linha = haversineKmCoord(
       +viagem.origem_lat, +viagem.origem_lng,
       +viagem.destino_lat, +viagem.destino_lng
@@ -4071,7 +4080,7 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
       console.error("calcularKmGpsViagem falhou (finalizar segue):", err?.message || err);
       return { km: 0, kmBruto: 0, valido: false };
     });
-    const med = resolverKmMedicaoViagem(v, calc, req.body?.km_maps, req.body?.km_tela);
+    const med = resolverKmMedicaoViagem(v, calc, req.body?.km_maps, req.body?.km_tela, { noDestino });
     if (!med.valido && noDestino && med.km > 0) {
       med.valido = med.km >= KM_MINIMO_VIAGEM;
     }

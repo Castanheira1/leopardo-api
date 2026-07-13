@@ -5500,7 +5500,12 @@
         }
         if (acompTimer) clearInterval(acompTimer);
         localStorage.removeItem('viagemAtiva');
-        const km_maps = Math.max(viagemView?.kmMapsPercorrido || 0, viagemView?.kmMapsRota || 0);
+        // Rota planejada (Maps) só vale se o carro chegou de fato perto do destino;
+        // finalizar sem sair do lugar conta apenas o que foi percorrido (zero).
+        const chegouDestino = viagemView?.kmMapsRestante != null && viagemView.kmMapsRestante <= 0.5;
+        const km_maps = chegouDestino
+            ? Math.max(viagemView?.kmMapsPercorrido || 0, viagemView?.kmMapsRota || 0)
+            : (viagemView?.kmMapsPercorrido || 0);
         const km_tela = Math.round((trackState?.kmTela || 0) * 100) / 100;
         const body = {};
         if (km_maps > 0) body.km_maps = Math.round(km_maps * 100) / 100;
