@@ -224,6 +224,15 @@
                         <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
                             <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar destino</button>
                         </div>
+                        <div id="alcanceOfeWrap" class="alcance-wrap" style="display:none;">
+                            <div class="alcance-top">
+                                <span class="alcance-label">Alcance da vaga</span>
+                                <span id="alcanceOfeVal" class="alcance-val">10 km</span>
+                            </div>
+                            <input type="range" id="alcanceOfe" class="alcance-range" min="1" max="25" step="1" value="10"
+                                   aria-label="Alcance em quilômetros" oninput="onAlcanceInput(this.value)">
+                            <div class="alcance-hint">Passageiros até essa distância veem sua rota — e você recebe os pedidos deles.</div>
+                        </div>
                         <div class="acao-sheet-body">
                         <p id="hintMotoristaOnline" class="cam-hint" style="margin:0 0 10px;">
                             Informe as <strong>vagas</strong> e <strong>arraste para ficar online</strong>.
@@ -1377,6 +1386,37 @@
     function atualizarBtnLimparOfe(visivel) {
         const wrap = document.getElementById('limparRotaOfeWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+        const alc = document.getElementById('alcanceOfeWrap');
+        if (alc) alc.style.display = visivel ? 'block' : 'none';
+    }
+    /* -------- alcance ajustável da vaga com destino (barra 1–25 km) -------- */
+    function lerAlcanceOfe() {
+        const el = document.getElementById('alcanceOfe');
+        const v = el ? +el.value : +(localStorage.getItem('alcanceOfeKm') || 10);
+        return Math.min(25, Math.max(1, Math.round(v) || 10));
+    }
+    function initAlcanceOfe() {
+        const el = document.getElementById('alcanceOfe');
+        if (!el) return;
+        const salvo = Math.min(25, Math.max(1, Math.round(+(localStorage.getItem('alcanceOfeKm') || 10)) || 10));
+        el.value = salvo;
+        const lab = document.getElementById('alcanceOfeVal');
+        if (lab) lab.textContent = salvo + ' km';
+    }
+    let _alcanceTimer = null;
+    function onAlcanceInput(v) {
+        const km = Math.min(25, Math.max(1, Math.round(+v) || 10));
+        localStorage.setItem('alcanceOfeKm', km);
+        const lab = document.getElementById('alcanceOfeVal');
+        if (lab) lab.textContent = km + ' km';
+        if (motoristaOnlineModo) atualizarUiMotoristaOnline();   // atualiza "(até X km)"
+        // Já online com carona: aplica ao vivo (debounced), sem recriar a carona.
+        if (motoristaModoDestino && motoristaCaronaId) {
+            clearTimeout(_alcanceTimer);
+            _alcanceTimer = setTimeout(() => {
+                fetchWithAuth('/api/caronas/raio', { method: 'POST', body: JSON.stringify({ raio_km: km }) }).catch(() => {});
+            }, 500);
+        }
     }
     function limparDestinoPassageiro() {
         if (carroSel) fecharCarro();
@@ -2378,6 +2418,7 @@
             selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, onDestinoMotorista);
             tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
             initSlideToggle(document.getElementById('slideOferecer'), document.getElementById('slideOferecerKnob'), toggleModoMotoristaOnline);
+            initAlcanceOfe();
             expandirSheetAcao('oferecer');
             if (motoristaOnlineModo) {
                 iniciarBroadcastLocalizacao(true);
@@ -3910,8 +3951,8 @@
                     if (sub) {
                         sub.style.display = '';
                         sub.textContent = dest?.texto
-                            ? (dest.texto + ' · passageiros veem sua rota (até 10 km)')
-                            : 'Passageiros veem sua rota (até 10 km)';
+                            ? (dest.texto + ` · passageiros veem sua rota (até ${lerAlcanceOfe()} km)`)
+                            : `Passageiros veem sua rota (até ${lerAlcanceOfe()} km)`;
                     }
                 } else {
                     if (tit) tit.textContent = 'Recebendo todas as chamadas';
@@ -4046,7 +4087,7 @@
             const body = {
                 origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
                 destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
-                horario: null, vagas,
+                horario: null, vagas, raio_km: lerAlcanceOfe(),
             };
             const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
@@ -4062,7 +4103,7 @@
             await ativarWakeLock();
             registrarPush();
             registrarEventoUso('motorista_modo_destino', { vagas, destino: dest.texto || null });
-            msg('Online com destino. Visível em até 10 km nessa direção.');
+            msg(`Online com destino. Visível em até ${lerAlcanceOfe()} km nessa direção.`);
             document.getElementById('acaoSheetOfe').classList.add('collapsed');
         } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
         finally {

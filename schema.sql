@@ -86,6 +86,7 @@ CREATE TABLE caronas (
     horario TIMESTAMP,                 -- NULL = agora (tempo real)
     vagas INTEGER NOT NULL DEFAULT 1,
     observacao TEXT,
+    raio_km NUMERIC(4,1) DEFAULT 10,   -- alcance ajustável (barra 1–25 km) da rota
     status VARCHAR(20) DEFAULT 'ativa' CHECK (status IN ('ativa', 'concluida', 'cancelada')),
     created_at TIMESTAMP DEFAULT NOW()
 );
