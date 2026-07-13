@@ -942,6 +942,55 @@ html.teclado-aberto {
 /* Durante o arrasto o JS controla o 'left' — sem transição p/ seguir o dedo. */
 .slide-toggle.dragging .slide-knob { transition: background 0.25s ease, color 0.25s ease; }
 .slide-toggle.processing { opacity: 0.75; pointer-events: none; }
+/* ===== Barra de alcance (km) da vaga com destino ===== */
+.alcance-wrap {
+    margin: 4px 0 10px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(234, 210, 152, 0.22);
+    border-radius: 14px;
+}
+.alcance-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.alcance-label { color: #e8eaed; font-weight: 600; font-size: 0.92rem; }
+.alcance-val { color: #EAD298; font-weight: 800; font-size: 1.05rem; letter-spacing: -0.01em; }
+.alcance-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: #33353a;
+    outline: none;
+    margin: 4px 0;
+    touch-action: pan-y;
+}
+.alcance-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #EAD298;
+    border: 3px solid #0b0b0d;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    cursor: grab;
+}
+.alcance-range::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #EAD298;
+    border: 3px solid #0b0b0d;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    cursor: grab;
+}
+.alcance-range::-webkit-slider-thumb:active { cursor: grabbing; }
+.alcance-hint { margin-top: 8px; color: #9aa0a6; font-size: 0.78rem; line-height: 1.35; }
 .acao-sheet.teclado-aberto {
     max-height: calc(var(--appvh, 1vh) * 72);
     overflow: hidden;

@@ -604,6 +604,9 @@ async function garantirColunasViagens() {
     // Oferta a um contato ("quer carona"/buzina): guarda de qual contato veio, pra
     // a viagem herdar embarque/destino do passageiro e desenhar a rota.
     await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS contato_id INTEGER");
+    // Alcance (km) ajustável da carona com destino: raio em que passageiros veem a
+    // rota e o motorista recebe/enxerga os pedidos. Barra 1–25 km no app (default 10).
+    await pool.query("ALTER TABLE caronas ADD COLUMN IF NOT EXISTS raio_km NUMERIC(4,1) DEFAULT 10");
   } catch (e) {
     console.warn("garantirColunasViagens:", e.message);
   }
@@ -1288,20 +1291,25 @@ async function notificarMotoristasProximos(ped) {
     if (!passInfo?.projeto_id) return;
 
     const nome = passInfo.nome || "Um colega";
+    // Raio por motorista: sem destino (amarelo) usa RAIO_ONLINE_KM (600 m); com
+    // carona ativa usa o alcance da barra (caronas.raio_km, default 10 km). Assim o
+    // motorista é notificado dos pedidos dentro do raio que ELE calibrou.
     const motoristas = (await pool.query(
       `SELECT motorista_id FROM (
          SELECT DISTINCT ON (h.motorista_id) h.motorista_id,
-                ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist
+                ${haversine("l.lat", "l.lng", "$1", "$2")} AS dist,
+                COALESCE(ca.raio_km, $4) AS raio
          FROM habilitacoes_motorista h
          JOIN localizacoes_online l ON l.usuario_id = h.motorista_id AND l.disponivel = TRUE
          JOIN usuarios um ON um.id = h.motorista_id
+         LEFT JOIN caronas ca ON ca.motorista_id = h.motorista_id AND ca.status = 'ativa'
          WHERE h.status = 'ativa' AND ${sqlSelfieValida("h")}
            AND h.motorista_id <> $3
            AND um.projeto_id = $5
            AND COALESCE(um.ativo, TRUE) = TRUE
          ORDER BY h.motorista_id, h.created_at DESC
        ) s
-       WHERE s.dist <= $4
+       WHERE s.dist <= s.raio
        ORDER BY s.dist ASC
        LIMIT 8`,
       [ped.origem_lat, ped.origem_lng, ped.passageiro_id, RAIO_ONLINE_KM, passInfo.projeto_id]
@@ -2182,12 +2190,14 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
   const {
     origem_texto, origem_lat, origem_lng,
     destino_texto, destino_lat, destino_lng,
-    horario, vagas, observacao,
+    horario, vagas, observacao, raio_km,
   } = req.body;
 
   if (origem_lat == null || origem_lng == null || destino_lat == null || destino_lng == null) {
     return res.status(400).json({ error: "Origem e destino são obrigatórios" });
   }
+  // Alcance da barra (1–25 km); default 10 se não vier.
+  const nraio = Math.min(25, Math.max(1, Number(raio_km) || 10));
 
   try {
     const pid = await exigirProjeto(req.user.id, res);
@@ -2204,13 +2214,13 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO caronas
          (motorista_id, habilitacao_id, origem_texto, origem_lat, origem_lng,
-          destino_texto, destino_lat, destino_lng, horario, vagas, observacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          destino_texto, destino_lat, destino_lng, horario, vagas, observacao, raio_km)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
       [
         req.user.id, hab.id, origem_texto || null, origem_lat, origem_lng,
         destino_texto || null, destino_lat, destino_lng,
-        horarioValido(horario), vagas || 1, observacao || null,
+        horarioValido(horario), vagas || 1, observacao || null, nraio,
       ]
     );
     const nvagas = Math.min(6, Math.max(parseInt(vagas, 10) || 1, 1));
@@ -2228,6 +2238,23 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao oferecer carona" });
+  }
+});
+
+// Ajuste ao vivo do alcance (barra 1–25 km) da carona ativa — sem recriar a
+// carona (evita cancelar/reinserir e perder propostas). Aplica no raio de
+// visibilidade e de notificação.
+app.post("/api/caronas/raio", verificarAuth, async (req, res) => {
+  const nraio = Math.min(25, Math.max(1, Number(req.body?.raio_km) || 10));
+  try {
+    await pool.query(
+      "UPDATE caronas SET raio_km = $2 WHERE motorista_id = $1 AND status = 'ativa'",
+      [req.user.id, nraio]
+    );
+    res.json({ ok: true, raio_km: nraio });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao ajustar alcance" });
   }
 });
 
@@ -2278,8 +2305,8 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       destFiltro = `AND (${compatTotal} OR ${compatParcial} OR ${compatProximo}) AND c.vagas > 0`;
       compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' WHEN ${compatProximo} THEN 'proximo' ELSE 'none' END AS compat_rota`;
     } else if (temPos) {
-      params.push(RAIO_VISIVEL_KM);
-      origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= $${params.length}`;
+      // Alcance por carona (barra do motorista, default 10 km) em vez de fixo.
+      origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= COALESCE(c.raio_km, ${RAIO_VISIVEL_KM})`;
     }
 
     params.push(pid);
@@ -2429,16 +2456,16 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
 
     // Com lat/lng (mapa do motorista): pedidos próximos.
     // - Online sem destino (amarelo): raio RAIO_ONLINE_KM (600 m)
-    // - Com carona/rota publicada: raio RAIO_VISIVEL_KM (10 km) — senão o motorista
-    //   não via o pulso de quem pediu a poucos km.
+    // - Com carona/rota publicada: alcance da barra (carona.raio_km, default 10 km)
+    //   — senão o motorista não via o pulso de quem pediu a poucos km.
     if (lat && lng) {
       const pid = await projetoDoUsuario(req.user.id);
       if (!pid) return res.json([]);
       const temCarona = (await pool.query(
-        `SELECT 1 FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1`,
+        `SELECT raio_km FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1`,
         [req.user.id]
       )).rows[0];
-      const raioKm = temCarona ? RAIO_VISIVEL_KM : RAIO_ONLINE_KM;
+      const raioKm = temCarona ? (Number(temCarona.raio_km) || RAIO_VISIVEL_KM) : RAIO_ONLINE_KM;
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
       const params = [lat, lng, raioKm, pid];
       const { rows } = await pool.query(
@@ -3576,7 +3603,7 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
     // Passageiro sem destino não consulta o mapa no front; com destino vê os dois tipos.
     const raio = temPos ? `WHERE (
       (online_desde IS NOT NULL AND ${distExpr} <= $4)
-      OR (online_desde IS NULL AND carona_id IS NOT NULL AND ${distExpr} <= $5)
+      OR (online_desde IS NULL AND carona_id IS NOT NULL AND ${distExpr} <= COALESCE(raio_km, $5))
     )` : "";
     const filtroProj = temPos ? `AND u.projeto_id = $6` : `AND u.projeto_id = $2`;
     const { rows } = await pool.query(
@@ -3585,14 +3612,15 @@ app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
                 u.id, u.nome, u.sexo, u.empresa_nome, l.lat, l.lng, l.vagas, l.online_desde,
                 h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
                 ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
-                ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas
+                ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas,
+                ca.raio_km
          FROM localizacoes_online l
          JOIN usuarios u ON u.id = l.usuario_id
          JOIN habilitacoes_motorista h
            ON h.motorista_id = u.id AND h.status = 'ativa'
               AND ${sqlSelfieValida("h")}
          LEFT JOIN LATERAL (
-           SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng, vagas
+           SELECT id, origem_texto, destino_texto, origem_lat, origem_lng, destino_lat, destino_lng, vagas, raio_km
            FROM caronas
            WHERE motorista_id = u.id AND status = 'ativa'
            ORDER BY created_at DESC
