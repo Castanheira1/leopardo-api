@@ -201,20 +201,21 @@
                         <p id="hintPedidoImediato" class="cam-hint" style="display:none;margin:0 0 8px;">
                             Motorista na rota — pedido imediato, sem agendamento.
                         </p>
+                        <!-- Resumo (estilo Uber): nº online, mais próximo e ETA. Alimentado
+                             mesmo SEM destino (sondagem própria); com destino, a lista
+                             completa atualiza. Toque abre a lista detalhada (com destino). -->
+                        <button type="button" class="mot-stats" id="motStatsCard" style="display:none;" onclick="toggleListaMotoristas()" aria-expanded="false">
+                            <span class="mot-stats-head">
+                                <span class="mot-stats-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg> Motoristas por perto</span>
+                                <svg class="mot-stats-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                            </span>
+                            <span class="mot-stats-num" id="motStatsNum">—</span>
+                            <span class="mot-stats-cols">
+                                <span class="mot-stats-col"><small>Mais próximo</small><b id="motStatsDist">—</b></span>
+                                <span class="mot-stats-col"><small>Tempo estimado</small><b id="motStatsEta">—</b></span>
+                            </span>
+                        </button>
                         <div id="motoristasDestinoWrap" class="motoristas-destino-wrap" style="display:none;">
-                            <!-- Resumo (estilo Uber): nº online, mais próximo e ETA.
-                                 Toque abre a lista detalhada logo abaixo. -->
-                            <button type="button" class="mot-stats" id="motStatsCard" style="display:none;" onclick="toggleListaMotoristas()" aria-expanded="false">
-                                <span class="mot-stats-head">
-                                    <span class="mot-stats-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg> Motoristas por perto</span>
-                                    <svg class="mot-stats-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-                                </span>
-                                <span class="mot-stats-num" id="motStatsNum">—</span>
-                                <span class="mot-stats-cols">
-                                    <span class="mot-stats-col"><small>Mais próximo</small><b id="motStatsDist">—</b></span>
-                                    <span class="mot-stats-col"><small>Tempo estimado</small><b id="motStatsEta">—</b></span>
-                                </span>
-                            </button>
                             <div id="motoristasListas" style="display:none;">
                                 <div id="motoristasIndoDestino">
                                     <strong class="painel-tit painel-tit--lista">Indo para lá</strong>
@@ -1006,8 +1007,9 @@
         }
     }
     // Resumo "Motoristas por perto" (nº online, mais próximo, ETA). O toque
-    // no card abre/fecha a lista detalhada de motoristas.
+    // no card abre/fecha a lista detalhada; sem destino, leva a escolher o local.
     function toggleListaMotoristas() {
+        if (!selPed?.getDestino?.()) return abrirLocais();
         const listas = document.getElementById('motoristasListas');
         const card = document.getElementById('motStatsCard');
         if (!listas) return;
@@ -1018,20 +1020,22 @@
             card.classList.toggle('mot-stats--aberto', abrir);
         }
     }
-    function atualizarStatsMotoristas(indo, perto) {
+    function preencherStatsMotoristas(todos, opts = {}) {
         const card = document.getElementById('motStatsCard');
         const listas = document.getElementById('motoristasListas');
-        if (!card || !listas) return;
-        const todos = [...(indo || []), ...(perto || [])];
-        if (!todos.length) {
-            // Sem motoristas: esconde o resumo e deixa as mensagens da lista à vista.
+        if (!card) return;
+        const n = (todos || []).length;
+        if (!n && !opts.semDestino) {
+            // Com destino e ninguém na lista: esconde o resumo e deixa as
+            // mensagens da lista ("Sem rota…") à vista.
             card.style.display = 'none';
-            listas.style.display = 'block';
+            if (listas) listas.style.display = 'block';
             return;
         }
-        const n = todos.length;
-        document.getElementById('motStatsNum').textContent = `${n} motorista${n > 1 ? 's' : ''} online`;
-        const dists = todos.map((it) => Number(it.dist)).filter((d) => isFinite(d) && d >= 0);
+        document.getElementById('motStatsNum').textContent = n
+            ? `${n} motorista${n > 1 ? 's' : ''} online`
+            : 'Nenhum motorista online agora';
+        const dists = (todos || []).map((it) => Number(it.dist)).filter((d) => isFinite(d) && d >= 0);
         const dEl = document.getElementById('motStatsDist');
         const eEl = document.getElementById('motStatsEta');
         if (dists.length) {
@@ -1044,8 +1048,34 @@
         }
         card.style.display = 'flex';
         // A lista detalhada respeita o estado que o usuário deixou (aberta/fechada).
-        listas.style.display = card.getAttribute('aria-expanded') === 'true' ? 'block' : 'none';
+        if (listas && !opts.semDestino) {
+            listas.style.display = card.getAttribute('aria-expanded') === 'true' ? 'block' : 'none';
+        }
     }
+    function atualizarStatsMotoristas(indo, perto) {
+        preencherStatsMotoristas([...(indo || []), ...(perto || [])]);
+    }
+    // Sem destino escolhido a lista completa não roda — esta sondagem leve
+    // alimenta o card com os carros online do projeto (com GPS, os por perto).
+    async function atualizarContadorOnline() {
+        if (selPed?.getDestino?.()) return;   // com destino, a lista completa alimenta
+        if (document.hidden) return;
+        if (!document.getElementById('tabPedir')?.classList.contains('active')) return;
+        try {
+            const o = selPed?.getOrigem ? selPed.getOrigem() : null;
+            const q = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
+            const r = await fetchWithAuth('/api/motoristas-online' + q);
+            if (!r.ok) return;
+            const lista = await r.json();
+            if (selPed?.getDestino?.()) return;   // escolheu destino enquanto buscava
+            const itens = (Array.isArray(lista) ? lista : []).map((m) => ({
+                dist: (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity,
+            }));
+            preencherStatsMotoristas(itens, { semDestino: true });
+        } catch (_) {}
+    }
+    setInterval(atualizarContadorOnline, 15000);
+    setTimeout(atualizarContadorOnline, 1500);
     function exigirDestinoPassageiro(acao) {
         const texto = acao
             ? `Escolha primeiro para onde vamos — depois você pode ${acao}.`
@@ -1067,6 +1097,8 @@
             expandirSheetAcao(id === 'tabPedir' ? 'pedir' : 'oferecer');
             requestAnimationFrame(() => garantirUiAcaoVisivel(true));
         }
+        // Contador de carros online já no primeiro paint da aba do passageiro.
+        if (id === 'tabPedir') atualizarContadorOnline();
         // Mapa em paralelo (não bloqueia o CTA).
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
@@ -1490,7 +1522,11 @@
     function atualizarBtnLimparPed(visivel) {
         const wrap = document.getElementById('limparRotaPedWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
-        if (!visivel) atualizarDestinoTopo(null);
+        if (!visivel) {
+            atualizarDestinoTopo(null);
+            // Card volta ao modo "sem destino" (contador de carros online).
+            atualizarContadorOnline();
+        }
     }
     function atualizarBtnLimparOfe(visivel) {
         const wrap = document.getElementById('limparRotaOfeWrap');
