@@ -143,19 +143,6 @@
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
             <div id="tabPedir" class="tab-content">
                 <div class="map-stage">
-                    <!-- Barra fixa no topo: "Para onde vamos?" abre o mesmo fluxo de
-                         escolher local; com destino, mostra o nome + X para limpar. -->
-                    <div class="destino-topo" id="destinoTopoPed">
-                        <div class="destino-topo-tit">Para onde vamos?</div>
-                        <div class="destino-topo-campo" role="button" tabindex="0" onclick="abrirLocais()">
-                            <span class="destino-topo-pin" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
-                            <span id="destinoTopoTxt" class="destino-topo-txt destino-topo-txt--vazio">Escolher local</span>
-                            <button type="button" id="destinoTopoLimpar" class="destino-topo-x" style="display:none;" aria-label="Limpar destino"
-                                onclick="event.stopPropagation();limparDestinoPassageiro()">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-                            </button>
-                        </div>
-                    </div>
                     <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div class="map-stage-controls" id="mapPedControls">
@@ -990,22 +977,6 @@
         const dest = selPed?.getDestino?.();
         if (hint) hint.style.display = dest ? 'none' : 'block';
     }
-    // Barra "Para onde vamos?" no topo do mapa: sem destino mostra "Escolher
-    // local"; com destino, o nome escolhido + X para limpar.
-    function atualizarDestinoTopo(nome) {
-        const txt = document.getElementById('destinoTopoTxt');
-        const x = document.getElementById('destinoTopoLimpar');
-        if (!txt) return;
-        if (nome) {
-            txt.textContent = nome;
-            txt.classList.remove('destino-topo-txt--vazio');
-            if (x) x.style.display = 'inline-flex';
-        } else {
-            txt.textContent = 'Escolher local';
-            txt.classList.add('destino-topo-txt--vazio');
-            if (x) x.style.display = 'none';
-        }
-    }
     // Resumo "Motoristas por perto" (nº online, mais próximo, ETA). O toque
     // no card abre/fecha a lista detalhada; sem destino, leva a escolher o local.
     function toggleListaMotoristas() {
@@ -1522,11 +1493,8 @@
     function atualizarBtnLimparPed(visivel) {
         const wrap = document.getElementById('limparRotaPedWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
-        if (!visivel) {
-            atualizarDestinoTopo(null);
-            // Card volta ao modo "sem destino" (contador de carros online).
-            atualizarContadorOnline();
-        }
+        // Card volta ao modo "sem destino" (contador de carros online).
+        if (!visivel) atualizarContadorOnline();
     }
     function atualizarBtnLimparOfe(visivel) {
         const wrap = document.getElementById('limparRotaOfeWrap');
@@ -2319,11 +2287,10 @@
                 `<span class="rota-info-nome">${esc(nome)}</span>`
                 + `<span class="rota-info-meta">${ICN.route} ${esc(kmTxt)} · ${ICN.clock} ${esc(durTxt)}</span>`;
             rotaInfo.style.display = 'block';
-            // Espelha o nome na faixa branca do sheet e na barra do topo (passageiro)
+            // Espelha o nome na faixa branca do sheet (passageiro)
             if (mapId === 'mapPed') {
                 const el = document.getElementById('destFaixaPedNome');
                 if (el) el.textContent = nome;
-                atualizarDestinoTopo(nome);
             }
         }
 
@@ -2444,7 +2411,6 @@
             if (mapId === 'mapPed') {
                 const el = document.getElementById('destFaixaPedNome');
                 if (el) el.textContent = nomeDestino || 'Destino no mapa';
-                atualizarDestinoTopo(nomeDestino || 'Destino no mapa');
                 atualizarHintDestinoPed();
                 atualizarFormPedidoRota(false);
             }
@@ -2471,7 +2437,6 @@
                             if (mapId === 'mapPed') {
                                 const el = document.getElementById('destFaixaPedNome');
                                 if (el) el.textContent = destino.texto;
-                                atualizarDestinoTopo(destino.texto);
                             }
                         }
                     });

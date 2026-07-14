@@ -2053,67 +2053,6 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     gap: 8px;
     pointer-events: none;
 }
-/* No mapa do passageiro a barra "Para onde vamos?" ocupa o topo — controles
-   e banner descem para não ficar atrás dela */
-#mapPedControls { top: 122px; }
-#bannerAgendamentos { top: 122px; }
-/* Barra "Para onde vamos?" fixa no topo do mapa do passageiro */
-.destino-topo {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 15;
-    padding: 10px 14px 14px;
-    background: linear-gradient(180deg, #0f1012 72%, rgba(15, 16, 18, 0));
-    pointer-events: none;
-}
-.destino-topo > * { pointer-events: auto; }
-.destino-topo-tit {
-    font-size: 1.05rem;
-    font-weight: 800;
-    color: #EAD298;
-    margin: 0 0 8px;
-}
-.destino-topo-campo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #1c1d21;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 12px;
-    cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-}
-.destino-topo-campo:active { background: #24252a; }
-.destino-topo-pin { display: inline-flex; color: #EAD298; flex: 0 0 auto; }
-.destino-topo-txt {
-    flex: 1;
-    min-width: 0;
-    color: #fff;
-    font-weight: 600;
-    font-size: 0.95rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.destino-topo-txt--vazio { color: #9aa0a6; font-weight: 500; }
-.destino-topo-x {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.08);
-    color: #e8eaed;
-    cursor: pointer;
-    touch-action: manipulation;
-}
-.destino-topo-x:active { background: rgba(255, 255, 255, 0.18); }
 /* Card-resumo "Motoristas por perto" (nº online, mais próximo, ETA) */
 .mot-stats {
     display: flex;
