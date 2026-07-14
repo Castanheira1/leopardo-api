@@ -2048,13 +2048,20 @@
         return !!(habHoje && selfieAindaValida(habHoje));
     }
 
+    let _habEmVoo = null;
     async function carregarHabilitacao() {
-        const r = await fetchWithAuth('/api/habilitacao/hoje');
-        habHoje = await r.json();
-        // API pode devolver null literal ou string "null"
-        if (!habHoje || habHoje === 'null') habHoje = null;
-        atualizarUiHabilitacaoPerfil();
-        if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
+        // Vários caminhos (escolher papel, sincronizar perfil, 2º plano) chamam isto
+        // quase ao mesmo tempo no boot. Compartilha uma única requisição em voo.
+        if (_habEmVoo) return _habEmVoo;
+        _habEmVoo = (async () => {
+            const r = await fetchWithAuth('/api/habilitacao/hoje');
+            habHoje = await r.json();
+            // API pode devolver null literal ou string "null"
+            if (!habHoje || habHoje === 'null') habHoje = null;
+            atualizarUiHabilitacaoPerfil();
+            if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
+        })();
+        try { await _habEmVoo; } finally { _habEmVoo = null; }
     }
 
     let veiculoPend = null;
@@ -4129,8 +4136,10 @@
         const maxX = () => Math.max(0, track.clientWidth - knob.offsetWidth - 10);
         const ligado = () => track.classList.contains('online');
         const posAtual = () => (ligado() ? maxX() : 0);
+        let suprimirClickAte = 0;   // engole o "click" sintético que segue um toque no knob
         const down = (e) => {
             if (track.classList.contains('processing')) return;
+            suprimirClickAte = Date.now() + 500;
             dragging = true; moved = 0; max = maxX();
             startX = (e.touches ? e.touches[0].clientX : e.clientX);
             startLeft = posAtual();
@@ -4188,6 +4197,14 @@
             if ((e.key === 'Enter' || e.key === ' ') && !track.classList.contains('processing')) {
                 e.preventDefault(); finalizar(!ligado());
             }
+        });
+        // Clicar em qualquer ponto da barra (não só arrastar o knob) alterna o estado.
+        // O flag suprimirClickAte evita alternar duas vezes quando o click é apenas o
+        // evento sintético que o navegador dispara logo após um toque no knob.
+        track.addEventListener('click', () => {
+            if (track.classList.contains('processing')) return;
+            if (Date.now() < suprimirClickAte) return;
+            finalizar(!ligado());
         });
     }
 
@@ -7015,9 +7032,8 @@
             await carregarHabilitacao();
             if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
         } catch (_) {}
-        loadPropostas().catch(() => {});
         registrarPush(true);
-        pollPropostas();
+        pollPropostas();   // já busca /api/propostas; painel recarrega ao abrir (abrirPainel)
         setInterval(pollPropostas, 8000);
         pollOfertaFila();
         setInterval(pollOfertaFila, 5000);

@@ -22,10 +22,36 @@ function checkAuth(adminOnly = false) {
     if (!token || !user) { location.href = 'index.html'; return; }
     if (adminOnly && !user.is_admin) { avisoProximaPagina('Acesso restrito a administradores.'); location.href = 'dashboard.html'; return; }
     aplicarSaudacaoUsuario(document.getElementById('userName'), user.nome);
+    // Sessão é global por navegador (token no localStorage). Se outra aba logar com
+    // outro usuário, o token daqui é trocado sem aviso e a tela passaria a agir como
+    // o usuário errado. Detecta a troca em outra aba e recarrega em vez de continuar.
+    instalarAvisoTrocaSessao(user);
     // LGPD: quem se cadastrou antes do consentimento precisa aceitar a política
     // para continuar usando o app. Verifica no servidor e, se pendente, mostra o
     // portão bloqueante. Fire-and-forget (não trava o resto do carregamento).
     verificarConsentimentoLGPD();
+}
+
+// O evento 'storage' dispara SÓ nas OUTRAS abas do mesmo navegador — exatamente a
+// aba que teve a sessão substituída. Se o usuário logado mudou (ou saiu), avisa e
+// recarrega para refletir a sessão real (evita motorista/passageiro cruzados).
+function instalarAvisoTrocaSessao(usuarioAtual) {
+    if (window._avisoSessaoInstalado) return;
+    window._avisoSessaoInstalado = true;
+    const idAtual = usuarioAtual && usuarioAtual.id != null ? usuarioAtual.id : null;
+    window.addEventListener('storage', (e) => {
+        if (e.key !== null && e.key !== 'user' && e.key !== 'token') return;
+        const token = localStorage.getItem('token');
+        let novo = null;
+        try { novo = JSON.parse(localStorage.getItem('user') || 'null'); } catch (_) {}
+        const idNovo = novo && novo.id != null ? novo.id : null;
+        if (idNovo === idAtual && token) return;   // mesma sessão: nada a fazer
+        alert(!token
+            ? 'Você saiu da conta em outra aba deste navegador. A página vai recarregar.'
+            : 'A sessão foi trocada em outra aba deste navegador (agora: '
+              + ((novo && novo.nome) || 'outro usuário') + '). A página vai recarregar.');
+        location.reload();
+    });
 }
 
 /* -------------------- LGPD: portão de consentimento -------------------- */
