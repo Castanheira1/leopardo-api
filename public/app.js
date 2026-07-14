@@ -1508,21 +1508,31 @@ function capturarFoto(opts = {}) {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 return falhaCamera('Câmera ao vivo indisponível neste navegador.');
             }
-            // Selfie: resolução moderada sem “ideal” que force crop digital no sensor.
+            // Proporção 4:3 (nativa do sensor): pedir 16:9 força crop digital e o
+            // rosto aparece "estourado" (efeito de zoom). 4:3 usa o sensor inteiro.
             const tentativas = facing === 'user'
                 ? [
-                    { video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                    { video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4 / 3 } }, audio: false },
                     { video: { facingMode: 'user' }, audio: false },
                     { video: true, audio: false },
                 ]
                 : [
-                    { video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                    { video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4 / 3 } }, audio: false },
                     { video: { facingMode: facing }, audio: false },
                     { video: true, audio: false },
                 ];
             for (const opts of tentativas) {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia(opts);
+                    // Alguns Androids abrem a câmera com zoom digital > 1 (rosto
+                    // enorme). Volta ao zoom mínimo sempre que o aparelho permitir.
+                    try {
+                        const track = stream.getVideoTracks()[0];
+                        const caps = track && track.getCapabilities ? track.getCapabilities() : null;
+                        if (caps && caps.zoom && Number.isFinite(caps.zoom.min)) {
+                            await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
+                        }
+                    } catch (_) { /* zoom não ajustável neste aparelho */ }
                     video.srcObject = stream;
                     const p = video.play();
                     if (p && p.catch) p.catch(() => {});

@@ -267,6 +267,17 @@
                                    aria-label="Alcance em quilômetros" oninput="onAlcanceInput(this.value)" onchange="onAlcanceChange(this.value)">
                             <div class="alcance-hint">Passageiros até essa distância veem sua rota — e você recebe os pedidos deles.</div>
                         </div>
+                        <!-- Depois de escolher o raio, a barra vira este resumo compacto
+                             (raio + velocidade média + temperatura). Toque = barra volta. -->
+                        <button type="button" id="alcanceInfoOfe" class="alcance-info" style="display:none;"
+                                onclick="reabrirBarraAlcance()" title="Toque para ajustar o alcance"
+                                aria-label="Ajustar alcance da vaga">
+                            <span class="alcance-info-km" id="alcanceInfoKm">10 km</span>
+                            <span class="alcance-info-sep" aria-hidden="true">·</span>
+                            <span id="alcanceInfoVel">— km/h</span>
+                            <span class="alcance-info-sep" aria-hidden="true">·</span>
+                            <span id="alcanceInfoTemp">—°C</span>
+                        </button>
                         <div class="acao-sheet-body">
                         <p id="hintMotoristaOnline" class="cam-hint" style="margin:0 0 10px;">
                             Informe as <strong>vagas</strong> e <strong>arraste para ficar online</strong>.
@@ -1567,8 +1578,12 @@
     function atualizarBtnLimparOfe(visivel) {
         const wrap = document.getElementById('limparRotaOfeWrap');
         if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+        if (!visivel) alcanceEscolhido = false;
         const alc = document.getElementById('alcanceOfeWrap');
-        if (alc) alc.style.display = visivel ? 'block' : 'none';
+        const info = document.getElementById('alcanceInfoOfe');
+        if (alc) alc.style.display = (visivel && !alcanceEscolhido) ? 'block' : 'none';
+        if (info) info.style.display = (visivel && alcanceEscolhido) ? 'flex' : 'none';
+        if (visivel && alcanceEscolhido) iniciarInfoAlcance(); else pararInfoAlcance();
         if (typeof atualizarRaioCarro === 'function') atualizarRaioCarro();
         if (visivel) agendarDescerSheet(); else cancelarDescerSheet();
     }
@@ -1617,6 +1632,88 @@
     function onAlcanceChange(v) {
         onAlcanceInput(v);
         ajustarMapaAoRaio();
+        esconderBarraAlcance();
+    }
+    /* -------- resumo compacto no lugar da barra (raio · vel. média · temperatura) -------- */
+    // Raio escolhido: a barra de ajuste dá lugar ao resumo. Toque no resumo reabre a barra.
+    let alcanceEscolhido = false;
+    let _infoAlcanceTimer = null;
+    function esconderBarraAlcance() {
+        alcanceEscolhido = true;
+        const alc = document.getElementById('alcanceOfeWrap');
+        const info = document.getElementById('alcanceInfoOfe');
+        if (alc) alc.style.display = 'none';
+        if (info) info.style.display = 'flex';
+        atualizarInfoAlcance();
+        iniciarInfoAlcance();
+    }
+    function reabrirBarraAlcance() {
+        alcanceEscolhido = false;
+        pararInfoAlcance();
+        const info = document.getElementById('alcanceInfoOfe');
+        const alc = document.getElementById('alcanceOfeWrap');
+        if (info) info.style.display = 'none';
+        if (alc) alc.style.display = 'block';
+        agendarDescerSheet();
+    }
+    function atualizarInfoAlcance() {
+        const kmEl = document.getElementById('alcanceInfoKm');
+        const velEl = document.getElementById('alcanceInfoVel');
+        const tempEl = document.getElementById('alcanceInfoTemp');
+        if (kmEl) kmEl.textContent = lerAlcanceOfe() + ' km';
+        const v = velocidadeMediaKmH();
+        if (velEl) velEl.textContent = (v != null ? Math.round(v) : '—') + ' km/h';
+        if (tempEl) tempEl.textContent = (_tempAmbiente.v != null ? _tempAmbiente.v : '—') + '°C';
+        atualizarTemperaturaAmbiente().then(() => {
+            if (tempEl && _tempAmbiente.v != null) tempEl.textContent = _tempAmbiente.v + '°C';
+        });
+    }
+    function iniciarInfoAlcance() {
+        if (_infoAlcanceTimer) return;
+        _infoAlcanceTimer = setInterval(atualizarInfoAlcance, 5000);
+    }
+    function pararInfoAlcance() {
+        if (_infoAlcanceTimer) { clearInterval(_infoAlcanceTimer); _infoAlcanceTimer = null; }
+    }
+    // Velocidade média dos últimos ~2 min, a partir do GPS do próprio carro.
+    // Usa coords.speed quando o aparelho informa; senão calcula pela distância.
+    const VEL_JANELA_MS = 2 * 60 * 1000;
+    let velAmostras = [];
+    function registrarAmostraVelocidade(p) {
+        const t = Date.now();
+        velAmostras.push({
+            lat: p.coords.latitude, lng: p.coords.longitude,
+            vel: (typeof p.coords.speed === 'number' && p.coords.speed >= 0) ? p.coords.speed : null,
+            t,
+        });
+        velAmostras = velAmostras.filter((a) => t - a.t <= VEL_JANELA_MS);
+    }
+    function velocidadeMediaKmH() {
+        if (velAmostras.length < 2) return null;
+        const comVel = velAmostras.filter((a) => a.vel != null);
+        if (comVel.length >= 2) {
+            return (comVel.reduce((s, a) => s + a.vel, 0) / comVel.length) * 3.6;
+        }
+        let dist = 0;
+        for (let i = 1; i < velAmostras.length; i++) dist += distKmGps(velAmostras[i - 1], velAmostras[i]);
+        const horas = (velAmostras[velAmostras.length - 1].t - velAmostras[0].t) / 3600000;
+        return horas > 0 ? dist / horas : null;
+    }
+    // Temperatura ambiente via Open-Meteo (grátis, sem chave). Cache de 10 min.
+    let _tempAmbiente = { v: null, em: 0, buscando: false };
+    async function atualizarTemperaturaAmbiente() {
+        if (_tempAmbiente.buscando || Date.now() - _tempAmbiente.em < 10 * 60 * 1000) return;
+        const pos = (selfCar && selfCar.lastPos) || ultimaPosConhecida();
+        if (!pos || pos.lat == null) return;
+        _tempAmbiente.buscando = true;
+        try {
+            const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + (+pos.lat).toFixed(3)
+                + '&longitude=' + (+pos.lng).toFixed(3) + '&current=temperature_2m');
+            const d = await r.json();
+            const t = d && d.current ? d.current.temperature_2m : null;
+            if (typeof t === 'number') _tempAmbiente = { v: Math.round(t), em: Date.now(), buscando: false };
+            else _tempAmbiente.buscando = false;
+        } catch (_) { _tempAmbiente.buscando = false; }
     }
     function ajustarMapaAoRaio() {
         if (!raioCircle || !selOfe || !selOfe.map || !g || !g.maps) return;
@@ -2164,6 +2261,16 @@
             registrarPush();
             if ('Notification' in window && Notification.permission === 'denied') {
                 msg('Notificações bloqueadas no navegador — ative-as para ser avisado de pedidos por perto.', 'error');
+            }
+            // Fotos novas (selfie + carro) publicadas: já entra online no modo
+            // 600 m (sem destino) pra facilitar — sem precisar arrastar o botão.
+            if (!reutilizarSelfie && localStorage.getItem('papel') === 'motorista'
+                && !motoristaOnlineModo && !(viagemView && viagemView.status === 'em_andamento')) {
+                try {
+                    showTab('tabOferecer');
+                    await entrarModoMotoristaOnline();
+                    if (motoristaOnlineModo) msg('Você já está online no modo 600 m — pronto para receber chamadas.');
+                } catch (_) { /* GPS indisponível: o motorista liga pelo botão */ }
             }
         } catch (_) { set('Erro de conexão. Tente novamente.', '#ef9a9a'); }
     }
@@ -6784,7 +6891,10 @@
             atualizarRaioCarro();   // círculo do alcance segue o carro
         }
         selfCar.watchId = navigator.geolocation.watchPosition(
-            (p) => aplicarPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
+            (p) => {
+                registrarAmostraVelocidade(p);   // alimenta a velocidade média do resumo
+                aplicarPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+            },
             () => {},
             { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 },
         );
