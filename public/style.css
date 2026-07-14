@@ -2795,6 +2795,84 @@ body.aguardando-papel .navbar {
 }
 .painel-locais .sol-actions .btn-secondary:active { background: #ddbf7f; }
 
+/* --- Painel interno CLARO (mesmo padrão da tela de Locais). Converte os sheets
+   escuros (#modalPerfil, #modalVeiculo, Caronas & solicitações, Meus agendamentos,
+   painel do motorista) para caixa branca com texto escuro e acabamento dourado. --- */
+.cam-overlay .cam-box.painel-claro {
+    background: #fff;
+    color: #23211c;
+}
+.painel-claro h3,
+.painel-claro .cam-box h3 { color: #23211c; }
+.painel-claro .painel-tit { color: #9a7412; }
+.painel-claro small,
+.painel-claro .cam-hint,
+.painel-claro .perfil-nav-sub { color: #6b675f; }
+.painel-claro p { color: #3a382f; }
+
+/* Divisórias e rótulos das seções */
+.painel-claro .perfil-secao { border-top-color: #ece8df; }
+.painel-claro .perfil-secao label { color: #3a382f; }
+.painel-claro .perfil-secao p { color: #6b675f; }
+
+/* Cartões de navegação do Perfil (Dados pessoais / Favoritos) */
+.painel-claro .perfil-nav-btn {
+    background: #fff;
+    border: 1px solid #ece8df;
+    color: #23211c;
+    box-shadow: 0 1px 2px rgba(20, 18, 12, 0.04);
+}
+.painel-claro .perfil-nav-btn:hover,
+.painel-claro .perfil-nav-btn:active {
+    background: #faf7ef;
+    border-color: #e6d9b4;
+}
+.painel-claro .perfil-nav-tit { color: #23211c; }
+.painel-claro .perfil-voltar { color: #9a7412; }
+
+/* Campos de formulário claros */
+.painel-claro .map-search,
+.painel-claro select.map-search {
+    background: #f3f4f6;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: #111;
+}
+.painel-claro .map-search::placeholder { color: #6b7280; opacity: 1; }
+.painel-claro .map-search:focus { border-color: rgba(196, 151, 26, 0.7); outline: none; }
+
+/* Cartões de lista: solicitações, propostas e agendamentos */
+.painel-claro .ride-item {
+    background: #fff;
+    border: 1px solid #ece8df;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(20, 18, 12, 0.03);
+}
+.painel-claro .ride-info strong { color: #23211c; }
+.painel-claro .ride-info,
+.painel-claro .ride-info small { color: #6b675f; }
+
+/* Botões: "Fechar"/secundário grande em dourado; secundário pequeno em contorno claro */
+.painel-claro .cam-actions .btn-secondary,
+.painel-claro .sol-actions .btn-secondary {
+    background: #EAD298;
+    color: #23211c;
+    border: 1px solid #EAD298;
+    font-weight: 700;
+}
+.painel-claro .cam-actions .btn-secondary:active,
+.painel-claro .sol-actions .btn-secondary:active { background: #ddbf7f; }
+.painel-claro .btn-secondary.btn-sm {
+    background: #fff;
+    color: #23211c;
+    border: 1px solid #ece8df;
+}
+.painel-claro .btn-secondary.btn-sm:hover { background: #faf7ef; }
+
+/* Status e dicas */
+.painel-claro .cam-status { color: #9a7412; }
+.painel-claro .hab-status { color: #3a382f; }
+.painel-claro .hab-status small { color: #6b675f; }
+
 /* Histórico - fotos de segurança */
 .fotos-grid {
     display: grid;

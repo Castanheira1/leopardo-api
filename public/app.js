@@ -73,25 +73,26 @@ function mostrarPortaoConsentimento() {
     if (document.getElementById('lgpdGate')) return;
     const gate = document.createElement('div');
     gate.id = 'lgpdGate';
-    gate.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(3,20,21,.92);' +
+    gate.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(35,33,28,.45);' +
         'display:flex;align-items:center;justify-content:center;padding:20px;';
     gate.innerHTML = `
-        <div style="max-width:440px;width:100%;background:#0b2e2f;border:1px solid rgba(234,210,152,.25);
-                    border-radius:16px;padding:24px 22px;color:#e8eef0;font-family:inherit;">
-            <h2 style="color:#EAD298;margin:0 0 10px;font-size:1.25rem;">Atualização de privacidade</h2>
-            <p style="line-height:1.55;margin:0 0 12px;">
+        <div style="max-width:440px;width:100%;background:#ffffff;border:1px solid #ece8df;
+                    border-radius:16px;padding:24px 22px;color:#23211c;font-family:inherit;
+                    box-shadow:0 20px 60px rgba(20,18,12,.25);">
+            <h2 style="color:#23211c;margin:0 0 10px;font-size:1.25rem;font-weight:600;">Atualização de privacidade</h2>
+            <p style="line-height:1.6;margin:0 0 12px;color:#3a382f;">
                 Para continuar usando o VAP, precisamos do seu aceite da
-                <a href="politica-privacidade.html" target="_blank" rel="noopener" style="color:#EAD298;">Política de Privacidade</a>.
+                <a href="politica-privacidade.html" target="_blank" rel="noopener" style="color:#b0562f;font-weight:600;">Política de Privacidade</a>.
                 Ela explica como usamos sua selfie, foto do veículo e localização (GPS)
                 para a segurança das caronas, conforme a LGPD.
             </p>
-            <div id="lgpdGateMsg" style="display:none;color:#ff9b9b;font-size:.9rem;margin-bottom:10px;"></div>
+            <div id="lgpdGateMsg" style="display:none;color:#c0392b;font-size:.9rem;margin-bottom:10px;"></div>
             <button id="lgpdAceitar" type="button"
-                style="width:100%;padding:13px;border:none;border-radius:10px;background:#EAD298;color:#0F3D3E;
+                style="width:100%;padding:13px;border:none;border-radius:11px;background:#EAD298;color:#23211c;
                        font-weight:700;font-size:1rem;cursor:pointer;">Li e aceito a Política de Privacidade</button>
             <button id="lgpdSair" type="button"
-                style="width:100%;padding:11px;margin-top:10px;border:1px solid rgba(255,255,255,.2);border-radius:10px;
-                       background:transparent;color:#c9d4d5;font-size:.92rem;cursor:pointer;">Agora não (sair)</button>
+                style="width:100%;padding:11px;margin-top:10px;border:1px solid #ece8df;border-radius:11px;
+                       background:#fff;color:#6b675f;font-size:.92rem;cursor:pointer;">Agora não (sair)</button>
         </div>`;
     document.body.appendChild(gate);
 

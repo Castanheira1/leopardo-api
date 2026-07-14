@@ -6,10 +6,10 @@
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#0F3D3E">
+    <meta name="theme-color" content="#faf9f5">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="VAP">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="icon" href="/favicon.ico" sizes="any">
@@ -17,27 +17,87 @@
     <script src="/pwa.js" defer></script>
     <title>Histórico - VAP</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* ---- Histórico: padrão claro (mesmo estilo da tela de Locais / documentos) ---- */
+        :root {
+            --h-bg: #faf9f5; --h-card: #fff; --h-ink: #23211c; --h-muted: #6b675f;
+            --h-line: #ece8df; --h-gold: #9a7412;
+        }
+        body.hist-page { background: var(--h-bg); color: var(--h-ink); }
+        .hist-page .container { max-width: 720px; margin: 0 auto; padding: 14px 16px 60px; }
+
+        /* Cabeçalho claro: [← voltar] VAP ......... [Sair] */
+        .hist-top {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top));
+            background: rgba(250,249,245,.92); backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--h-line);
+        }
+        .hist-back {
+            width: 40px; height: 40px; flex: 0 0 auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 11px; border: 1px solid var(--h-line);
+            background: #fff; color: var(--h-ink); cursor: pointer; text-decoration: none;
+        }
+        .hist-back:hover { background: #f3f1ea; }
+        .hist-back svg { width: 20px; height: 20px; }
+        .hist-brand { font-weight: 700; letter-spacing: .04em; color: var(--h-ink); font-size: 1rem; }
+        .hist-top .grow { flex: 1 1 auto; }
+        .hist-sair {
+            flex: 0 0 auto; padding: 9px 16px; border-radius: 11px;
+            background: #EAD298; color: #23211c; border: 1px solid #EAD298;
+            font-weight: 700; font-size: .9rem; cursor: pointer;
+        }
+        .hist-sair:hover { background: #e0c479; }
+
+        .hist-page h1 {
+            font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            font-weight: 600; font-size: 1.45rem; letter-spacing: -0.01em;
+            margin: 16px 2px 4px; color: var(--h-ink);
+        }
+        .hist-page .intro { color: var(--h-muted); font-size: .9rem; margin: 0 2px 14px; line-height: 1.5; }
+
+        .hist-page .card {
+            background: var(--h-card); border: 1px solid var(--h-line);
+            border-radius: 16px; box-shadow: 0 1px 2px rgba(20,18,12,.03);
+            padding: 16px 16px; margin-bottom: 14px;
+        }
+        .hist-page .card h3 { color: var(--h-ink); font-size: 1.05rem; margin: 0 0 8px; }
+        .hist-page .card h4 { color: var(--h-ink); font-size: .98rem; margin: 14px 0 8px; }
+
+        /* Cada viagem: cartão branco compacto, texto menor, botão que ocupa a largura */
+        .hist-page .ride-item {
+            display: block; background: #fff; border: 1px solid var(--h-line);
+            border-radius: 14px; padding: 14px 14px; margin: 0 0 12px;
+        }
+        .hist-page .ride-info strong { font-size: .98rem; color: var(--h-ink); line-height: 1.35; }
+        .hist-page .ride-info small { color: var(--h-muted); font-size: .82rem; line-height: 1.5; }
+        .hist-page .ride-item .btn {
+            display: block; width: 100%; margin-top: 12px; text-align: center;
+            padding: 11px 14px; border-radius: 11px; font-size: .9rem; font-weight: 700;
+            background: #EAD298; color: #23211c; border: 1px solid #EAD298; cursor: pointer;
+        }
+        .hist-page .ride-item .btn:hover { background: #e0c479; }
+        .hist-page .map-box { border-radius: 12px; overflow: hidden; border: 1px solid var(--h-line); }
+        .hist-page .foto-card { border-color: var(--h-line); }
+        .hist-page .cam-hint { color: var(--h-muted); font-size: .85rem; }
+    </style>
 </head>
-<body class="app-mobile">
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-left">
-                <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
-            </div>
-            <div class="nav-links">
-                <span id="userName"></span>
-                <a href="dashboard.html" class="btn btn-secondary btn-sm">Voltar</a>
-                <button onclick="logout()" class="btn btn-secondary btn-sm">Sair</button>
-            </div>
-        </div>
-    </nav>
+<body class="app-mobile hist-page">
+    <header class="hist-top">
+        <a href="dashboard.html" class="hist-back" aria-label="Voltar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </a>
+        <span class="hist-brand">VAP</span>
+        <span class="grow"></span>
+        <button onclick="logout()" class="hist-sair">Sair</button>
+    </header>
 
     <div class="container">
-        <div class="card">
-            <h3>Minhas viagens</h3>
-            <p class="cam-hint">Cada viagem guarda a rota percorrida e as fotos de segurança (selfies e foto do carro) com data e local — registro para sua proteção.</p>
-            <div id="listaViagens"></div>
-        </div>
+        <h1>Minhas viagens</h1>
+        <p class="intro">Cada viagem guarda a rota percorrida e as fotos de segurança (selfies e foto do carro) com data e local — registro para sua proteção.</p>
+        <div id="listaViagens"></div>
 
         <div id="detalhe" class="card" style="display:none;">
             <h3>Detalhe da viagem</h3>
@@ -51,8 +111,6 @@
     <script src="app.js"></script>
     <script>
     checkAuth();
-    const user = JSON.parse(localStorage.getItem('user'));
-    document.getElementById('userName').textContent = `Olá, ${user.nome.split(' ')[0]}!`;
 
     async function carregar() {
         const r = await fetchWithAuth('/api/viagens');
@@ -66,7 +124,7 @@
                     <small>Motorista: ${esc(v.motorista_nome)} • Passageiro: ${esc(v.passageiro_nome)}</small><br>
                     <small>${fmtData(v.iniciada_em)} • ${v.status}${v.distancia_km ? ' • ' + v.distancia_km + ' km' : ''} • ${v.qtd_pontos} pontos GPS</small>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="ver(${v.id})">Ver rota e fotos</button>
+                <button class="btn" onclick="ver(${v.id})">Ver rota e fotos</button>
             </div>`).join('');
     }
 

@@ -4,83 +4,115 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Política de Privacidade — VAP</title>
+    <meta name="theme-color" content="#faf9f5">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/icon-192.png" type="image/png">
     <style>
-        :root { --teal: #0F3D3E; --gold: #EAD298; --ink: #12333a; }
+        :root {
+            --bg: #faf9f5;        /* creme claro, fundo do documento */
+            --card: #ffffff;
+            --ink: #23211c;       /* texto principal */
+            --muted: #6b675f;     /* texto secundário */
+            --line: #ece8df;      /* divisórias suaves */
+            --gold: #9a7412;      /* dourado legível sobre branco */
+            --link: #b0562f;      /* terracota p/ links */
+        }
         * { box-sizing: border-box; }
+        html, body { background: var(--bg); }
         body {
-            margin: 0; background: var(--teal); color: #e8eef0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            line-height: 1.6; padding: 24px 16px 64px;
+            margin: 0; color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 16px; line-height: 1.65;
+            padding: 28px 18px 72px;
+            -webkit-font-smoothing: antialiased;
         }
-        .doc { max-width: 760px; margin: 0 auto; }
+        .doc { max-width: 720px; margin: 0 auto; }
+        .head { margin-bottom: 20px; }
+        h1 {
+            font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            font-weight: 600; font-size: 1.7rem; line-height: 1.2;
+            letter-spacing: -0.01em; margin: 0 0 6px; color: var(--ink);
+        }
+        h2 {
+            font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            font-weight: 600; font-size: 1.15rem; letter-spacing: -0.005em;
+            margin: 26px 0 8px; color: var(--ink);
+        }
+        .meta { color: var(--muted); font-size: .9rem; margin: 2px 0; }
         .card {
-            background: #0b2e2f; border: 1px solid rgba(234,210,152,.18);
-            border-radius: 16px; padding: 24px 22px; margin-top: 18px;
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: 16px; padding: 8px 24px 22px;
+            box-shadow: 0 1px 2px rgba(20,18,12,.03);
         }
-        h1 { color: var(--gold); font-size: 1.5rem; margin: 0 0 4px; }
-        h2 { color: var(--gold); font-size: 1.1rem; margin: 26px 0 8px; }
-        .meta { color: #9fb3b4; font-size: .85rem; margin-bottom: 6px; }
-        a { color: var(--gold); }
-        ul { padding-left: 20px; }
-        li { margin: 4px 0; }
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .92rem; }
-        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+        p { margin: 10px 0; }
+        a { color: var(--link); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; margin: 10px 0; }
+        li { margin: 5px 0; }
+        strong { font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .95rem; }
+        th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
         th { color: var(--gold); font-weight: 600; }
-        .aviso {
-            background: rgba(234,210,152,.10); border: 1px dashed rgba(234,210,152,.4);
-            border-radius: 10px; padding: 12px 14px; font-size: .9rem; margin-top: 12px;
+        .ident {
+            background: #fbf7ec; border: 1px solid #efe4c6;
+            border-radius: 12px; padding: 14px 16px; margin: 14px 0 4px; font-size: .95rem;
         }
-        .voltar { display: inline-block; margin-top: 24px; color: var(--gold); text-decoration: none; font-weight: 600; }
-        .placeholder { color: #ffd27a; font-weight: 600; }
+        .ident strong { color: var(--gold); }
+        .voltar {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 24px; color: var(--gold); text-decoration: none; font-weight: 600;
+        }
+        .voltar:hover { text-decoration: underline; }
+        .sep { color: var(--line); margin: 0 8px; }
     </style>
 </head>
 <body>
     <div class="doc">
-        <h1>Política de Privacidade</h1>
-        <p class="meta">Aplicativo VAP — caronas entre colaboradores</p>
-        <p class="meta">Versão 1.0 · Vigente desde 03/07/2026</p>
-
-        <div class="aviso">
-            <strong>Antes de publicar:</strong> substitua os campos marcados em
-            <span class="placeholder">destaque</span> pelos dados reais do controlador
-            (razão social, CNPJ, endereço) e do encarregado (DPO). Esta política é um
-            modelo alinhado à LGPD (Lei nº 13.709/2018) e não substitui revisão jurídica.
+        <div class="head">
+            <h1>Política de Privacidade</h1>
+            <p class="meta">Aplicativo VAP — caronas entre colaboradores</p>
+            <p class="meta">Versão 1.1 · Vigente desde 14/07/2026</p>
         </div>
 
         <div class="card">
             <h2>1. Quem é o controlador dos dados</h2>
             <p>O controlador dos dados pessoais tratados neste aplicativo é
-            <span class="placeholder">[RAZÃO SOCIAL DO CONTROLADOR]</span>, inscrita no CNPJ
-            <span class="placeholder">[CNPJ]</span>, com sede em
-            <span class="placeholder">[ENDEREÇO]</span>. O aplicativo é de uso interno,
-            destinado a organizar caronas entre colaboradores.</p>
+            <strong>Wanderlei Ribeiro de Castro Castanheira</strong>, pessoa responsável pelo
+            VAP. O aplicativo é de uso interno, destinado a organizar caronas entre
+            colaboradores. Assim que a pessoa jurídica for constituída, esta política será
+            atualizada com a razão social e o CNPJ correspondentes.</p>
+
+            <div class="ident">
+                <p style="margin:0;"><strong>Controlador:</strong> Wanderlei Ribeiro de Castro Castanheira</p>
+                <p style="margin:6px 0 0;"><strong>CPF:</strong> 035.320.691-13</p>
+                <p style="margin:6px 0 0;"><strong>Contato:</strong>
+                    <a href="mailto:castanheira.wrc@gmail.com">castanheira.wrc@gmail.com</a></p>
+            </div>
 
             <h2>2. Encarregado (DPO) e contato</h2>
             <p>Para exercer seus direitos ou tirar dúvidas sobre esta política, fale com o
-            nosso Encarregado pelo Tratamento de Dados Pessoais:
-            <span class="placeholder">[NOME DO ENCARREGADO]</span> —
-            <a href="mailto:[EMAIL-DPO]"><span class="placeholder">[EMAIL-DPO]</span></a>.</p>
+            Encarregado pelo Tratamento de Dados Pessoais:
+            <strong>Wanderlei Ribeiro de Castro Castanheira</strong> —
+            <a href="mailto:castanheira.wrc@gmail.com">castanheira.wrc@gmail.com</a>.</p>
 
             <h2>3. Quais dados coletamos</h2>
             <table>
                 <tr><th>Categoria</th><th>Dados</th></tr>
                 <tr><td>Cadastro / identificação</td><td>Nome, matrícula, função, sexo, empresa, projeto, centro de custo, telefone (WhatsApp) e email.</td></tr>
-                <tr><td>Autenticação</td><td>Senha (armazenada apenas como <em>hash</em> bcrypt — nunca em texto).</td></tr>
+                <tr><td>Autenticação</td><td>Senha, armazenada apenas como <em>hash</em> (bcrypt) — nunca em texto.</td></tr>
                 <tr><td>Segurança da viagem</td><td>Selfie ao vivo (motorista e passageiro) e foto do veículo com placa, cada uma com data/hora e localização (GPS) do momento da captura.</td></tr>
-                <tr><td>Geolocalização</td><td>Posição GPS em tempo real durante o uso (mapa) e o traçado completo (rota) das viagens realizadas.</td></tr>
+                <tr><td>Geolocalização</td><td>Posição GPS em tempo real durante o uso (mapa) e o traçado completo (rota) das viagens.</td></tr>
                 <tr><td>Uso do app</td><td>Caronas ofertadas, pedidos, propostas, viagens, distância percorrida e registros de acesso.</td></tr>
             </table>
-            <p>Não coletamos dados de crianças e adolescentes nem categorias sensíveis além
-            das imagens necessárias à segurança das caronas.</p>
+            <p>Não coletamos dados de crianças e adolescentes nem categorias sensíveis além das
+            imagens necessárias à segurança das caronas.</p>
 
             <h2>4. Para que usamos (finalidades) e base legal</h2>
             <ul>
-                <li><strong>Operar as caronas</strong> (cadastro, login, match por proximidade, contato entre as partes) — execução de contrato/procedimentos preliminares e legítimo interesse.</li>
-                <li><strong>Segurança das viagens</strong> (selfie ao vivo, foto do carro/placa e rota GPS que permitem identificar quem dirigiu, quem embarcou e o trajeto) — legítimo interesse na segurança dos colaboradores, com o seu <strong>consentimento</strong> para o uso de imagem e localização.</li>
-                <li><strong>Gestão e rateio de custos</strong> por empresa/projeto/centro de custo — legítimo interesse e cumprimento de obrigações contratuais.</li>
+                <li><strong>Operar as caronas</strong> (cadastro, login, match por proximidade e contato entre as partes) — execução de contrato e procedimentos preliminares, e legítimo interesse.</li>
+                <li><strong>Segurança das viagens</strong> (selfie ao vivo, foto do carro/placa e rota GPS, que permitem identificar quem dirigiu, quem embarcou e o trajeto) — legítimo interesse na segurança dos colaboradores, com o seu <strong>consentimento</strong> para o uso de imagem e localização.</li>
+                <li><strong>Gestão e rateio de custos</strong> por empresa, projeto e centro de custo — legítimo interesse e cumprimento de obrigações contratuais.</li>
                 <li><strong>Recuperação de senha e comunicação operacional</strong> por email — execução do serviço.</li>
             </ul>
 
@@ -127,8 +159,10 @@
         </div>
 
         <a class="voltar" href="registro.html">← Voltar ao cadastro</a>
-        &nbsp;·&nbsp;
+        <span class="sep">·</span>
         <a class="voltar" href="index.html">Ir para o login</a>
+        <span class="sep">·</span>
+        <a class="voltar" href="termos-de-uso.html">Termos de Uso</a>
     </div>
 </body>
 </html>
