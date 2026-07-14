@@ -1797,6 +1797,10 @@
         if (ctx.state === 'suspended') { ctx.resume().then(tocar).catch(() => {}); return; }
         tocar();
     }
+    // Vibração curta de confirmação (celulares com suporte; no resto é no-op).
+    function vibradinha(ms = 30) {
+        try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {}
+    }
     let papelGlowTimer = null;
     function resetarGlowPapel() {
         if (papelGlowTimer) { clearTimeout(papelGlowTimer); papelGlowTimer = null; }
@@ -1806,6 +1810,7 @@
     function selecionarPapelComGlow(papel, btn) {
         resetarGlowPapel();
         tocSeco();
+        vibradinha();
         btn.classList.add('papel-opt--on');
         papelGlowTimer = setTimeout(() => {
             papelGlowTimer = null;
@@ -4145,6 +4150,8 @@
             const flip = querLigar !== ligado();
             track.classList.remove('dragging');
             if (!flip) { knob.style.left = ''; return; }   // volta pro lado atual (transição CSS)
+            tocSeco();
+            vibradinha();
             // Otimista: prende o knob no lado alvo enquanto a ação roda.
             knob.style.left = querLigar ? (5 + maxX()) + 'px' : '5px';
             track.classList.add('processing');
