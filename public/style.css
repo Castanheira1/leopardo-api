@@ -94,6 +94,21 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Saudação em duas linhas: "Boa noite," pequeno + nome em destaque */
+.nav-user small {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #9aa0a6;
+    line-height: 1.15;
+}
+.nav-user strong {
+    display: block;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #EAD298;
+    line-height: 1.2;
+}
 /* Espaço invisível à direita: mantém o nome centralizado após mover o menu */
 .nav-spacer {
     width: 44px;
@@ -2038,6 +2053,113 @@ body.buscando-carona .banner-agendamentos { visibility: hidden; }
     gap: 8px;
     pointer-events: none;
 }
+/* No mapa do passageiro a barra "Para onde vamos?" ocupa o topo — controles
+   e banner descem para não ficar atrás dela */
+#mapPedControls { top: 122px; }
+#bannerAgendamentos { top: 122px; }
+/* Barra "Para onde vamos?" fixa no topo do mapa do passageiro */
+.destino-topo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    padding: 10px 14px 14px;
+    background: linear-gradient(180deg, #0f1012 72%, rgba(15, 16, 18, 0));
+    pointer-events: none;
+}
+.destino-topo > * { pointer-events: auto; }
+.destino-topo-tit {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #EAD298;
+    margin: 0 0 8px;
+}
+.destino-topo-campo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1c1d21;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.destino-topo-campo:active { background: #24252a; }
+.destino-topo-pin { display: inline-flex; color: #EAD298; flex: 0 0 auto; }
+.destino-topo-txt {
+    flex: 1;
+    min-width: 0;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.destino-topo-txt--vazio { color: #9aa0a6; font-weight: 500; }
+.destino-topo-x {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e8eaed;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.destino-topo-x:active { background: rgba(255, 255, 255, 0.18); }
+/* Card-resumo "Motoristas por perto" (nº online, mais próximo, ETA) */
+.mot-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    text-align: left;
+    padding: 12px 14px;
+    margin: 0 0 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    cursor: pointer;
+    color: #e8eaed;
+    touch-action: manipulation;
+}
+.mot-stats:active { background: rgba(255, 255, 255, 0.07); }
+.mot-stats-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #9aa0a6;
+    font-size: 0.82rem;
+}
+.mot-stats-lab { display: inline-flex; align-items: center; gap: 8px; }
+.mot-stats-chev { transition: transform 0.18s ease; }
+.mot-stats--aberto .mot-stats-chev { transform: rotate(90deg); }
+.mot-stats-num {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.01em;
+}
+.mot-stats-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 2px;
+}
+.mot-stats-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mot-stats-col + .mot-stats-col {
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    padding-left: 12px;
+}
+.mot-stats-col small { font-size: 0.75rem; color: #9aa0a6; }
+.mot-stats-col b { font-size: 1rem; font-weight: 700; color: #EAD298; }
 .map-stage-controls .map-tipo-btn {
     pointer-events: auto;
     margin: 0;

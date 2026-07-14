@@ -2,13 +2,26 @@
    VAP - utilidades globais (auth, mapa, câmera, OCR)
    ============================================================ */
 
+// Saudação por horário ("Boa noite," em cima, nome embaixo — estilo app de corrida).
+function aplicarSaudacaoUsuario(el, nome) {
+    if (!el || !nome) return;
+    const h = new Date().getHours();
+    const saud = h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';
+    el.innerHTML = '';
+    const s = document.createElement('small');
+    s.textContent = saud + ',';
+    const b = document.createElement('strong');
+    b.textContent = String(nome).split(' ')[0];
+    el.appendChild(s);
+    el.appendChild(b);
+}
+
 function checkAuth(adminOnly = false) {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || 'null');
     if (!token || !user) { location.href = 'index.html'; return; }
     if (adminOnly && !user.is_admin) { avisoProximaPagina('Acesso restrito a administradores.'); location.href = 'dashboard.html'; return; }
-    const el = document.getElementById('userName');
-    if (el) el.textContent = `Olá, ${user.nome.split(' ')[0]}!`;
+    aplicarSaudacaoUsuario(document.getElementById('userName'), user.nome);
     // LGPD: quem se cadastrou antes do consentimento precisa aceitar a política
     // para continuar usando o app. Verifica no servidor e, se pendente, mostra o
     // portão bloqueante. Fire-and-forget (não trava o resto do carregamento).
