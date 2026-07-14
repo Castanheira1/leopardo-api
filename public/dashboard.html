@@ -749,6 +749,9 @@
             }
         }
         document.querySelectorAll('.tab-content.active .acao-sheet').forEach((sheet) => {
+            // Busca rodando ("Procurando motorista…"): o sheet fica oculto pelo
+            // CSS — não força visível por cima, senão sobra um pedaço na tela.
+            if (document.body.classList.contains('buscando-carona')) return;
             sheet.style.visibility = 'visible';
             sheet.style.display = 'flex';
             sheet.style.opacity = '1';
@@ -1025,13 +1028,8 @@
         const listas = document.getElementById('motoristasListas');
         if (!card) return;
         const n = (todos || []).length;
-        if (!n && !opts.semDestino) {
-            // Com destino e ninguém na lista: esconde o resumo e deixa as
-            // mensagens da lista ("Sem rota…") à vista.
-            card.style.display = 'none';
-            if (listas) listas.style.display = 'block';
-            return;
-        }
+        // Mesmo cartão da tela inicial também COM destino e lista vazia — os
+        // detalhes ("Sem rota…", "Nenhum online…") ficam no toque do cartão.
         document.getElementById('motStatsNum').textContent = n
             ? `${n} motorista${n > 1 ? 's' : ''} online`
             : 'Nenhum motorista online agora';

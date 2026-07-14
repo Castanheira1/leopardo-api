@@ -1836,8 +1836,10 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 /* Enquanto a busca está aberta, o painel de ação da aba (Pedir/Oferecer,
    "Limpar rota"…) e o banner de agendamentos somem: o vão do mapa deixa
    toques passarem, e botão escondido não pode receber clique. */
+/* !important: garantirUiAcaoVisivel() deixa visibility:visible INLINE no sheet;
+   sem isto, a sobra do painel aparecia no meio da busca. */
 body.buscando-carona .acao-sheet,
-body.buscando-carona .banner-agendamentos { visibility: hidden; }
+body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
 /* Barra única com divisórias finas entre os itens (como no layout). */
 .chamando-info-bar {
     display: flex;
