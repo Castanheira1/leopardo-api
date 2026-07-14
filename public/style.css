@@ -1008,6 +1008,29 @@ html.teclado-aberto {
 }
 .alcance-range::-webkit-slider-thumb:active { cursor: grabbing; }
 .alcance-hint { margin-top: 8px; color: #9aa0a6; font-size: 0.78rem; line-height: 1.35; }
+/* Resumo compacto no lugar da barra (raio · velocidade média · temperatura).
+   Mesmo visual da barra; toque reabre o ajuste. */
+.alcance-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    margin: 4px 0 10px;
+    padding: 13px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(234, 210, 152, 0.22);
+    border-radius: 14px;
+    color: #e8eaed;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.alcance-info:active { background: rgba(234, 210, 152, 0.1); }
+.alcance-info .alcance-info-km { color: #EAD298; font-weight: 800; }
+.alcance-info .alcance-info-sep { color: #6b7280; }
 .acao-sheet.teclado-aberto {
     max-height: calc(var(--appvh, 1vh) * 72);
     overflow: hidden;
@@ -2706,6 +2729,17 @@ body.aguardando-papel .navbar {
 .perfil-secao .map-search { margin-bottom: 10px; }
 .perfil-box .hab-info { margin-bottom: 4px; }
 .perfil-box .hab-actions { margin-top: 10px; }
+/* Botões de habilitação do Perfil: mesma faixa dos cartões de navegação acima
+   (largura total, mesma altura/raio), mantendo a cor dourada do primário. */
+.perfil-box .hab-actions { flex-direction: column; gap: 10px; }
+.perfil-box .hab-actions .btn {
+    flex: none;
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 700;
+}
 
 /* Filtro de locais/favoritos: logo abaixo do título, visível com teclado aberto */
 .fav-filtro-topo {
