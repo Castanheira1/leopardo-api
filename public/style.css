@@ -538,6 +538,17 @@ body {
     letter-spacing: -0.01em;
     color: rgba(255, 255, 255, 0.92);
 }
+/* "Recebendo todas as chamadas" no padrão Claude: por dentro, amarelinho claro
+   e suave com texto escuro; contorno dourado fraco (sem o cinza escuro). */
+#statusMotoristaOnline.ios-banner--amarelo {
+    background: #f6ecd2;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(234, 210, 152, 0.7);
+    box-shadow: none;
+}
+#statusMotoristaOnline.ios-banner--amarelo .ios-banner__title { color: #23211c; }
+#statusMotoristaOnline.ios-banner--amarelo .ios-banner__sub { color: #6b675f; }
 .acao-sheet .form-group {
     margin-bottom: 12px;
 }
@@ -1071,12 +1082,13 @@ html.teclado-aberto {
     /* alça sempre no fluxo visível — não some com z-index do mapa */
     z-index: 2;
 }
-/* Alça de arrastar — SEMPRE visível (aberto ou colapsado). Antes sumia no aberto. */
+/* Alça de arrastar — SEMPRE visível (aberto ou colapsado). Antes sumia no aberto.
+   Dourada (padrão Claude) em vez do cinza. */
 .acao-handle {
     width: 44px;
     height: 5px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.45);
+    background: rgba(234, 210, 152, 0.6);
     box-shadow: none;
     display: block !important;
     flex-shrink: 0;
@@ -1087,6 +1099,12 @@ html.teclado-aberto {
     width: 52px;
     height: 6px;
     background: rgba(234, 210, 152, 0.75);
+}
+/* Sheet colapsado com a faixa de resumo (km · km/h · °C) ou a barra de alcance:
+   sobe um pouco — sem colar na borda de baixo da tela. */
+.acao-sheet.collapsed .alcance-wrap,
+.acao-sheet.collapsed .alcance-info {
+    margin-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
 }
 .limpar-rota-bar {
     display: flex;
