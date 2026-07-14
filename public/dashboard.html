@@ -1797,9 +1797,10 @@
         if (ctx.state === 'suspended') { ctx.resume().then(tocar).catch(() => {}); return; }
         tocar();
     }
-    // Vibração curta de confirmação (celulares com suporte; no resto é no-op).
-    function vibradinha(ms = 50) {
-        try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {}
+    // Vibração de confirmação: duas vibradas de 80ms com pausa curta entre elas
+    // (celulares com suporte; no resto é no-op). Aceita número ou padrão [ms,...].
+    function vibradinha(padrao = [80, 70, 80]) {
+        try { if (navigator.vibrate) navigator.vibrate(padrao); } catch (_) {}
     }
     let papelGlowTimer = null;
     function resetarGlowPapel() {
