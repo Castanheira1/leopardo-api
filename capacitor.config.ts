@@ -1,19 +1,18 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-// Build apontando para o backend publicado (ex.: https://vagao.onrender.com):
-//   CAPACITOR_SERVER_URL=https://vagao.onrender.com npx cap sync
-// Sem a variável, o app embarca os arquivos de public/ como assets locais
-// (útil para inspecionar o shell nativo, mas as chamadas a /api/... exigem
-// um backend acessível — ver docs/CAPACITOR.md).
-const serverUrl = process.env.CAPACITOR_SERVER_URL;
+// O app nativo carrega o backend publicado. Como o front usa caminhos relativos
+// (/api/...), o modo que funciona é apontar server.url para o backend em produção.
+// Sobrescreva com a variável se mudar de host:
+//   CAPACITOR_SERVER_URL=https://outro-host npx cap sync
+// (ver docs/PUBLICAR-LOJAS.md e docs/CAPACITOR.md).
+const PROD_URL = "https://leopardo-api.onrender.com";
+const serverUrl = process.env.CAPACITOR_SERVER_URL || PROD_URL;
 
 const config: CapacitorConfig = {
   appId: "com.vap.carona",
   appName: "VAP",
   webDir: "public",
-  server: serverUrl
-    ? { url: serverUrl, cleartext: false }
-    : { androidScheme: "https" },
+  server: { url: serverUrl, cleartext: false },
 };
 
 export default config;

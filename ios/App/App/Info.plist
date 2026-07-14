@@ -47,5 +47,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Permissões: exigidas pela App Store para câmera e localização. Sem elas o app é rejeitado (e trava ao acessar o recurso). -->
+	<key>NSCameraUsageDescription</key>
+	<string>O VAP usa a câmera para a selfie ao vivo e a foto do veículo, que garantem a segurança das caronas.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O VAP usa sua localização para mostrar motoristas e passageiros próximos, calcular a rota e registrar a viagem.</string>
+	<!-- Sem criptografia proprietária: dispensa o formulário de conformidade de exportação. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

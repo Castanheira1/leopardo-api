@@ -40,4 +40,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Sem VIBRATE o navigator.vibrate() do WebView falha em silêncio. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Câmera: selfie ao vivo e foto do veículo (getUserMedia no WebView). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Localização (uso em primeiro plano): mapa, match por proximidade e rota. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>
