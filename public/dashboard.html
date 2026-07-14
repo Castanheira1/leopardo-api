@@ -1798,7 +1798,7 @@
         tocar();
     }
     // Vibração curta de confirmação (celulares com suporte; no resto é no-op).
-    function vibradinha(ms = 30) {
+    function vibradinha(ms = 50) {
         try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {}
     }
     let papelGlowTimer = null;
