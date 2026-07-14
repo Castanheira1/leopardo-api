@@ -648,16 +648,16 @@
     <div id="telaPapel" class="papel-overlay" style="display:none;">
         <div class="papel-box">
             <h2>O que você quer fazer?</h2>
-            <button type="button" class="papel-opt" onclick="escolherPapel('passageiro')">
-                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
-                <span class="papel-tit">Solicitar carona</span>
-                <span class="papel-sub">Sou passageiro</span>
-            </button>
-            <button type="button" class="papel-opt" onclick="escolherPapel('motorista')">
-                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#EAD298" stroke-width="2" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="#EAD298"/><circle cx="16.5" cy="16" r="1.2" fill="#EAD298"/></svg>
-                <span class="papel-tit">Oferecer carona</span>
-                <span class="papel-sub">Sou motorista</span>
-            </button>
+            <div class="papel-row">
+                <button type="button" class="papel-opt" onclick="selecionarPapelComGlow('passageiro', this)">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
+                    <span class="papel-tit">Pedir carona</span>
+                </button>
+                <button type="button" class="papel-opt" onclick="selecionarPapelComGlow('motorista', this)">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>
+                    <span class="papel-tit">Oferecer carona</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1769,8 +1769,30 @@
         }
         // Não apaga o papel até escolher outro — se cancelar/voltar, permanece.
         document.body.classList.add('aguardando-papel');
+        resetarGlowPapel();
         document.getElementById('telaPapel').style.display = 'flex';
         esconderBootSplash();
+    }
+
+    /* Toque no card: acende a luzinha dourada, segura 2s (dá tempo de ver a
+       seleção "ligar") e então entra no modo. Tocar no outro card dentro
+       desses 2s troca a escolha e reinicia a espera. */
+    let papelGlowTimer = null;
+    function resetarGlowPapel() {
+        if (papelGlowTimer) { clearTimeout(papelGlowTimer); papelGlowTimer = null; }
+        document.querySelectorAll('#telaPapel .papel-opt--on')
+            .forEach((b) => b.classList.remove('papel-opt--on'));
+    }
+    function selecionarPapelComGlow(papel, btn) {
+        resetarGlowPapel();
+        btn.classList.add('papel-opt--on');
+        papelGlowTimer = setTimeout(() => {
+            papelGlowTimer = null;
+            // Se outra rotina fechou a tela nesse meio-tempo (ex.: retomada de
+            // viagem), não força a troca de papel.
+            if (document.getElementById('telaPapel').style.display === 'none') return;
+            escolherPapel(papel);
+        }, 2000);
     }
     function escolherPapel(papel) {
         // Com viagem em curso, só aceita o papel já fixado (evita “perder” a corrida).

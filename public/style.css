@@ -649,7 +649,7 @@ a.btn { display: inline-block; text-align: center; }
     .btn-primary:hover, .btn-success:hover { background: #EAD298; }
     .btn-secondary:hover { background: rgba(15, 61, 62, 0.55); }
     .btn-danger:hover { background: #c9a96a; }
-    .papel-opt:hover, .papel-opt:active { border-color: #2a2b2f; background: #161719; }
+    .papel-opt:hover, .papel-opt:active { border-color: #5a5b5f; background: #0e0f11; }
     .perfil-nav-btn:hover, .perfil-nav-btn:active { background: rgba(255, 255, 255, 0.05); border-color: rgba(234, 210, 152, 0.25); }
 }
 
@@ -1566,14 +1566,24 @@ body.theme-dark {
 @keyframes boot-spin { to { transform: rotate(360deg); } }
 
 /* ===== Tela de escolha do papel (passageiro x motorista) ===== */
-.papel-overlay { position: fixed; inset: 0; background: #0b0b0d; z-index: 9998; display: flex; align-items: center; justify-content: center; padding: 24px; }
-.papel-box { width: 100%; max-width: 420px; text-align: center; }
-.papel-box h2 { color: #fff; margin-bottom: 22px; font-size: 1.35rem; }
-.papel-opt { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 26px 18px; margin-bottom: 16px; background: #161719; border: 1px solid #2a2b2f; border-radius: 16px; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
-.papel-opt:hover, .papel-opt:active { border-color: #EAD298; background: #1d1f22; }
-.papel-opt svg { margin-bottom: 6px; }
-.papel-tit { font-size: 1.15rem; font-weight: 700; color: #fff; }
-.papel-sub { font-size: 0.85rem; color: #9aa0a6; }
+.papel-overlay { position: fixed; inset: 0; background: #000; z-index: 9998; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.papel-box { width: 100%; max-width: 440px; text-align: center; }
+.papel-box h2 { color: #fff; margin-bottom: 34px; font-size: 1.45rem; font-weight: 600; }
+.papel-row { display: flex; gap: 10px; }
+.papel-opt { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 34px 12px; background: #0e0f11; border: 1px solid #5a5b5f; border-radius: 24px; color: #e8eaed; cursor: pointer; transition: border-color 0.25s ease, background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease; }
+.papel-opt:hover, .papel-opt:active { border-color: #EAD298; background: #15140f; }
+.papel-tit { font-size: 1.1rem; font-weight: 600; color: inherit; }
+/* Card escolhido: "luzinha" dourada acesa, pulsando enquanto espera os 2s de entrada. */
+.papel-opt--on, .papel-opt--on:hover, .papel-opt--on:active {
+    color: #EAD298;
+    border-color: #EAD298;
+    background: #17140c;
+    animation: papelGlow 1.1s ease-in-out infinite alternate;
+}
+@keyframes papelGlow {
+    from { box-shadow: 0 0 10px rgba(234, 210, 152, 0.35), 0 0 28px rgba(234, 210, 152, 0.15), inset 0 0 12px rgba(234, 210, 152, 0.08); }
+    to   { box-shadow: 0 0 18px rgba(234, 210, 152, 0.60), 0 0 52px rgba(234, 210, 152, 0.30), inset 0 0 20px rgba(234, 210, 152, 0.14); }
+}
 
 /* ===== Viagem em andamento estilo Uber (mapa cheio + sheet arrastável) ===== */
 #tabViagem.tab-content { padding: 10px 8px; }
