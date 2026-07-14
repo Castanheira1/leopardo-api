@@ -1774,9 +1774,29 @@
         esconderBootSplash();
     }
 
-    /* Toque no card: acende a luzinha dourada, segura 2s (dá tempo de ver a
-       seleção "ligar") e então entra no modo. Tocar no outro card dentro
-       desses 2s troca a escolha e reinicia a espera. */
+    /* Toque no card: som seco de "toc", acende a luzinha dourada, segura 2s
+       (dá tempo de ver a seleção "ligar") e então entra no modo. Tocar no
+       outro card dentro desses 2s troca a escolha e reinicia a espera. */
+    function tocSeco() {
+        try { if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+        const ctx = _audioCtx;
+        if (!ctx) return;
+        const tocar = () => {
+            if (ctx.state !== 'running') return;
+            const t = ctx.currentTime + 0.005;
+            // Estalo curto tipo madeira: pitch cai rápido e o volume morre em ~90ms.
+            const o = ctx.createOscillator(), gn = ctx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(1050, t);
+            o.frequency.exponentialRampToValueAtTime(320, t + 0.04);
+            gn.gain.setValueAtTime(0.4, t);
+            gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+            o.connect(gn).connect(ctx.destination);
+            o.start(t); o.stop(t + 0.1);
+        };
+        if (ctx.state === 'suspended') { ctx.resume().then(tocar).catch(() => {}); return; }
+        tocar();
+    }
     let papelGlowTimer = null;
     function resetarGlowPapel() {
         if (papelGlowTimer) { clearTimeout(papelGlowTimer); papelGlowTimer = null; }
@@ -1785,6 +1805,7 @@
     }
     function selecionarPapelComGlow(papel, btn) {
         resetarGlowPapel();
+        tocSeco();
         btn.classList.add('papel-opt--on');
         papelGlowTimer = setTimeout(() => {
             papelGlowTimer = null;
