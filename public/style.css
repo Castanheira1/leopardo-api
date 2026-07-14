@@ -2741,22 +2741,28 @@ body.aguardando-papel .navbar {
     margin-top: auto;
     padding-top: 14px;
 }
-/* --- Locais: acabamento estilo app (título ao centro, busca clara, Fechar preto) --- */
+/* --- Locais: painel CLARO estilo mockup (caixa branca, título escuro,
+   busca cinza-claro, Fechar dourado) — passageiro e motorista --- */
+.cam-overlay-alto .cam-box.painel-locais {
+    background: #fff;
+    color: #111;
+}
 .painel-locais #favTitulo {
     text-align: center;
     font-size: 1.35rem;
     letter-spacing: -0.01em;
     margin: 2px 0 12px;
+    color: #111;
 }
 .painel-locais #favSubtitulo {
     text-align: center;
-    color: #9aa0a6;
+    color: #6b7280;
 }
-/* Busca: campo BRANCO por dentro, texto do placeholder cinza. Vence o
+/* Busca: campo cinza-claro com placeholder cinza. Vence o
    .theme-dark input por especificidade (2 classes). */
 .painel-locais .fav-filtro-topo {
-    background: #fff;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    background: #f3f4f6;
+    border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: 12px;
     padding: 13px 14px;
     color: #111;
@@ -2764,17 +2770,18 @@ body.aguardando-papel .navbar {
 }
 .painel-locais .fav-filtro-topo::placeholder { color: #6b7280; opacity: 1; }
 .painel-locais .fav-filtro-topo:focus {
-    border-color: rgba(234, 210, 152, 0.9);
+    border-color: rgba(196, 151, 26, 0.7);
     outline: none;
 }
-/* Fechar: branco com letra preta. */
+/* Fechar: dourado com letra preta (como o mockup). */
 .painel-locais .sol-actions .btn-secondary,
 .painel-locais .sol-actions .btn-secondary:hover {
-    background: #fff;
+    background: #EAD298;
     color: #111;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    border: 1px solid #EAD298;
     font-weight: 700;
 }
+.painel-locais .sol-actions .btn-secondary:active { background: #ddbf7f; }
 
 /* Histórico - fotos de segurança */
 .fotos-grid {
