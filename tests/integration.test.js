@@ -886,6 +886,63 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(rC.json, null, "oferta de C deveria ter expirado");
     });
 
+    /* =================== BUSCA HONESTA (fila-status + recusa avisada) =================== */
+    grupo("Busca honesta: fila-status conta recusas/online e recusa some do mapa");
+    await test("fila-status expõe esgotada, recusas e motoristas online", async () => {
+      const { status, json } = await api("GET", `/api/pedidos/${pedidoFilaId}/fila-status`, { token: tokFilaPax });
+      eq(status, 200, "status");
+      eq(json.esgotada, true, "fila esgotada deveria vir sinalizada");
+      eq(json.restantes, 0, "sem candidatos restantes");
+      assert(json.recusas >= 1, `A recusou — recusas deveria ser >= 1, veio ${json.recusas}`);
+      assert(typeof json.online === "number" && json.online >= 1,
+        `deveria contar motoristas online no projeto, veio ${json.online}`);
+    });
+
+    let pedidoPulsoId;
+    await test("pedido broadcast (sem fila): motorista perto vê o pulso", async () => {
+      // A e B vão para a origem exata (dentro dos 600 m do modo amarelo).
+      for (const tok of [tokFilaA, tokFilaB]) {
+        const { status } = await api("POST", "/api/motorista/online", {
+          token: tok, body: { lat: ORIGEM_FILA.lat, lng: ORIGEM_FILA.lng },
+        });
+        eq(status, 200, "ficar online na origem");
+      }
+      const novo = await api("POST", "/api/pedidos", {
+        token: tokFilaPax,
+        body: {
+          origem_texto: "Portaria", origem_lat: ORIGEM_FILA.lat, origem_lng: ORIGEM_FILA.lng,
+          destino_texto: "Usina", destino_lat: DESTINO_FILA.lat, destino_lng: DESTINO_FILA.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(novo.status, 200, "status novo pedido");
+      pedidoPulsoId = novo.json.id;
+      const { status, json } = await api(
+        "GET", `/api/pedidos?lat=${ORIGEM_FILA.lat}&lng=${ORIGEM_FILA.lng}`, { token: tokFilaA });
+      eq(status, 200, "status");
+      assert(json.some((p) => p.id === pedidoPulsoId), "A deveria ver o pulso do pedido");
+    });
+
+    await test("A recusa o pulso -> recusa registrada e pulso some SÓ para A", async () => {
+      const { status, json } = await api(
+        "POST", `/api/pedidos/${pedidoPulsoId}/recusar-motorista`, { token: tokFilaA });
+      eq(status, 200, "status recusar");
+      eq(json.avancou, false, "sem fila viva não há avanço de fila");
+
+      const rA = await api("GET", `/api/pedidos?lat=${ORIGEM_FILA.lat}&lng=${ORIGEM_FILA.lng}`, { token: tokFilaA });
+      assert(!rA.json.some((p) => p.id === pedidoPulsoId), "pulso não deveria voltar para quem recusou");
+
+      const rB = await api("GET", `/api/pedidos?lat=${ORIGEM_FILA.lat}&lng=${ORIGEM_FILA.lng}`, { token: tokFilaB });
+      assert(rB.json.some((p) => p.id === pedidoPulsoId), "B (não recusou) deveria continuar vendo o pulso");
+    });
+
+    await test("passageiro enxerga a recusa no fila-status do pedido broadcast", async () => {
+      const { status, json } = await api("GET", `/api/pedidos/${pedidoPulsoId}/fila-status`, { token: tokFilaPax });
+      eq(status, 200, "status");
+      assert(json.recusas >= 1, `recusa do pulso deveria contar, veio ${json.recusas}`);
+      assert(typeof json.online === "number" && json.online >= 1, "online deveria contar B disponível");
+    });
+
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
     grupo("Localização ao vivo");
     await test("POST /api/localizacao aceita coordenadas válidas", async () => {

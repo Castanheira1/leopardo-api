@@ -1383,16 +1383,33 @@ if (process.env.RENDER_EXTERNAL_URL) {
 // passou há mais de 3h.
 setInterval(async () => {
   try {
+    // Passageiro já está numa viagem em andamento: encerra o pedido pendente
+    // dele (não some só da vista — sai de vez, pra não voltar). Sem aviso —
+    // ele já está sendo atendido.
     await pool.query(`
       UPDATE pedidos p SET status = 'cancelado'
-      WHERE p.status = 'aberto' AND (
-        (p.horario IS NULL AND p.created_at < NOW() - INTERVAL '10 minutes')
-        OR (p.horario IS NOT NULL AND p.horario < NOW() - INTERVAL '3 hours')
-        -- Passageiro já está numa viagem em andamento: encerra o pedido pendente
-        -- dele (não some só da vista — sai de vez, pra não voltar).
-        OR EXISTS (SELECT 1 FROM viagens v
-                   WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
-      )
+      WHERE p.status = 'aberto'
+        AND EXISTS (SELECT 1 FROM viagens v
+                    WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
+    `);
+    // Busca "para agora" vencida (10 min sem ninguém aceitar): encerra E AVISA —
+    // o passageiro não pode descobrir sozinho que a busca morreu.
+    const { rows: vencidos } = await pool.query(`
+      UPDATE pedidos SET status = 'cancelado'
+      WHERE status = 'aberto' AND horario IS NULL
+        AND created_at < NOW() - INTERVAL '10 minutes'
+      RETURNING id, passageiro_id
+    `);
+    vencidos.forEach((p) => enviarPush(p.passageiro_id, {
+      title: "Busca encerrada",
+      body: "Nenhum motorista aceitou desta vez. Peça novamente quando quiser.",
+      url: "/dashboard.html",
+    }));
+    // Agendado cujo horário já passou há mais de 3h: limpeza silenciosa.
+    await pool.query(`
+      UPDATE pedidos SET status = 'cancelado'
+      WHERE status = 'aberto' AND horario IS NOT NULL
+        AND horario < NOW() - INTERVAL '3 hours'
     `);
   } catch (err) {
     console.error("Erro ao expirar pedidos:", err.message);
@@ -2476,7 +2493,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       )).rows[0];
       const raioKm = temCarona ? (Number(temCarona.raio_km) || RAIO_VISIVEL_KM) : RAIO_ONLINE_KM;
       const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
-      const params = [lat, lng, raioKm, pid];
+      const params = [lat, lng, raioKm, pid, req.user.id];
       const { rows } = await pool.query(
         `SELECT * FROM (
            SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
@@ -2500,6 +2517,11 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
              AND NOT EXISTS (SELECT 1 FROM pedido_fila f
                              WHERE f.pedido_id = p.id
                                AND f.status IN ('aguardando', 'ofertada'))
+             -- Este motorista já recusou: o pulso não volta pra ele (nem após reload).
+             AND NOT EXISTS (SELECT 1 FROM pedido_fila fr
+                             WHERE fr.pedido_id = p.id
+                               AND fr.motorista_id = $5
+                               AND fr.status = 'recusada')
              AND u.projeto_id = $4
          ) s
          WHERE s.dist_origem <= $3
@@ -2531,7 +2553,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
 
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
-    const params = [pid];
+    const params = [pid, req.user.id];
     const filtroProj = `AND u.projeto_id = $1`;
     const { rows } = await pool.query(
       `SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo
@@ -2549,6 +2571,11 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
          AND NOT EXISTS (SELECT 1 FROM pedido_fila f
                          WHERE f.pedido_id = p.id
                            AND f.status IN ('aguardando', 'ofertada'))
+         -- Quem já recusou não vê o pedido de novo.
+         AND NOT EXISTS (SELECT 1 FROM pedido_fila fr
+                         WHERE fr.pedido_id = p.id
+                           AND fr.motorista_id = $2
+                           AND fr.status = 'recusada')
          ${filtroProj}
        ORDER BY p.created_at DESC`,
       params
@@ -2997,6 +3024,36 @@ async function cancelarViagemAtiva(viagemId, usuarioId) {
  * próximo. Quem aceitar primeiro trava a vaga — os demais somem da fila.
  */
 
+// Quantos motoristas habilitados estão de fato online/disponíveis no projeto
+// (mesmo critério de visibilidade do mapa do passageiro). É o "tem carro ativo?"
+// que alimenta a tela de busca — sem isso o robozinho procura no vazio.
+// pedidoIdSemRecusas: desconta quem já recusou aquele pedido — sobra só quem
+// ainda pode aceitar.
+async function contarMotoristasOnline(projetoId, excluirUsuarioId, pedidoIdSemRecusas = null) {
+  const params = [excluirUsuarioId, projetoId];
+  let filtroRecusa = "";
+  if (pedidoIdSemRecusas) {
+    params.push(pedidoIdSemRecusas);
+    filtroRecusa = `AND NOT EXISTS (SELECT 1 FROM pedido_fila fr
+                      WHERE fr.pedido_id = $3 AND fr.motorista_id = u.id AND fr.status = 'recusada')`;
+  }
+  const { rows } = await pool.query(
+    `SELECT COUNT(DISTINCT u.id)::int AS n
+     FROM localizacoes_online l
+     JOIN usuarios u ON u.id = l.usuario_id
+     JOIN habilitacoes_motorista h
+       ON h.motorista_id = u.id AND h.status = 'ativa' AND ${sqlSelfieValida("h")}
+     WHERE l.disponivel = TRUE
+       AND COALESCE(u.ativo, TRUE) = TRUE
+       AND ${sqlGpsVisivelMapa("l")}
+       AND u.id <> $1
+       AND u.projeto_id = $2
+       ${filtroRecusa}`,
+    params
+  );
+  return rows[0]?.n || 0;
+}
+
 // Motoristas habilitados e disponíveis dentro de RAIO_ROTA_KM da rota
 // origem->destino, ordenados do mais perto da ORIGEM pro mais longe.
 async function motoristasNaRota(origem, destino, projetoId, excluirUsuarioId) {
@@ -3059,7 +3116,22 @@ async function ofertarProximo(pedidoId) {
     `SELECT * FROM pedido_fila WHERE pedido_id = $1 AND status = 'aguardando' ORDER BY ordem ASC LIMIT 1`,
     [pedidoId]
   )).rows[0];
-  if (!proximo) return;
+  if (!proximo) {
+    // Fila esgotada (todo mundo recusou ou não respondeu): o pedido volta ao
+    // mapa dos motoristas próximos, mas o PASSAGEIRO precisa saber — senão fica
+    // esperando um aceite que não vem.
+    const houveFila = (await pool.query(
+      "SELECT 1 FROM pedido_fila WHERE pedido_id = $1 LIMIT 1", [pedidoId]
+    )).rows[0];
+    if (houveFila) {
+      enviarPush(ped.passageiro_id, {
+        title: "Nenhum motorista aceitou ainda",
+        body: "Os motoristas chamados não puderam atender. Seu pedido continua visível para quem está por perto.",
+        url: "/dashboard.html",
+      });
+    }
+    return;
+  }
   await pool.query(
     `UPDATE pedido_fila SET status = 'ofertada', ofertada_em = NOW(),
             expira_em = NOW() + ($2 || ' seconds')::interval
@@ -3196,10 +3268,17 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
     )).rows[0] || null;
     const tot = (await pool.query(
       `SELECT COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE status IN ('aguardando', 'ofertada'))::int AS restantes
+              COUNT(*) FILTER (WHERE status IN ('aguardando', 'ofertada'))::int AS restantes,
+              COUNT(*) FILTER (WHERE status = 'recusada')::int AS recusas
        FROM pedido_fila WHERE pedido_id = $1`,
       [ped.id]
     )).rows[0];
+    // Verdade pro passageiro: quantos carros ativos existem AGORA no projeto.
+    // online = 0 → a tela troca o "procurando…" por um aviso honesto.
+    const pid = await projetoDoUsuario(ped.passageiro_id);
+    const online = pid ? await contarMotoristasOnline(pid, ped.passageiro_id) : 0;
+    const total = tot?.total || 0;
+    const restantes = tot?.restantes || 0;
     res.json({
       status: ped.status,
       atual: atual ? {
@@ -3209,8 +3288,12 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
         lat: atual.lat != null ? Number(atual.lat) : null,
         lng: atual.lng != null ? Number(atual.lng) : null,
       } : null,
-      total: tot?.total || 0,
-      restantes: tot?.restantes || 0,
+      total,
+      restantes,
+      recusas: tot?.recusas || 0,
+      // Fila criada e ninguém sobrou (todos recusaram/expiraram) — sem oferta viva.
+      esgotada: total > 0 && restantes === 0 && !atual,
+      online,
     });
   } catch (err) {
     console.error(err);
@@ -3255,6 +3338,9 @@ app.post("/api/pedidos/:id/reofertar-motorista", verificarAuth, async (req, res)
 
 // Motorista recusa um pedido (viu pelo pulso/modal): sai da fila desse pedido e,
 // se era o motorista da vez, o robô do passageiro segue na hora pro próximo.
+// Pedido SEM fila (broadcast/pulso): registra a recusa mesmo assim — o pulso
+// não volta pro mapa deste motorista e o passageiro é avisado na hora, em vez
+// de ficar esperando um aceite que já morreu.
 app.post("/api/pedidos/:id/recusar-motorista", verificarAuth, async (req, res) => {
   try {
     const pedidoId = parseInt(req.params.id, 10);
@@ -3273,8 +3359,52 @@ app.post("/api/pedidos/:id/recusar-motorista", verificarAuth, async (req, res) =
        SELECT alvo.status AS antes FROM alvo`,
       [pedidoId, req.user.id]
     )).rows[0];
-    // Era o motorista da vez: avança o robô pro próximo agora mesmo.
+    // Era o motorista da vez: avança o robô pro próximo agora mesmo (e, se a
+    // fila esgotou, ofertarProximo avisa o passageiro).
     if (alvo?.antes === "ofertada") await ofertarProximo(pedidoId);
+    if (!alvo) {
+      const ped = (await pool.query(
+        "SELECT id, passageiro_id, status FROM pedidos WHERE id = $1",
+        [pedidoId]
+      )).rows[0];
+      if (ped && ped.status === "aberto" && ped.passageiro_id !== req.user.id) {
+        const anterior = (await pool.query(
+          "SELECT id, status FROM pedido_fila WHERE pedido_id = $1 AND motorista_id = $2 LIMIT 1",
+          [pedidoId, req.user.id]
+        )).rows[0];
+        let registrou = false;
+        if (!anterior) {
+          await pool.query(
+            `INSERT INTO pedido_fila (pedido_id, motorista_id, ordem, status, respondida_em)
+             VALUES ($1, $2,
+                     COALESCE((SELECT MAX(ordem) + 1 FROM pedido_fila WHERE pedido_id = $1), 0),
+                     'recusada', NOW())`,
+            [pedidoId, req.user.id]
+          );
+          registrou = true;
+        } else if (anterior.status === "expirada" || anterior.status === "cancelada") {
+          // Oferta antiga dele venceu e agora ele recusou de vez: registra.
+          await pool.query(
+            "UPDATE pedido_fila SET status = 'recusada', respondida_em = NOW() WHERE id = $1",
+            [anterior.id]
+          );
+          registrou = true;
+        }
+        if (registrou) {
+          const pid = await projetoDoUsuario(ped.passageiro_id);
+          const alternativas = pid
+            ? await contarMotoristasOnline(pid, ped.passageiro_id, pedidoId)
+            : 0;
+          enviarPush(ped.passageiro_id, {
+            title: "Motorista não pôde aceitar",
+            body: alternativas > 0
+              ? "Seu pedido continua ativo e visível para outros motoristas por perto."
+              : "Não há outro motorista online agora. Sua busca segue aberta por alguns minutos — ou tente novamente mais tarde.",
+            url: "/dashboard.html",
+          });
+        }
+      }
+    }
     res.json({ success: true, avancou: alvo?.antes === "ofertada" });
   } catch (err) {
     console.error(err);
