@@ -3702,6 +3702,11 @@
         return null;
     }
     // Acompanha a fila real do pedido: quem está sendo chamado, se acabou a busca.
+    // A tela é HONESTA com o passageiro: recusa vira aviso na hora, e sem carro
+    // online o "procurando…" dá lugar a um estado claro de espera (nada de
+    // robozinho caçando motorista que não existe).
+    let buscaEstadoUi = 'normal';    // 'normal' | 'esgotada' | 'semcarro'
+    let buscaRecusasVistas = null;   // null = ainda não leu a primeira vez
     async function pollFilaStatus() {
         if (!chamandoPedidoId) return;
         try {
@@ -3717,13 +3722,53 @@
             // aviso. Aceite vira 'atendido' → viagem, tratado por pollPropostas.
             if (d.status === 'cancelado') {
                 fecharChamando();
-                msg('Ninguém disponível agora. Tente novamente em instantes.', 'info');
+                msg('Ninguém aceitou sua carona desta vez. Tente novamente em instantes.', 'info');
+                return;
             }
+            // Motorista recusou desde a última olhada: avisa na hora, sem deixar
+            // o passageiro esperando um aceite que já morreu. Na primeira leitura
+            // só memoriza (recusa antiga de antes de abrir a tela não vira toast).
+            const recusas = +d.recusas || 0;
+            if (buscaRecusasVistas === null) {
+                buscaRecusasVistas = recusas;
+            } else if (recusas > buscaRecusasVistas) {
+                buscaRecusasVistas = recusas;
+                msg((d.atual || (+d.online || 0) > 0)
+                    ? 'Um motorista não pôde aceitar. Procurando outro para você…'
+                    : 'O motorista não pôde aceitar e não há outro carro online agora.',
+                    'info');
+            }
+            aplicarEstadoBusca(d);
         } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    // Traduz a situação real (carros online, recusas) pra tela de busca.
+    function aplicarEstadoBusca(d) {
+        const estado = (!d.atual && (+d.online || 0) === 0) ? 'semcarro'
+            : (d.esgotada ? 'esgotada' : 'normal');
+        if (estado === buscaEstadoUi) return;
+        const anterior = buscaEstadoUi;
+        buscaEstadoUi = estado;
+        const tit = document.getElementById('chamandoTitulo');
+        const sub = document.getElementById('chamandoSub');
+        if (estado === 'semcarro') {
+            // Sem carro ativo: para o teatro da bolinha e fala a verdade.
+            pararBolinhaBusca();
+            if (tit) tit.textContent = 'Nenhum motorista online';
+            if (sub) sub.textContent = 'Não há carros ativos agora. Sua busca fica aberta e avisaremos se alguém entrar — ou cancele e tente mais tarde.';
+            statusBuscaRodape('Nenhum online');
+        } else {
+            if (anterior === 'semcarro') iniciarBolinhaBusca();   // voltou carro: retoma a busca visível
+            if (tit) tit.textContent = 'Procurando motorista…';
+            if (sub) sub.textContent = estado === 'esgotada'
+                ? 'Alguns motoristas não puderam aceitar. Seu pedido continua visível para os outros por perto.'
+                : 'Avisamos os motoristas perto de você';
+        }
     }
     function iniciarPollFilaStatus() {
         pararPollFilaStatus();
         if (!chamandoPedidoId) return;
+        buscaEstadoUi = 'normal';
+        buscaRecusasVistas = null;
         pollFilaStatus();
         filaStatusTimer = setInterval(pollFilaStatus, 3000);
     }
@@ -3732,6 +3777,8 @@
         bolinhaAlvoId = null;
         bolinhaAlvoPos = null;
         bolinhaAlvoNome = null;
+        buscaEstadoUi = 'normal';
+        buscaRecusasVistas = null;
         try { bolinhaAvisados.clear(); } catch (_) {}
     }
     function criarBolinhaOverlay(map, pos) {
