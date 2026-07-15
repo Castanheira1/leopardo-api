@@ -65,6 +65,12 @@ Supabase → **Project Settings → Database → Reset database password**.
    | `SUPABASE_URL` | `https://vsxnqtecnvhhvekmkshb.supabase.co` |
    | `SUPABASE_KEY` | chave `service_role` |
    | `GOOGLE_MAPS_API_KEY` | chave do Google Maps |
+   | `RESEND_API_KEY` | [resend.com](https://resend.com) → API Keys. **Sem ela a recuperação de senha responde 503 em produção.** |
+
+   Sobre o email de recuperação: o remetente padrão (`EMAIL_FROM`) é
+   `VAP <onboarding@resend.dev>`, que o Resend só entrega para o email da
+   própria conta Resend — bom para testar. Para os usuários receberem de
+   verdade, verifique um domínio no Resend e troque `EMAIL_FROM` para ele.
 
    Já vêm prontas do blueprint: `NODE_VERSION=22`, `NODE_ENV=production`,
    `JWT_SECRET` (gerado automático), `SUPABASE_BUCKET=veiculos`, `RAIO_MATCH_KM=3`.

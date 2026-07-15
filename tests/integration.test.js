@@ -19,6 +19,7 @@
 
 const { spawn } = require("child_process");
 const path = require("path");
+const crypto = require("crypto");
 const { Pool } = require("pg");
 
 const PORT = process.env.TEST_PORT || 3457;
@@ -1516,6 +1517,71 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       if (r.json && r.json.token) tokPax = r.json.token;
     });
 
+    /* =================== CHAMADOS DE ACESSO ADMIN (fila de aprovação) =================== */
+    grupo("Chamados de acesso admin (aprovar cria o admin do projeto)");
+    const uChamado = novoUsuario(31, "S11D");
+    const uChamado2 = novoUsuario(32, "S11D");
+    let chamadoId;
+    await test("POST /api/admin/chamados (público) cria solicitação", async () => {
+      const { status } = await api("POST", "/api/admin/chamados", {
+        body: {
+          nome: uChamado.nome, matricula: uChamado.matricula, empresa_nome: uChamado.empresa_nome,
+          projeto_codigo: "S11D", telefone: uChamado.telefone, email: uChamado.email,
+          justificativa: "Teste de integração",
+        },
+      });
+      eq(status, 200, "status");
+    });
+    await test("mesma matrícula com chamado pendente → 400", async () => {
+      const { status } = await api("POST", "/api/admin/chamados", {
+        body: {
+          nome: uChamado.nome, matricula: uChamado.matricula, projeto_codigo: "S11D",
+          telefone: uChamado.telefone, email: uChamado.email,
+        },
+      });
+      eq(status, 400, "status");
+    });
+    await test("GET /api/admin/chamados exige admin (motorista → 403)", async () => {
+      const { status } = await api("GET", "/api/admin/chamados", { token: tokDriver });
+      eq(status, 403, "status");
+    });
+    await test("GET /api/admin/chamados lista o pendente do projeto", async () => {
+      const { status, json } = await api("GET", "/api/admin/chamados?status=pendente", { token: tokAdmin });
+      eq(status, 200, "status");
+      const c = json.find((x) => x.matricula === uChamado.matricula);
+      assert(c, "chamado não apareceu na fila do admin");
+      chamadoId = c.id;
+    });
+    await test("aprovar chamado cria o admin (senha inicial 123456)", async () => {
+      const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokAdmin });
+      eq(status, 200, "status aprovar");
+      const r = await api("POST", "/api/login", {
+        body: { matricula: uChamado.matricula, senha: "123456" },
+      });
+      eq(r.status, 200, "login do novo admin");
+      assert(r.json.user.is_admin, "aprovado deveria ser admin");
+    });
+    await test("chamado já processado não pode ser reaprovado (404)", async () => {
+      const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokAdmin });
+      eq(status, 404, "status");
+    });
+    await test("recusar chamado move para a lista de recusados", async () => {
+      let r = await api("POST", "/api/admin/chamados", {
+        body: {
+          nome: uChamado2.nome, matricula: uChamado2.matricula, projeto_codigo: "S11D",
+          telefone: uChamado2.telefone, email: uChamado2.email,
+        },
+      });
+      eq(r.status, 200, "status criar");
+      r = await api("GET", "/api/admin/chamados?status=pendente", { token: tokAdmin });
+      const c = r.json.find((x) => x.matricula === uChamado2.matricula);
+      assert(c, "segundo chamado na fila");
+      r = await api("POST", `/api/admin/chamados/${c.id}/recusar`, { token: tokAdmin });
+      eq(r.status, 200, "status recusar");
+      r = await api("GET", "/api/admin/chamados?status=recusado", { token: tokAdmin });
+      assert(r.json.some((x) => x.matricula === uChamado2.matricula), "deveria estar em recusados");
+    });
+
     /* =================== LGPD: consentimento de usuário existente =================== */
     grupo("LGPD — aceite de usuário já cadastrado (portão)");
     await test("usuário legado (sem aceite) tem politica_pendente=true e aceita depois", async () => {
@@ -1540,6 +1606,77 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
 
       r = await api("GET", "/api/perfil", { token: tokPax });
       eq(r.json.politica_pendente, false, "perfil deve refletir o aceite persistido");
+    });
+
+    /* =================== RECUPERAÇÃO DE SENHA (email + link) =================== */
+    grupo("Recuperação de senha (token por email)");
+    await test("solicitar com email que não confere → 200 genérico (não vaza cadastro)", async () => {
+      const { status, json } = await api("POST", "/api/recuperar-senha/solicitar", {
+        body: { matricula: uPax.matricula, email: "nao-eh-o-email@example.com" },
+      });
+      eq(status, 200, "status");
+      assert(json.success, "resposta genérica de sucesso");
+    });
+    await test("solicitar com dados corretos grava token pendente no banco", async () => {
+      // Sem RESEND_API_KEY (fora de produção) o envio é pulado, mas o token nasce.
+      const { status } = await api("POST", "/api/recuperar-senha/solicitar", {
+        body: { matricula: uPax.matricula, email: uPax.email },
+      });
+      eq(status, 200, "status");
+      const pg = pgTeste();
+      try {
+        const { rows } = await pg.query(
+          `SELECT t.id FROM tokens_recuperacao t
+           JOIN usuarios u ON u.id = t.usuario_id
+           WHERE u.matricula = $1 AND t.usado = FALSE AND t.expira_em > NOW()`,
+          [uPax.matricula]
+        );
+        eq(rows.length, 1, "um token pendente");
+      } finally { await pg.end(); }
+    });
+    await test("confirmar com token inválido → 400", async () => {
+      const { status } = await api("POST", "/api/recuperar-senha/confirmar", {
+        body: { token: "deadbeef".repeat(8), nova_senha: "654321" },
+      });
+      eq(status, 400, "status");
+    });
+    await test("confirmar exige senha de 6 dígitos → 400", async () => {
+      const { status } = await api("POST", "/api/recuperar-senha/confirmar", {
+        body: { token: "qualquer", nova_senha: "abc" },
+      });
+      eq(status, 400, "status");
+    });
+    await test("confirmar troca a senha; token não pode ser reusado", async () => {
+      // O servidor guarda só o SHA-256 do token: injeta um token conhecido no
+      // banco de teste, como o email teria entregado ao usuário.
+      const token = crypto.randomBytes(32).toString("hex");
+      const hash = crypto.createHash("sha256").update(token).digest("hex");
+      const pg = pgTeste();
+      try {
+        await pg.query(
+          `INSERT INTO tokens_recuperacao (usuario_id, token_hash, expira_em)
+           SELECT id, $2, NOW() + INTERVAL '1 hour' FROM usuarios WHERE matricula = $1`,
+          [uPax.matricula, hash]
+        );
+      } finally { await pg.end(); }
+
+      let r = await api("POST", "/api/recuperar-senha/confirmar", {
+        body: { token, nova_senha: "654321" },
+      });
+      eq(r.status, 200, "status confirmar");
+
+      r = await api("POST", "/api/login", {
+        body: { matricula: uPax.matricula, senha: "654321" },
+      });
+      eq(r.status, 200, "login com a senha nova");
+      uPax.senha = "654321";
+      // Sessão única: login novo rotaciona o token do passageiro.
+      if (r.json && r.json.token) tokPax = r.json.token;
+
+      r = await api("POST", "/api/recuperar-senha/confirmar", {
+        body: { token, nova_senha: "111111" },
+      });
+      eq(r.status, 400, "token usado não vale de novo");
     });
 
     /* =================== MATCH PRÓXIMO S11D (Portaria vs Central) =================== */

@@ -375,6 +375,10 @@
             <button class="adm-nav-item" data-sec="sec-usuarios" onclick="irSecao('sec-usuarios')">
                 <span class="ico">☺</span> Usuários
             </button>
+            <button class="adm-nav-item" data-sec="sec-chamados" onclick="irSecao('sec-chamados')">
+                <span class="ico">✦</span> Acesso admin
+                <span id="badgeChamados" style="display:none;margin-left:auto;background:var(--gold);color:#0a0a0a;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 8px;">0</span>
+            </button>
             <button class="adm-nav-item" data-sec="sec-operacao" onclick="irSecao('sec-operacao')">
                 <span class="ico">➤</span> Operação
             </button>
@@ -545,6 +549,31 @@
                 </div>
             </section>
 
+            <section id="sec-chamados" class="adm-section">
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>
+                        <div style="flex:1;">
+                            <h3>Solicitações de acesso admin</h3>
+                            <p class="cap">Valide a identidade (ligue/WhatsApp) antes de aprovar. Aprovar cria o admin do projeto com senha inicial 123456.</p>
+                        </div>
+                        <select class="panel-select" id="filtroChamados" onchange="carregarChamados()">
+                            <option value="pendente" selected>Pendentes</option>
+                            <option value="aprovado">Aprovados</option>
+                            <option value="recusado">Recusados</option>
+                        </select>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="adm" id="tabChamados">
+                            <thead><tr><th>Solicitante</th><th>Contato</th><th>Justificativa</th><th>Quando</th><th></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div id="chamadosVazio" class="empty" style="display:none;">Nenhuma solicitação.</div>
+                    <div id="chamadosMsg" class="cap" style="margin-top:10px;"></div>
+                </div>
+            </section>
+
             <section id="sec-operacao" class="adm-section">
                 <div class="grid cols-2">
                     <div class="panel">
@@ -657,6 +686,7 @@ const SECOES = {
     'sec-rateio': { titulo: 'Rateio detalhado', sub: 'Distribuição de custo por empresa, centro de custo e usuário' },
     'sec-contrato': { titulo: 'Contrato', sub: 'Valor mensal e derivados de custo' },
     'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta (senha pelo Esqueci a senha no login)' },
+    'sec-chamados': { titulo: 'Acesso admin', sub: 'Solicitações de acesso ao painel — aprove só após validar a identidade' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
     'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
     'sec-simulacao': { titulo: 'Frota fake', sub: 'Motoristas simulados circulando no mapa para testes' },
@@ -687,8 +717,72 @@ function irSecao(id) {
         document.getElementById('topSub').textContent = meta.sub;
     }
     if (id === 'sec-simulacao') carregarSimFrota();
+    if (id === 'sec-chamados') carregarChamados();
     fecharSidebar();
 }
+
+/* -------- chamados de acesso admin (fila de aprovação) -------- */
+async function carregarChamados() {
+    const status = document.getElementById('filtroChamados').value;
+    const tbody = document.querySelector('#tabChamados tbody');
+    const vazio = document.getElementById('chamadosVazio');
+    document.getElementById('chamadosMsg').textContent = '';
+    try {
+        const r = await fetchWithAuth('/api/admin/chamados?status=' + encodeURIComponent(status));
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro ao listar solicitações');
+        tbody.innerHTML = d.map(c => `<tr>
+            <td><strong>${esc(c.nome)}</strong><br><span class="cap">Mat. ${esc(c.matricula)} · ${esc(c.empresa_nome || 'empresa não informada')}</span></td>
+            <td><a href="${linkWhatsApp(c.telefone)}" target="_blank" rel="noopener">${esc(c.telefone)}</a><br><span class="cap">${esc(c.email)}</span></td>
+            <td style="max-width:260px;">${esc(c.justificativa || '—')}</td>
+            <td class="cap">${new Date(c.created_at).toLocaleString('pt-BR')}</td>
+            <td style="white-space:nowrap;">${status === 'pendente'
+                ? `<button class="btn-gold" onclick="aprovarChamado(${c.id}, '${esc(c.matricula)}')">Aprovar</button>
+                   <button class="btn-ghost" onclick="recusarChamado(${c.id})">Recusar</button>`
+                : ''}</td>
+        </tr>`).join('');
+        vazio.style.display = d.length ? 'none' : 'block';
+        if (status === 'pendente') atualizarBadgeChamados(d.length);
+    } catch (e) {
+        tbody.innerHTML = '';
+        vazio.style.display = 'none';
+        document.getElementById('chamadosMsg').textContent = e.message;
+    }
+}
+async function aprovarChamado(id, matricula) {
+    if (!confirm(`Aprovar acesso admin para a matrícula ${matricula}?\n\nConfirme apenas se você já validou a identidade do solicitante.`)) return;
+    await acaoChamado(id, 'aprovar');
+}
+async function recusarChamado(id) {
+    if (!confirm('Recusar esta solicitação?')) return;
+    await acaoChamado(id, 'recusar');
+}
+async function acaoChamado(id, acao) {
+    let msg = '';
+    try {
+        const r = await fetchWithAuth(`/api/admin/chamados/${id}/${acao}`, { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+        msg = d.message || 'Feito.';
+    } catch (e) { msg = e.message; }
+    // Recarrega antes de escrever a mensagem — carregarChamados limpa o campo,
+    // e a senha inicial do aprovado precisa ficar visível para o operador.
+    await carregarChamados();
+    document.getElementById('chamadosMsg').textContent = msg;
+}
+function atualizarBadgeChamados(n) {
+    const b = document.getElementById('badgeChamados');
+    if (!b) return;
+    b.textContent = n;
+    b.style.display = n > 0 ? 'inline-block' : 'none';
+}
+// Badge no boot: mostra pendências sem precisar abrir a seção.
+(async function badgeChamadosBoot() {
+    try {
+        const r = await fetchWithAuth('/api/admin/chamados?status=pendente');
+        if (r.ok) atualizarBadgeChamados((await r.json()).length);
+    } catch (_) {}
+})();
 
 /* -------- frota fake (motoristas simulados p/ teste visual) -------- */
 async function carregarSimFrota() {

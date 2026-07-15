@@ -46,3 +46,11 @@ services:
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
+      # Recuperação de senha por email (Resend — resend.com). SEM esta chave a
+      # recuperação responde 503 em produção. Crie a API key no painel do Resend.
+      - key: RESEND_API_KEY
+        sync: false
+      # Remetente. Para testes serve "VAP <onboarding@resend.dev>"; em produção
+      # use um domínio verificado no Resend.
+      - key: EMAIL_FROM
+        value: VAP <onboarding@resend.dev>

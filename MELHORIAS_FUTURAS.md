@@ -14,14 +14,19 @@ O acesso admin concede visibilidade sobre relatórios de uso, custos por projeto
 6. O sistema cria automaticamente o usuário admin no banco com `is_admin = TRUE` e `admin_projeto_id` definido
 7. O novo admin recebe notificação e pode acessar o painel do projeto
 
-### Tabela já criada
-`admin_chamados` — armazena todas as solicitações com status: pendente / aprovado / recusado
+### Já implementado (2026-07)
+- Tabela `admin_chamados` (status: pendente / aprovado / recusado)
+- Formulário público no cadastro (`registro.html` → "Solicitar acesso admin")
+- `GET /api/admin/chamados?status=...` — fila por projeto do admin
+- `POST /api/admin/chamados/:id/aprovar` — cria/promove o usuário a admin do
+  projeto (senha inicial 123456) — e `POST .../recusar`
+- Interface da fila no painel (`admin.html` → seção "Acesso admin", com badge
+  de pendências e link de WhatsApp para validar identidade antes de aprovar)
 
-### O que falta implementar
-- Interface de fila de chamados para o operador interno
-- Chat integrado (WhatsApp Business API ou similar) para validação
-- Endpoint `PATCH /api/admin/chamados/:id/aprovar` que cria o usuário admin
-- Notificação ao aprovado (e-mail ou WhatsApp)
+### O que ainda falta
+- Chat integrado (WhatsApp Business API ou similar) para validação — hoje a
+  validação é manual pelo link de WhatsApp da fila
+- Notificação automática ao aprovado (e-mail ou WhatsApp)
 
 ---
 

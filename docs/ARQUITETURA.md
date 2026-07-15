@@ -158,8 +158,11 @@ Tables: `usuarios`, `habilitacoes_motorista`, `caronas`, `pedidos`, `propostas`,
 ### API surface (all `/api/...`)
 
 Public: `GET /api/config`, `GET /api/projetos`, `POST /api/register`, `POST /api/login`,
-`POST /api/recuperar-senha` (matrícula + cadastered phone → new password, no email/SMS),
-`POST /api/admin/chamados`.
+`POST /api/recuperar-senha/solicitar` (matrícula + email → Resend sends a reset link;
+needs `RESEND_API_KEY`, otherwise 503 in production) and
+`POST /api/recuperar-senha/confirmar` (token from the link + new 6-digit password;
+tokens live in `tokens_recuperacao`, SHA-256 hashed, 1h expiry, single-use),
+`POST /api/admin/chamados` (request admin access, from the signup page).
 
 Authenticated: `GET/PATCH /api/perfil`, `POST /api/fotos`,
 `GET /api/habilitacao/hoje`, `POST /api/habilitacao`,
@@ -171,7 +174,11 @@ Authenticated: `GET/PATCH /api/perfil`, `POST /api/fotos`,
 `POST/DELETE /api/localizacao`, `GET /api/motoristas-online`.
 
 Admin: `GET /api/admin/overview`, `POST /api/admin/reset-senha` (resets to `123456`),
-`GET /api/rateio` (active users in last 40 days, grouped by project/company/cost center).
+`GET /api/rateio` (active users in last 40 days, grouped by project/company/cost center),
+`GET /api/admin/chamados?status=pendente|aprovado|recusado` plus
+`POST /api/admin/chamados/:id/aprovar|recusar` (admin-access request queue — approving
+creates/promotes the user as project admin with initial password `123456`; the queue UI
+lives in `admin.html` → "Acesso admin").
 
 ## Frontend conventions (`public/`)
 
@@ -213,7 +220,7 @@ public `veiculos` Storage bucket). The schema must be applied to the DB separate
 - After backend edits, smoke-test with `JWT_SECRET=test node server.js` and hit
   `GET /api/config` / `GET /` (boots without a DB). For schema edits, validate against a
   throwaway Postgres with `psql -v ON_ERROR_STOP=1 -f schema.sql`.
-- **Known open items** (`MELHORIAS_FUTURAS.md`): admin approval workflow (the
-  `admin_chamados` table + `POST /api/admin/chamados` exist; approval endpoint does not),
-  automated per-company rateio/billing, per-project data isolation (today users from
-  different `projeto_id` can see each other), and an in-app admin assistant.
+- **Known open items** (`MELHORIAS_FUTURAS.md`): integrated WhatsApp chat + automatic
+  notification for approved admin requests (the request→approve/refuse flow itself is
+  done: endpoints + queue in `admin.html`), automated per-company rateio/billing
+  charging, and an in-app admin assistant.
