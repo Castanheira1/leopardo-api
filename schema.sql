@@ -122,6 +122,20 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_status_horario ON pedidos (status, horari
 CREATE INDEX IF NOT EXISTS idx_pedidos_passageiro ON pedidos (passageiro_id, status);
 
 -- ------------------------------------------------------------
+-- Contato direto passageiro -> motorista (o server.js também garante/expande
+-- esta tabela no boot, mas propostas.contato_id referencia ela — em banco
+-- NOVO ela precisa existir antes do CREATE TABLE propostas abaixo).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS contatos_motorista (
+    id SERIAL PRIMARY KEY,
+    motorista_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    passageiro_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    mensagem TEXT,
+    lido BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------
 -- Propostas (o "match" + aceite, cobre os dois lados)
 --   passageiro -> carona : carona_id preenchido + selfie do passageiro
 --   motorista  -> pedido : pedido_id preenchido
