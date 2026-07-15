@@ -5360,7 +5360,19 @@ require("./sim-frota")({
 });
 
 /* ============================ ESTÁTICOS ============================ */
-app.use(express.static(path.join(__dirname, "public")));
+// Imagens/fontes mudam raramente: cache de 7 dias no navegador corta requisições
+// repetidas (CPU/banda na instância free do Render). HTML/JS/CSS e o
+// service-worker ficam em no-cache: o navegador revalida sempre (304 barato) e
+// atualizações do app chegam na hora — o cache offline fica por conta do SW.
+app.use(express.static(path.join(__dirname, "public"), {
+  setHeaders: (res, filePath) => {
+    if (/\.(png|jpe?g|webp|ico|svg|woff2?)$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=604800");
+    } else {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  },
+}));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 app.use((err, req, res, next) => {
