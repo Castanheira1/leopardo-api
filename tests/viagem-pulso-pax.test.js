@@ -25,7 +25,9 @@ ok(
   dash.includes("Depois do embarque (fase destino): só o carrinho"),
   "comentario: so carrinho apos embarque"
 );
-ok(/VERSION = "v259"/.test(sw), "SW v259");
+// Ratchet: SW versionado e no mínimo na versão que trouxe o pulso do passageiro.
+const swVer = Number((sw.match(/VERSION = "v(\d+)"/) || [])[1] || 0);
+ok(swVer >= 259, `SW versionado >= v259 (atual v${swVer})`);
 
 // pos inicial para passageiro tambem (embarque)
 ok(

@@ -1,0 +1,108 @@
+# CI/CD do VAP.
+#
+# 1. "testes": roda em todo push/PR — sintaxe do backend, testes de contrato
+#    (sem banco) e a suíte de integração completa contra um Postgres efêmero
+#    com o schema.sql aplicado (mesmo fluxo de scripts/test-com-pg-local.sh).
+# 2. "android": só em push na main (ou manual) — valida o shell Capacitor de
+#    ponta a ponta gerando o APK de debug e o AAB de release (sem assinatura).
+#    O artefato fica disponível na aba Actions por 14 dias. A assinatura para
+#    a Play Store continua local (keystore), ver docs/PUBLICAR-LOJAS.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  testes:
+    name: Testes (contrato + integração com Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vap
+          POSTGRES_PASSWORD: vap
+          POSTGRES_DB: vap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vap"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://vap:vap@localhost:5432/vap_test
+      JWT_SECRET: test-secret-com-mais-de-32-caracteres-aqui-ok
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Sintaxe do backend
+        run: node --check server.js
+
+      - name: Testes de contrato e unitários (sem banco)
+        run: |
+          node tests/sim-frota-helpers.test.js
+          node tests/sim-rotina.test.js
+          node tests/map-markers.test.js
+          node tests/sessao-mapa.test.js
+          node tests/ui-sheet.test.js
+          node tests/viagem-pulso-pax.test.js
+
+      - name: Aplicar schema.sql no Postgres de teste
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f schema.sql
+
+      - name: Suíte de integração (rotas HTTP reais)
+        run: node tests/integration.test.js
+
+  android:
+    name: Build Android (Capacitor)
+    needs: testes
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Capacitor sync (aponta para o backend de produção)
+        run: npx cap sync android
+
+      - name: Gerar APK de debug e AAB de release (sem assinatura)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug bundleRelease --no-daemon
+
+      - name: Publicar artefatos
+        uses: actions/upload-artifact@v4
+        with:
+          name: vap-android
+          retention-days: 14
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/bundle/release/app-release.aab
