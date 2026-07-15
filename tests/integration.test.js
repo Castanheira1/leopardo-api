@@ -234,6 +234,9 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       });
       eq(status, 200, "status");
       assert(json.token, "sem token");
+      // Sessão única por conta: este login rotaciona o sessao_id e mata o
+      // token do register. Adota o novo, como o app real faria.
+      tokDriver = json.token;
     });
     await test("login com senha errada → 401", async () => {
       const { status } = await api("POST", "/api/login", {
@@ -513,9 +516,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(!json.some((x) => x.id === caronaId), "destino muito além do fim não deve casar");
     });
     await test("GET /api/caronas?dest marca parcial quando destino só um pouco além", async () => {
+      // 25% do segmento (~7,1 km) ≈ 1,8 km além do fim: passa do raio de "mesmo
+      // destino" (RAIO_MESMO_DEST_KM=1,5 → seria total) mas fica dentro do
+      // corredor (RAIO_ROTA_KM=2 no env do teste) → parcial.
       const alemPerto = {
-        lat: DESTINO.lat + (DESTINO.lat - ORIGEM.lat) * 0.02,
-        lng: DESTINO.lng + (DESTINO.lng - ORIGEM.lng) * 0.02,
+        lat: DESTINO.lat + (DESTINO.lat - ORIGEM.lat) * 0.25,
+        lng: DESTINO.lng + (DESTINO.lng - ORIGEM.lng) * 0.25,
       };
       const q = `?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}&dest_lat=${alemPerto.lat}&dest_lng=${alemPerto.lng}`;
       const { status, json } = await api("GET", "/api/caronas" + q, { token: tokPax });
@@ -692,11 +698,16 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       await api("POST", `/api/viagens/${viagemId}/iniciar`, { token: tokDriver });
       const { status, json } = await api("POST", `/api/viagens/${viagemId}/pontos`, {
         token: tokDriver,
+        // Trajeto plausível: o cálculo de km só conta pontos APÓS o embarque_em
+        // (timestamps passados caem fora) e descarta segmentos acima de
+        // KM_VELOCIDADE_MAX_H (120 km/h). Aqui: ~0,28 km a cada 14 s ≈ 73 km/h,
+        // dentro da janela de +60 s aceita pelo servidor.
         body: { pontos: [
-          { lat: -1.4500, lng: -48.4800, em: Date.now() - 90000 },
-          { lat: -1.4450, lng: -48.4600, em: Date.now() - 60000 },
-          { lat: -1.4200, lng: -48.4500, em: Date.now() - 30000 },
-          { lat: -1.4000, lng: -48.4400, em: Date.now() },
+          { lat: -1.4500, lng: -48.4800, em: Date.now() + 2000 },
+          { lat: -1.4480, lng: -48.4784, em: Date.now() + 16000 },
+          { lat: -1.4460, lng: -48.4768, em: Date.now() + 30000 },
+          { lat: -1.4440, lng: -48.4752, em: Date.now() + 44000 },
+          { lat: -1.4420, lng: -48.4736, em: Date.now() + 58000 },
         ] },
       });
       eq(status, 200, "status");
@@ -733,6 +744,19 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
         token: tokDriver,
         body: { lat: ORIGEM.lat, lng: ORIGEM.lng },
       });
+      // O pedido original do passageiro foi CANCELADO quando a proposta foi
+      // aceita (ele embarcou). Cria um novo, sem fila automática (sem
+      // usar_fila), para pulsar direto no mapa do motorista.
+      const novo = await api("POST", "/api/pedidos", {
+        token: tokPax,
+        body: {
+          origem_texto: "Portaria", origem_lat: ORIGEM.lat, origem_lng: ORIGEM.lng,
+          destino_texto: "Alojamento", destino_lat: DESTINO.lat, destino_lng: DESTINO.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(novo.status, 200, "status novo pedido");
+      pedidoId = novo.json.id;
       const { status, json } = await api("GET", `/api/pedidos?lat=${ORIGEM.lat}&lng=${ORIGEM.lng}`, { token: tokDriver });
       eq(status, 200, "status");
       assert(json.some((p) => p.id === pedidoId), "pedido perto não listado");
@@ -934,6 +958,8 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
 
       r = await api("POST", "/api/login", { body: { matricula: uPax.matricula, senha: uPax.senha } });
       eq(r.status, 200, "login ok após reativar");
+      // Sessão única: o re-login invalidou o tokPax antigo — adota o novo.
+      if (r.json && r.json.token) tokPax = r.json.token;
     });
 
     /* =================== LGPD: consentimento de usuário existente =================== */
@@ -966,7 +992,11 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     grupo("Match proximo S11D (Portaria vs Central)");
     const PORTARIA_S11D = { lat: -6.454156, lng: -50.208344, texto: "Portaria S11D" };
     const CENTRAL_S11D = { lat: -6.438503, lng: -50.232414, texto: "Central de Operações S11D" };
-    const ORIGEM_S11D = { lat: -6.449, lng: -50.24 };
+    // Origem a LESTE da Portaria: a Central (~3,2 km do destino) fica fora do
+    // corredor da rota (não vira "total") e cai no raio próximo (4 km) → buzina.
+    // Vindo do oeste (-50.24) a linha reta passava a ~1,3 km da Central e o
+    // corredor de 2 km classificava como "total", que bloqueia a buzina.
+    const ORIGEM_S11D = { lat: -6.449, lng: -50.18 };
 
     await test("motorista publica carona para Portaria S11D", async () => {
       const { status, json } = await api("POST", "/api/caronas", {

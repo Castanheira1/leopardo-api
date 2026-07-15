@@ -2494,8 +2494,12 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
                              WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
              -- Pedido em busca automática por proximidade (fila sequencial): só
              -- o motorista da vez responde, pelos endpoints /api/pedido-fila.
-             -- Não vira pulso no mapa dos outros — oferecer nele daria 400.
-             AND NOT EXISTS (SELECT 1 FROM pedido_fila f WHERE f.pedido_id = p.id)
+             -- Não vira pulso no mapa dos outros enquanto a fila está VIVA
+             -- (aguardando/ofertada). Se a fila esgotou sem ninguém aceitar, o
+             -- pedido volta ao mapa — senão sumia para sempre.
+             AND NOT EXISTS (SELECT 1 FROM pedido_fila f
+                             WHERE f.pedido_id = p.id
+                               AND f.status IN ('aguardando', 'ofertada'))
              AND u.projeto_id = $4
          ) s
          WHERE s.dist_origem <= $3
@@ -2537,11 +2541,14 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
          AND COALESCE(u.ativo, TRUE) = TRUE
          AND (p.horario IS NULL OR p.horario <= NOW())
          -- Mesmas regras do mapa: sem solicitação vencida (30 min), sem pedido de
-         -- passageiro já em viagem, e sem pedido em fila por proximidade.
+         -- passageiro já em viagem, e sem pedido em fila por proximidade VIVA
+         -- (fila esgotada devolve o pedido à lista).
          AND COALESCE(p.horario, p.created_at) > NOW() - INTERVAL '30 minutes'
          AND NOT EXISTS (SELECT 1 FROM viagens v
                          WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
-         AND NOT EXISTS (SELECT 1 FROM pedido_fila f WHERE f.pedido_id = p.id)
+         AND NOT EXISTS (SELECT 1 FROM pedido_fila f
+                         WHERE f.pedido_id = p.id
+                           AND f.status IN ('aguardando', 'ofertada'))
          ${filtroProj}
        ORDER BY p.created_at DESC`,
       params
@@ -2754,8 +2761,13 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       if (!(await validarMesmoProjeto(req.user.id, ped.passageiro_id, res))) return;
       // Pedido com fila ativa (chamada sequencial por rota): só quem está na
       // vez pode responder, e é pelos endpoints /api/pedido-fila/:id — evita
-      // dois motoristas aceitando o mesmo pedido ao mesmo tempo.
-      const temFila = (await pool.query("SELECT 1 FROM pedido_fila WHERE pedido_id = $1 LIMIT 1", [pedido_id])).rows[0];
+      // dois motoristas aceitando o mesmo pedido ao mesmo tempo. Fila esgotada
+      // (todas expiradas/recusadas) libera a oferta manual de novo.
+      const temFila = (await pool.query(
+        `SELECT 1 FROM pedido_fila
+         WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada') LIMIT 1`,
+        [pedido_id]
+      )).rows[0];
       if (temFila) return res.status(400).json({ error: "Este pedido está usando busca automática por proximidade" });
       para_usuario_id = ped.passageiro_id;
     }
