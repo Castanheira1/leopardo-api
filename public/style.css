@@ -1020,7 +1020,8 @@ html.teclado-aberto {
 .alcance-range::-webkit-slider-thumb:active { cursor: grabbing; }
 .alcance-hint { margin-top: 8px; color: #9aa0a6; font-size: 0.78rem; line-height: 1.35; }
 /* Resumo compacto no lugar da barra (raio · velocidade média · temperatura).
-   Mesmo visual da barra; toque reabre o ajuste. */
+   Padrão Claude: amarelinho claro e suave por dentro, texto escuro e contorno
+   dourado fraco. Toque reabre o ajuste. */
 .alcance-info {
     display: flex;
     align-items: center;
@@ -1029,19 +1030,19 @@ html.teclado-aberto {
     width: 100%;
     margin: 4px 0 10px;
     padding: 13px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(234, 210, 152, 0.22);
+    background: #f6ecd2;
+    border: 1px solid rgba(234, 210, 152, 0.7);
     border-radius: 14px;
-    color: #e8eaed;
+    color: #3a382f;
     font-family: inherit;
     font-weight: 600;
     font-size: 0.95rem;
     cursor: pointer;
     touch-action: manipulation;
 }
-.alcance-info:active { background: rgba(234, 210, 152, 0.1); }
-.alcance-info .alcance-info-km { color: #EAD298; font-weight: 800; }
-.alcance-info .alcance-info-sep { color: #6b7280; }
+.alcance-info:active { background: #eee0b9; }
+.alcance-info .alcance-info-km { color: #9a7412; font-weight: 800; }
+.alcance-info .alcance-info-sep { color: #a89e8a; }
 .acao-sheet.teclado-aberto {
     max-height: calc(var(--appvh, 1vh) * 72);
     overflow: hidden;
@@ -1111,10 +1112,10 @@ html.teclado-aberto {
     justify-content: center;
     margin: 0 0 12px;
 }
-/* "Limpar destino": preto com contorno dourado fraco — mesmo padrão (Claude/
-   Locais) da faixa de resumo do alcance logo abaixo. Sem o verde do
-   .btn-secondary: as regras :hover/:active abaixo vencem o hover que "gruda"
-   no toque do WebView Android. */
+/* "Limpar destino": padrão Claude — amarelinho claro e suave por dentro,
+   texto escuro e contorno dourado fraco (igual ao banner "Recebendo todas as
+   chamadas"). As regras :hover/:active próprias vencem o verde do
+   .btn-secondary que "gruda" no toque do WebView Android. */
 .btn-limpar-rota {
     font-size: 0.9rem;
     font-weight: 700;
@@ -1124,14 +1125,15 @@ html.teclado-aberto {
     min-height: 48px;
     width: 100%;
     max-width: 100%;
-    border: 1px solid rgba(234, 210, 152, 0.22);
-    background: rgba(255, 255, 255, 0.05);
-    color: #EAD298;
+    border: 1px solid rgba(234, 210, 152, 0.7);
+    background: #f6ecd2;
+    color: #23211c;
 }
 .btn-secondary.btn-limpar-rota:hover,
 .btn-secondary.btn-limpar-rota:active {
-    background: rgba(234, 210, 152, 0.1);
-    border: 1px solid rgba(234, 210, 152, 0.4);
+    background: #eee0b9;
+    border: 1px solid rgba(234, 210, 152, 0.9);
+    color: #23211c;
 }
 .acao-titulo {
     color: #fff;
@@ -1834,8 +1836,10 @@ html.teclado-aberto #tabViagem.active .viagem-wrap::after {
 /* Enquanto a busca está aberta, o painel de ação da aba (Pedir/Oferecer,
    "Limpar rota"…) e o banner de agendamentos somem: o vão do mapa deixa
    toques passarem, e botão escondido não pode receber clique. */
+/* !important: garantirUiAcaoVisivel() deixa visibility:visible INLINE no sheet;
+   sem isto, a sobra do painel aparecia no meio da busca. */
 body.buscando-carona .acao-sheet,
-body.buscando-carona .banner-agendamentos { visibility: hidden; }
+body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
 /* Barra única com divisórias finas entre os itens (como no layout). */
 .chamando-info-bar {
     display: flex;
