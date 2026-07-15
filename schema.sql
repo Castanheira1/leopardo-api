@@ -177,7 +177,15 @@ CREATE TABLE pedido_fila (
     ofertada_em TIMESTAMP,
     expira_em TIMESTAMP,
     respondida_em TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+    -- exclusiva: TRUE = fila "dona" do pedido (só o da vez responde, pulso oculto);
+    -- FALSE = fila de notificação do pedido broadcast (pulso continua p/ todos).
+    exclusiva BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Ponto em comum ("encaixe"): o motorista não vai até o destino do passageiro,
+    -- mas a rota dele passa por este ponto — desembarque combinado.
+    encaixe_texto TEXT,
+    encaixe_lat NUMERIC(10,6),
+    encaixe_lng NUMERIC(10,6)
 );
 CREATE INDEX IF NOT EXISTS idx_pedido_fila_pedido ON pedido_fila (pedido_id, ordem);
 CREATE INDEX IF NOT EXISTS idx_pedido_fila_motorista_ativa ON pedido_fila (motorista_id, status);

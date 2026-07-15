@@ -923,17 +923,23 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(json.some((p) => p.id === pedidoPulsoId), "A deveria ver o pulso do pedido");
     });
 
-    await test("A recusa o pulso -> recusa registrada e pulso some SÓ para A", async () => {
+    await test("A recusa o pulso -> pulso some SÓ para A e o robô chama o próximo (B)", async () => {
       const { status, json } = await api(
         "POST", `/api/pedidos/${pedidoPulsoId}/recusar-motorista`, { token: tokFilaA });
       eq(status, 200, "status recusar");
-      eq(json.avancou, false, "sem fila viva não há avanço de fila");
+      // Pedido broadcast agora tem fila de NOTIFICAÇÃO (não-exclusiva): A era o
+      // da vez, então a recusa avança o robô pro próximo na hora.
+      eq(json.avancou, true, "recusa do motorista da vez deveria avançar a fila de notificação");
 
       const rA = await api("GET", `/api/pedidos?lat=${ORIGEM_FILA.lat}&lng=${ORIGEM_FILA.lng}`, { token: tokFilaA });
       assert(!rA.json.some((p) => p.id === pedidoPulsoId), "pulso não deveria voltar para quem recusou");
 
       const rB = await api("GET", `/api/pedidos?lat=${ORIGEM_FILA.lat}&lng=${ORIGEM_FILA.lng}`, { token: tokFilaB });
       assert(rB.json.some((p) => p.id === pedidoPulsoId), "B (não recusou) deveria continuar vendo o pulso");
+
+      await dormir(300);
+      const ofB = await api("GET", "/api/motorista/oferta-atual", { token: tokFilaB });
+      assert(ofB.json && ofB.json.pedido_id === pedidoPulsoId, "B deveria ser o próximo chamado pelo robô");
     });
 
     await test("passageiro enxerga a recusa no fila-status do pedido broadcast", async () => {
@@ -941,6 +947,102 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(json.recusas >= 1, `recusa do pulso deveria contar, veio ${json.recusas}`);
       assert(typeof json.online === "number" && json.online >= 1, "online deveria contar B disponível");
+    });
+
+    /* =================== PONTO EM COMUM (ENCAIXE) + MELHOR MOTORISTA ===================
+       Cenário real S11D: o motorista vai da Portaria para a Usina; o passageiro
+       está na Portaria e quer ir para a MINA (destino totalmente diferente, o
+       corredor em linha reta não bate). Mas a rota do motorista passa por pontos
+       conhecidos do catálogo (locais-favoritos.json) que ADIANTAM o passageiro —
+       ele desce num ponto em comum e segue de lá. */
+    grupo("Ponto em comum (encaixe): destino diferente, mesmo caminho");
+    const PORTARIA_ENC = { lat: -6.454156, lng: -50.208344 };   // Portaria S11D
+    const USINA_ENC = { lat: -6.448992, lng: -50.243534 };      // Rodoviária Arara Azul — Usina
+    const MINA_ENC = { lat: -6.415464, lng: -50.320819 };       // Estação Bombeiros 09 — Mina
+    const uEncD = novoUsuario(30, "S11D");   // motorista com rota Portaria -> Usina
+    const uEncE = novoUsuario(31, "S11D");   // motorista amarelo, igualmente perto
+    const uEncPax = novoUsuario(32, "S11D"); // passageiro Portaria -> Mina
+    let tokEncD, tokEncE, tokEncPax, caronaEncId, pedidoEncId, ofertaEncId;
+
+    await test("prepara motoristas D (carona p/ Usina) e E (amarelo) na Portaria", async () => {
+      for (const [u, setTok] of [
+        [uEncD, (t) => (tokEncD = t)], [uEncE, (t) => (tokEncE = t)], [uEncPax, (t) => (tokEncPax = t)],
+      ]) {
+        const { status, json } = await api("POST", "/api/register", { body: u });
+        eq(status, 200, "registro");
+        setTok(json.token);
+      }
+      for (const tok of [tokEncD, tokEncE]) {
+        const { status } = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "ENC" + Math.floor(Math.random() * 9000 + 1000), tag: "Encaixe",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(status, 200, "habilitação");
+      }
+      // D publica a rota Portaria -> Usina e fica disponível na Portaria.
+      const rCar = await api("POST", "/api/caronas", {
+        token: tokEncD,
+        body: {
+          origem_texto: "Portaria S11D", origem_lat: PORTARIA_ENC.lat, origem_lng: PORTARIA_ENC.lng,
+          destino_texto: "Usina", destino_lat: USINA_ENC.lat, destino_lng: USINA_ENC.lng,
+          vagas: 2,
+        },
+      });
+      eq(rCar.status, 200, "carona de D");
+      caronaEncId = rCar.json.id;
+      const rLoc = await api("POST", "/api/localizacao", {
+        token: tokEncD, body: { lat: PORTARIA_ENC.lat, lng: PORTARIA_ENC.lng, disponivel: true },
+      });
+      eq(rLoc.status, 200, "localização de D");
+      // E fica online (amarelo) também na Portaria — tão perto quanto D.
+      const rOn = await api("POST", "/api/motorista/online", {
+        token: tokEncE, body: { lat: PORTARIA_ENC.lat, lng: PORTARIA_ENC.lng },
+      });
+      eq(rOn.status, 200, "E online");
+    });
+
+    await test("carona para a Usina aparece como ENCAIXE para quem vai à Mina", async () => {
+      const q = `?lat=${PORTARIA_ENC.lat}&lng=${PORTARIA_ENC.lng}&dest_lat=${MINA_ENC.lat}&dest_lng=${MINA_ENC.lng}`;
+      const { status, json } = await api("GET", "/api/caronas" + q, { token: tokEncPax });
+      eq(status, 200, "status");
+      const c = json.find((x) => x.id === caronaEncId);
+      assert(c, "carona da Usina deveria aparecer para quem vai à Mina (ponto em comum)");
+      eq(c.compat_rota, "encaixe", "compat_rota");
+      assert(c.encaixe_texto, "deveria dizer QUAL é o ponto em comum (nome do local)");
+      assert(c.encaixe_lat != null && c.encaixe_lng != null, "ponto em comum precisa de coordenadas");
+    });
+
+    await test("pedido broadcast: quem tem ponto em comum é chamado ANTES do amarelo igualmente perto", async () => {
+      const { status, json } = await api("POST", "/api/pedidos", {
+        token: tokEncPax,
+        body: {
+          origem_texto: "Portaria S11D", origem_lat: PORTARIA_ENC.lat, origem_lng: PORTARIA_ENC.lng,
+          destino_texto: "Mina", destino_lat: MINA_ENC.lat, destino_lng: MINA_ENC.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(status, 200, "status pedido");
+      pedidoEncId = json.id;
+      await dormir(300);
+      const rD = await api("GET", "/api/motorista/oferta-atual", { token: tokEncD });
+      assert(rD.json && rD.json.pedido_id === pedidoEncId,
+        "D (rota com ponto em comum) deveria ser o primeiro chamado");
+      assert(rD.json.encaixe_texto, "a oferta de D deveria trazer o ponto em comum");
+      ofertaEncId = rD.json.id;
+      const rE = await api("GET", "/api/motorista/oferta-atual", { token: tokEncE });
+      eq(rE.json, null, "E (amarelo) não deveria ser chamado enquanto D não responde");
+      // Pulso continua visível para E (fila não-exclusiva não esconde o pedido).
+      const rMapaE = await api(
+        "GET", `/api/pedidos?lat=${PORTARIA_ENC.lat}&lng=${PORTARIA_ENC.lng}`, { token: tokEncE });
+      assert(rMapaE.json.some((p) => p.id === pedidoEncId), "pulso deveria continuar no mapa de E");
+    });
+
+    await test("D aceita e a viagem nasce PARCIAL até o ponto em comum", async () => {
+      const { status, json } = await api("POST", `/api/pedido-fila/${ofertaEncId}/aceitar`, { token: tokEncD });
+      eq(status, 200, "status aceitar");
+      assert(json.viagem_id, "deveria criar a viagem");
+      eq(json.parcial, true, "viagem deveria ser parcial (desembarque no ponto em comum)");
     });
 
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
