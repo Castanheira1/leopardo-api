@@ -59,6 +59,7 @@ jobs:
           node tests/sessao-mapa.test.js
           node tests/ui-sheet.test.js
           node tests/viagem-pulso-pax.test.js
+          node tests/encadeamento-perna.test.js
 
       - name: Aplicar schema.sql no Postgres de teste
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f schema.sql

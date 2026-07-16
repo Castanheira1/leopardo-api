@@ -95,7 +95,9 @@ function bootServer() {
       RAIO_PROXIMO_KM: "4",
       FILA_OFERTA_TIMEOUT_S: "2", // curto de propósito, só pra testar o avanço por timeout
       FILA_TICK_MS: "500",
-      AUTH_RATE_MAX: "30",        // teto conhecido p/ validar o anti-força-bruta no fim
+      AGENDADO_TICK_MS: "500",    // agendador rápido: ativa pedido agendado sem esperar 1 min
+      AUTH_RATE_MAX: "60",        // teto conhecido p/ validar o anti-força-bruta no fim
+                                  // (acima dos cadastros/logins legítimos; o loop de 40 ainda estoura)
       CORS_ORIGINS: "",           // sem CORS externo (comportamento padrão seguro)
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -1298,6 +1300,144 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const fs = await api("GET", `/api/pedidos/${pedidoOdId}/fila-status`, { token: tokOdP });
       eq(fs.status, 200, "status fila-status");
       eq(fs.json.atual, null, "fila esgotada: nenhum motorista sendo chamado (sem oferta fantasma)");
+    });
+
+    /* ============= ENCAIXE À FRENTE DO EMBARQUE (carro não volta) ============= */
+    // O ponto em comum precisa estar À FRENTE de onde o passageiro embarca na rota
+    // do motorista. Antes, um ponto ATRÁS do embarque (que o carro já passou) podia
+    // ser ofertado como encaixe — e o carro não volta. Geometria calculada sobre o
+    // catálogo real S11D (Portaria -> Bombeiros/Mina): o cluster "Usina" fica em
+    // t≈0.3 do corredor; com o passageiro embarcando em t≈0.5, esse cluster está
+    // ATRÁS e não pode virar encaixe. (O caso positivo — encaixe à frente — já é
+    // coberto pelo grupo "Ponto em comum".)
+    grupo("Encaixe à frente do embarque: ponto atrás não é ofertado");
+    const EMB_CAR_ORIG = { lat: -6.454156, lng: -50.208344 };  // Portaria S11D (início da rota do motorista)
+    const EMB_CAR_DEST = { lat: -6.415464, lng: -50.320819 };  // Bombeiros 09 — Mina (fim da rota)
+    const EMB_PAX_ORIG = { lat: -6.434810, lng: -50.264581 };  // embarque em t≈0.5 do corredor (à frente do cluster Usina)
+    const EMB_PAX_DEST = { lat: -6.479156, lng: -50.233344 };  // destino "atrás", puxa o cluster Usina como encaixe (proibido)
+    const uEmbMot = novoUsuario(47, "S11D");
+    const uEmbPax = novoUsuario(48, "S11D");
+    let tokEmbMot, tokEmbPax;
+    await test("motorista é chamado, mas SEM encaixe (o único ponto em comum ficou atrás)", async () => {
+      for (const [u, set] of [[uEmbMot, (t) => (tokEmbMot = t)], [uEmbPax, (t) => (tokEmbPax = t)]]) {
+        const r = await api("POST", "/api/register", { body: u });
+        eq(r.status, 200, "registro");
+        set(r.json.token);
+      }
+      const h = await api("POST", "/api/habilitacao", {
+        token: tokEmbMot,
+        body: { placa: "EMB" + Math.floor(Math.random() * 9000 + 1000), tag: "Embarque",
+          foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+      });
+      eq(h.status, 200, "habilitação");
+      // Publica a rota Portaria -> Bombeiros e fica disponível na Portaria.
+      const rCar = await api("POST", "/api/caronas", {
+        token: tokEmbMot,
+        body: {
+          origem_texto: "Portaria S11D", origem_lat: EMB_CAR_ORIG.lat, origem_lng: EMB_CAR_ORIG.lng,
+          destino_texto: "Bombeiros 09 — Mina", destino_lat: EMB_CAR_DEST.lat, destino_lng: EMB_CAR_DEST.lng,
+          vagas: 2,
+        },
+      });
+      eq(rCar.status, 200, "carona");
+      const rLoc = await api("POST", "/api/localizacao", {
+        token: tokEmbMot, body: { lat: EMB_CAR_ORIG.lat, lng: EMB_CAR_ORIG.lng, disponivel: true },
+      });
+      eq(rLoc.status, 200, "localização");
+      // Passageiro embarca em t≈0.5 (à frente do cluster Usina) e vai para um destino
+      // que, sem a trava, faria o robô ofertar um ponto ATRÁS do embarque.
+      const ped = await api("POST", "/api/pedidos", {
+        token: tokEmbPax,
+        body: {
+          origem_texto: "Embarque meio-rota", origem_lat: EMB_PAX_ORIG.lat, origem_lng: EMB_PAX_ORIG.lng,
+          destino_texto: "Destino atrás", destino_lat: EMB_PAX_DEST.lat, destino_lng: EMB_PAX_DEST.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(ped.status, 200, "status pedido");
+      await dormir(300);
+      const oferta = await api("GET", "/api/motorista/oferta-atual", { token: tokEmbMot });
+      // O motorista É chamado (candidato pela proximidade da rota) — garante que o
+      // caminho de encaixe rodou e não passou batido por falta de candidato...
+      assert(oferta.json && oferta.json.pedido_id === ped.json.id,
+        "o motorista deveria ser chamado para o pedido (candidato pela rota)");
+      // ...mas NÃO pode trazer encaixe: o único ponto em comum ficou atrás do embarque.
+      assert(!oferta.json.encaixe_texto,
+        "não deveria ofertar encaixe num ponto atrás do embarque (o carro não volta)");
+    });
+
+    /* ============= PEDIDO AGENDADO ATIVA BUSCA NÃO-EXCLUSIVA ============= */
+    // Ao chegar o horário, o pedido agendado deve entrar com a MESMA busca do
+    // pedido imediato (fila NÃO-exclusiva): pulso visível no mapa e propostas
+    // manuais liberadas. A fila EXCLUSIVA antiga escondia o pedido e travava
+    // ofertas manuais com 400 "busca automática por proximidade".
+    grupo("Pedido agendado: ativa busca não-exclusiva (pulso visível, proposta liberada)");
+    const AG_ORIG = { lat: -6.200000, lng: -50.600000 };
+    const AG_DEST = { lat: -6.220000, lng: -50.640000 };
+    const uAgMot = novoUsuario(49, "S11D");   // motorista candidato (na origem)
+    const uAgMot2 = novoUsuario(50, "S11D");  // motorista que testa a proposta manual
+    const uAgPax = novoUsuario(51, "S11D");   // passageiro que agenda
+    let tokAgMot, tokAgMot2, tokAgPax;
+    await test("agendado que venceu o horário entra com fila não-exclusiva e aceita proposta manual", async () => {
+      for (const [u, set] of [[uAgMot, (t) => (tokAgMot = t)], [uAgMot2, (t) => (tokAgMot2 = t)], [uAgPax, (t) => (tokAgPax = t)]]) {
+        const r = await api("POST", "/api/register", { body: u });
+        eq(r.status, 200, "registro");
+        set(r.json.token);
+      }
+      for (const tok of [tokAgMot, tokAgMot2]) {
+        const h = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "AGD" + Math.floor(Math.random() * 9000 + 1000), tag: "Agendado",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(h.status, 200, "habilitação");
+      }
+      // Só o candidato (uAgMot) fica online na origem — uAgMot2 apenas oferta manual.
+      const on = await api("POST", "/api/motorista/online", { token: tokAgMot, body: { lat: AG_ORIG.lat, lng: AG_ORIG.lng } });
+      eq(on.status, 200, "online");
+      // Agenda para o próximo minuto (futuro): não dispara fila na hora, notificado=FALSE.
+      const quando = new Date(Date.now() + 90 * 1000);
+      const p2 = (n) => String(n).padStart(2, "0");
+      const horario = `${quando.getFullYear()}-${p2(quando.getMonth() + 1)}-${p2(quando.getDate())}T${p2(quando.getHours())}:${p2(quando.getMinutes())}`;
+      const ped = await api("POST", "/api/pedidos", {
+        token: tokAgPax,
+        body: {
+          origem_texto: "Origem AG", origem_lat: AG_ORIG.lat, origem_lng: AG_ORIG.lng,
+          destino_texto: "Destino AG", destino_lat: AG_DEST.lat, destino_lng: AG_DEST.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1, horario,
+        },
+      });
+      eq(ped.status, 200, "status pedido agendado");
+      const pedidoId = ped.json.id;
+      assert(ped.json.agendado_futuro, "pedido deveria nascer agendado para o futuro");
+      // Simula a chegada do horário (como o teste de GPS envelhece o relógio):
+      // recua o horário para o passado; o agendador (500 ms) ativa no próximo tick.
+      const pg = pgTeste();
+      try {
+        await pg.query("UPDATE pedidos SET horario = NOW() - INTERVAL '1 minute' WHERE id = $1", [pedidoId]);
+      } finally { await pg.end(); }
+      await dormir(900);
+      // Ativou? notificado=TRUE e há fila — e ela é NÃO-exclusiva.
+      const pg2 = pgTeste();
+      try {
+        const f = await pg2.query(
+          `SELECT COUNT(*)::int AS total,
+                  COUNT(*) FILTER (WHERE exclusiva)::int AS exclusivas
+           FROM pedido_fila WHERE pedido_id = $1`,
+          [pedidoId]
+        );
+        assert(f.rows[0].total > 0, "o agendador deveria ter criado a fila do pedido");
+        eq(f.rows[0].exclusivas, 0, "a fila do agendado deveria ser NÃO-exclusiva");
+      } finally { await pg2.end(); }
+      // Prova de comportamento: proposta manual de outro motorista é LIBERADA
+      // (fila exclusiva antiga devolveria 400).
+      const prop = await api("POST", "/api/propostas", { token: tokAgMot2, body: { pedido_id: pedidoId } });
+      eq(prop.status, 200, "proposta manual deveria ser aceita (fila não-exclusiva)");
+      // E o pulso continua visível no mapa de um motorista perto.
+      const mapa = await api("GET", `/api/pedidos?lat=${AG_ORIG.lat}&lng=${AG_ORIG.lng}`, { token: tokAgMot2 });
+      eq(mapa.status, 200, "status mapa");
+      assert(Array.isArray(mapa.json) && mapa.json.some((p) => p.id === pedidoId),
+        "o pulso do agendado deveria aparecer no mapa (fila não-exclusiva não esconde)");
     });
 
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
