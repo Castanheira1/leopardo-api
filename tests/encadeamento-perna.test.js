@@ -13,7 +13,9 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.join(__dirname, "..");
-const dash = fs.readFileSync(path.join(root, "public/dashboard.html"), "utf8");
+// dashboard modularizado: HTML + dashboard.js + dashboard.css (contrato vale pro conjunto)
+const dash = ["public/dashboard.html", "public/dashboard.js", "public/dashboard.css"]
+  .map((p) => fs.readFileSync(path.join(root, p), "utf8")).join("\n");
 // Backend modularizado (server.js + src/**): o contrato vale para o conjunto.
 function lerBackend() {
   const partes = [fs.readFileSync(path.join(root, "server.js"), "utf8")];

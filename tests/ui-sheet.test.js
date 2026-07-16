@@ -1,7 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 const root = path.join(__dirname, "..");
-const h = fs.readFileSync(path.join(root, "public/dashboard.html"), "utf8");
+// dashboard modularizado: HTML + dashboard.js + dashboard.css (contrato vale pro conjunto)
+const h = ["public/dashboard.html", "public/dashboard.js", "public/dashboard.css"]
+  .map((p) => fs.readFileSync(path.join(root, p), "utf8")).join("\n");
 const css = fs.readFileSync(path.join(root, "public/style.css"), "utf8");
 const sw = fs.readFileSync(path.join(root, "public/service-worker.js"), "utf8");
 let failed = 0;

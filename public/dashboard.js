@@ -1,0 +1,6835 @@
+// JS do dashboard — extraido VERBATIM do <script> inline do dashboard.html.
+// Escopo global classico (nao-module): mesmo comportamento de antes.
+    checkAuth();                 // app.js já preenche #userName
+    let user = JSON.parse(localStorage.getItem('user'));
+
+    let habHoje = null;
+    let g = null;             // google namespace
+    let selPed = null, selOfe = null;
+    let trackState = null;    // { viagemId, watchId, buffer, timer }
+    let viagemView = null;    // estado da tela de viagem aberta (2 fases: encontro -> destino)
+
+    /* -------- alça arrastável dos sheets (abre/colapsa) -------- */
+    // Robusto a interrupções: se o app vai a 2º plano NO MEIO de um toque na alça
+    // (troca de app, sombra de notificação, chamada), o navegador dispara
+    // `touchcancel` — NÃO `touchend`. Sem tratar isso, o `up` nunca rodava e o
+    // estado `dragging` ficava preso em true. Ao voltar, `up`/`move` estão no
+    // window (disparam em QUALQUER toque): o próximo toque — inclusive no botão do
+    // sheet — era lido como fim-de-arraste (togglava `collapsed`, escondendo os
+    // botões na hora do clique) e o `move` chamava preventDefault engolindo o
+    // gesto -> o botão ficava "sem resposta" e só destravava sozinho no toque
+    // seguinte. Aqui zeramos o arraste em touchcancel/pointercancel/blur/aba
+    // oculta, e só o toque que REALMENTE começou na alça togglea o sheet.
+    function bindGripArrasto(sheet, grip) {
+        if (!sheet || !grip) return;
+        let startY = 0, moved = 0, dragging = false;
+        const yOf = (e) => (e.touches ? (e.touches[0] || e.changedTouches[0]).clientY : e.clientY);
+        const down = (e) => { dragging = true; moved = 0; startY = yOf(e); };
+        const move = (e) => {
+            if (!dragging) return;
+            moved = yOf(e) - startY;
+            if (Math.abs(moved) > 4 && e.cancelable) e.preventDefault();
+        };
+        const up = () => {
+            if (!dragging) return;
+            dragging = false;
+            if (Math.abs(moved) < 10) sheet.classList.toggle('collapsed');
+            else if (moved > 28) sheet.classList.add('collapsed');
+            else if (moved < -28) sheet.classList.remove('collapsed');
+        };
+        // Interrupção: NÃO é um toque -> só destrava, sem togglar nada.
+        const cancel = () => { dragging = false; moved = 0; };
+        grip.addEventListener('mousedown', down);
+        grip.addEventListener('touchstart', down, { passive: true });
+        grip.addEventListener('touchmove', move, { passive: false });
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+        window.addEventListener('touchend', up);
+        window.addEventListener('touchcancel', cancel);
+        window.addEventListener('pointercancel', cancel);
+        window.addEventListener('blur', cancel);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
+    }
+    /* -------- sheet pedir/oferecer: alça só abre/fecha (sem transform) -------- */
+    function tornarSheetAcaoArrastavel(sheet, grip) {
+        if (!sheet || !grip || sheet._acaoDragReady) return;
+        sheet._acaoDragReady = true;
+        bindGripArrasto(sheet, grip);
+    }
+
+    function sheetAcaoExpandido() {
+        return !!document.querySelector('.tab-content.active .acao-sheet:not(.collapsed)');
+    }
+    /** Restaura sheet/botão se a tela ficou "limpa" (altura 0 / teclado residual). */
+    function garantirUiAcaoVisivel(abrirCta) {
+        limparEstadoTeclado();
+        // --appvh já no primeiro paint (não espera visualViewport/Maps).
+        const h = window.visualViewport?.height || window.innerHeight || 700;
+        document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
+        const tab = document.querySelector('.tab-content.active');
+        const stage = tab?.querySelector('.map-stage');
+        if (stage) {
+            // Se o flex colapsou a área, força altura mínima legível na hora.
+            if (stage.clientHeight < 120) {
+                stage.style.minHeight = Math.round(Math.min(h * 0.62, 520)) + 'px';
+            }
+        }
+        document.querySelectorAll('.tab-content.active .acao-sheet').forEach((sheet) => {
+            // Busca rodando ("Procurando motorista…"): o sheet fica oculto pelo
+            // CSS — não força visível por cima, senão sobra um pedaço na tela.
+            if (document.body.classList.contains('buscando-carona')) return;
+            sheet.style.visibility = 'visible';
+            sheet.style.display = 'flex';
+            sheet.style.opacity = '1';
+            sheet.style.pointerEvents = '';
+            sheet.style.bottom = '';
+            if (abrirCta) sheet.classList.remove('collapsed');
+        });
+        reassentarAltura();
+    }
+    function expandirSheetAcao(qual) {
+        const ids = qual === 'pedir' ? ['acaoSheetPed']
+            : qual === 'oferecer' ? ['acaoSheetOfe']
+            : ['acaoSheetPed', 'acaoSheetOfe'];
+        ids.forEach((id) => {
+            const sheet = document.getElementById(id);
+            if (sheet) sheet.classList.remove('collapsed');
+        });
+        garantirUiAcaoVisivel(true);
+    }
+
+    /* -------- altura real da tela + compensação do teclado virtual -------- */
+    // Fallback p/ navegadores sem "dvh": 100vh passa da área visível e CORTA a
+    // barra de baixo — e como a tela é travada (sem rolagem), o botão fica
+    // inalcançável. Mede a altura de verdade e expõe em --appvh.
+    // Com teclado aberto, visualViewport.height encolhe — usamos isso p/ subir
+    // o bottom sheet (--sheet-kbd) e manter campos/botões acessíveis.
+    function insetTeclado() {
+        const vv = window.visualViewport;
+        if (!vv) return 0;
+        const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        const foco = document.activeElement;
+        const emCampo = foco && (
+            foco.matches('input, select, textarea')
+            || foco.closest?.('gmp-place-autocomplete')
+        );
+        // Sem campo focado não há teclado — evita que a barra do navegador/status
+        // bar ainda se ajustando no boot seja lida como teclado aberto, prendendo
+        // o sheet (--sheet-kbd) recortado para fora da tela pelo overflow:hidden
+        // do .map-stage até o usuário deslogar e logar de novo.
+        if (!emCampo) return 0;
+        return inset;
+    }
+    // Idempotente: o visualViewport dispara scroll/resize o tempo todo no celular
+    // (barra do navegador, micro-ajustes). Reescrever as variáveis a cada disparo
+    // fazia o bottom sheet reposicionar e o toque no botão "escorregar" (parecia
+    // travar). Só reescreve quando o valor MUDA de verdade.
+    let _appvhAnt = null, _kbdAnt = null;
+    function compensarTeclado() {
+        const vv = window.visualViewport;
+        const h = vv ? vv.height : window.innerHeight;
+        const inset = insetTeclado();
+        const sheetAberto = sheetAcaoExpandido();
+        const tecladoAtivo = inset > 80;
+        // Sheet aberto sem teclado: ignora micro-ajustes do viewport (barra do navegador).
+        const appvh = (sheetAberto && !tecladoAtivo)
+            ? Math.round(h / 4) / 25
+            : Math.round(h * 0.1) / 10;
+        if (appvh !== _appvhAnt) {
+            document.documentElement.style.setProperty('--appvh', (h * 0.01) + 'px');
+            _appvhAnt = appvh;
+        }
+        const mudouKbd = inset !== _kbdAnt;
+        const kbdRelevante = tecladoAtivo || _kbdAnt > 80 || !sheetAberto
+            || Math.abs(inset - _kbdAnt) >= 12;
+        if (mudouKbd && kbdRelevante) {
+            document.documentElement.style.setProperty('--sheet-kbd', inset + 'px');
+            document.documentElement.classList.toggle('teclado-aberto', tecladoAtivo);
+            _kbdAnt = inset;
+        }
+    }
+    // Entrada/volta do app: a barra do navegador/status bar ainda anima e
+    // visualViewport.height vem transitório, gravando um --appvh errado que só se
+    // corrige no próximo resize espontâneo (a UI "quebra e volta sozinha"). Aqui
+    // remedimos a altura algumas vezes por ~1,2s, zerando o throttle (_appvhAnt)
+    // p/ FORÇAR a reescrita até a altura assentar. Janela curta e só em
+    // entrada/retorno/expandir — não reintroduz o "botão escorregando" (que vinha
+    // de reescrever a cada micro-evento do viewport durante o uso).
+    let _settleTimers = [];
+    function reassentarAltura() {
+        _settleTimers.forEach(clearTimeout);
+        _settleTimers = [];
+        const aplicar = () => { _appvhAnt = null; compensarTeclado(); };
+        requestAnimationFrame(aplicar);
+        [60, 160, 320, 550, 850, 1200].forEach((ms) => _settleTimers.push(setTimeout(aplicar, ms)));
+    }
+    function rolarCampoNoSheet(sheet, el) {
+        if (!sheet || !el) return;
+        const scrollEl = sheet.querySelector('.acao-sheet-body') || sheet;
+        const sheetRect = scrollEl.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const margem = 16;
+        if (elRect.bottom > sheetRect.bottom - margem) {
+            scrollEl.scrollTop += elRect.bottom - sheetRect.bottom + margem;
+        } else if (elRect.top < sheetRect.top + margem) {
+            scrollEl.scrollTop -= sheetRect.top + margem - elRect.top;
+        }
+    }
+    function limparEstadoTeclado() {
+        document.documentElement.style.setProperty('--sheet-kbd', '0px');
+        document.documentElement.classList.remove('teclado-aberto');
+        document.querySelectorAll('.acao-sheet.teclado-aberto, .viagem-sheet.teclado-aberto')
+            .forEach((s) => s.classList.remove('teclado-aberto'));
+        _kbdAnt = 0;
+    }
+    function syncMapasAbas(abaAtiva) {
+        [
+            ['tabPedir', () => selPed?.map],
+            ['tabOferecer', () => selOfe?.map],
+            ['tabViagem', () => viagemView?.map],
+        ].forEach(([id, getMap]) => {
+            const tab = document.getElementById(id);
+            if (!tab) return;
+            const on = id === abaAtiva;
+            tab.querySelectorAll('.map-stage-map, .viagem-map, .map-search-wrap').forEach((el) => {
+                el.style.visibility = on ? '' : 'hidden';
+                el.style.pointerEvents = on ? '' : 'none';
+            });
+            if (on) {
+                const map = getMap();
+                if (map && g?.maps) setTimeout(() => g.maps.event.trigger(map, 'resize'), 80);
+            }
+        });
+    }
+    function ajustarAltura() { compensarTeclado(); }
+    ajustarAltura();
+    window.addEventListener('resize', ajustarAltura);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', compensarTeclado);
+        window.visualViewport.addEventListener('scroll', compensarTeclado);
+    }
+    // Entrada (cold) e volta via bfcache (back/forward): remede enquanto assenta.
+    reassentarAltura();
+    window.addEventListener('pageshow', reassentarAltura);
+    document.addEventListener('focusin', (e) => {
+        if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
+            const overlay = e.target.closest('.cam-overlay');
+            if (overlay) overlay.classList.add('teclado-aberto');
+            compensarTeclado();
+            requestAnimationFrame(() => {
+                try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+            });
+            return;
+        }
+        const pac = e.target.closest?.('gmp-place-autocomplete');
+        if (pac) {
+            const stage = pac.closest('.map-stage');
+            const sheet = stage?.querySelector('.acao-sheet');
+            if (sheet) sheet.classList.add('collapsed');
+            compensarTeclado();
+            return;
+        }
+        const sheet = e.target.closest?.('.acao-sheet, .viagem-sheet');
+        if (!sheet || !e.target.matches('input, select, textarea')) return;
+        sheet.classList.remove('collapsed');
+        sheet.classList.add('teclado-aberto');
+        compensarTeclado();
+        requestAnimationFrame(() => rolarCampoNoSheet(sheet, e.target));
+    });
+    document.addEventListener('focusout', (e) => {
+        if (e.target.matches('#perfilFavFiltro, #favFiltro')) {
+            setTimeout(() => {
+                const ativo = document.activeElement;
+                if (ativo?.matches('#perfilFavFiltro, #favFiltro')) return;
+                e.target.closest('.cam-overlay')?.classList.remove('teclado-aberto');
+                compensarTeclado();
+            }, 120);
+            return;
+        }
+        const sheet = e.target.closest?.('.acao-sheet, .viagem-sheet');
+        if (!sheet) return;
+        setTimeout(() => {
+            const ativo = document.activeElement;
+            if (sheet.contains(ativo) && ativo.matches('input, select, textarea')) return;
+            sheet.classList.remove('teclado-aberto');
+            compensarTeclado();
+        }, 120);
+    });
+
+    /* -------- buzina (aviso de novo pedido de carona) -------- */
+    // Três buzinadas curtas + três vibradas no celular do motorista. O AudioContext
+    // só toca depois de um gesto do usuário (política de autoplay dos navegadores):
+    // destrava no primeiro toque em qualquer lugar da página.
+    let _audioCtx = null;
+    function destravarAudioBuzina() {
+        try {
+            if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (_audioCtx.state === 'suspended') _audioCtx.resume();
+        } catch (_) {}
+    }
+    document.addEventListener('pointerdown', destravarAudioBuzina);
+    function buzinar() {
+        try { if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]); } catch (_) {}
+        try { if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+        const ctx = _audioCtx;
+        if (!ctx) return;   // sem suporte/gesto ainda: só vibra
+        const tocar = () => {
+            if (ctx.state !== 'running') return;
+            const toque = (t) => {
+                [440, 554].forEach((f) => {   // duas notas juntas = timbre de buzina
+                    const o = ctx.createOscillator(), gn = ctx.createGain();
+                    o.type = 'sawtooth';
+                    o.frequency.value = f;
+                    gn.gain.setValueAtTime(0.0001, t);
+                    gn.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
+                    gn.gain.setValueAtTime(0.15, t + 0.16);
+                    gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.23);
+                    o.connect(gn).connect(ctx.destination);
+                    o.start(t); o.stop(t + 0.26);
+                });
+            };
+            const t0 = ctx.currentTime + 0.01;
+            toque(t0); toque(t0 + 0.34); toque(t0 + 0.68);   // bi-bi-bi (3x)
+        };
+        if (ctx.state === 'suspended') {
+            ctx.resume().then(tocar).catch(() => {});
+            return;
+        }
+        tocar();
+    }
+
+    /* -------- util -------- */
+    function msg(texto, tipo = 'success', ms = 5000) {
+        const m = document.getElementById('message');
+        m.style.display = 'block';
+        m.className = 'message ' + tipo;
+        m.textContent = texto;
+        clearTimeout(window._msgTimer);
+        window._msgTimer = setTimeout(() => { m.style.display = 'none'; }, ms);
+    }
+    // Notificação estilo iPhone: desce do topo, frosted, com ícone do app e some
+    // sozinha (ou ao toque). status: 'on' (verde) | 'off' (cinza) | null.
+    function notificarTopo(titulo, corpo, opts = {}) {
+        document.querySelectorAll('.notif-topo').forEach((n) => { clearTimeout(n._t); n.remove(); });
+        const el = document.createElement('div');
+        el.className = 'notif-topo';
+        const dot = opts.status ? `<span class="notif-dot ${opts.status === 'on' ? 'on' : 'off'}"></span>` : '';
+        el.innerHTML = `<div class="notif-ico"><img src="logo-vap.png" alt="VAP" onerror="this.style.display='none'">${dot}</div>`
+            + `<div class="notif-corpo"><div class="notif-tit">${esc(titulo)}</div>`
+            + (corpo ? `<div class="notif-sub">${esc(corpo)}</div>` : '') + `</div>`;
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('show'));
+        const fechar = () => {
+            clearTimeout(el._t);
+            el.classList.remove('show');
+            el.classList.add('hide');
+            setTimeout(() => el.remove(), 340);
+        };
+        el.addEventListener('click', fechar);
+        el._t = setTimeout(fechar, opts.ms || 4200);
+        if (navigator.vibrate) { try { navigator.vibrate(12); } catch (_) {} }
+        return el;
+    }
+    function atualizarHintDestinoPed() {
+        const hint = document.getElementById('hintEscolherDestino');
+        const dest = selPed?.getDestino?.();
+        if (hint) hint.style.display = dest ? 'none' : 'block';
+    }
+    // Resumo "Motoristas por perto" (nº online, mais próximo, ETA). O toque
+    // no card abre/fecha a lista detalhada; sem destino, leva a escolher o local.
+    function toggleListaMotoristas() {
+        if (!selPed?.getDestino?.()) return abrirLocais();
+        const listas = document.getElementById('motoristasListas');
+        const card = document.getElementById('motStatsCard');
+        if (!listas) return;
+        const abrir = listas.style.display === 'none';
+        listas.style.display = abrir ? 'block' : 'none';
+        if (card) {
+            card.setAttribute('aria-expanded', String(abrir));
+            card.classList.toggle('mot-stats--aberto', abrir);
+        }
+    }
+    function preencherStatsMotoristas(todos, opts = {}) {
+        const card = document.getElementById('motStatsCard');
+        const listas = document.getElementById('motoristasListas');
+        if (!card) return;
+        const n = (todos || []).length;
+        // Mesmo cartão da tela inicial também COM destino e lista vazia — os
+        // detalhes ("Sem rota…", "Nenhum online…") ficam no toque do cartão.
+        document.getElementById('motStatsNum').textContent = n
+            ? `${n} motorista${n > 1 ? 's' : ''} online`
+            : 'Nenhum motorista online agora';
+        const dists = (todos || []).map((it) => Number(it.dist)).filter((d) => isFinite(d) && d >= 0);
+        const dEl = document.getElementById('motStatsDist');
+        const eEl = document.getElementById('motStatsEta');
+        if (dists.length) {
+            const d = Math.min(...dists);
+            dEl.textContent = d < 1 ? `${Math.round(d * 1000)} metros` : `${d.toFixed(1)} km`;
+            eEl.textContent = `${Math.max(1, Math.round((d / 22) * 60))} min`;
+        } else {
+            dEl.textContent = '—';
+            eEl.textContent = '—';
+        }
+        card.style.display = 'flex';
+        // A lista detalhada respeita o estado que o usuário deixou (aberta/fechada).
+        if (listas && !opts.semDestino) {
+            listas.style.display = card.getAttribute('aria-expanded') === 'true' ? 'block' : 'none';
+        }
+    }
+    function atualizarStatsMotoristas(indo, perto) {
+        preencherStatsMotoristas([...(indo || []), ...(perto || [])]);
+    }
+    // Sem destino escolhido a lista completa não roda — esta sondagem leve
+    // alimenta o card com os carros online do projeto (com GPS, os por perto).
+    async function atualizarContadorOnline() {
+        if (selPed?.getDestino?.()) return;   // com destino, a lista completa alimenta
+        if (document.hidden) return;
+        if (!document.getElementById('tabPedir')?.classList.contains('active')) return;
+        try {
+            const o = selPed?.getOrigem ? selPed.getOrigem() : null;
+            const q = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
+            const r = await fetchWithAuth('/api/motoristas-online' + q);
+            if (!r.ok) return;
+            const lista = await r.json();
+            if (selPed?.getDestino?.()) return;   // escolheu destino enquanto buscava
+            const itens = (Array.isArray(lista) ? lista : []).map((m) => ({
+                dist: (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity,
+            }));
+            preencherStatsMotoristas(itens, { semDestino: true });
+        } catch (_) {}
+    }
+    setInterval(atualizarContadorOnline, 15000);
+    setTimeout(atualizarContadorOnline, 1500);
+    function exigirDestinoPassageiro(acao) {
+        const texto = acao
+            ? `Escolha primeiro para onde vamos — depois você pode ${acao}.`
+            : 'Motoristas online aparecem no mapa. Escolha para onde vamos para ver sua rota e pedir carona.';
+        msg(texto, 'error', 9000);
+        selPed?.focarBuscaDestino?.();
+        atualizarHintDestinoPed();
+        return false;
+    }
+    function showTab(id, btn) {
+        limparEstadoTeclado();
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (btn) btn.classList.add('active');
+        syncMapasAbas(id);
+        // Botão/alça na hora — NÃO espera o Google Maps (tela ficava limpa até o mapa carregar).
+        if (id === 'tabPedir' || id === 'tabOferecer') {
+            expandirSheetAcao(id === 'tabPedir' ? 'pedir' : 'oferecer');
+            requestAnimationFrame(() => garantirUiAcaoVisivel(true));
+        }
+        // Contador de carros online já no primeiro paint da aba do passageiro.
+        if (id === 'tabPedir') atualizarContadorOnline();
+        // Mapa em paralelo (não bloqueia o CTA).
+        if (id === 'tabPedir') {
+            if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
+            if (!selPed) {
+                initMapPedir().catch(async (err) => {
+                    console.error('initMapPedir falhou:', err);
+                    try {
+                        await new Promise((r) => setTimeout(r, 1200));
+                        await initMapPedir();
+                    } catch (e2) {
+                        console.error('initMapPedir retry:', e2);
+                        msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    }
+                }).finally(() => garantirUiAcaoVisivel(true));
+            } else {
+                iniciarFrotaAoVivo(selPed.map);
+                selPed.recentrar();
+                sincronizarQuandoPed();
+                iniciarRelogioQuandoPed();
+                garantirUiAcaoVisivel(true);
+            }
+        }
+        if (id === 'tabOferecer') {
+            if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+            if (!selOfe) {
+                initMapOferecer().catch(async (err) => {
+                    console.error('initMapOferecer falhou:', err);
+                    try {
+                        await new Promise((r) => setTimeout(r, 1200));
+                        await initMapOferecer();
+                    } catch (e2) {
+                        console.error('initMapOferecer retry:', e2);
+                        msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    }
+                }).finally(() => garantirUiAcaoVisivel(true));
+            } else {
+                if (motoristaOnlineModo) refreshModoMotoristaOnline();
+                else { selOfe.recentrar(); }
+                garantirUiAcaoVisivel(true);
+            }
+        }
+    }
+
+    /* -------- menu (hambúrguer) -------- */
+    // A busca flutua com z-index acima do navbar (pra não sumir ao rolar); por isso
+    // ela passava por cima do menu. Enquanto o menu está aberto, escondemos a busca.
+    function _buscaVisivel(menuAberto) {
+        document.querySelectorAll('.map-search-wrap, .map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
+    }
+    function toggleMenu(e) {
+        if (e) e.stopPropagation();
+        const m = document.getElementById('navMenu');
+        const aberto = m.style.display !== 'block';
+        m.style.display = aberto ? 'block' : 'none';
+        _buscaVisivel(aberto);
+    }
+    function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; _buscaVisivel(false); }
+    document.addEventListener('click', (e) => {
+        if (document.getElementById('navMenu').style.display === 'block'
+            && !e.target.closest('.nav-menu-wrap')) fecharMenu();
+    });
+
+    /* -------- painéis (listas/solicitações) abertos pelo menu -------- */
+    function abrirPainel(id) {
+        loadPropostas();
+        if (id === 'painelPassageiro') loadMeusPedidos();
+        document.getElementById(id).style.display = 'flex';
+    }
+    function fecharPainel(id) { document.getElementById(id).style.display = 'none'; }
+    function painelAberto() {
+        return document.getElementById('painelPassageiro').style.display === 'flex'
+            || document.getElementById('painelMotorista').style.display === 'flex'
+            || document.getElementById('painelAgendamentos').style.display === 'flex';
+    }
+
+    /* -------- Locais do projeto (catálogo) + favoritos pessoais (Perfil) --------
+       Catálogo: locais-favoritos.json — menu "Locais" mostra TODOS.
+       Favoritos: salvos pelo usuário — menu "Meus locais favoritos".
+       Posição: referência curada do projeto; Google só refina se bater perto. */
+    let favCatalogo = null;
+    let favProjeto = null;
+    let favCatalogoLocais = [];   // todos do projeto [{nome, busca, ref, grupo}]
+    let favPessoais = [];         // salvos pelo usuário (API)
+    let favModoPainel = 'catalogo'; // 'catalogo' | 'pessoais'
+
+    async function carregarCatalogoFavoritos() {
+        if (favCatalogo) return favCatalogo;
+        const r = await fetch('/locais-favoritos.json', { cache: 'no-store' });
+        if (!r.ok) throw new Error('catalogo');
+        favCatalogo = await r.json();
+        return favCatalogo;
+    }
+
+    function montarCatalogoProjeto(codigo) {
+        favProjeto = favCatalogo?.projetos?.[codigo] || null;
+        favCatalogoLocais = [];
+        (favProjeto?.grupos || []).forEach((gr) => {
+            (gr.locais || []).forEach((l) => favCatalogoLocais.push({ ...l, grupo: gr.titulo }));
+        });
+    }
+
+    async function carregarFavoritosPessoais() {
+        const r = await fetchWithAuth('/api/perfil/favoritos');
+        if (!r || !r.ok) throw new Error('api');
+        favPessoais = await r.json();
+        return favPessoais;
+    }
+
+    async function salvarFavoritosPessoais() {
+        const r = await fetchWithAuth('/api/perfil/favoritos', {
+            method: 'PUT',
+            body: JSON.stringify({ favoritos: favPessoais }),
+        });
+        if (!r || !r.ok) {
+            const d = r ? await r.json().catch(() => ({})) : {};
+            throw new Error(d.error || 'Erro ao salvar');
+        }
+        favPessoais = await r.json();
+    }
+
+    function favEstaMarcado(nome) {
+        return favPessoais.some((f) => f.nome === nome);
+    }
+
+    async function toggleFavoritoPerfil(btn) {
+        const nome = decodeURIComponent(btn.dataset.nomeEnc || '');
+        const local = favCatalogoLocais.find((l) => l.nome === nome);
+        if (!local) return;
+        const msg = document.getElementById('perfilFavMsg');
+        if (favEstaMarcado(nome)) {
+            favPessoais = favPessoais.filter((f) => f.nome !== nome);
+        } else {
+            if (favPessoais.length >= 40) {
+                if (msg) msg.textContent = 'Máximo de 40 favoritos.';
+                return;
+            }
+            favPessoais.push({
+                nome: local.nome,
+                busca: local.busca || local.nome,
+                grupo: local.grupo,
+                ref: local.ref,
+                vivo: !!local.vivo,
+            });
+        }
+        renderPerfilFavoritos();
+        try {
+            await salvarFavoritosPessoais();
+            if (msg) msg.textContent = favEstaMarcado(nome) ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.';
+        } catch (e) {
+            if (msg) msg.textContent = e.message || 'Erro ao salvar.';
+            await carregarFavoritosPessoais();
+            renderPerfilFavoritos();
+        }
+    }
+
+    async function renderPerfilFavoritos() {
+        const el = document.getElementById('perfilFavCatalogo');
+        if (!el) return;
+        const cod = (user?.projeto_codigo || '').toUpperCase();
+        if (!cod) {
+            el.innerHTML = '<div class="fav-vazio">Defina seu projeto acima para ver o catálogo.</div>';
+            return;
+        }
+        try {
+            await carregarCatalogoFavoritos();
+            montarCatalogoProjeto(cod);
+            if (!favCatalogoLocais.length) {
+                el.innerHTML = '<div class="fav-vazio">Catálogo ainda não disponível para este projeto.</div>';
+                return;
+            }
+        } catch (_) {
+            el.innerHTML = '<div class="fav-vazio">Não foi possível carregar o catálogo.</div>';
+            return;
+        }
+        const filtro = (document.getElementById('perfilFavFiltro')?.value || '').trim();
+        const visiveis = filtro
+            ? favCatalogoLocais.filter((l) => locCoincideFiltro(l, filtro))
+            : favCatalogoLocais;
+        if (!visiveis.length) {
+            el.innerHTML = '<div class="fav-vazio">Nenhum local no filtro.</div>';
+            return;
+        }
+        let html = '';
+        let grupoAtual = null;
+        visiveis.forEach((l) => {
+            if (l.grupo !== grupoAtual) {
+                grupoAtual = l.grupo;
+                html += `<div class="fav-grupo">${esc(grupoAtual)}</div>`;
+            }
+            const on = favEstaMarcado(l.nome);
+            const enc = encodeURIComponent(l.nome);
+            html += `<div class="fav-perfil-item">
+                <button type="button" class="fav-star ${on ? 'on' : ''}" data-nome-enc="${enc}" title="${on ? 'Remover' : 'Adicionar'}" onclick="toggleFavoritoPerfil(this)">${on ? '★' : '☆'}</button>
+                <span class="fav-nome">${esc(l.nome)}</span>
+            </div>`;
+        });
+        el.innerHTML = html;
+    }
+
+    async function abrirLocais() {
+        favModoPainel = 'catalogo';
+        await abrirPainelLocais();
+    }
+
+    async function abrirFavoritos() {
+        favModoPainel = 'pessoais';
+        await abrirPainelLocais();
+    }
+
+    async function abrirPainelLocais() {
+        fecharMenu();
+        const titulo = document.getElementById('favTitulo');
+        const subtitulo = document.getElementById('favSubtitulo');
+        const filtro = document.getElementById('favFiltro');
+        const lista = document.getElementById('listaFavoritos');
+        document.getElementById('painelFavoritos').style.display = 'flex';
+        lista.innerHTML = '<div class="fav-vazio">Carregando…</div>';
+
+        if (favModoPainel === 'pessoais') {
+            titulo.textContent = 'Meus locais favoritos';
+            subtitulo.textContent = 'Seus locais frequentes — toque para marcar destino.';
+            if (filtro) filtro.style.display = 'none';
+            try {
+                await carregarFavoritosPessoais();
+                renderPainelLocais();
+            } catch (_) {
+                lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar seus favoritos.</div>';
+            }
+            return;
+        }
+
+        titulo.textContent = 'Locais';
+        if (filtro) { filtro.style.display = ''; filtro.value = ''; }
+        try {
+            await carregarCatalogoFavoritos();
+            const cod = (user?.projeto_codigo || '').toUpperCase();
+            montarCatalogoProjeto(cod);
+            if (!favProjeto) {
+                subtitulo.textContent = 'Seu projeto ainda não tem locais cadastrados. Defina o projeto no Perfil.';
+                lista.innerHTML = '<div class="fav-vazio">Sem locais para este projeto.</div>';
+                return;
+            }
+            subtitulo.textContent = `${favProjeto.nome} — toque num local para marcar como destino.`;
+            renderPainelLocais();
+        } catch (_) {
+            lista.innerHTML = '<div class="fav-vazio">Não foi possível carregar os locais. Verifique a internet.</div>';
+        }
+    }
+
+    const FAV_PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>';
+
+    // Distância do usuário até a referência curada do local (null sem GPS/ref).
+    function distKmLocalRef(origem, l) {
+        const ref = l?.ref;
+        if (!origem || !ref || ref.lat == null || ref.lng == null) return null;
+        const d = distKmGps(origem, { lat: +ref.lat, lng: +ref.lng });
+        return isFinite(d) ? d : null;
+    }
+    function fmtDistLocal(d) {
+        if (d == null) return '';
+        return d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(1).replace('.', ',')} km`;
+    }
+    function origemParaLocais() {
+        const sel = seletorAtivo();
+        if (!sel?.origemConfiavel?.() || !sel.getOrigem) return null;
+        return sel.getOrigem();
+    }
+    // Item claro estilo mockup: pin, nome + categoria, distância e seta;
+    // o destino já marcado ganha fundo dourado suave e check.
+    function itemLocalHtml(l, origem, destinoNome, opts = {}) {
+        const enc = encodeURIComponent(l.nome);
+        const distTxt = fmtDistLocal(distKmLocalRef(origem, l));
+        const sel = !!destinoNome && destinoNome === l.nome;
+        const direita = sel
+            ? '<span class="fav-check" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5L19 7"/></svg></span>'
+            : '<svg class="fav-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+        const sub = !opts.semGrupo && l.grupo ? `<span class="fav-sub">${esc(l.grupo)}</span>` : '';
+        return `<button type="button" class="fav-item${sel ? ' fav-item--sel' : ''}" data-nome-enc="${enc}" onclick="escolherFavorito(this)">
+            <span class="fav-pin">${FAV_PIN}</span>
+            <span class="fav-item-txt">
+                <span class="fav-nome">${esc(l.nome)}</span>
+                ${sub}
+            </span>
+            ${distTxt ? `<span class="fav-dist">${distTxt}</span>` : ''}
+            ${direita}
+        </button>`;
+    }
+
+    function renderPainelLocais() {
+        if (favModoPainel === 'pessoais') return renderFavoritosMenu();
+        const lista = document.getElementById('listaFavoritos');
+        const filtro = (document.getElementById('favFiltro')?.value || '').trim();
+        const visiveis = filtro
+            ? favCatalogoLocais.filter((l) => locCoincideFiltro(l, filtro))
+            : favCatalogoLocais;
+        if (!visiveis.length) {
+            lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
+            return;
+        }
+        const origem = origemParaLocais();
+        const destinoNome = seletorAtivo()?.getDestino?.()?.texto || null;
+        let html = '';
+        if (origem) {
+            // Com GPS: lista única do mais perto pro mais longe (estilo mockup).
+            const ordenados = [...visiveis].sort((a, b) => {
+                const da = distKmLocalRef(origem, a);
+                const db = distKmLocalRef(origem, b);
+                return (da == null ? Infinity : da) - (db == null ? Infinity : db);
+            });
+            html += '<div class="fav-grupo">Locais próximos</div>';
+            html += ordenados.map((l) => itemLocalHtml(l, origem, destinoNome)).join('');
+        } else {
+            // Sem GPS: mantém o agrupamento do catálogo.
+            let grupoAtual = null;
+            visiveis.forEach((l) => {
+                if (l.grupo !== grupoAtual) {
+                    grupoAtual = l.grupo;
+                    html += `<div class="fav-grupo">${esc(grupoAtual)}</div>`;
+                }
+                html += itemLocalHtml(l, null, destinoNome, { semGrupo: true });
+            });
+        }
+        lista.innerHTML = html;
+    }
+
+    function renderFavoritosMenu() {
+        const lista = document.getElementById('listaFavoritos');
+        if (!favPessoais.length) {
+            lista.innerHTML = '<div class="fav-vazio">Nenhum favorito ainda.<br><br>Use o menu <strong>Locais</strong> para ver o catálogo completo ou marque no <strong>Perfil → Meus locais favoritos</strong>.</div>';
+            return;
+        }
+        const origem = origemParaLocais();
+        const destinoNome = seletorAtivo()?.getDestino?.()?.texto || null;
+        const itens = origem
+            ? [...favPessoais].sort((a, b) => {
+                const da = distKmLocalRef(origem, a);
+                const db = distKmLocalRef(origem, b);
+                return (da == null ? Infinity : da) - (db == null ? Infinity : db);
+            })
+            : favPessoais;
+        lista.innerHTML = itens.map((l) => itemLocalHtml(l, origem, destinoNome)).join('');
+    }
+
+    function seletorAtivo() {
+        const papel = localStorage.getItem('papel');
+        return papel === 'motorista' ? selOfe : selPed;
+    }
+
+    function favLocationBias() {
+        const cod = (user?.projeto_codigo || '').toUpperCase();
+        const reg = favCatalogo?.projetos?.[cod]?.regiao;
+        if (!reg) return undefined;
+        return { center: { lat: reg.lat, lng: reg.lng }, radius: (reg.raio_km || 40) * 1000 };
+    }
+
+    async function garantirCatalogoProjeto() {
+        await carregarCatalogoFavoritos();
+        const cod = (user?.projeto_codigo || '').toUpperCase();
+        if (!favCatalogoLocais.length) montarCatalogoProjeto(cod);
+    }
+
+    function normNomeLoc(s) {
+        return String(s || '').normalize('NFD').replace(/\p{M}/gu, '')
+            .replace(/[—–-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function locCoincideFiltro(local, filtroRaw) {
+        const f = normNomeLoc(filtroRaw);
+        if (!f) return true;
+        return normNomeLoc(local.nome).includes(f) || normNomeLoc(local.grupo || '').includes(f);
+    }
+
+    function localDoCatalogo(local) {
+        if (!local?.nome) return null;
+        const alvo = normNomeLoc(local.nome);
+        return favCatalogoLocais.find((l) => normNomeLoc(l.nome) === alvo) || null;
+    }
+
+    // Lista de locais: mesma resolução do buscador Google (searchByText + viés do mapa).
+    // ref no JSON é só fallback se o Google não achar.
+    // Cache local de 30 dias: os locais do catálogo são fixos (portaria, refeitório…),
+    // e cada searchByText é a chamada mais cara do Google — resolve uma vez por aparelho.
+    const LOCAL_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    function localCacheKey(query) {
+        return 'vapLocal:' + normNomeLoc(query);
+    }
+    function lerLocalCache(query) {
+        try {
+            const c = JSON.parse(localStorage.getItem(localCacheKey(query)) || 'null');
+            if (c && c.lat != null && c.lng != null && Date.now() - (c.em || 0) < LOCAL_CACHE_TTL_MS) {
+                return { lat: Number(c.lat), lng: Number(c.lng), nome: c.nome };
+            }
+        } catch (_) {}
+        return null;
+    }
+    function salvarLocalCache(query, achado) {
+        try {
+            localStorage.setItem(localCacheKey(query), JSON.stringify({
+                lat: achado.lat, lng: achado.lng, nome: achado.nome, em: Date.now(),
+            }));
+        } catch (_) { /* storage cheio: segue sem cache */ }
+    }
+    async function resolverLocalAoVivo(local) {
+        await garantirCatalogoProjeto();
+        const cat = localDoCatalogo(local);
+        const nome = cat?.nome || local?.nome;
+        const query = cat?.busca || local?.busca || nome;
+        if (!nome) return null;
+
+        const emCache = lerLocalCache(query);
+        if (emCache) return emCache;
+
+        try {
+            g = g || await carregarMaps();
+            const sel = seletorAtivo();
+            const achado = await buscarLugarGoogle(query, { map: sel?.map, nomePreferido: nome });
+            if (achado) {
+                salvarLocalCache(query, achado);
+                return achado;
+            }
+        } catch (_) { /* sem Google agora: usa ref */ }
+
+        const ref = cat?.ref || local?.ref;
+        if (ref?.lat != null && ref?.lng != null) {
+            return { lat: Number(ref.lat), lng: Number(ref.lng), nome };
+        }
+        return null;
+    }
+
+    async function escolherFavorito(btn) {
+        const nome = decodeURIComponent(btn.dataset.nomeEnc || '');
+        const local = favModoPainel === 'pessoais'
+            ? favPessoais.find((l) => l.nome === nome)
+            : favCatalogoLocais.find((l) => l.nome === nome);
+        if (!local) return;
+        const sel = seletorAtivo();
+        if (!sel) { msg('Abra o mapa primeiro para marcar o destino.', 'error'); return; }
+        btn.classList.add('fav-buscando');
+        const achado = await resolverLocalAoVivo(local);
+        btn.classList.remove('fav-buscando');
+        if (!achado) { msg('Local não encontrado. Tente a busca no mapa.', 'error'); return; }
+        fecharPainel('painelFavoritos');
+        sel.irPara({ lat: achado.lat, lng: achado.lng }, achado.nome);
+    }
+
+    /* -------- papel: passageiro x motorista (trava no modo escolhido) -------- */
+    // Remove o splash de abertura (idempotente): chamado assim que a UI real
+    // está pronta — seja o seletor de papel, seja a tela retomada.
+    function esconderBootSplash() {
+        const s = document.getElementById('bootSplash');
+        if (s) s.remove();
+    }
+    // Escolheu destino errado: limpa a marcação/rota do mapa.
+    function limparBuscaDestino(mapId) {
+        const tabId = mapId === 'mapPed' ? 'tabPedir' : 'tabOferecer';
+        const inputId = mapId === 'mapPed' ? 'destPedInput' : 'destOfeInput';
+        const inp = document.getElementById(inputId);
+        if (inp) inp.value = '';
+        const pac = document.querySelector(`#${tabId} gmp-place-autocomplete`);
+        try {
+            const interno = pac?.shadowRoot?.querySelector('input, [role="combobox"]');
+            if (interno) interno.value = '';
+        } catch (_) {}
+    }
+    function limparDestino(mapId) {
+        limparBuscaDestino(mapId);
+        const sel = mapId === 'mapPed' ? selPed : selOfe;
+        if (sel && sel.limparRota) sel.limparRota();
+        else if (mapId === 'mapPed') carregarCaronasDestino(null);
+    }
+    function atualizarBtnLimparPed(visivel) {
+        const wrap = document.getElementById('limparRotaPedWrap');
+        if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+        // Card volta ao modo "sem destino" (contador de carros online).
+        if (!visivel) atualizarContadorOnline();
+    }
+    function atualizarBtnLimparOfe(visivel) {
+        const wrap = document.getElementById('limparRotaOfeWrap');
+        if (wrap) wrap.style.display = visivel ? 'flex' : 'none';
+        if (!visivel) alcanceEscolhido = false;
+        const alc = document.getElementById('alcanceOfeWrap');
+        const info = document.getElementById('alcanceInfoOfe');
+        if (alc) alc.style.display = (visivel && !alcanceEscolhido) ? 'block' : 'none';
+        if (info) info.style.display = (visivel && alcanceEscolhido) ? 'flex' : 'none';
+        if (visivel && alcanceEscolhido) iniciarInfoAlcance(); else pararInfoAlcance();
+        if (typeof atualizarRaioCarro === 'function') atualizarRaioCarro();
+        if (visivel) agendarDescerSheet(); else cancelarDescerSheet();
+    }
+    // Se o motorista não mexer na barra em ~10 s, desce a alça (colapsa) sozinho.
+    let _alcanceIdleTimer = null;
+    function agendarDescerSheet() {
+        clearTimeout(_alcanceIdleTimer);
+        _alcanceIdleTimer = setTimeout(() => {
+            const sheet = document.getElementById('acaoSheetOfe');
+            if (sheet && !sheet.classList.contains('collapsed') && raioCircle) ajustarMapaAoRaio();
+        }, 10000);
+    }
+    function cancelarDescerSheet() { clearTimeout(_alcanceIdleTimer); }
+    /* -------- alcance ajustável da vaga com destino (barra 1–25 km) -------- */
+    function lerAlcanceOfe() {
+        const el = document.getElementById('alcanceOfe');
+        const v = el ? +el.value : +(localStorage.getItem('alcanceOfeKm') || 10);
+        return Math.min(25, Math.max(1, Math.round(v) || 10));
+    }
+    function initAlcanceOfe() {
+        const el = document.getElementById('alcanceOfe');
+        if (!el) return;
+        const salvo = Math.min(25, Math.max(1, Math.round(+(localStorage.getItem('alcanceOfeKm') || 10)) || 10));
+        el.value = salvo;
+        const lab = document.getElementById('alcanceOfeVal');
+        if (lab) lab.textContent = salvo + ' km';
+    }
+    let _alcanceTimer = null;
+    function onAlcanceInput(v) {
+        cancelarDescerSheet();   // mexeu na barra: o onchange cuida de descer
+        const km = Math.min(25, Math.max(1, Math.round(+v) || 10));
+        localStorage.setItem('alcanceOfeKm', km);
+        const lab = document.getElementById('alcanceOfeVal');
+        if (lab) lab.textContent = km + ' km';
+        atualizarRaioCarro();   // redimensiona o círculo do alcance
+        if (motoristaOnlineModo) atualizarUiMotoristaOnline();   // atualiza "(até X km)"
+        // Já online com carona: aplica ao vivo (debounced), sem recriar a carona.
+        if (motoristaModoDestino && motoristaCaronaId) {
+            clearTimeout(_alcanceTimer);
+            _alcanceTimer = setTimeout(() => {
+                fetchWithAuth('/api/caronas/raio', { method: 'POST', body: JSON.stringify({ raio_km: km }) }).catch(() => {});
+            }, 500);
+        }
+    }
+    // Ao SOLTAR a barra: colapsa o sheet e dá zoom pra caber o círculo inteiro.
+    function onAlcanceChange(v) {
+        onAlcanceInput(v);
+        ajustarMapaAoRaio();
+        esconderBarraAlcance();
+    }
+    /* -------- resumo compacto no lugar da barra (raio · vel. média · temperatura) -------- */
+    // Raio escolhido: a barra de ajuste dá lugar ao resumo. Toque no resumo reabre a barra.
+    let alcanceEscolhido = false;
+    let _infoAlcanceTimer = null;
+    function esconderBarraAlcance() {
+        alcanceEscolhido = true;
+        const alc = document.getElementById('alcanceOfeWrap');
+        const info = document.getElementById('alcanceInfoOfe');
+        if (alc) alc.style.display = 'none';
+        if (info) info.style.display = 'flex';
+        atualizarInfoAlcance();
+        iniciarInfoAlcance();
+    }
+    function reabrirBarraAlcance() {
+        alcanceEscolhido = false;
+        pararInfoAlcance();
+        const info = document.getElementById('alcanceInfoOfe');
+        const alc = document.getElementById('alcanceOfeWrap');
+        if (info) info.style.display = 'none';
+        if (alc) alc.style.display = 'block';
+        agendarDescerSheet();
+    }
+    function atualizarInfoAlcance() {
+        const kmEl = document.getElementById('alcanceInfoKm');
+        const velEl = document.getElementById('alcanceInfoVel');
+        const tempEl = document.getElementById('alcanceInfoTemp');
+        if (kmEl) kmEl.textContent = lerAlcanceOfe() + ' km';
+        const v = velocidadeMediaKmH();
+        if (velEl) velEl.textContent = (v != null ? Math.round(v) : '—') + ' km/h';
+        if (tempEl) tempEl.textContent = (_tempAmbiente.v != null ? _tempAmbiente.v : '—') + '°C';
+        atualizarTemperaturaAmbiente().then(() => {
+            if (tempEl && _tempAmbiente.v != null) tempEl.textContent = _tempAmbiente.v + '°C';
+        });
+    }
+    function iniciarInfoAlcance() {
+        if (_infoAlcanceTimer) return;
+        _infoAlcanceTimer = setInterval(atualizarInfoAlcance, 5000);
+    }
+    function pararInfoAlcance() {
+        if (_infoAlcanceTimer) { clearInterval(_infoAlcanceTimer); _infoAlcanceTimer = null; }
+    }
+    // Velocidade média dos últimos ~2 min, a partir do GPS do próprio carro.
+    // Usa coords.speed quando o aparelho informa; senão calcula pela distância.
+    const VEL_JANELA_MS = 2 * 60 * 1000;
+    let velAmostras = [];
+    function registrarAmostraVelocidade(p) {
+        const t = Date.now();
+        velAmostras.push({
+            lat: p.coords.latitude, lng: p.coords.longitude,
+            vel: (typeof p.coords.speed === 'number' && p.coords.speed >= 0) ? p.coords.speed : null,
+            t,
+        });
+        velAmostras = velAmostras.filter((a) => t - a.t <= VEL_JANELA_MS);
+    }
+    function velocidadeMediaKmH() {
+        if (velAmostras.length < 2) return null;
+        const comVel = velAmostras.filter((a) => a.vel != null);
+        if (comVel.length >= 2) {
+            return (comVel.reduce((s, a) => s + a.vel, 0) / comVel.length) * 3.6;
+        }
+        let dist = 0;
+        for (let i = 1; i < velAmostras.length; i++) dist += distKmGps(velAmostras[i - 1], velAmostras[i]);
+        const horas = (velAmostras[velAmostras.length - 1].t - velAmostras[0].t) / 3600000;
+        return horas > 0 ? dist / horas : null;
+    }
+    // Temperatura ambiente via Open-Meteo (grátis, sem chave). Cache de 10 min.
+    let _tempAmbiente = { v: null, em: 0, buscando: false };
+    async function atualizarTemperaturaAmbiente() {
+        if (_tempAmbiente.buscando || Date.now() - _tempAmbiente.em < 10 * 60 * 1000) return;
+        const pos = (selfCar && selfCar.lastPos) || ultimaPosConhecida();
+        if (!pos || pos.lat == null) return;
+        _tempAmbiente.buscando = true;
+        try {
+            const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + (+pos.lat).toFixed(3)
+                + '&longitude=' + (+pos.lng).toFixed(3) + '&current=temperature_2m');
+            const d = await r.json();
+            const t = d && d.current ? d.current.temperature_2m : null;
+            if (typeof t === 'number') _tempAmbiente = { v: Math.round(t), em: Date.now(), buscando: false };
+            else _tempAmbiente.buscando = false;
+        } catch (_) { _tempAmbiente.buscando = false; }
+    }
+    function ajustarMapaAoRaio() {
+        if (!raioCircle || !selOfe || !selOfe.map || !g || !g.maps) return;
+        const bounds = raioCircle.getBounds && raioCircle.getBounds();
+        if (!bounds) return;
+        const map = selOfe.map;
+        const sheet = document.getElementById('acaoSheetOfe');
+        if (sheet) sheet.classList.add('collapsed');   // baixa o sheet -> mapa maior
+        // Zoom fracionário: sem isto o Maps (raster) arredonda pra um nível inteiro
+        // pra baixo e sobra quase o dobro de folga — o círculo ficava pequeno. Com
+        // fracionário + padding curto, ele enche a tela e encosta sem estourar.
+        try { map.setOptions({ isFractionalZoomEnabled: true }); } catch (_) {}
+        // Espera o mapa reassentar (sheet colapsou) e enquadra o círculo no MAIOR
+        // zoom possível. Padding só p/ não sumir atrás da busca (topo) e da alça.
+        setTimeout(() => {
+            g.maps.event.trigger(map, 'resize');
+            map.fitBounds(bounds, { top: 62, bottom: 54, left: 10, right: 10 });
+        }, 90);
+    }
+    function limparDestinoPassageiro() {
+        if (carroSel) fecharCarro();
+        if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+        // Some do mapa do motorista: cancela a buzina/solicitação pendente.
+        fetchWithAuth('/api/motoristas-online/contato/cancelar', {
+            method: 'POST', body: JSON.stringify({}),
+        }).catch(() => {});
+        limparBuscaDestino('mapPed');
+        if (selPed?.limparRota) selPed.limparRota();
+        carregarCaronasDestino(null);
+        atualizarBtnLimparPed(false);
+        atualizarHintDestinoPed();
+        atualizarFormPedidoRota(false);
+        const wrap = document.getElementById('motoristasDestinoWrap');
+        if (wrap) wrap.style.display = 'none';
+        const sheet = document.getElementById('acaoSheetPed');
+        if (sheet) sheet.classList.remove('collapsed');
+        garantirUiAcaoVisivel(true);
+    }
+    async function limparDestinoMotorista() {
+        limparBuscaDestino('mapOfe');
+        if (selOfe?.limparRota) selOfe.limparRota();
+        atualizarBtnLimparOfe(false);
+        // Se estava online COM destino (carona publicada), cancela a rota no
+        // servidor e volta ao online sem destino — senão banner/servidor mentem.
+        if (motoristaModoDestino && motoristaCaronaId) {
+            await fetchWithAuth('/api/caronas/' + motoristaCaronaId, { method: 'DELETE' }).catch(() => {});
+            motoristaCaronaId = null;
+            motoristaModoDestino = false;
+            if (motoristaOnlineModo && selOfe?.getOrigem) {
+                try {
+                    const origem = selOfe.getOrigem();
+                    await fetchWithAuth('/api/motorista/online', {
+                        method: 'POST',
+                        body: JSON.stringify({ lat: origem.lat, lng: origem.lng, vagas: lerVagasOfe() }),
+                    });
+                } catch (_) { /* mantém flags locais; próximo tick tenta de novo */ }
+            }
+        } else {
+            motoristaModoDestino = false;
+        }
+        atualizarUiMotoristaOnline();
+        const sheet = document.getElementById('acaoSheetOfe');
+        if (sheet) sheet.classList.remove('collapsed');
+    }
+    /** Libera o mapa após agendar: rota some, sheet abre, formulário pronto para novo pedido. */
+    function resetMapaParaNovoPedido() {
+        if (carroSel) fecharCarro();
+        if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+        limparBuscaDestino('mapPed');
+        if (selPed?.limparRota) selPed.limparRota();
+        carregarCaronasDestino(null);
+        atualizarBtnLimparPed(false);
+        atualizarHintDestinoPed();
+        atualizarFormPedidoRota(false);
+        const wrap = document.getElementById('motoristasDestinoWrap');
+        if (wrap) wrap.style.display = 'none';
+        const sheet = document.getElementById('acaoSheetPed');
+        if (sheet) sheet.classList.remove('collapsed');
+        inicializarQuandoPed();
+    }
+    /**
+     * Atividade que impede trocar papel (viagem, busca, online…).
+     * Retorna { tipo, msg } ou null.
+     */
+    function bloqueioTrocaPapel() {
+        if (viagemView && viagemView.status === 'em_andamento') {
+            return {
+                tipo: 'viagem',
+                msg: 'Há uma viagem em andamento. Finalize ou cancele antes de trocar de papel.',
+            };
+        }
+        if (localStorage.getItem('viagemAtiva') && !viagemView) {
+            // Tela perdeu o view mas o id ficou — ainda conta como em curso.
+            return {
+                tipo: 'viagem',
+                msg: 'Há uma viagem em andamento. Aguarde retomar ou finalize/cancele no app.',
+            };
+        }
+        if (document.body.classList.contains('buscando-carona')
+            || document.getElementById('modalChamando')?.style.display === 'flex') {
+            return {
+                tipo: 'busca',
+                msg: 'Você está pedindo carona. Cancele a busca antes de trocar de papel.',
+            };
+        }
+        if (typeof motoristaOnlineModo !== 'undefined' && motoristaOnlineModo) {
+            return {
+                tipo: 'online',
+                msg: 'Você está online como motorista. Fique offline antes de trocar de papel.',
+            };
+        }
+        if (document.getElementById('modalOfertaFila')?.style.display === 'flex') {
+            return {
+                tipo: 'oferta',
+                msg: 'Responda ou feche a solicitação da fila antes de trocar de papel.',
+            };
+        }
+        return null;
+    }
+
+    /** Volta à tela da atividade em curso (viagem / papel atual). */
+    function voltarParaAtividadeAtual() {
+        document.getElementById('telaPapel').style.display = 'none';
+        document.body.classList.remove('aguardando-papel');
+        if (viagemView && viagemView.status === 'em_andamento') {
+            document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
+            document.getElementById('tabViagem')?.classList.add('active');
+            syncMapasAbas('tabViagem');
+            const btn = document.getElementById('btnViagemAndamento');
+            if (btn) btn.style.display = 'inline-block';
+            return;
+        }
+        const papel = localStorage.getItem('papel');
+        if (papel === 'motorista' || papel === 'passageiro') {
+            showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+            garantirUiAcaoVisivel(true);
+        }
+    }
+
+    function abrirEscolhaPapel() {
+        const bloqueio = bloqueioTrocaPapel();
+        if (bloqueio) {
+            msg(bloqueio.msg, 'error');
+            voltarParaAtividadeAtual();
+            // Se perdeu a tela da viagem mas ainda tem id, tenta retomar.
+            if (bloqueio.tipo === 'viagem' && !viagemView) {
+                retomarViagemSeAtiva().catch(() => {});
+            }
+            return;
+        }
+        // Não apaga o papel até escolher outro — se cancelar/voltar, permanece.
+        document.body.classList.add('aguardando-papel');
+        resetarGlowPapel();
+        document.getElementById('telaPapel').style.display = 'flex';
+        esconderBootSplash();
+    }
+
+    /* Toque no card: som seco de "toc", acende a luzinha dourada, segura 2s
+       (dá tempo de ver a seleção "ligar") e então entra no modo. Tocar no
+       outro card dentro desses 2s troca a escolha e reinicia a espera. */
+    function tocSeco() {
+        try { if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+        const ctx = _audioCtx;
+        if (!ctx) return;
+        const tocar = () => {
+            if (ctx.state !== 'running') return;
+            const t = ctx.currentTime + 0.005;
+            // Estalo curto tipo madeira: pitch cai rápido e o volume morre em ~90ms.
+            const o = ctx.createOscillator(), gn = ctx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(1050, t);
+            o.frequency.exponentialRampToValueAtTime(320, t + 0.04);
+            gn.gain.setValueAtTime(0.4, t);
+            gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+            o.connect(gn).connect(ctx.destination);
+            o.start(t); o.stop(t + 0.1);
+        };
+        if (ctx.state === 'suspended') { ctx.resume().then(tocar).catch(() => {}); return; }
+        tocar();
+    }
+    // Vibração de confirmação: duas vibradas de 80ms com pausa curta entre elas
+    // (celulares com suporte; no resto é no-op). Aceita número ou padrão [ms,...].
+    function vibradinha(padrao = [80, 70, 80]) {
+        try { if (navigator.vibrate) navigator.vibrate(padrao); } catch (_) {}
+    }
+    let papelGlowTimer = null;
+    function resetarGlowPapel() {
+        if (papelGlowTimer) { clearTimeout(papelGlowTimer); papelGlowTimer = null; }
+        document.querySelectorAll('#telaPapel .papel-opt--on')
+            .forEach((b) => b.classList.remove('papel-opt--on'));
+    }
+    function selecionarPapelComGlow(papel, btn) {
+        resetarGlowPapel();
+        tocSeco();
+        vibradinha();
+        btn.classList.add('papel-opt--on');
+        papelGlowTimer = setTimeout(() => {
+            papelGlowTimer = null;
+            // Se outra rotina fechou a tela nesse meio-tempo (ex.: retomada de
+            // viagem), não força a troca de papel.
+            if (document.getElementById('telaPapel').style.display === 'none') return;
+            escolherPapel(papel);
+        }, 2000);
+    }
+    function escolherPapel(papel) {
+        // Com viagem em curso, só aceita o papel já fixado (evita “perder” a corrida).
+        const bloqueio = bloqueioTrocaPapel();
+        if (bloqueio && bloqueio.tipo === 'viagem') {
+            const papelAtual = localStorage.getItem('papel');
+            if (papelAtual && papelAtual !== papel) {
+                msg(bloqueio.msg, 'error');
+                voltarParaAtividadeAtual();
+                retomarViagemSeAtiva().catch(() => {});
+                return;
+            }
+        }
+        document.body.classList.remove('aguardando-papel');
+        localStorage.setItem('papel', papel);   // persiste: reabrir o app volta aqui
+        registrarPush();   // gesto do usuário: bom momento para pedir permissão de notificação
+        document.getElementById('telaPapel').style.display = 'none';
+        esconderBootSplash();
+        limparEstadoTeclado();
+        document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
+        document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
+        document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
+        document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
+        document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
+        // Viagem em curso: não joga pro mapa de pedir/oferecer — mantém/retoma a viagem.
+        if (viagemView && viagemView.status === 'em_andamento') {
+            document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
+            document.getElementById('tabViagem')?.classList.add('active');
+            syncMapasAbas('tabViagem');
+            const btn = document.getElementById('btnViagemAndamento');
+            if (btn) btn.style.display = 'inline-block';
+            atualizarIndicadorModoOperante();
+            return;
+        }
+        showTab(papel === 'motorista' ? 'tabOferecer' : 'tabPedir');
+        // 2 frames: 1º após active na tab, 2º após layout flex — evita tela limpa.
+        requestAnimationFrame(() => {
+            garantirUiAcaoVisivel(true);
+            requestAnimationFrame(() => garantirUiAcaoVisivel(true));
+        });
+        atualizarIndicadorModoOperante();
+        if (papel === 'motorista') {
+            carregarHabilitacao().then(() => verificarRetomarMotorista());
+        } else {
+            verificarRetomarPassageiro();
+        }
+        loadPropostas();
+    }
+
+    /* -------- perfil / telefone -------- */
+    const PROJETOS_PERFIL = [
+        { codigo: 'S11D', label: 'S11D' },
+        { codigo: 'SALOBO', label: 'SALOBO' },
+        { codigo: 'CARAJAS', label: 'CARAJÁS' },
+        { codigo: 'SOSSEGO', label: 'SOSSEGO' },
+    ];
+    let projetosPerfilCarregados = false;
+
+    async function carregarOpcoesProjetoPerfil() {
+        const sel = document.getElementById('perfilProjeto');
+        if (!sel) return;
+        let lista = [...PROJETOS_PERFIL];
+        try {
+            const r = await fetch('/api/projetos');
+            if (r.ok) {
+                const api = await r.json();
+                const map = new Map(lista.map((p) => [p.codigo, p]));
+                api.forEach((p) => {
+                    if (p.codigo && !map.has(p.codigo)) {
+                        map.set(p.codigo, { codigo: p.codigo, label: p.nome || p.codigo });
+                    }
+                });
+                lista = Array.from(map.values());
+            }
+        } catch (_) {}
+        const atual = user?.projeto_codigo || '';
+        sel.innerHTML = '<option value="">Selecione o projeto</option>' +
+            lista.map((p) => `<option value="${p.codigo}">${p.label}</option>`).join('');
+        if (atual) sel.value = atual;
+        projetosPerfilCarregados = true;
+    }
+
+    function checarTelefone() {
+        document.getElementById('avisoTelefone').style.display = user.telefone ? 'none' : 'block';
+    }
+    function checarCadastro() {
+        const ok = user.projeto_id && user.empresa_nome && user.email;
+        const el = document.getElementById('avisoCadastro');
+        if (el) el.style.display = ok ? 'none' : 'block';
+    }
+    function aplicarPerfilNaTela() {
+        const nomeEl = document.getElementById('userName');
+        if (nomeEl && user?.nome) aplicarSaudacaoUsuario(nomeEl, user.nome);
+        checarTelefone();
+        checarCadastro();
+    }
+    async function sincronizarPerfil() {
+        try {
+            const r = await fetchWithAuth('/api/perfil');
+            if (!r.ok) return;
+            user = await r.json();
+            localStorage.setItem('user', JSON.stringify(user));
+            aplicarPerfilNaTela();
+        } catch (_) {}
+    }
+    // Navega entre o hub do Perfil e as sub-telas (dados / favoritos).
+    function perfilIrPara(view) {
+        const views = { menu: 'perfilMenu', dados: 'perfilViewDados', favoritos: 'perfilViewFavoritos' };
+        Object.values(views).forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        const alvo = document.getElementById(views[view] || 'perfilMenu');
+        if (alvo) alvo.style.display = 'block';
+        if (view === 'favoritos') {
+            renderPerfilFavoritos();
+            const box = document.querySelector('#modalPerfil .cam-box');
+            if (box) box.scrollTop = 0;
+        }
+    }
+    async function abrirPerfil(view) {
+        if (!projetosPerfilCarregados) await carregarOpcoesProjetoPerfil();
+        const sel = document.getElementById('perfilProjeto');
+        sel.value = user.projeto_codigo || '';
+        document.getElementById('perfilEmpresa').value = user.empresa_nome || '';
+        document.getElementById('perfilCentroCusto').value = user.centro_custo || '';
+        const emailEl = document.getElementById('perfilEmail');
+        emailEl.value = user.email || '';
+        emailEl.readOnly = !!user.email;
+        emailEl.style.opacity = user.email ? '0.85' : '1';
+        document.getElementById('perfilTelefone').value = user.telefone || '';
+        document.getElementById('perfilSexo').value = user.sexo || '';
+        document.getElementById('modalPerfil').style.display = 'flex';
+        perfilIrPara(typeof view === 'string' ? view : 'menu');
+        // Atualiza status da habilitação ao abrir (evita “ativar de novo” à toa).
+        try { await carregarHabilitacao(); } catch (_) { atualizarUiHabilitacaoPerfil(); }
+        try {
+            await carregarFavoritosPessoais();
+        } catch (_) { favPessoais = []; }
+        // Se o usuário já está na tela de favoritos, atualiza as estrelas.
+        if (document.getElementById('perfilViewFavoritos').style.display !== 'none') {
+            renderPerfilFavoritos();
+        }
+    }
+    function fecharPerfil() {
+        document.getElementById('modalPerfil').style.display = 'none';
+    }
+    async function salvarPerfil() {
+        const tel = document.getElementById('perfilTelefone').value.trim();
+        const sexo = document.getElementById('perfilSexo').value || null;
+        const empresa = document.getElementById('perfilEmpresa').value.trim();
+        const centro = document.getElementById('perfilCentroCusto').value.trim();
+        const projeto = document.getElementById('perfilProjeto').value;
+        const emailEl = document.getElementById('perfilEmail');
+        const email = emailEl.readOnly ? null : emailEl.value.trim();
+        const out = document.getElementById('perfilMsg');
+        const setMsg = (t, cor) => { if (out) { out.textContent = t; out.style.color = cor || ''; } };
+        if (tel.replace(/\D/g, '').length < 10) return setMsg('Informe um telefone válido com DDD.', '#ef9a9a');
+        if (!empresa) return setMsg('Informe a empresa.', '#ef9a9a');
+        if (!projeto) return setMsg('Selecione o projeto.', '#ef9a9a');
+        if (!user.email && !email) return setMsg('Informe o email para recuperação de senha.', '#ef9a9a');
+        if (!user.email && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return setMsg('Informe um email válido.', '#ef9a9a');
+        }
+        setMsg('Salvando...', '');
+        try {
+            const body = { telefone: tel, sexo, empresa_nome: empresa, centro_custo: centro || null, projeto_codigo: projeto };
+            if (email) body.email = email;
+            const r = await fetchWithAuth('/api/perfil', {
+                method: 'PATCH',
+                body: JSON.stringify(body),
+            });
+            const d = await r.json();
+            if (r.ok) {
+                user = d;
+                localStorage.setItem('user', JSON.stringify(user));
+                aplicarPerfilNaTela();
+                setMsg('✓ Perfil salvo!', '#86efac');
+            } else setMsg(d.error || 'Erro ao salvar', '#ef9a9a');
+        } catch (_) {
+            setMsg('Erro de conexão. Tente novamente.', '#ef9a9a');
+        }
+    }
+
+    /* -------- habilitação motorista -------- */
+    function atualizarUiHabilitacaoPerfil() {
+        const nav = document.getElementById('navAtivar');
+        const btn = document.getElementById('btnAtivarMot');
+        const btnTroca = document.getElementById('btnTrocarVeic');
+        const st = document.getElementById('habStatusPerfil');
+        const ativo = !!(habHoje && selfieAindaValida(habHoje));
+        if (nav) {
+            nav.innerHTML = ativo
+                ? '<span style="color:#22c55e">●</span> Habilitado (perfil)'
+                : 'Ativar no Perfil';
+        }
+        if (st) {
+            if (ativo) {
+                const placa = habHoje.placa ? String(habHoje.placa).toUpperCase() : '';
+                const tag = habHoje.tag ? String(habHoje.tag) : '';
+                const veic = [tag, placa].filter(Boolean).join(' · ') || 'veículo ok';
+                st.style.display = 'block';
+                st.innerHTML = `<span style="color:#22c55e">●</span> <strong>Habilitado para motorista</strong>`
+                    + `<br><small>${esc(veic)} · selfie 12h · use <b>Ficar online</b> no mapa</small>`;
+            } else {
+                st.style.display = 'none';
+                st.innerHTML = '';
+            }
+        }
+        if (btn) {
+            // Já ativo: some o botão de ativar (evita tédio de “ativar de novo”).
+            btn.style.display = ativo ? 'none' : '';
+            btn.textContent = 'Ativar para oferecer carona';
+            btn.disabled = false;
+        }
+        if (btnTroca) {
+            btnTroca.style.display = ativo ? '' : 'none';
+            btnTroca.disabled = false;
+        }
+    }
+
+    async function garantirHabilitacaoMotorista() {
+        if (!habHoje || !selfieAindaValida(habHoje)) {
+            try { await carregarHabilitacao(); } catch (_) {}
+        }
+        return !!(habHoje && selfieAindaValida(habHoje));
+    }
+
+    let _habEmVoo = null;
+    async function carregarHabilitacao() {
+        // Vários caminhos (escolher papel, sincronizar perfil, 2º plano) chamam isto
+        // quase ao mesmo tempo no boot. Compartilha uma única requisição em voo.
+        if (_habEmVoo) return _habEmVoo;
+        _habEmVoo = (async () => {
+            const r = await fetchWithAuth('/api/habilitacao/hoje');
+            habHoje = await r.json();
+            // API pode devolver null literal ou string "null"
+            if (!habHoje || habHoje === 'null') habHoje = null;
+            atualizarUiHabilitacaoPerfil();
+            if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
+        })();
+        try { await _habEmVoo; } finally { _habEmVoo = null; }
+    }
+
+    let veiculoPend = null;
+    const SELFIE_VALIDADE_MS = 12 * 60 * 60 * 1000;
+
+    function selfieAindaValida(hab) {
+        if (!hab) return false;
+        const t = new Date(hab.selfie_em || hab.created_at).getTime();
+        return Number.isFinite(t) && (Date.now() - t) < SELFIE_VALIDADE_MS;
+    }
+
+    async function ativarMotorista(trocar) {
+        if (!habHoje) await carregarHabilitacao();
+        if (!trocar) {
+            if (habHoje && selfieAindaValida(habHoje)) {
+                msg('Modo motorista já está ativo (selfie válida por 12h).');
+                return;
+            }
+        } else if (!selfieAindaValida(habHoje)) {
+            msg('Selfie expirada — tire uma nova selfie e depois a foto do veículo.', 'error');
+            trocar = false;
+        }
+        try {
+            preCarregarOcr();
+            const reutilizarSelfie = trocar && selfieAindaValida(habHoje);
+            msg(reutilizarSelfie
+                ? 'Troca de veículo: tire a foto do carro NOVO (só a placa, selfie já vale 12h).'
+                : 'Iniciando câmera...');
+            let selfie = null;
+            if (!reutilizarSelfie) {
+                selfie = await capturarFoto({
+                    tipo: 'selfies',
+                    facing: 'user',
+                    titulo: 'Selfie de identificação',
+                    hint: 'Posicione o rosto bem iluminado e capture',
+                });
+            }
+            const carro = await capturarFoto({
+                tipo: 'carros',
+                facing: 'environment',
+                ocrPlaca: true,
+                titulo: reutilizarSelfie ? 'Foto do veículo NOVO' : 'Foto do veículo — placa dianteira',
+                hint: reutilizarSelfie
+                    ? 'Tire a foto do carro que você vai usar agora — placa dianteira obrigatória'
+                    : 'Enquadre a placa dianteira do veículo',
+            });
+            veiculoPend = { selfie, carro, reutilizarSelfie, trocar };
+            document.getElementById('veicPlaca').value = (carro.placa || '').toUpperCase();
+            document.getElementById('veicTag').value = reutilizarSelfie && habHoje?.tag ? habHoje.tag : '';
+            document.getElementById('veicMsg').textContent = '';
+            const prev = document.getElementById('veicFoto');
+            if (carro.url) { prev.src = carro.url; prev.style.display = 'block'; } else { prev.style.display = 'none'; }
+            const tituloVeic = document.getElementById('veicTitulo');
+            const btnVeic = document.getElementById('btnConfirmarVeic');
+            if (tituloVeic) tituloVeic.textContent = reutilizarSelfie ? 'Trocar veículo' : 'Confirmar veículo';
+            if (btnVeic) btnVeic.textContent = reutilizarSelfie ? 'Confirmar troca' : 'Ativar';
+            document.getElementById('modalPerfil').style.display = 'none';
+            document.getElementById('modalVeiculo').style.display = 'flex';
+        } catch (e) {
+            if (e.message !== 'cancelado') msg(e.message, 'error');
+        }
+    }
+    function cancelarVeiculo() {
+        veiculoPend = null;
+        document.getElementById('modalVeiculo').style.display = 'none';
+    }
+    async function confirmarVeiculo() {
+        if (!veiculoPend) return;
+        const placa = document.getElementById('veicPlaca').value.trim().toUpperCase();
+        const tag = document.getElementById('veicTag').value.trim();
+        const out = document.getElementById('veicMsg');
+        const set = (t, c) => { out.textContent = t; out.style.color = c || ''; };
+        if (placa.replace(/[^A-Z0-9]/g, '').length < 7) return set('Confira a placa (7 caracteres).', '#ef9a9a');
+        set('Ativando...', '');
+        const { selfie, carro, reutilizarSelfie } = veiculoPend;
+        const body = {
+            placa, tag,
+            foto_carro_url: carro.url, foto_carro_lat: carro.lat, foto_carro_lng: carro.lng, foto_carro_em: carro.em,
+        };
+        if (reutilizarSelfie) {
+            body.reutilizar_selfie = true;
+            body.troca_veiculo = true;
+        } else {
+            body.selfie_url = selfie.url;
+            body.selfie_lat = selfie.lat;
+            body.selfie_lng = selfie.lng;
+            body.selfie_em = selfie.em;
+        }
+        try {
+            const r = await fetchWithAuth('/api/habilitacao', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return set(d.error || 'Erro ao ativar', '#ef9a9a');
+            habHoje = d;
+            await carregarHabilitacao();
+            veiculoPend = null;
+            document.getElementById('modalVeiculo').style.display = 'none';
+            msg(reutilizarSelfie ? 'Veículo trocado!' : 'Modo motorista ativado!');
+            // Motorista precisa do push para ser avisado de pedidos por perto
+            // (inclusive com o app fechado). Gesto válido: pede a permissão aqui.
+            registrarPush();
+            if ('Notification' in window && Notification.permission === 'denied') {
+                msg('Notificações bloqueadas no navegador — ative-as para ser avisado de pedidos por perto.', 'error');
+            }
+            // Fotos novas (selfie + carro) publicadas: já entra online no modo
+            // 600 m (sem destino) pra facilitar — sem precisar arrastar o botão.
+            if (!reutilizarSelfie && localStorage.getItem('papel') === 'motorista'
+                && !motoristaOnlineModo && !(viagemView && viagemView.status === 'em_andamento')) {
+                try {
+                    showTab('tabOferecer');
+                    await entrarModoMotoristaOnline();
+                    if (motoristaOnlineModo) msg('Você já está online no modo 600 m — pronto para receber chamadas.');
+                } catch (_) { /* GPS indisponível: o motorista liga pelo botão */ }
+            }
+        } catch (_) { set('Erro de conexão. Tente novamente.', '#ef9a9a'); }
+    }
+
+    /* -------- mapa: criação central + alternador Satélite/Mapa leve -------- */
+    // Satélite é pesado em internet fraca. O tipo escolhido fica salvo; o modo
+    // padrão é o mapa CLARO (branco, estilo Uber): ruas brancas, quadras e
+    // prédios em cinza suave — carrega muito mais rápido. Os carros/pulsos/
+    // rotas continuam ao vivo igual.
+    // Mapa leve (branco, estilo Uber): ruas brancas, fundo claro, SEM ícones
+    // coloridos de loja/restaurante/POI — só ruas + nomes essenciais.
+    const ESTILO_MAPA_CLARO = [
+        { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+        { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
+        { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d7dbe2' }] },
+        { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+        { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f0f1f3' }] },
+        { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#ebecef' }] },
+        { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#d9dde3' }] },
+        // Esconde TODOS os POIs (ícones coloridos de loja, restaurante, etc.)
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.government', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.medical', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.place_of_worship', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.school', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.sports_complex', stylers: [{ visibility: 'off' }] },
+        // Parques só como mancha verde, sem pin colorido
+        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ visibility: 'on' }, { color: '#dcead6' }] },
+        { featureType: 'poi.park', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.park', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#dfe3e8' }] },
+        { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#eef0f3' }] },
+        { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#d4d9df' }] },
+        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+        { featureType: 'transit.station', stylers: [{ visibility: 'off' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c6d5dd' }] },
+        { featureType: 'water', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    ];
+    // Zoom padrão de "foco na origem": nível de rua, com o pulso/carrinho no
+    // centro e uns 2-3 quarteirões em volta. Usado ao abrir o mapa, recentrar
+    // e sempre que o foco volta da pré-visualização do destino.
+    const ZOOM_FOCO_ORIGEM = 17;
+    // Chave nova (V2): migra todo mundo para o novo padrão claro; quem preferir
+    // satélite alterna de novo e a escolha fica salva normalmente.
+    function tipoMapaSalvo() { try { return localStorage.getItem('tipoMapaV2') || 'roadmap'; } catch (_) { return 'roadmap'; } }
+    // DEMO sem mapId → mapa branco local (ESTILO_MAPA_CLARO). Map ID real → nuvem.
+    // Nunca aplicar styles se houver mapId (Google proíbe).
+    function mapaUsaEstiloLocal() {
+        if (typeof mapaIdEfetivo === 'function') return !mapaIdEfetivo();
+        return !_mapId || _mapId === 'DEMO_MAP_ID';
+    }
+    function aplicarEstiloMapa(map, tipo) {
+        if (!mapaUsaEstiloLocal()) return;
+        if (tipo !== 'roadmap') {
+            try { map.setOptions({ styles: null }); } catch (_) {}
+            return;
+        }
+        try { map.setOptions({ styles: ESTILO_MAPA_CLARO }); } catch (_) {}
+    }
+    function aplicarTipoMapa(map, tipo) {
+        map.setMapTypeId(tipo);
+        aplicarEstiloMapa(map, tipo);
+    }
+    function rotuloBotoesTipoMapa(map) {
+        const id = map && map.getMapTypeId ? map.getMapTypeId() : tipoMapaSalvo();
+        const satAtivo = id === 'hybrid' || id === 'satellite';
+        const alvo = satAtivo ? 'Ver mapa leve' : 'Ver satélite';
+        document.querySelectorAll('.map-tipo-btn').forEach((el) => {
+            el.classList.toggle('map-tipo-btn--sat', satAtivo);
+            el.title = alvo;
+            el.setAttribute('aria-label', alvo);
+        });
+    }
+    // Pré-aquece tiles de satélite da região (mapa oculto 256px) — quando o
+    // usuário escolhe o local, o hybrid já costuma estar no cache do browser.
+    function preaquecerSatelite(gmaps, center) {
+        if (window.__vapSatWarm || !gmaps?.maps || !center) return;
+        window.__vapSatWarm = true;
+        try {
+            const el = document.createElement('div');
+            el.setAttribute('aria-hidden', 'true');
+            el.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:320px;opacity:0;pointer-events:none;';
+            document.body.appendChild(el);
+            const warm = new gmaps.maps.Map(el, opcoesMapa({
+                center: { lat: Number(center.lat), lng: Number(center.lng) },
+                zoom: 17,
+                mapTypeId: 'hybrid',
+                disableDefaultUI: true,
+                gestureHandling: 'none',
+                keyboardShortcuts: false,
+                clickableIcons: false,
+            }));
+            forcarMapaRaster(warm);
+            const limpar = () => { try { el.remove(); } catch (_) {} };
+            gmaps.maps.event.addListenerOnce(warm, 'tilesloaded', () => setTimeout(limpar, 1500));
+            setTimeout(limpar, 8000); // segurança se tilesloaded nunca vier
+        } catch (_) { /* sem warm: preview ainda funciona, só carrega na hora */ }
+    }
+    function novoMapa(elId, opts) {
+        const el = document.getElementById(elId);
+        if (!el) throw new Error('mapa: elemento #' + elId + ' não encontrado');
+
+        // Roadmap RASTER leve — hybrid no 1º load é o que mais pesa em rede fraca.
+        const baseOpts = {
+            zoom: 15,
+            mapTypeId: 'roadmap',
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'greedy',
+            clickableIcons: false,
+            draggable: true,
+            ...opts,
+        };
+        if (baseOpts.mapTypeId === 'hybrid' || baseOpts.mapTypeId === 'satellite') {
+            baseOpts.mapTypeId = 'roadmap';
+        }
+
+        const map = new g.maps.Map(el, opcoesMapa(baseOpts));
+        forcarMapaRaster(map);
+        aplicarEstiloMapa(map, 'roadmap');
+        vincularBotaoTipoMapa(elId, map);
+        vincularZoomCarros(map);
+        // Um único reforço RASTER no idle — sem panBy/resize que forçam re-download de tiles
+        try {
+            g.maps.event.addListenerOnce(map, 'idle', () => forcarMapaRaster(map));
+        } catch (_) {}
+        return map;
+    }
+    function vincularBotaoTipoMapa(mapId, map) {
+        const btnId = mapId === 'mapPed' ? 'btnTipoMapaPed' : mapId === 'mapOfe' ? 'btnTipoMapaOfe' : null;
+        const b = btnId ? document.getElementById(btnId) : null;
+        if (!b) return;
+        rotuloBotoesTipoMapa(map);
+        b.onclick = () => {
+            const novo = (map.getMapTypeId() === 'hybrid' || map.getMapTypeId() === 'satellite')
+                ? 'roadmap' : 'hybrid';
+            try { localStorage.setItem('tipoMapaV2', novo); } catch (_) {}
+            aplicarTipoMapa(map, novo);
+            rotuloBotoesTipoMapa(map);
+        };
+    }
+
+    /* -------- seletor de rota (mapa) -------- */
+    async function criarSeletor(mapId, inputId, comoCarro, onDestino) {
+        // carregarMaps já faz retry interno; 2º ciclo só se o 1º morrer de vez.
+        try {
+            g = await carregarMaps();
+        } catch (err1) {
+            console.warn('criarSeletor carregarMaps', err1?.message || err1);
+            await new Promise((r) => setTimeout(r, 600));
+            g = await carregarMaps();
+        }
+        // O mapa abre NA HORA na última posição conhecida (ou no polo S11D) e o
+        // GPS ajusta quando responder — esperar o GPS aqui segurava o download
+        // das imagens e o mapa parecia lento. A origem continua sendo SEMPRE a
+        // posição real do GPS: sem ele, pedir/oferecer segue bloqueado.
+        let origem = ultimaPosConhecida() || { lat: -6.40, lng: -49.85 };
+        const estado = { gpsOk: false };
+        let map;
+        try {
+            map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
+        } catch (errMap) {
+            console.warn('criarSeletor novoMapa', errMap?.message || errMap);
+            await new Promise((r) => setTimeout(r, 800));
+            g = await carregarMaps();
+            map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
+        }
+
+        // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
+        // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
+        // passageiro o marcador fica invisível (só serve de "pega" para arrastar) e o
+        // pulso anda junto. Nunca deixa o ícone derrubar o mapa caso falhe.
+        const mkOrigem = criarMarcador({
+            position: origem, map, invisivel: !comoCarro,
+            iconW: comoCarro ? 30 : undefined, iconH: comoCarro ? 40 : undefined,
+            iconVariant: comoCarro ? 'gold' : undefined,
+            title: comoCarro ? 'Seu carro (posição do GPS)' : 'Você (posição do GPS)',
+        });
+        let pulseOrigem = null;
+        if (!comoCarro) {
+            try {
+                pulseOrigem = criarPulse(map, origem, user.sexo, null, 'Você', null, true);
+            } catch (_) { /* sem pulso: segue só com o marcador */ }
+        }
+        // Primeiro fix do GPS: chega e posiciona (o mapa já está carregando desde
+        // o primeiro instante — a espera não trava mais a tela).
+        obterLocalizacao().then((p) => {
+            estado.gpsOk = true;
+            mkOrigem.setPosition(p);
+            if (pulseOrigem) pulseOrigem.setPosition(p);
+            map.panTo(p);
+            if (destino) tracarRota();
+        }).catch(() => {
+            msg('Ative a localização (GPS) — ela é obrigatória para pedir ou oferecer carona.', 'error');
+        });
+        // Origem viva: acompanha o GPS de tempos em tempos (sem panejar o mapa,
+        // para não brigar com o usuário olhando em volta).
+        setInterval(async () => {
+            if (document.hidden) return;
+            try {
+                const p = await obterLocalizacao();
+                estado.gpsOk = true;
+                const atual = mkOrigem.getPosition();
+                const pos = { lat: p.lat, lng: p.lng };
+                const moveu = Math.abs(atual.lat() - pos.lat) + Math.abs(atual.lng() - pos.lng) > 0.0005; // ~50 m
+                if (comoCarro) atualizarPosicaoCarro(mkOrigem, pos, { lat: atual.lat(), lng: atual.lng() });
+                else mkOrigem.setPosition(pos);
+                if (pulseOrigem) pulseOrigem.setPosition(pos);
+                // Economia Google: andando EM CIMA da rota já traçada, só atualiza
+                // km/ETA localmente (projeção na polyline). Recalcula de verdade
+                // apenas ao sair do corredor da rota (~80 m).
+                if (moveu && destino) {
+                    if (rotaPath && !foraDaRota(pos, rotaPath)) atualizarRotaInfoLocal(pos);
+                    else tracarRota();
+                }
+            } catch (_) { /* GPS indisponível agora: mantém a última posição */ }
+        }, 10000);
+        let destino = null;
+        // Sem pin de destino (nem letra B nem bolinha): igual Uber — só a rota
+        // e o texto "Para onde vamos" / info de km. O ponto final é o fim da linha.
+        let previewTimer = null;
+        let previewSeq = 0;
+
+        const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 });
+        const rotaInfo = document.createElement('div');
+        rotaInfo.className = 'rota-info';
+        rotaInfo.style.display = 'none';
+        document.getElementById(mapId).insertAdjacentElement('afterend', rotaInfo);
+        // Última rota calculada (polyline + totais) para acompanhar sem nova chamada.
+        let rotaPath = null;
+        let rotaKmTotal = 0;
+        let rotaDurMsTotal = 0;
+
+        function renderRotaInfo(kmTxt, durTxt) {
+            const nome = (destino?.texto && String(destino.texto).trim()) || 'Destino no mapa';
+            rotaInfo.innerHTML =
+                `<span class="rota-info-nome">${esc(nome)}</span>`
+                + `<span class="rota-info-meta">${ICN.route} ${esc(kmTxt)} · ${ICN.clock} ${esc(durTxt)}</span>`;
+            rotaInfo.style.display = 'block';
+            // Espelha o nome na faixa branca do sheet (passageiro)
+            if (mapId === 'mapPed') {
+                const el = document.getElementById('destFaixaPedNome');
+                if (el) el.textContent = nome;
+            }
+        }
+
+        // km/ETA restantes derivados da projeção do GPS na rota já traçada (0 chamadas).
+        function atualizarRotaInfoLocal(pos) {
+            const p = progressoNaRota(pos, rotaPath);
+            if (!p || !rotaKmTotal) return;
+            const durMs = rotaDurMsTotal * (p.kmRestante / rotaKmTotal);
+            renderRotaInfo(formatarMetros(p.kmRestante * 1000), formatarDuracaoMs(durMs));
+        }
+
+        async function tracarRota() {
+            if (!destino) return;
+            try {
+                const resp = await rotaCtrl.calcular(mkOrigem.getPosition(), { lat: destino.lat, lng: destino.lng });
+                rotaPath = resp._path || null;
+                rotaKmTotal = resp.km || 0;
+                rotaDurMsTotal = resp._durationMillis || 0;
+                const leg = resp.routes[0].legs[0];
+                renderRotaInfo(leg.distance.text, leg.duration.text);
+            } catch (_) { /* sem rota disponível: mantém destino em memória */ }
+        }
+
+        // Tipo de mapa antes do preview satélite (não grava no localStorage).
+        let tipoMapaAntesPreview = null;
+        const stageEl = document.getElementById(mapId)?.parentElement || null;
+        let nomeLocalEl = null;
+        function mostrarNomeLocal(nome) {
+            if (!stageEl) return;
+            if (!nomeLocalEl) {
+                nomeLocalEl = document.createElement('div');
+                nomeLocalEl.className = 'map-nome-local';
+                nomeLocalEl.setAttribute('role', 'status');
+                stageEl.appendChild(nomeLocalEl);
+            }
+            const t = (nome && String(nome).trim()) || 'Destino';
+            nomeLocalEl.textContent = t;
+            nomeLocalEl.style.display = 'block';
+        }
+        function ocultarNomeLocal() {
+            if (nomeLocalEl) nomeLocalEl.style.display = 'none';
+        }
+        function preVisualizarDestino(pos, nome) {
+            const seq = ++previewSeq;
+            if (previewTimer) clearTimeout(previewTimer);
+
+            // Satélite só na prévia do local (leve: tiles já pré-aquecidos).
+            // Não altera a preferência salva do usuário.
+            if (tipoMapaAntesPreview == null) {
+                tipoMapaAntesPreview = map.getMapTypeId() || tipoMapaSalvo() || 'roadmap';
+            }
+            aplicarTipoMapa(map, 'hybrid');
+            rotuloBotoesTipoMapa(map);
+            map.panTo(pos);
+            map.setZoom(18);
+            mostrarNomeLocal(nome || destino?.texto);
+
+            previewTimer = setTimeout(() => {
+                if (seq !== previewSeq) return;
+                ocultarNomeLocal();
+                // Volta ao mapa que o usuário tinha (quase sempre o leve).
+                if (tipoMapaAntesPreview) {
+                    aplicarTipoMapa(map, tipoMapaAntesPreview === 'satellite' ? 'hybrid' : tipoMapaAntesPreview);
+                    tipoMapaAntesPreview = null;
+                    rotuloBotoesTipoMapa(map);
+                }
+                const origem = mkOrigem.getPosition();
+                if (!origem) return;
+                map.panTo({ lat: origem.lat(), lng: origem.lng() });
+                map.setZoom(ZOOM_FOCO_ORIGEM);
+                // Sobe a alça de volta: só com a rota no mapa, sem o CTA à vista, dava
+                // pra achar que a carona já tinha sido pedida.
+                const sheetEl = document.getElementById(sheetId);
+                if (sheetEl) sheetEl.classList.remove('collapsed');
+            }, 4000);
+        }
+
+        const btnLimpar = document.getElementById(mapId === 'mapPed' ? 'btnLimparPed' : 'btnLimparOfe');
+        // Sem stopPropagation o toque vira "arraste" e o clique é engolido.
+        if (btnLimpar) {
+            ['touchstart', 'mousedown', 'pointerdown'].forEach((ev) => btnLimpar.addEventListener(ev, (e) => e.stopPropagation()));
+            btnLimpar.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (mapId === 'mapPed') limparDestinoPassageiro();
+                else limparDestinoMotorista();
+            });
+        }
+        function mostrarBtnLimpar(v) {
+            if (mapId === 'mapPed') atualizarBtnLimparPed(v);
+            else atualizarBtnLimparOfe(v);
+        }
+        function limparRota() {
+            destino = null;
+            rotaPath = null;
+            rotaKmTotal = 0;
+            rotaDurMsTotal = 0;
+            previewSeq++;
+            if (previewTimer) clearTimeout(previewTimer);
+            ocultarNomeLocal();
+            if (tipoMapaAntesPreview) {
+                aplicarTipoMapa(map, tipoMapaAntesPreview === 'satellite' ? 'hybrid' : tipoMapaAntesPreview);
+                tipoMapaAntesPreview = null;
+                rotuloBotoesTipoMapa(map);
+            }
+            rotaCtrl.setMap(null);
+            rotaInfo.style.display = 'none';
+            mostrarBtnLimpar(false);
+            if (onDestino) onDestino(null);
+        }
+
+        let geocoder = null;
+        function setDestino(pos, texto) {
+            const nomeDestino = (texto && String(texto).trim()) || '';
+            destino = { lat: Number(pos.lat), lng: Number(pos.lng), texto: nomeDestino };
+            mostrarBtnLimpar(true);
+            // Faixa branca no sheet com o nome escolhido (antes mesmo da rota).
+            if (mapId === 'mapPed') {
+                const el = document.getElementById('destFaixaPedNome');
+                if (el) el.textContent = nomeDestino || 'Destino no mapa';
+                atualizarHintDestinoPed();
+                atualizarFormPedidoRota(false);
+            }
+            // Abaixa o sheet NA HORA: com ele suspenso, a pré-visualização do
+            // destino (busca, Locais, toque no mapa) ficava escondida atrás.
+            const sheetEl = document.getElementById(sheetId);
+            if (sheetEl) sheetEl.classList.add('collapsed');
+            // Prévia: satélite + zoom + nome do local (~4 s), depois volta ao mapa leve.
+            map.panTo(pos);
+            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos, nomeDestino));
+            if (onDestino) onDestino(destino);
+            // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
+            if (!nomeDestino) {
+                try {
+                    geocoder = geocoder || new g.maps.Geocoder();
+                    geocoder.geocode({ location: pos }, (res, status) => {
+                        if (status === 'OK' && res && res[0] && destino
+                            && destino.lat === pos.lat && destino.lng === pos.lng) {
+                            destino.texto = res[0].formatted_address;
+                            // Atualiza a faixa de nome se a prévia satélite ainda estiver aberta.
+                            if (nomeLocalEl && nomeLocalEl.style.display !== 'none') {
+                                mostrarNomeLocal(destino.texto);
+                            }
+                            if (mapId === 'mapPed') {
+                                const el = document.getElementById('destFaixaPedNome');
+                                if (el) el.textContent = destino.texto;
+                            }
+                        }
+                    });
+                } catch (_) { /* sem geocoder: segue sem o nome */ }
+            }
+        }
+
+        // Tocar num LUGAR nomeado do mapa (POI: portaria, hospital, britador…) usa o
+        // NOME dele como destino — muito mais fácil que decorar o endereço de rua.
+        // O destino também pode ser definido pela busca "Para onde vamos".
+        let placesSvc = null;
+        map.addListener('click', async (e) => {
+            if (!e.placeId) return;   // toque no vazio não marca nada (evita destino/rota acidental)
+            if (e.stop) e.stop();     // não abre o infowindow padrão do Google
+            try {
+                if (!g.maps.places) await garantirPlacesLib();
+                placesSvc = placesSvc || new g.maps.places.PlacesService(map);
+                placesSvc.getDetails({ placeId: e.placeId, fields: ['name', 'geometry'] }, (det, status) => {
+                    if (status === 'OK' && det && det.geometry) {
+                        setDestino({ lat: det.geometry.location.lat(), lng: det.geometry.location.lng() }, det.name);
+                    } else {
+                        setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                    }
+                });
+            } catch (_) {
+                setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+            }
+        });
+
+        const inputEl = document.getElementById(inputId);
+        const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
+        // Places NÃO bloqueia o mapa: autocomplete sobe em paralelo (rede lenta).
+        let pacDestino = null;
+        const pacPronto = ligarPlaceAutocomplete(inputEl, {
+            map,
+            onFocus: () => {
+                const sheet = document.getElementById(sheetId);
+                if (sheet) sheet.classList.add('collapsed');
+            },
+            onPlace: (p) => {
+                if (p.geometry) {
+                    setDestino(
+                        { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() },
+                        p.name || p.formatted_address
+                    );
+                    inputEl.value = '';
+                    const sheet = document.getElementById(sheetId);
+                    if (sheet) sheet.classList.add('collapsed');
+                }
+            },
+        }).then((pac) => { pacDestino = pac; return pac; })
+            .catch((e) => { console.warn('autocomplete places:', e?.message || e); return null; });
+
+        async function focarBuscaDestino() {
+            const sheet = document.getElementById(sheetId);
+            if (sheet) sheet.classList.remove('collapsed');
+            const wrap = inputEl.closest('.map-search-wrap');
+            if (wrap) {
+                wrap.classList.add('map-search-atencao');
+                setTimeout(() => wrap.classList.remove('map-search-atencao'), 3200);
+            }
+            try {
+                if (!pacDestino) await pacPronto;
+                if (!pacDestino) {
+                    inputEl.focus();
+                    return;
+                }
+                pacDestino.focus();
+                const interno = pacDestino.shadowRoot?.querySelector('input, [role="combobox"]');
+                if (interno) interno.focus();
+            } catch (_) {
+                try { inputEl.focus(); } catch (__) {}
+            }
+        }
+
+        // Atualiza a origem para a localização ATUAL (evita ficar travado num lugar antigo).
+        async function recentrar() {
+            try {
+                const p = await obterLocalizacao();
+                estado.gpsOk = true;   // GPS voltou (ex.: usuário liberou nos ajustes)
+                mkOrigem.setPosition(p);
+                if (pulseOrigem) pulseOrigem.setPosition(p);
+                map.panTo(p);
+                map.setZoom(ZOOM_FOCO_ORIGEM);
+                if (destino) tracarRota();
+            } catch (_) {
+                if (!estado.gpsOk) msg('Ainda sem sua localização. Libere o GPS nos ajustes do aparelho para continuar.', 'error');
+            }
+        }
+
+        return {
+            map,
+            marcadorCarro: comoCarro ? mkOrigem : null,
+            getOrigem: () => ({ lat: mkOrigem.getPosition().lat(), lng: mkOrigem.getPosition().lng() }),
+            getDestino: () => destino,
+            // Favoritos e afins: define o destino como se tivesse buscado na barra.
+            irPara: (pos, texto) => setDestino(pos, texto),
+            recentrar,
+            limparRota,
+            focarBuscaDestino,
+            // Origem vale para publicar? Só se veio do GPS de verdade.
+            origemConfiavel: () => estado.gpsOk,
+        };
+    }
+    // Guarda contra inicialização concorrente: showTab e outros fluxos podem
+    // chamar initMap ao mesmo tempo (selOfe/selPed ainda não resolveu),
+    // criando dois seletores — e dois buscadores. O promise compartilhado dedupe.
+    let initPedirPromise = null;
+    let initOfePromise = null;
+    async function initMapPedir() {
+        if (selPed) return selPed;
+        if (initPedirPromise) return initPedirPromise;
+        initPedirPromise = (async () => {
+            selPed = await criarSeletor('mapPed', 'destPedInput', false, carregarCaronasDestino);
+            atualizarHintDestinoPed();
+            iniciarFrotaAoVivo(selPed.map);
+            inicializarQuandoPed();
+            tornarSheetAcaoArrastavel(document.getElementById('acaoSheetPed'), document.getElementById('gripPed'));
+            expandirSheetAcao('pedir');
+            return selPed;
+        })();
+        try { return await initPedirPromise; }
+        finally { initPedirPromise = null; }
+    }
+    async function initMapOferecer() {
+        if (selOfe) return selOfe;
+        if (initOfePromise) return initOfePromise;
+        initOfePromise = (async () => {
+            selOfe = await criarSeletor('mapOfe', 'destOfeInput', true, onDestinoMotorista);
+            tornarSheetAcaoArrastavel(document.getElementById('acaoSheetOfe'), document.getElementById('gripOfe'));
+            initSlideToggle(document.getElementById('slideOferecer'), document.getElementById('slideOferecerKnob'), toggleModoMotoristaOnline);
+            initAlcanceOfe();
+            expandirSheetAcao('oferecer');
+            if (motoristaOnlineModo) {
+                iniciarBroadcastLocalizacao(true);
+                acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
+                iniciarPedidosAoVivo(selOfe.map);
+                iniciarContatosAoVivo(selOfe.map);
+            }
+            return selOfe;
+        })();
+        try { return await initOfePromise; }
+        finally { initOfePromise = null; }
+    }
+
+    function formatDatetimeLocal(d) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    let horaPedTimer = null;
+    let horaPedModoAgenda = false;   // true = usuário escolheu horário futuro; não sobrescreve o relógio
+    let pedidoTemCaronaNaRota = false;   // carona publicada indo ao destino → pedido imediato
+
+    function tituloSheetPed() {
+        return 'Solicitar carona';
+    }
+    function atualizarTituloSheetPed() {
+        const el = document.querySelector('#acaoSheetPed .acao-titulo');
+        if (el) el.textContent = tituloSheetPed();
+    }
+    /**
+     * Atualiza CTA/horário conforme há carona na rota (pedido imediato).
+     * NÃO esconde o botão quando há carro amarelo na lista — isso gerava
+     * “Pedir carona” dourado piscando (mostra → some após o fetch).
+     * Contato do amarelo: modal do carro. Pedido geral: botão sempre estável.
+     */
+    function atualizarFormPedidoRota(temCarona) {
+        pedidoTemCaronaNaRota = !!temCarona;
+        const horaWrap = document.getElementById('horaPedWrap');
+        const hint = document.getElementById('hintPedidoImediato');
+        const btn = document.getElementById('btnCtaPedir');
+        const temDest = !!selPed?.getDestino?.();
+        // Método único: com destino, o botão é sempre "Solicitar carona" (dispara a
+        // busca automática — robozinho + fila, mais perto primeiro). Sem destino,
+        // "Escolher local". O rótulo "Pedir agora" foi aposentado.
+        if (temCarona) {
+            horaPedModoAgenda = false;
+            if (horaWrap) horaWrap.classList.add('form-slot-reservado');
+            if (hint) hint.style.display = 'block';
+        } else {
+            if (horaWrap) horaWrap.classList.remove('form-slot-reservado');
+            if (hint) hint.style.display = 'none';
+            if (!horaPedModoAgenda) tickQuandoPed();
+        }
+        if (btn) {
+            btn.textContent = temDest ? 'Solicitar carona' : 'Escolher local';
+            btn.style.display = '';
+            btn.style.visibility = '';
+            btn.style.pointerEvents = '';
+        }
+        atualizarTituloSheetPed();
+    }
+
+    function parseDatetimeLocalValue(v) {
+        const m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        if (!m) return null;
+        const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
+    function atualizarMinQuandoPed() {
+        const el = document.getElementById('horaPed');
+        if (!el) return;
+        el.min = formatDatetimeLocal(new Date());
+    }
+
+    function parseHorarioLocal(h) {
+        if (h == null || h === '') return null;
+        const s = String(h).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) {
+            const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+            return isNaN(d.getTime()) ? null : d;
+        }
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
+    function tickQuandoPed() {
+        const el = document.getElementById('horaPed');
+        if (!el || horaPedModoAgenda) return;
+        if (el.dataset.editando === '1') {
+            // Blur perdido (ex.: picker nativo fechado no Cancelar): destrava.
+            if (document.activeElement === el) return;
+            delete el.dataset.editando;
+        }
+        if (document.querySelector('.cam-video')) return;
+        const tab = document.getElementById('tabPedir');
+        if (!tab?.classList.contains('active') || document.hidden) return;
+        const agora = formatDatetimeLocal(new Date());
+        if (el.value === agora) return;   // mesmo minuto: não mexe no campo
+        atualizarMinQuandoPed();
+        el.value = agora;
+    }
+
+    function sincronizarQuandoPed(apenasSeVazio) {
+        const el = document.getElementById('horaPed');
+        if (!el || horaPedModoAgenda || el.dataset.editando === '1') return;
+        atualizarMinQuandoPed();
+        const sel = parseDatetimeLocalValue(el.value);
+        const margem = 60000;
+        if (sel && sel.getTime() > Date.now() + margem) {
+            horaPedModoAgenda = true;
+            return;
+        }
+        if (apenasSeVazio && el.value.trim()) return;
+        el.value = formatDatetimeLocal(new Date());
+    }
+
+    function detectarModoAgendaQuandoPed() {
+        const el = document.getElementById('horaPed');
+        if (!el) return;
+        atualizarMinQuandoPed();
+        const sel = parseDatetimeLocalValue(el.value);
+        const margem = 60000;
+        const eraAgenda = horaPedModoAgenda;
+        horaPedModoAgenda = !!(sel && sel.getTime() > Date.now() + margem);
+        // Voltou para "agora" → retoma relógio ao vivo
+        if (!horaPedModoAgenda && eraAgenda) {
+            el.value = formatDatetimeLocal(new Date());
+        }
+    }
+
+    function ligarEventosQuandoPed() {
+        const el = document.getElementById('horaPed');
+        if (!el || el.dataset.quandoLigado) return;
+        el.dataset.quandoLigado = '1';
+        el.addEventListener('focus', () => { el.dataset.editando = '1'; });
+        el.addEventListener('change', () => {
+            // Escolheu no picker: edição terminou (o blur nem sempre dispara no Android).
+            delete el.dataset.editando;
+            detectarModoAgendaQuandoPed();
+        });
+        el.addEventListener('input', detectarModoAgendaQuandoPed);
+        el.addEventListener('blur', () => {
+            delete el.dataset.editando;
+            detectarModoAgendaQuandoPed();
+        });
+        // Cancelar do picker nativo não dispara change nem blur e o campo ficava
+        // preso em "editando" — o relógio parava. Qualquer toque fora destrava.
+        document.addEventListener('pointerdown', (ev) => {
+            if (ev.target !== el && el.dataset.editando === '1') delete el.dataset.editando;
+        }, true);
+    }
+
+    function iniciarRelogioQuandoPed() {
+        ligarEventosQuandoPed();
+        sincronizarQuandoPed(true);
+        if (horaPedTimer) return;
+        // A cada segundo (só escreve quando o minuto vira): acompanha o relógio
+        // do celular sem atraso perceptível — 30 s deixava até meio minuto de defasagem.
+        horaPedTimer = setInterval(tickQuandoPed, 1000);
+    }
+
+    function inicializarQuandoPed() {
+        horaPedModoAgenda = false;
+        iniciarRelogioQuandoPed();
+    }
+
+    // Lê datetime-local como horário LOCAL (evita bug de fuso no iPhone com new Date(string)).
+    function lerHorarioPedido() {
+        const v = document.getElementById('horaPed')?.value?.trim() || '';
+        if (!v) return { iso: null, local: null };
+        const m = v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        if (!m) return { iso: null, local: null, invalido: true };
+        const local = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+        if (isNaN(local.getTime())) return { iso: null, local: null, invalido: true };
+        return { iso: local.toISOString(), local };
+    }
+
+    function limparQuandoPed() {
+        horaPedModoAgenda = false;
+        sincronizarQuandoPed();
+    }
+
+    /* -------- pedir carona -------- */
+    // Geocodificação reversa: posição {lat,lng} -> endereço escrito (para mostrar
+    // ORIGEM e DESTINO por nome, não só a linha da rota). Nunca lança.
+    let _geocoder = null;
+    const _geocodeCache = new Map();   // grade ~11 m -> endereço (evita repetir a chamada paga)
+    function geocodeReverso(pos) {
+        return new Promise((resolve) => {
+            try {
+                if (!g || !g.maps || !pos) return resolve(null);
+                const chave = pos.lat.toFixed(4) + ',' + pos.lng.toFixed(4);
+                if (_geocodeCache.has(chave)) return resolve(_geocodeCache.get(chave));
+                _geocoder = _geocoder || new g.maps.Geocoder();
+                _geocoder.geocode({ location: pos }, (res, status) => {
+                    const end = status === 'OK' && res && res[0] ? res[0].formatted_address : null;
+                    if (end) _geocodeCache.set(chave, end);
+                    resolve(end);
+                });
+            } catch (_) { resolve(null); }
+        });
+    }
+
+    // Selfie de segurança do passageiro: vale por 1h na mesma sessão. Repetir a
+    // câmera a cada toque (pedir carona, pedir vaga) só gerava fricção — a foto
+    // continua ao vivo e carimbada; só não é exigida de novo em sequência.
+    async function obterSelfieSeguranca(titulo) {
+        try {
+            const s = JSON.parse(sessionStorage.getItem('selfieSeguranca') || 'null');
+            if (s && s.url && Date.now() - new Date(s.em).getTime() < 60 * 60 * 1000) {
+                msg('Usando a selfie tirada há pouco.');
+                return s;
+            }
+        } catch (_) {}
+        const s = await capturarFoto({ tipo: 'selfies', facing: 'user', titulo });
+        try { sessionStorage.setItem('selfieSeguranca', JSON.stringify(s)); } catch (_) {}
+        return s;
+    }
+
+    // Feedback IMEDIATO no botão + trava de duplo toque: em rede lenta o toque
+    // parecia "não pegar" e o usuário tocava de novo (duplicando a ação).
+    function travarBotao(id, texto) {
+        const b = document.getElementById(id);
+        if (!b || b.disabled) return null;
+        const original = b.innerHTML;
+        b.disabled = true;
+        b.textContent = texto;
+        return () => { b.disabled = false; b.innerHTML = original; };
+    }
+
+    // CTA do passageiro em dois tempos: sem destino, o botão é "Escolher local"
+    // e abre direto o menu Locais (mesmo destino do menu ☰ → Locais); com
+    // destino marcado ele vira "Pedir carona" e segue o pedido normal.
+    function ctaPedirClick() {
+        const dest = selPed?.getDestino?.();
+        if (!dest) return abrirLocais();
+        return pedirCarona();
+    }
+
+    async function pedirCarona() {
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
+        const dest = selPed && selPed.getDestino();
+        if (!dest) return exigirDestinoPassageiro('pedir carona');
+        // Sem GPS não tem pedido: a origem seria um ponto fantasma longe do
+        // passageiro real e o motorista nunca o acharia.
+        if (!selPed.origemConfiavel()) {
+            selPed.recentrar();   // re-tenta o GPS; se voltou, o próximo toque passa
+            return msg('Ative sua localização (GPS) para pedir carona.', 'error');
+        }
+        const origem = selPed.getOrigem();
+        let ehAgendado = false;
+        let hor = { iso: null, local: null };
+        if (pedidoTemCaronaNaRota) {
+            ehAgendado = false;
+        } else {
+            hor = lerHorarioPedido();
+            if (hor.invalido) return msg('Horário inválido. Ajuste data e hora.', 'error');
+            const margemAgenda = 60000;
+            ehAgendado = horaPedModoAgenda
+                || !!(hor.local && hor.local.getTime() > Date.now() + margemAgenda);
+            if (hor.local && hor.local.getTime() < Date.now() - margemAgenda) {
+                return msg('Escolha um horário futuro para agendar.', 'error');
+            }
+        }
+        const horarioEnviar = ehAgendado && hor.local ? formatDatetimeLocal(hor.local) : null;
+        const soltar = travarBotao('btnCtaPedir', 'Abrindo a câmera…');
+        if (!soltar) return;   // já tem um pedido em andamento
+        let eraAgendado = false;
+        try {
+            const selfie = await obterSelfieSeguranca('Selfie (segurança da viagem)');
+            const origemTexto = await geocodeReverso(origem);   // nome do ponto de embarque
+            const body = {
+                origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
+                destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
+                horario: horarioEnviar, pessoas: +document.getElementById('pessoasPed').value || 1,
+                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+                // Broadcast (não fila sequencial): o pedido vira PULSO (bandeira dourada)
+                // no mapa dos motoristas próximos e qualquer um pode aceitar — estilo
+                // Flightradar. A fila escondia o pedido do mapa e só oferecia 1 a 1.
+                usar_fila: false,
+            };
+            const r = await fetchWithAuth('/api/pedidos', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            eraAgendado = !!d.agendado_futuro;
+            limparQuandoPed();
+            fecharChamando();
+            if (eraAgendado) {
+                resetMapaParaNovoPedido();
+                const quando = parseHorarioLocal(d.horario);
+                const txt = quando
+                    ? quando.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    : fmtHorario(d.horario);
+                msg('Carona agendada para ' + txt + '. Você pode pedir outra carona agora ou ver em Meus agendamentos.');
+                await atualizarUiAgendamentos();
+            } else {
+                await matchCaronas(d.id);   // popula o painel para consulta
+                mostrarChamando({ pedidoId: d.id, pessoas: body.pessoas });   // entra no modo chamada (procurando agora)
+            }
+        } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
+        finally {
+            soltar();
+            // soltar() restaura o label antigo do botão; reaplica o estado real.
+            const temDest = !!selPed?.getDestino?.();
+            atualizarFormPedidoRota(eraAgendado ? false : pedidoTemCaronaNaRota);
+            if (!temDest) atualizarFormPedidoRota(false);
+        }
+    }
+
+    async function matchCaronas(pedidoId) {
+        const r = await fetchWithAuth('/api/caronas/match?pedido_id=' + pedidoId);
+        const caronas = await r.json();
+        const div = document.getElementById('listaCaronasMatch');
+        if (!caronas.length) { div.innerHTML = '<p class="cam-hint">Nenhuma carona compatível agora. Aguarde um motorista oferecer.</p>'; return; }
+        div.innerHTML = caronas.map(c => cardCarona(c, true)).join('');
+    }
+    async function listarTodasCaronas() {
+        const o = selPed ? selPed.getOrigem() : null;
+        const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
+        const r = await fetchWithAuth('/api/caronas' + q);
+        const caronas = await r.json();
+        document.getElementById('listaCaronasTodas').innerHTML = caronas.length
+            ? caronas.map(c => cardCarona(c, true)).join('')
+            : '<p class="cam-hint">Nenhuma carona disponível.</p>';
+    }
+    function cardCarona(c, comBotao) {
+        const dist = c.dist_origem != null ? ` • ${Number(c.dist_origem).toFixed(1)} km` : '';
+        return `<div class="ride-item">
+            ${c.foto_carro_url ? `<img src="${esc(c.foto_carro_url)}" class="ride-thumb">` : ''}
+            <div class="ride-info">
+                <strong>${esc(c.motorista_nome)}</strong> ${c.placa ? '• ' + esc(c.placa) : ''} ${c.tag ? '(TAG ' + esc(c.tag) + ')' : ''}<br>
+                <small>${ICN.pin} ${esc(c.destino_texto || 'Destino no mapa')} • ${ICN.clock} ${fmtHorario(c.horario)} • ${c.vagas} vaga(s)${dist}</small>
+                ${c.observacao ? `<br><small>"${esc(c.observacao)}"</small>` : ''}
+            </div>
+            ${comBotao ? `<button class="btn btn-primary btn-sm" onclick="pedirVaga(${c.id}, ${c.vagas || 1})">Solicitar</button>` : ''}
+        </div>`;
+    }
+
+    function lerPessoasPed() {
+        return Math.min(6, Math.max(1, +document.getElementById('pessoasPed')?.value || 1));
+    }
+    function atualizarListaMotoristasPorPessoas() {
+        const dest = selPed?.getDestino?.();
+        if (dest) carregarCaronasDestino(dest);
+    }
+
+    // Três jeitos de falar com um motorista disponível na rota (buzina, ligação,
+    // WhatsApp). Envia GPS + destino para o motorista ver o pulso no mapa.
+    async function contatoMotorista(id) {
+        if (!user.telefone) { msg('Adicione seu WhatsApp no Perfil para continuar', 'error'); return null; }
+        const dest = selPed?.getDestino?.();
+        if (!dest) {
+            exigirDestinoPassageiro('buzinar, ligar ou chamar no WhatsApp');
+            return null;
+        }
+        if (!selPed?.origemConfiavel?.()) {
+            selPed?.recentrar?.();
+            msg('Ative sua localização (GPS) para aparecer no mapa do motorista.', 'error');
+            return null;
+        }
+        const origem = selPed.getOrigem();
+        const pessoas = lerPessoasPed();
+        try {
+            const r = await fetchWithAuth('/api/motoristas-online/' + id + '/contato', {
+                method: 'POST',
+                body: JSON.stringify({
+                    origem_lat: origem.lat, origem_lng: origem.lng,
+                    destino_lat: dest.lat, destino_lng: dest.lng,
+                    destino_texto: dest.texto || null,
+                    pessoas,
+                }),
+            });
+            const d = await r.json();
+            if (!r.ok) { msg(d.error || 'Erro', 'error'); return null; }
+            return d;
+        } catch (_) {
+            msg('Erro de conexão. Tente novamente.', 'error');
+            return null;
+        }
+    }
+    async function buzinarMotorista(id) {
+        const d = await contatoMotorista(id);
+        if (d) msg('Motorista avisado! Você aparece no mapa dele com seu destino.');
+    }
+    async function ligarMotorista(id) {
+        const d = await contatoMotorista(id);
+        if (d && d.telefone) window.location.href = 'tel:' + d.telefone.replace(/\D/g, '');
+    }
+    async function whatsappMotorista(id) {
+        const d = await contatoMotorista(id);
+        if (d && d.telefone) {
+            abrirWhatsApp(d.telefone, d.mensagem);
+            msg('WhatsApp aberto — combine com o motorista.');
+        }
+    }
+    function botoesContato(id, compacto) {
+        if (compacto) {
+            const cls = 'ride-icon-btn';
+            return `<div class="ride-contatos ride-contatos--icons" role="group" aria-label="Falar com motorista">
+                <button type="button" class="${cls}" title="Avisar o motorista" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+                <button type="button" class="${cls}" title="Ligar" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+                <button type="button" class="${cls}" title="WhatsApp" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+            </div>`;
+        }
+        return `<div class="ride-contatos ride-contatos--stack" role="group" aria-label="Falar com motorista">
+            <button type="button" class="btn btn-secondary btn-block ride-contato-whats" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+            <div class="ride-contatos-row">
+                <button type="button" class="btn btn-secondary ride-contato-half" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+                <button type="button" class="btn btn-secondary ride-contato-half" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+            </div>
+        </div>`;
+    }
+    // Ícone discreto do WhatsApp (canal direto sem ocupar a tela).
+    function btnWhatsDiscreto(id) {
+        return `<button type="button" class="whats-mini" title="Chamar no WhatsApp" aria-label="WhatsApp"
+            onclick="event.stopPropagation();whatsappMotorista(${id})">${ICN.whats}</button>`;
+    }
+    function botoesContatoPerfil(id) {
+        return `<div class="drv-contact-wrap" role="group" aria-label="Falar com motorista">
+            <button type="button" class="drv-btn drv-btn--whats" onclick="whatsappMotorista(${id})">${ICN.whats} WhatsApp</button>
+            <div class="drv-contact-row">
+                <button type="button" class="drv-btn" onclick="ligarMotorista(${id})">${ICN.phone} Ligar</button>
+                <button type="button" class="drv-btn" onclick="buzinarMotorista(${id})">${ICN.horn} Buzinar</button>
+            </div>
+        </div>`;
+    }
+    // (botões do perfil usam o mesmo markup — estilo limpo no CSS .drv-btn)
+    function iniciaisMotorista(nome) {
+        const p = (nome || 'M').trim().split(/\s+/).filter(Boolean);
+        if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+        return (p[0]?.[0] || 'M').toUpperCase();
+    }
+    function textoDistanciaEta(origem, m) {
+        if (!origem || m?.lat == null || m?.lng == null) return '';
+        const dist = distKmGps(origem, { lat: +m.lat, lng: +m.lng });
+        if (!isFinite(dist)) return '';
+        const metros = Math.round(dist * 1000);
+        const distTxt = dist < 1 ? `${metros} m` : `${dist.toFixed(1)} km`;
+        const min = Math.max(1, Math.round((dist / 22) * 60));
+        return `${ICN.pin} Chega em ~${min} min · ${distTxt}`;
+    }
+
+    function cardMotoristaDisponivel(it) {
+        // Lista = só resumo. Ações (WhatsApp/Ligar/Buzinar/Solicitar) ficam no
+        // MESMO modal do clique no carro no mapa — uma tela só.
+        const km = it.dist != null && isFinite(it.dist) && it.dist >= 0.1 ? `${Number(it.dist).toFixed(1)} km` : '';
+        const carro = [it.tag, it.placa].filter(Boolean).map(esc).join(' • ') || 'Veículo';
+        const empresa = esc(it.nome || 'Motorista');
+        const posicao = it.caronaId && it.ordem != null
+            ? `<span class="ride-posicao">#${it.ordem + 1} na fila</span>` : '';
+        // encaixe = ponto em comum: o motorista não vai até o destino do
+        // passageiro, mas passa por um ponto que adianta (ex.: Portaria).
+        const encaixe = it.compatRota === 'encaixe';
+        const parcial = it.compatRota === 'parcial' || encaixe;
+        const proximo = it.compatRota === 'proximo';
+        const destMot = esc((encaixe ? it.encaixeTexto : null) || it.destinoMotorista || it.destino || 'destino do motorista');
+        const aoVivo = !it.caronaId
+            ? '<span class="ride-badge ride-badge--amarelo">Por perto · 600 m</span>'
+            : (it.online
+                ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
+                : (parcial
+                    ? `<span class="ride-badge ride-badge--parcial">${encaixe ? 'Deixa você em' : 'Só até'} ${destMot}</span>`
+                    : (proximo
+                        ? `<span class="ride-badge ride-badge--proximo">Passa perto</span>`
+                        : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')));
+        const linha = it.caronaId
+            ? `${ICN.pin} ${esc(it.destino || 'mesmo destino')} · ${it.vagas || 1} vaga(s)`
+            : `${ICN.car} Disponível por perto`;
+        const foto = it.foto
+            ? `<img src="${esc(it.foto)}" class="ride-card__thumb" loading="lazy" alt="" onerror="this.remove()">`
+            : '<div class="ride-card__ph" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></div>';
+        const cardMod = parcial ? ' ride-card--parcial' : (proximo ? ' ride-card--proximo' : '');
+        // Card só informativo: mostra quem está por perto/na rota. Sem contato
+        // direto e sem abrir perfil — o único método é "Solicitar carona" no
+        // rodapé, que dispara a busca automática (robozinho + fila).
+        const distLinha = km ? `<div class="ride-card__dist">${km} de você</div>` : '';
+        return `<article class="ride-card${cardMod}">
+            <div class="ride-card__head">
+                ${foto}
+                <div class="ride-card__body">
+                    <div class="ride-card__title">${empresa} ${posicao} ${aoVivo}</div>
+                    <div class="ride-card__sub">${carro}</div>
+                    <div class="ride-card__route">${linha}</div>
+                    ${distLinha}
+                </div>
+                ${btnWhatsDiscreto(it.id)}
+            </div>
+        </article>`;
+    }
+
+    let listaMotoristasTimer = null;
+    let ultimaListaMotoristas = [];
+    // Seq da última busca: resposta antiga NÃO pode sobrescrever a tela (race).
+    let _listaMotSeq = 0;
+    let _listaMotCarregando = false;
+
+    // Ao escolher um local no mapa, monta a lista (estilo Uber):
+    //   1) caronas indo para o destino (rota publicada);
+    //   2) motoristas no modo amarelo por perto (600 m) — buzina/WhatsApp.
+    // dest = null -> esconde a lista.
+    //
+    // POR QUE a UI “ficava ruim e voltava”:
+    // a cada poll a lista era ZERADA ("Procurando…") e reescrita. Em rede lenta
+    // ou com 2 fetches em paralelo, o sheet saltava de altura / mostrava texto
+    // velho e depois corrigia. Agora: não apaga se já tem conteúdo; só a
+    // resposta mais nova pinta a tela.
+    async function carregarCaronasDestino(dest) {
+        const wrap = document.getElementById('motoristasDestinoWrap');
+        const contIndo = document.getElementById('motoristasIndoDestino');
+        const contPerto = document.getElementById('motoristasPorPerto');
+        const listaIndo = document.getElementById('listaIndoDestino');
+        const listaPerto = document.getElementById('listaPorPerto');
+        if (!wrap || !listaIndo || !listaPerto) return;
+        if (!dest) {
+            _listaMotSeq += 1;
+            if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
+            if (listaMotoristasTimer) { clearInterval(listaMotoristasTimer); listaMotoristasTimer = null; }
+            atualizarBtnLimparPed(false);
+            wrap.style.display = 'none';
+            listaIndo.innerHTML = '';
+            listaPerto.innerHTML = '';
+            if (contPerto) contPerto.style.display = 'none';
+            atualizarFormPedidoRota(false);
+            atualizarHintDestinoPed();
+            return;
+        }
+        atualizarHintDestinoPed();
+        // CTA não depende da lista: amarelo → contato no modal; botão fica estável.
+        if (atualizarFrotaAoVivo) atualizarFrotaAoVivo();
+        atualizarBtnLimparPed(true);
+        wrap.style.display = 'block';
+        const o = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
+
+        // Só mostra “Procurando…” na 1ª carga (lista vazia). Refresh silencioso
+        // mantém o conteúdo atual → sem pulo de layout / texto feio sumindo.
+        const listaVazia = !listaIndo.innerHTML.trim()
+            || listaIndo.querySelector('.lista-vazia-leve, .cam-hint');
+        if (listaVazia && !ultimaListaMotoristas.length) {
+            listaIndo.innerHTML = '<p class="lista-vazia-leve">Procurando…</p>';
+        }
+
+        const seq = ++_listaMotSeq;
+        _listaMotCarregando = true;
+        try {
+            const qCaronas = new URLSearchParams();
+            if (o) { qCaronas.set('lat', o.lat); qCaronas.set('lng', o.lng); }
+            qCaronas.set('dest_lat', dest.lat); qCaronas.set('dest_lng', dest.lng);
+            const qRota = o ? '?' + new URLSearchParams({
+                origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
+            }).toString() : '';
+            const qOnline = o ? '?' + new URLSearchParams({ lat: o.lat, lng: o.lng }).toString() : '';
+            const [caronas, online, naRota] = await Promise.all([
+                fetchWithAuth('/api/caronas?' + qCaronas.toString()).then(r => r.ok ? r.json() : []).catch(() => []),
+                o ? fetchWithAuth('/api/motoristas-online' + qOnline).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
+                o ? fetchWithAuth('/api/motoristas-rota' + qRota).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve([]),
+            ]);
+            // Outra busca mais nova já rodou — descarta esta resposta.
+            if (seq !== _listaMotSeq) return;
+
+            const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
+                .filter((m) => m.carona_id)
+                .map((m) => [m.id, m.ordem]));
+            const indoDestino = [];
+            const porPerto = [];
+            const porMotorista = new Map();
+            (Array.isArray(caronas) ? caronas : []).forEach((c) => {
+                const item = {
+                    id: c.motorista_id, caronaId: c.id,
+                    nome: c.motorista_empresa || c.motorista_nome, placa: c.placa, tag: c.tag,
+                    foto: c.foto_carro_url, selfie: c.selfie_url || null,
+                    vagas: c.vagas, destino: c.destino_texto,
+                    dist: c.dist_origem != null ? Number(c.dist_origem) : Infinity,
+                    ordem: ordemPorId.has(c.motorista_id) ? ordemPorId.get(c.motorista_id) : null,
+                    online: !!c.motorista_online,
+                    compatRota: c.compat_rota || 'total',
+                    destinoMotorista: c.destino_texto,
+                    encaixeTexto: c.encaixe_texto || null,
+                    lat: c.lat != null ? +c.lat : (c.origem_lat != null ? +c.origem_lat : null),
+                    lng: c.lng != null ? +c.lng : (c.origem_lng != null ? +c.origem_lng : null),
+                    empresa: c.motorista_empresa || null,
+                };
+                const prev = porMotorista.get(c.motorista_id);
+                if (!prev || item.caronaId > prev.caronaId) porMotorista.set(c.motorista_id, item);
+            });
+            porMotorista.forEach((item) => indoDestino.push(item));
+            const idsIndo = new Set(indoDestino.map((it) => it.id));
+            (Array.isArray(online) ? online : []).forEach((m) => {
+                if (m.carona_id || idsIndo.has(m.id)) return;
+                const dist = (o && m.lat != null) ? distKmGps(o, { lat: +m.lat, lng: +m.lng }) : Infinity;
+                porPerto.push({
+                    id: m.id, caronaId: null,
+                    nome: m.empresa_nome || m.nome, placa: m.placa, tag: m.tag,
+                    foto: m.foto_carro_url, selfie: m.selfie_url,
+                    vagas: m.vagas || 1, destino: null, dist, ordem: null, online: true,
+                    compatRota: 'total', destinoMotorista: null,
+                    lat: m.lat != null ? +m.lat : null,
+                    lng: m.lng != null ? +m.lng : null,
+                    empresa: m.empresa_nome || null,
+                });
+            });
+            indoDestino.sort((a, b) => {
+                const ordem = { total: 0, proximo: 1, parcial: 2, encaixe: 3 };
+                const oa = ordem[a.compatRota] ?? 3;
+                const ob = ordem[b.compatRota] ?? 3;
+                if (oa !== ob) return oa - ob;
+                return a.dist - b.dist;
+            });
+            porPerto.sort((a, b) => a.dist - b.dist);
+
+            sincronizarModalCarroLista(indoDestino);
+            ultimaListaMotoristas = [...indoDestino, ...porPerto];
+
+            listaIndo.innerHTML = indoDestino.length
+                ? indoDestino.map(cardMotoristaDisponivel).join('')
+                : '<p class="lista-vazia-leve">Sem rota para esse destino</p>';
+            if (porPerto.length) {
+                if (contPerto) contPerto.style.display = 'block';
+                listaPerto.innerHTML = porPerto.map(cardMotoristaDisponivel).join('');
+            } else if (!indoDestino.length && contPerto) {
+                contPerto.style.display = 'block';
+                listaPerto.innerHTML = '<p class="lista-vazia-leve">Nenhum online por perto</p>';
+            } else if (contPerto) {
+                contPerto.style.display = 'none';
+                listaPerto.innerHTML = '';
+            }
+            atualizarStatsMotoristas(indoDestino, porPerto);
+            // Botão "Solicitar carona" é o método único (dispara a fila/robozinho).
+            // temCarona só decide o textinho de "pedido imediato" no formulário.
+            atualizarFormPedidoRota(indoDestino.some((it) => it.compatRota === 'total'));
+            if (!listaMotoristasTimer) {
+                // Refresh em silêncio (não zera a lista). Só com sheet colapsado
+                // ou a cada 12s em background — evita “piscar” com a alça aberta.
+                listaMotoristasTimer = setInterval(() => {
+                    if (_listaMotCarregando) return;
+                    const d = selPed?.getDestino?.();
+                    if (!d || document.hidden) return;
+                    if (!document.getElementById('tabPedir')?.classList.contains('active')) return;
+                    carregarCaronasDestino(d);
+                }, 12000);
+            }
+        } catch (_) {
+            if (seq !== _listaMotSeq) return;
+            if (!ultimaListaMotoristas.length) {
+                listaIndo.innerHTML = '<p class="lista-vazia-leve">Não foi possível carregar</p>';
+            }
+            atualizarFormPedidoRota(false);
+        } finally {
+            if (seq === _listaMotSeq) _listaMotCarregando = false;
+        }
+    }
+
+    async function pedirVaga(caronaId, vagasDisp) {
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
+        const pessoas = lerPessoasPed();
+        if (vagasDisp != null && pessoas > vagasDisp) {
+            return msg(`Este veículo tem ${vagasDisp} vaga(s). Você pediu ${pessoas}.`, 'error');
+        }
+        try {
+            const selfie = await obterSelfieSeguranca('Selfie para pedir a vaga');
+            const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({
+                carona_id: caronaId, pessoas,
+                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
+            }) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            mostrarChamando({ nome: carroSel && carroSel.nome, propostaId: d.id, pessoas });
+        } catch (e) { if (e.message !== 'cancelado') msg(e.message, 'error'); }
+    }
+
+    /* -------- modo chamada (estilo Uber) -------- */
+    // chamandoId = proposta enviada esperando aceite; chamandoPedidoId = pedido
+    // postado procurando motorista.
+    let chamandoId = null;
+    let chamandoPedidoId = null;
+    // Ícones do rodapé (SVGs de ICN, definido mais abaixo): setados uma vez só,
+    // preservados entre aberturas do modal.
+    let iconesChamandoProntos = false;
+    function iniciarIconesChamando() {
+        if (iconesChamandoProntos) return;
+        iconesChamandoProntos = true;
+        document.getElementById('chamandoIcoTempo').innerHTML = ICN.clock;
+        document.getElementById('chamandoIcoMotoristas').innerHTML = ICN.car;
+        document.getElementById('chamandoIcoPessoas').innerHTML = ICN.person;
+    }
+    // Cronômetro de busca: tempo decorrido de verdade (não é uma estimativa
+    // inventada) — dá pro usuário ver que a busca está rodando, não travada.
+    let chamandoCronoTimer = null;
+    let chamandoCronoInicio = 0;
+    function iniciarCronometroChamando() {
+        pararCronometroChamando();
+        chamandoCronoInicio = Date.now();
+        const el = document.getElementById('chamandoTempoTxt');
+        const tick = () => {
+            const s = Math.max(0, Math.floor((Date.now() - chamandoCronoInicio) / 1000));
+            el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+        };
+        tick();
+        chamandoCronoTimer = setInterval(tick, 1000);
+    }
+    function pararCronometroChamando() {
+        if (chamandoCronoTimer) { clearInterval(chamandoCronoTimer); chamandoCronoTimer = null; }
+    }
+    function mostrarChamando({ nome, propostaId, pedidoId, pessoas, souMotorista } = {}) {
+        chamandoId = propostaId || null;
+        chamandoPedidoId = pedidoId || null;
+        // souMotorista: o MOTORISTA ofereceu e espera o passageiro aceitar. A tela é
+        // a mesma, mas os rótulos mudam de lado (ele não é "1 passageiro").
+        const souMot = !!souMotorista;
+        document.getElementById('chamandoTitulo').textContent = souMot
+            ? 'Aguardando o passageiro'
+            : (pedidoId ? 'Procurando motorista…' : 'Chamando…');
+        document.getElementById('chamandoSub').innerHTML = souMot
+            ? `Aguardando <strong>${esc(nome || 'o passageiro')}</strong> aceitar sua carona`
+            : (pedidoId
+                ? 'Avisamos os motoristas perto de você'
+                : `Aguardando <strong>${esc(nome || 'o motorista')}</strong> aceitar`);
+        document.getElementById('chamandoRotuloMeio').textContent = souMot ? 'Passageiro' : 'Motoristas';
+        document.getElementById('chamandoMotoristasTxt').textContent =
+            souMot ? 'Aguardando aceite' : (pedidoId ? 'Procurando…' : 'Aguardando aceite');
+        const cancTxt = document.getElementById('chamandoCancelarTxt');
+        if (cancTxt) cancTxt.textContent = souMot ? 'Cancelar oferta' : 'Cancelar busca';
+        const n = Number(pessoas) || 0;
+        const pessoasWrap = document.getElementById('chamandoPessoasWrap');
+        document.getElementById('chamandoRotuloPessoas').textContent = souMot ? 'Passageiros' : 'Você é';
+        if (n > 0) {
+            document.getElementById('chamandoPessoasTxt').textContent = souMot
+                ? String(n)
+                : n + (n > 1 ? ' passageiros' : ' passageiro');
+            pessoasWrap.style.display = '';
+        } else {
+            pessoasWrap.style.display = 'none';
+        }
+        iniciarIconesChamando();
+        iniciarCronometroChamando();
+        // O vão do mapa deixa toques passarem pro que estiver atrás — o painel
+        // da aba (Pedir/Oferecer, "Limpar rota"…) some enquanto a busca roda,
+        // pra nenhum botão escondido receber clique no meio da busca.
+        document.body.classList.add('buscando-carona');
+        document.getElementById('modalChamando').style.display = 'flex';
+        iniciarAnunciosEspera();
+        iniciarBolinhaBusca();
+        iniciarPollFilaStatus();
+    }
+    function fecharChamando() {
+        chamandoId = null;
+        chamandoPedidoId = null;
+        pararAnunciosEspera();
+        pararCronometroChamando();
+        pararBolinhaBusca();
+        pararPollFilaStatus();
+        document.body.classList.remove('buscando-carona');
+        document.getElementById('modalChamando').style.display = 'none';
+    }
+
+    /* -------- vitrine de anúncios na tela de espera (área do mapa) -------- */
+    // A foto fica parada; se houver mais de uma, troca em loop com fade num
+    // ritmo de leitura confortável (não pisca rápido).
+    const INTERVALO_ANUNCIO_MS = 7000;
+    let anunciosEsperaCache = null;   // cache em memória (evita refazer a busca)
+    let anuncioTimer = null;
+    let anuncioIdx = 0;
+
+    async function carregarAnunciosEspera() {
+        if (anunciosEsperaCache) return anunciosEsperaCache;
+        try {
+            const r = await fetchWithAuth('/api/anuncios');
+            const lista = await r.json();
+            anunciosEsperaCache = Array.isArray(lista) ? lista : [];
+        } catch (_) {
+            anunciosEsperaCache = [];
+        }
+        return anunciosEsperaCache;
+    }
+
+    function preCarregarAnuncio(url) {
+        if (!url) return;
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+    }
+
+    function pintarAnuncio(a, proximoUrl) {
+        const img = document.getElementById('chamandoAdImg');
+        const tit = document.getElementById('chamandoAdTitulo');
+        if (!img) return;
+        // Mesma foto borrada preenche a sobra do card (laterais no pôster
+        // vertical, em cima/embaixo na foto horizontal).
+        const fundo = document.getElementById('chamandoAdFundo');
+        if (fundo) fundo.src = a.imagem_url;
+        const mostrar = () => {
+            tit.textContent = a.titulo || '';
+            tit.style.display = a.titulo ? '' : 'none';
+            img.classList.remove('trocando');
+            if (proximoUrl) preCarregarAnuncio(proximoUrl);
+        };
+        img.classList.add('trocando');
+        img.onload = () => { img.onload = null; img.onerror = null; mostrar(); };
+        img.onerror = () => { img.onload = null; img.onerror = null; mostrar(); };
+        img.src = a.imagem_url;
+        if (img.complete) { img.onload = null; img.onerror = null; mostrar(); }
+    }
+
+    // Pontinhos de posição do carrossel: quantidade varia com o que o admin
+    // publicar — não é fixo nem regra, só reflete ads.length. Puramente
+    // decorativo (o carrossel troca sozinho, o usuário não arrasta).
+    function montarDotsAnuncio(qtd) {
+        const wrap = document.getElementById('chamandoAdDots');
+        if (!wrap) return;
+        wrap.innerHTML = qtd > 1
+            ? Array.from({ length: qtd }, (_, i) => `<span class="${i === anuncioIdx ? 'ativo' : ''}"></span>`).join('')
+            : '';
+    }
+    function atualizarDotsAnuncio() {
+        const wrap = document.getElementById('chamandoAdDots');
+        if (!wrap) return;
+        wrap.querySelectorAll('span').forEach((s, i) => s.classList.toggle('ativo', i === anuncioIdx));
+    }
+
+    // Só conta anúncio cuja FOTO realmente carrega. Sem foto publicada (ou imagem
+    // quebrada), o painel some e o mapa fica livre.
+    function fotoAnuncioCarrega(url) {
+        return new Promise((resolve) => {
+            if (!url) return resolve(false);
+            const img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = url;
+        });
+    }
+    async function filtrarAnunciosComFoto(ads) {
+        const arr = Array.isArray(ads) ? ads : [];
+        const oks = await Promise.all(arr.map((a) => fotoAnuncioCarrega(a.imagem_url)));
+        return arr.filter((_, i) => oks[i]);
+    }
+
+    async function iniciarAnunciosEspera() {
+        pararAnunciosEspera();
+        const box = document.getElementById('chamandoAds');
+        const dots = document.getElementById('chamandoAdDots');
+        if (!chamandoPedidoId) { if (box) box.style.display = 'none'; return; }
+        // Só mostra o painel se houver foto publicada que carregue — senão mapa livre.
+        const ads = await filtrarAnunciosComFoto(await carregarAnunciosEspera());
+        if (!chamandoPedidoId || !ads.length) {
+            if (box) box.style.display = 'none';
+            if (dots) dots.innerHTML = '';
+            return;
+        }
+        anuncioIdx = 0;
+        box.style.display = 'flex';
+        montarDotsAnuncio(ads.length);
+        pintarAnuncio(ads[0], ads[1] && ads[1].imagem_url);
+        if (ads.length > 1) {
+            anuncioTimer = setInterval(() => {
+                anuncioIdx = (anuncioIdx + 1) % ads.length;
+                const prox = ads[(anuncioIdx + 1) % ads.length].imagem_url;
+                pintarAnuncio(ads[anuncioIdx], prox);
+                atualizarDotsAnuncio();
+            }, INTERVALO_ANUNCIO_MS);
+        }
+    }
+
+    function pararAnunciosEspera() {
+        if (anuncioTimer) { clearInterval(anuncioTimer); anuncioTimer = null; }
+        const box = document.getElementById('chamandoAds');
+        const img = document.getElementById('chamandoAdImg');
+        const dots = document.getElementById('chamandoAdDots');
+        const fundo = document.getElementById('chamandoAdFundo');
+        if (fundo) fundo.removeAttribute('src');
+        if (img) {
+            img.onload = null;
+            img.onerror = null;
+            img.removeAttribute('src');
+            img.classList.remove('trocando');
+        }
+        if (dots) dots.innerHTML = '';
+        if (box) box.style.display = 'none';
+    }
+
+    /* -------- bolinha-radar: a busca visível no mapa (joguinho) -------- */
+    // Uma bolinha dourada percorre o mapa DE VERDADE durante a espera: vai de
+    // carrinho em carrinho por ordem de distância, "toca" cada um, mostra que
+    // chamou e que ninguém topou ainda, e recomeça — não para até dar match.
+    // É a parte invisível da busca (avisamos os motoristas e esperamos alguém
+    // aceitar) virando teatro visual; o match real continua no pollPropostas,
+    // que fecha esta tela sozinho quando alguém aceita.
+    const BOLINHA_TOQUE_MS = 2600;    // parada "chamando" em cima do carro
+    const BOLINHA_RESULT_MS = 1500;   // mostra que este não topou ainda
+    const BOLINHA_PAUSA_MS = 1300;    // respiro antes de recomeçar a rodada
+    let bolinha = null;
+    // Motorista que o servidor está chamando AGORA na fila (a bolinha vai até ele
+    // de verdade). null = ainda sem oferta ativa → bolinha patrulha/insiste.
+    let bolinhaAlvoId = null;
+    let bolinhaAlvoPos = null;    // posição ao vivo do motorista chamado (vem da fila)
+    let bolinhaAlvoNome = null;
+    let bolinhaAlvoEmViagem = false;   // o chamado está finalizando outra corrida
+    let filaStatusTimer = null;
+    function alvoRealDaFila() {
+        if (bolinhaAlvoId == null) return null;
+        // Carro no campo de visão (600 m) → posição ao vivo do marcador. Se estiver
+        // além disso, usa a posição que a fila devolveu — a bolinha acha do mesmo
+        // jeito o motorista que o sistema escolheu.
+        const it = fleet.markers[bolinhaAlvoId];
+        if (it && it.lastPos && it.m) return it;
+        if (bolinhaAlvoPos) return { lastPos: bolinhaAlvoPos, m: { id: bolinhaAlvoId, nome: bolinhaAlvoNome || 'o motorista' } };
+        return null;
+    }
+    // Acompanha a fila real do pedido: quem está sendo chamado, se acabou a busca.
+    // A tela é HONESTA com o passageiro: recusa vira aviso na hora, e sem carro
+    // online o "procurando…" dá lugar a um estado claro de espera (nada de
+    // robozinho caçando motorista que não existe).
+    let buscaEstadoUi = 'normal';    // 'normal' | 'esgotada' | 'semcarro'
+    let buscaRecusasVistas = null;   // null = ainda não leu a primeira vez
+    async function pollFilaStatus() {
+        if (!chamandoPedidoId) return;
+        try {
+            const r = await fetchWithAuth('/api/pedidos/' + chamandoPedidoId + '/fila-status');
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!chamandoPedidoId) return;   // busca fechou enquanto esperava
+            bolinhaAlvoId = d.atual ? +d.atual.motorista_id : null;
+            bolinhaAlvoPos = (d.atual && d.atual.lat != null && d.atual.lng != null)
+                ? { lat: +d.atual.lat, lng: +d.atual.lng } : null;
+            bolinhaAlvoNome = d.atual?.nome || null;
+            bolinhaAlvoEmViagem = !!(d.atual && d.atual.em_viagem);
+            // Motorista escolhido está terminando outra corrida: o passageiro fica
+            // sabendo (em vez de achar que ninguém vem).
+            const subEmV = document.getElementById('chamandoSub');
+            if (subEmV && buscaEstadoUi === 'normal') {
+                if (bolinhaAlvoEmViagem && subEmV.dataset.emViagem !== '1') {
+                    subEmV.dataset.emViagem = '1';
+                    subEmV.textContent = 'O motorista escolhido está finalizando outra corrida e já vem te buscar.';
+                } else if (!bolinhaAlvoEmViagem && subEmV.dataset.emViagem === '1') {
+                    delete subEmV.dataset.emViagem;
+                    subEmV.textContent = 'Avisamos os motoristas perto de você';
+                }
+            }
+            // Pedido expirou/foi cancelado (10 min sem aceite): encerra a busca com
+            // aviso. Aceite vira 'atendido' → viagem, tratado por pollPropostas.
+            if (d.status === 'cancelado') {
+                fecharChamando();
+                msg('Ninguém aceitou sua carona desta vez. Tente novamente em instantes.', 'info');
+                return;
+            }
+            // Motorista recusou desde a última olhada: avisa na hora, sem deixar
+            // o passageiro esperando um aceite que já morreu. Na primeira leitura
+            // só memoriza (recusa antiga de antes de abrir a tela não vira toast).
+            const recusas = +d.recusas || 0;
+            if (buscaRecusasVistas === null) {
+                buscaRecusasVistas = recusas;
+            } else if (recusas > buscaRecusasVistas) {
+                buscaRecusasVistas = recusas;
+                msg((d.atual || (+d.online || 0) > 0)
+                    ? 'Um motorista não pôde aceitar. Procurando outro para você…'
+                    : 'O motorista não pôde aceitar e não há outro carro online agora.',
+                    'info');
+            }
+            aplicarEstadoBusca(d);
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    // Traduz a situação real (carros online, recusas) pra tela de busca.
+    function aplicarEstadoBusca(d) {
+        const estado = (!d.atual && (+d.online || 0) === 0) ? 'semcarro'
+            : (d.esgotada ? 'esgotada' : 'normal');
+        if (estado === buscaEstadoUi) return;
+        const anterior = buscaEstadoUi;
+        buscaEstadoUi = estado;
+        const tit = document.getElementById('chamandoTitulo');
+        const sub = document.getElementById('chamandoSub');
+        if (estado === 'semcarro') {
+            // Sem carro ativo: para o teatro da bolinha e fala a verdade.
+            pararBolinhaBusca();
+            if (tit) tit.textContent = 'Nenhum motorista online';
+            if (sub) sub.textContent = 'Não há carros ativos agora. Sua busca fica aberta e avisaremos se alguém entrar — ou cancele e tente mais tarde.';
+            statusBuscaRodape('Nenhum online');
+        } else {
+            if (anterior === 'semcarro') iniciarBolinhaBusca();   // voltou carro: retoma a busca visível
+            if (tit) tit.textContent = 'Procurando motorista…';
+            if (sub) sub.textContent = estado === 'esgotada'
+                ? 'Alguns motoristas não puderam aceitar. Seu pedido continua visível para os outros por perto.'
+                : 'Avisamos os motoristas perto de você';
+        }
+    }
+    function iniciarPollFilaStatus() {
+        pararPollFilaStatus();
+        if (!chamandoPedidoId) return;
+        buscaEstadoUi = 'normal';
+        buscaRecusasVistas = null;
+        pollFilaStatus();
+        filaStatusTimer = setInterval(pollFilaStatus, 3000);
+    }
+    function pararPollFilaStatus() {
+        if (filaStatusTimer) { clearInterval(filaStatusTimer); filaStatusTimer = null; }
+        bolinhaAlvoId = null;
+        bolinhaAlvoPos = null;
+        bolinhaAlvoNome = null;
+        bolinhaAlvoEmViagem = false;
+        buscaEstadoUi = 'normal';
+        buscaRecusasVistas = null;
+        try { bolinhaAvisados.clear(); } catch (_) {}
+    }
+    function criarBolinhaOverlay(map, pos) {
+        const ov = new g.maps.OverlayView();
+        ov.pos = pos;
+        ov.onAdd = function () {
+            const d = document.createElement('div');
+            d.className = 'bolinha-busca';
+            d.innerHTML = '<span class="bb-ring"></span><span class="bb-ring"></span><span class="bb-dot"></span>'
+                + '<span class="bb-flag" aria-hidden="true">' + SVG_BANDEIRA_SVG + '</span>';
+            this.div = d;
+            this.getPanes().overlayMouseTarget.appendChild(d);
+        };
+        ov.draw = function () {
+            if (!this.div) return;
+            const pr = this.getProjection();
+            if (!pr) return;
+            const p = pr.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+            if (p) { this.div.style.left = p.x + 'px'; this.div.style.top = p.y + 'px'; }
+        };
+        ov.onRemove = function () { if (this.div) { this.div.remove(); this.div = null; } };
+        ov.setMap(map);
+        return ov;
+    }
+    function aplicarVisualBolinha(st) {
+        const div = st.ov && st.ov.div;
+        if (!div) return;
+        div.classList.toggle('tocando', !!st.tocando);
+        div.classList.toggle('achou', !!st.alvoEncontrado);   // finca a bandeira
+    }
+    // A bolinha chegou no motorista escolhido: garante o aviso (buzina) — ele vê o
+    // pulso com bandeira no mapa dele + push. Uma vez por motorista (sem spam).
+    const bolinhaAvisados = new Set();
+    function avisarMotoristaBolinha(id) {
+        if (id == null) return;
+        const k = String(id);
+        if (bolinhaAvisados.has(k)) return;
+        bolinhaAvisados.add(k);
+        fetchWithAuth('/api/pedidos/' + chamandoPedidoId + '/reofertar-motorista', {
+            method: 'POST', body: JSON.stringify({ motorista_id: +id }),
+        }).catch(() => {});
+    }
+    function statusBuscaRodape(txt) {
+        const el = document.getElementById('chamandoMotoristasTxt');
+        if (el && txt) el.textContent = txt;
+    }
+    function carrosDaBusca() {
+        return Object.values(fleet.markers).filter((it) => it.lastPos && it.m);
+    }
+    function primeiroNome(m) { return ((m && m.nome) || 'o motorista').split(' ')[0]; }
+    function iniciarBolinhaBusca() {
+        pararBolinhaBusca();
+        if (!chamandoPedidoId) return;   // joguinho só na busca por motorista
+        const preparar = () => {
+            if (!chamandoPedidoId) return;   // a busca já fechou enquanto esperava
+            const map = fleet.map;
+            const origem = selPed && selPed.getOrigem ? selPed.getOrigem() : null;
+            // Mapa/origem ainda não prontos: tenta de novo daqui a pouco.
+            if (!g || !map || !origem) { bolinha = { aguardando: setTimeout(preparar, 700) }; return; }
+            const st = {
+                map, origem,
+                pos: { ...origem },
+                ov: null,
+                path: null,        // rota (pontos de rua) que a bolinha está andando
+                segIdx: 0,         // segmento atual da rota
+                destino: null,     // ponto final da rota atual
+                destKey: null,     // 'id:<motorista>' | 'carro:<id>' | 'wander:<ts>'
+                calculando: false, // rota sendo buscada (evita spam)
+                visitados: new Set(),  // carros já "tocados" na rodada (sem alvo de fila)
+                carroAlvoId: null, // carro visível que a bolinha está visitando agora
+                tocandoDesde: 0,   // início do "encostou" (dwell antes de ir pro próximo)
+                tocando: false,    // encostou no carro chamado (pulso "chamando")
+                speedMs: 0.032,    // metros por ms (~32 m/s) — busca ágil
+                ultimo: 0,
+                ultimoPan: 0,
+                raf: 0,
+            };
+            st.ov = criarBolinhaOverlay(map, st.pos);
+            bolinha = st;
+            st.raf = requestAnimationFrame(passoBolinha);
+        };
+        preparar();
+    }
+    // Ponto de "passeio" quando não há motorista sendo chamado: um alvo a algumas
+    // centenas de metros da origem (a bolinha viaja pelo mapa, sempre volta perto).
+    function pontoWanderBolinha(st) {
+        const ang = Math.random() * Math.PI * 2;
+        const R = 0.004 + Math.random() * 0.004;   // ~0,45–0,9 km em graus
+        return { lat: st.origem.lat + Math.sin(ang) * R, lng: st.origem.lng + Math.cos(ang) * R * 1.25 };
+    }
+    // Caminho local até o destino, SEM consumir API de rotas: um "L" (vira uma
+    // esquina) — na malha urbana isso já dá a sensação de seguir ruas. Reseta o
+    // segmento pra 0, então cada alvo só recalcula uma vez (sem jitter).
+    function recomputarPathBolinha(st, destino, key) {
+        const a = { ...st.pos };
+        const b = { lat: +destino.lat, lng: +destino.lng };
+        const corner = Math.random() < 0.5 ? { lat: a.lat, lng: b.lng } : { lat: b.lat, lng: a.lng };
+        st.path = [a, corner, b];
+        st.segIdx = 0;
+        st.destino = b;
+        st.destKey = key;
+    }
+    // Anda "dt" ms pela rota atual, seguindo os segmentos de rua.
+    function avancarNaPath(st, dt) {
+        if (!st.path || st.path.length < 2) return;
+        let restante = st.speedMs * dt;   // metros a percorrer neste frame
+        let guard = 0;
+        while (restante > 0 && st.segIdx < st.path.length - 1 && guard++ < 64) {
+            const b = st.path[st.segIdx + 1];
+            const segLen = distKmGps(st.pos, b) * 1000;
+            if (segLen <= 0.5) { st.segIdx++; st.pos = { ...b }; continue; }
+            if (restante >= segLen) {
+                st.pos = { ...b };
+                st.segIdx++;
+                restante -= segLen;
+            } else {
+                const f = restante / segLen;
+                st.pos = { lat: st.pos.lat + (b.lat - st.pos.lat) * f, lng: st.pos.lng + (b.lng - st.pos.lng) * f };
+                restante = 0;
+            }
+        }
+    }
+    function passoBolinha(agora) {
+        const st = bolinha;
+        if (!st || st.aguardando) return;
+        if (!st.ultimo) st.ultimo = agora;
+        const dt = Math.min(64, agora - st.ultimo);
+        st.ultimo = agora;
+
+        const real = alvoRealDaFila();
+        if (real) {
+            const key = 'id:' + bolinhaAlvoId;
+            const pertoCarro = distKmGps(st.pos, real.lastPos) * 1000 < 35;
+            st.tocando = pertoCarro;
+            st.alvoEncontrado = pertoCarro;   // achou o motorista escolhido → finca a bandeira
+            if (pertoCarro) {
+                // Encostou: gruda de leve no carro (ele pode andar) e espera resposta.
+                st.pos = { lat: st.pos.lat + (real.lastPos.lat - st.pos.lat) * 0.18,
+                           lng: st.pos.lng + (real.lastPos.lng - st.pos.lng) * 0.18 };
+                st.path = null;
+                st.destKey = key;
+                avisarMotoristaBolinha(bolinhaAlvoId);   // garante que o motorista foi avisado
+                statusBuscaRodape(bolinhaAlvoEmViagem
+                    ? primeiroNome(real.m) + ' finalizando outra corrida…'
+                    : 'Chamando ' + primeiroNome(real.m) + '…');
+            } else {
+                const reached = !st.path || st.segIdx >= st.path.length - 1;
+                const alvoMudou = st.destKey !== key;
+                const carroAndou = st.destino && distKmGps(st.destino, real.lastPos) * 1000 > 45;
+                if ((alvoMudou || reached || carroAndou) && !st.calculando) {
+                    recomputarPathBolinha(st, { ...real.lastPos }, key);
+                }
+                avancarNaPath(st, dt);
+                statusBuscaRodape('Indo até ' + primeiroNome(real.m) + '…');
+            }
+        } else {
+            // Sem motorista específico na fila: a bolinha vai até os carros online
+            // visíveis (anda pelas ruas), um a um. Só passeia se NÃO houver carro
+            // nenhum no mapa. Sem alvo real → sem bandeira (ainda não achou).
+            st.alvoEncontrado = false;
+            const carros = carrosDaBusca();
+            if (carros.length) {
+                if (!st.visitados) st.visitados = new Set();
+                let alvoCarro = st.carroAlvoId != null ? fleet.markers[st.carroAlvoId] : null;
+                if (!alvoCarro || !alvoCarro.lastPos) {
+                    let livres = carros.filter((c) => !st.visitados.has(String(c.m.id)));
+                    if (!livres.length) { st.visitados.clear(); livres = carros; }
+                    livres.sort((a, b) => distKmGps(st.pos, a.lastPos) - distKmGps(st.pos, b.lastPos));
+                    alvoCarro = livres[0];
+                    st.carroAlvoId = String(alvoCarro.m.id);
+                    st.path = null;
+                }
+                const pertoCarro = distKmGps(st.pos, alvoCarro.lastPos) * 1000 < 35;
+                if (pertoCarro) {
+                    st.tocando = true;
+                    if (!st.tocandoDesde) st.tocandoDesde = agora;
+                    st.pos = { lat: st.pos.lat + (alvoCarro.lastPos.lat - st.pos.lat) * 0.18,
+                               lng: st.pos.lng + (alvoCarro.lastPos.lng - st.pos.lng) * 0.18 };
+                    // Encostou um instante ("chamando") e parte pro próximo carro.
+                    if (agora - st.tocandoDesde > 1200) {
+                        st.visitados.add(String(alvoCarro.m.id));
+                        st.carroAlvoId = null;
+                        st.path = null;
+                        st.tocandoDesde = 0;
+                    }
+                } else {
+                    st.tocando = false;
+                    st.tocandoDesde = 0;
+                    const key = 'carro:' + st.carroAlvoId;
+                    const reached = !st.path || st.segIdx >= st.path.length - 1;
+                    const carroAndou = st.destino && distKmGps(st.destino, alvoCarro.lastPos) * 1000 > 45;
+                    if ((st.destKey !== key || reached || carroAndou) && !st.calculando) {
+                        recomputarPathBolinha(st, { ...alvoCarro.lastPos }, key);
+                    }
+                    avancarNaPath(st, dt);
+                }
+                statusBuscaRodape(carros.length + ' por perto');
+            } else {
+                // Mapa vazio: a bolinha viaja pelo mapa (passeio por ruas).
+                st.tocando = false;
+                st.carroAlvoId = null;
+                const reached = !st.path || st.segIdx >= st.path.length - 1;
+                const eraAlvo = st.destKey && !st.destKey.startsWith('wander');
+                if ((reached || eraAlvo) && !st.calculando) {
+                    recomputarPathBolinha(st, pontoWanderBolinha(st), 'wander:' + agora);
+                }
+                avancarNaPath(st, dt);
+                statusBuscaRodape('Procurando motoristas…');
+            }
+        }
+
+        // A tela acompanha a bolinha (pan suave, sem brigar com cada frame).
+        if (agora - st.ultimoPan > 420) {
+            try { st.map.panTo(st.pos); } catch (_) {}
+            st.ultimoPan = agora;
+        }
+
+        st.ov.pos = st.pos;
+        st.ov.draw();
+        aplicarVisualBolinha(st);
+        st.raf = requestAnimationFrame(passoBolinha);
+    }
+    function pararBolinhaBusca() {
+        if (!bolinha) return;
+        if (bolinha.aguardando) clearTimeout(bolinha.aguardando);
+        if (bolinha.raf) cancelAnimationFrame(bolinha.raf);
+        if (bolinha.ov) bolinha.ov.setMap(null);
+        bolinha = null;
+    }
+
+    async function cancelarChamando() {
+        const prop = chamandoId, ped = chamandoPedidoId;
+        fecharChamando();
+        if (prop) { propostasTratadas.add(prop); await fetchWithAuth('/api/propostas/' + prop + '/cancelar', { method: 'POST' }).catch(() => {}); }
+        if (ped) { await fetchWithAuth('/api/pedidos/' + ped, { method: 'DELETE' }).catch(() => {}); }
+        if (selPed) selPed.limparRota();   // cancelou: o mapa não fica com a rota presa
+        msg('Chamada cancelada.');
+        loadPropostas();
+    }
+
+    /* -------- passageiro clica no carro no mapa e pede a carona -------- */
+    let carroSel = null;
+    function itemListaParaMotorista(it) {
+        return {
+            id: it.id,
+            nome: it.nome,
+            motorista_nome: it.nome,
+            empresa_nome: it.empresa || it.empresa_nome || null,
+            carona_id: it.caronaId,
+            placa: it.placa,
+            tag: it.tag,
+            foto_carro_url: it.foto,
+            selfie_url: it.selfie,
+            destino_texto: it.destino || it.destinoMotorista || null,
+            carona_vagas: it.vagas,
+            vagas: it.vagas,
+            compatRota: it.compatRota,
+            encaixeTexto: it.encaixeTexto || null,
+            dist: it.dist,
+            lat: it.lat,
+            lng: it.lng,
+        };
+    }
+    function abrirPerfilDaLista(id) {
+        if (!selPed?.getDestino?.()) {
+            exigirDestinoPassageiro('ver o perfil do motorista');
+            return;
+        }
+        const it = ultimaListaMotoristas.find((x) => +x.id === +id);
+        if (!it) return;
+        const fleetItem = fleet.markers[id]?.m;
+        const base = itemListaParaMotorista(it);
+        if (fleetItem) {
+            base.lat = fleetItem.lat;
+            base.lng = fleetItem.lng;
+            base.selfie_url = fleetItem.selfie_url;
+            base.origem_texto = fleetItem.origem_texto;
+            base.origem_lat = fleetItem.origem_lat;
+            base.origem_lng = fleetItem.origem_lng;
+        }
+        mostrarCaronaDoCarro(base);
+    }
+    function mostrarCaronaDoCarro(m) {
+        if (!selPed?.getDestino?.()) {
+            exigirDestinoPassageiro('ver e falar com motoristas');
+            return;
+        }
+        carroSel = m;
+        const temRota = !!m.carona_id;
+        const encaixe = m.compatRota === 'encaixe';
+        const parcial = m.compatRota === 'parcial';
+        const proximo = m.compatRota === 'proximo';
+        const badge = document.getElementById('carroBadge');
+        if (badge) {
+            let label = 'Motorista por perto';
+            let mod = '';
+            if (temRota) {
+                if (encaixe) { label = m.encaixeTexto ? `Deixa você em ${m.encaixeTexto}` : 'Passa num ponto do caminho'; mod = ' drv-badge--parcial'; }
+                else if (parcial) { label = 'Rota parcial'; mod = ' drv-badge--parcial'; }
+                else if (proximo) { label = 'Passa perto'; mod = ' drv-badge--proximo'; }
+                else { label = 'Rota publicada'; mod = ' drv-badge--rota'; }
+            }
+            badge.className = 'drv-badge' + mod;
+            badge.textContent = label;
+        }
+        const nome = m.nome || m.motorista_nome || 'Motorista';
+        document.getElementById('carroNome').textContent = nome;
+        const role = document.getElementById('carroRole');
+        if (role) {
+            const emp = m.empresa_nome && m.empresa_nome !== nome ? m.empresa_nome + ' · ' : '';
+            role.textContent = emp + 'Parceiro VAP';
+        }
+        const vagas = m.carona_vagas || m.vagas || 1;
+        const stats = document.getElementById('carroStats');
+        if (stats) {
+            stats.textContent = temRota
+                ? `Verificado · ${vagas} vaga(s)`
+                : 'Verificado · combine o destino';
+        }
+        const selfie = document.getElementById('carroSelfie');
+        const iniciais = document.getElementById('carroIniciais');
+        if (m.selfie_url) {
+            selfie.src = m.selfie_url;
+            selfie.style.display = 'block';
+            if (iniciais) iniciais.style.display = 'none';
+        } else {
+            selfie.style.display = 'none';
+            if (iniciais) {
+                iniciais.textContent = iniciaisMotorista(nome);
+                iniciais.style.display = 'flex';
+            }
+        }
+        const veiculo = document.getElementById('carroVeiculo');
+        if (veiculo) veiculo.textContent = m.tag || 'Veículo';
+        const sub = document.getElementById('carroSub');
+        if (sub) {
+            sub.textContent = temRota && m.destino_texto
+                ? `Indo para ${m.destino_texto}`
+                : (m.tag && m.placa ? 'Habilitado na plataforma' : '');
+        }
+        const placaWrap = document.getElementById('carroPlacaWrap');
+        const placa = document.getElementById('carroPlaca');
+        if (placaWrap && placa) {
+            if (m.placa) {
+                placa.textContent = m.placa;
+                placaWrap.style.display = 'block';
+            } else {
+                placaWrap.style.display = 'none';
+            }
+        }
+        const origem = selPed?.getOrigem?.();
+        const eta = document.getElementById('carroEta');
+        if (eta) {
+            const etaTxt = textoDistanciaEta(origem, m);
+            eta.innerHTML = etaTxt;
+            eta.style.display = etaTxt ? 'flex' : 'none';
+        }
+        const rotaEl = document.getElementById('carroRota');
+        if (rotaEl) {
+            rotaEl.innerHTML = temRota
+                ? `<b>Destino:</b> ${esc(m.destino_texto || 'no mapa')}`
+                : 'Use WhatsApp, ligação ou buzina para combinar.';
+        }
+        const foto = document.getElementById('carroFoto');
+        const fotoPh = document.getElementById('carroFotoPh');
+        const veicBox = document.querySelector('.drv-vehicle');
+        if (m.foto_carro_url) {
+            foto.src = m.foto_carro_url;
+            foto.style.display = 'block';
+            if (fotoPh) fotoPh.style.display = 'none';
+            if (veicBox) veicBox.classList.remove('drv-vehicle--sem-foto');
+        } else {
+            foto.style.display = 'none';
+            // Sem foto: não mostra caixa cinza vazia (cansa a vista)
+            if (fotoPh) fotoPh.style.display = 'none';
+            if (veicBox) veicBox.classList.add('drv-vehicle--sem-foto');
+        }
+        const btnPedir = document.getElementById('btnPedirCarroMapa');
+        const destMotTxt = m.destino_texto || 'destino do motorista';
+        // Rota total → Solicitar. Parcial → pedir até a parada. Amarelo/próximo → só contato.
+        let mostrarSolicitar = false;
+        let labelSolicitar = 'Solicitar vaga';
+        if (temRota && !proximo) {
+            if (parcial) {
+                mostrarSolicitar = true;
+                labelSolicitar = 'Pedir até ' + destMotTxt;
+            } else {
+                mostrarSolicitar = true;
+                labelSolicitar = 'Solicitar vaga';
+            }
+        }
+        if (btnPedir) {
+            btnPedir.style.display = mostrarSolicitar ? 'block' : 'none';
+            btnPedir.textContent = labelSolicitar;
+        }
+        // WhatsApp sempre presente: botões completos sem CTA; com CTA "Solicitar
+        // vaga", fica só o ícone discreto do WhatsApp ao lado do botão.
+        document.getElementById('carroContatos').innerHTML =
+            (!temRota || parcial || proximo)
+                ? botoesContatoPerfil(m.id)
+                : `<div class="drv-whats-discreto">${btnWhatsDiscreto(m.id)}<span class="drv-whats-hint">Combinar pelo WhatsApp</span></div>`;
+        document.getElementById('modalCarro').style.display = 'flex';
+    }
+    function fecharCarro() {
+        document.getElementById('modalCarro').style.display = 'none';
+    }
+    function fecharCarroLimpo(aviso) {
+        fecharCarro();
+        carroSel = null;
+        if (aviso) msg(aviso);
+    }
+    // Modal do mapa: fecha se o motorista saiu ou cancelou a carona publicada.
+    function sincronizarModalCarroAoVivo(lista, idsRemovidos) {
+        const modal = document.getElementById('modalCarro');
+        if (!modal || modal.style.display !== 'flex' || !carroSel) return;
+        if (idsRemovidos && idsRemovidos.some((id) => +id === +carroSel.id)) {
+            fecharCarroLimpo('Este motorista não está mais disponível.');
+            const dest = selPed?.getDestino?.();
+            if (dest) carregarCaronasDestino(dest);
+            return;
+        }
+        const m = (Array.isArray(lista) ? lista : []).find((x) => +x.id === +carroSel.id);
+        if (!m) {
+            fecharCarroLimpo('Este motorista não está mais disponível.');
+            const dest = selPed?.getDestino?.();
+            if (dest) carregarCaronasDestino(dest);
+            return;
+        }
+        if (carroSel.carona_id && !m.carona_id) {
+            fecharCarroLimpo('Esta carona foi encerrada pelo motorista.');
+            const dest = selPed?.getDestino?.();
+            if (dest) carregarCaronasDestino(dest);
+        }
+    }
+    function sincronizarModalCarroLista(indoDestino) {
+        const modal = document.getElementById('modalCarro');
+        if (!modal || modal.style.display !== 'flex' || !carroSel?.carona_id) return;
+        const ainda = (Array.isArray(indoDestino) ? indoDestino : [])
+            .some((it) => +it.id === +carroSel.id && it.caronaId);
+        if (!ainda) fecharCarroLimpo('Esta carona foi encerrada pelo motorista.');
+    }
+    async function pedirCaronaDoCarro() {
+        const m = carroSel;
+        if (!m || !m.carona_id) {
+            fecharCarroLimpo('Essa carona não está mais disponível.');
+            return;
+        }
+        fecharCarro();
+        await pedirVaga(m.carona_id, m.carona_vagas || m.vagas || 1);
+    }
+
+    /* -------- modo motorista online (sem destino obrigatório) -------- */
+    let motoristaOnlineModo = false;
+    let motoristaModoDestino = false;
+    let motoristaCaronaId = null;
+    let publicandoCaronaAuto = false;
+    let wakeLockRef = null;
+
+    function lerVagasOfe() {
+        return Math.min(6, Math.max(1, +document.getElementById('vagasOfe')?.value || 1));
+    }
+
+    function registrarEventoUso(evento, detalhes) {
+        fetchWithAuth('/api/eventos-uso', {
+            method: 'POST',
+            body: JSON.stringify({ evento, detalhes: detalhes || null }),
+        }).catch(() => {});
+    }
+
+    function atualizarIndicadorModoOperante() {
+        const el = document.getElementById('indicadorModoMotorista');
+        if (!el) return;
+        const ehMotorista = document.getElementById('modoTitulo')?.textContent === 'Motorista';
+        // Só acende quando está ONLINE de verdade (não só habilitado no perfil).
+        if (!ehMotorista || !motoristaOnlineModo) {
+            el.style.display = 'none';
+            return;
+        }
+        el.style.display = 'inline-block';
+        el.removeAttribute('aria-hidden');
+        const modoDestino = !!motoristaModoDestino;
+        el.classList.toggle('modo-indicador--geral', !modoDestino);
+        el.classList.toggle('modo-indicador--destino', modoDestino);
+    }
+
+    // Motorista já online: ao escolher destino no mapa, publica (ou republica) a
+    // carona — senão o servidor mantém só online_desde e o passageiro não vê rota.
+    async function onDestinoMotorista(dest) {
+        atualizarIndicadorModoOperante();
+        if (!dest || !motoristaOnlineModo || publicandoCaronaAuto) return;
+        publicandoCaronaAuto = true;
+        try {
+            if (motoristaCaronaId) {
+                await fetchWithAuth('/api/caronas/' + motoristaCaronaId, { method: 'DELETE' }).catch(() => {});
+                motoristaCaronaId = null;
+                motoristaModoDestino = false;
+            }
+            await oferecerCarona();
+        } finally {
+            publicandoCaronaAuto = false;
+            atualizarUiMotoristaOnline();
+        }
+    }
+
+    // Toggle deslizante: UM botão. Knob à esquerda = offline, à direita = online.
+    // Arraste (ou toque) o knob p/ o outro lado e ele FICA lá. Chama onToggle()
+    // quando muda de lado. Robusto a interrupções (pointercancel/blur/aba oculta).
+    function initSlideToggle(track, knob, onToggle) {
+        if (!track || !knob || track._slideReady) return;
+        track._slideReady = true;
+        let dragging = false, startX = 0, moved = 0, startLeft = 0, max = 0, pid = null;
+        const maxX = () => Math.max(0, track.clientWidth - knob.offsetWidth - 10);
+        const ligado = () => track.classList.contains('online');
+        const posAtual = () => (ligado() ? maxX() : 0);
+        let suprimirClickAte = 0;   // engole o "click" sintético que segue um toque no knob
+        const down = (e) => {
+            if (track.classList.contains('processing')) return;
+            suprimirClickAte = Date.now() + 500;
+            dragging = true; moved = 0; max = maxX();
+            startX = (e.touches ? e.touches[0].clientX : e.clientX);
+            startLeft = posAtual();
+            track.classList.add('dragging');
+            pid = e.pointerId;
+            if (pid != null && knob.setPointerCapture) { try { knob.setPointerCapture(pid); } catch (_) {} }
+        };
+        const move = (e) => {
+            if (!dragging) return;
+            const cx = (e.touches ? e.touches[0].clientX : e.clientX);
+            moved = cx - startX;
+            const v = Math.min(max, Math.max(0, startLeft + moved));
+            knob.style.left = (5 + v) + 'px';
+            if (e.cancelable) e.preventDefault();
+        };
+        const finalizar = async (irParaDireita) => {
+            const querLigar = irParaDireita;
+            const flip = querLigar !== ligado();
+            track.classList.remove('dragging');
+            if (!flip) { knob.style.left = ''; return; }   // volta pro lado atual (transição CSS)
+            tocSeco();
+            vibradinha();
+            // Otimista: prende o knob no lado alvo enquanto a ação roda.
+            knob.style.left = querLigar ? (5 + maxX()) + 'px' : '5px';
+            track.classList.add('processing');
+            try { await onToggle(); } catch (_) {}
+            track.classList.remove('processing');
+            knob.style.left = '';   // estado real definido em atualizarUiMotoristaOnline()
+        };
+        const up = () => {
+            if (!dragging) return;
+            dragging = false;
+            const v = Math.min(max, Math.max(0, startLeft + moved));
+            // Toque (quase sem arrasto) inverte; arrasto decide pelo lado onde soltou.
+            const irDireita = Math.abs(moved) < 6 ? !ligado() : (v >= max / 2);
+            finalizar(irDireita);
+        };
+        const cancel = () => { if (!dragging) return; dragging = false; track.classList.remove('dragging'); knob.style.left = ''; };
+        knob.addEventListener('pointerdown', down);
+        knob.addEventListener('pointermove', move);
+        knob.addEventListener('pointerup', up);
+        knob.addEventListener('pointercancel', cancel);
+        if (!window.PointerEvent) {
+            knob.addEventListener('touchstart', down, { passive: true });
+            knob.addEventListener('touchmove', move, { passive: false });
+            window.addEventListener('touchend', up);
+            window.addEventListener('touchcancel', cancel);
+            knob.addEventListener('mousedown', down);
+            window.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', up);
+        }
+        window.addEventListener('blur', cancel);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
+        track.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !track.classList.contains('processing')) {
+                e.preventDefault(); finalizar(!ligado());
+            }
+        });
+        // Clicar em qualquer ponto da barra (não só arrastar o knob) alterna o estado.
+        // O flag suprimirClickAte evita alternar duas vezes quando o click é apenas o
+        // evento sintético que o navegador dispara logo após um toque no knob.
+        track.addEventListener('click', () => {
+            if (track.classList.contains('processing')) return;
+            if (Date.now() < suprimirClickAte) return;
+            finalizar(!ligado());
+        });
+    }
+
+    function atualizarUiMotoristaOnline() {
+        const btn = document.getElementById('btnCtaOferecer');
+        const st = document.getElementById('statusMotoristaOnline');
+        const vagasWrap = document.getElementById('vagasOfeWrap');
+        const vagasEl = document.getElementById('vagasOfe');
+        const hint = document.getElementById('hintMotoristaOnline');
+        const tituloSheet = document.querySelector('#acaoSheetOfe .acao-titulo');
+        if (tituloSheet) tituloSheet.textContent = motoristaOnlineModo ? '' : 'Ficar online';
+        if (hint) hint.style.display = motoristaOnlineModo ? 'none' : '';
+        if (btn) {
+            btn.textContent = motoristaOnlineModo ? 'Ficar offline' : 'Ficar online';
+            btn.classList.toggle('btn-danger', motoristaOnlineModo);
+            btn.classList.toggle('btn-primary', !motoristaOnlineModo);
+            btn.disabled = false;
+        }
+        // Toggle deslizante: knob à esquerda=Offline, à direita=Online (e fica lá).
+        const slide = document.getElementById('slideOferecer');
+        const slideLabel = document.getElementById('slideOferecerLabel');
+        if (slide) {
+            slide.classList.toggle('online', motoristaOnlineModo);
+            slide.setAttribute('aria-checked', motoristaOnlineModo ? 'true' : 'false');
+            const k = document.getElementById('slideOferecerKnob');
+            if (k) k.style.left = '';   // posição final vem do CSS (.online)
+        }
+        if (slideLabel) slideLabel.textContent = motoristaOnlineModo ? 'Online' : 'Offline';
+        // Vagas ficam editáveis só offline; online o valor já foi publicado.
+        if (vagasWrap) vagasWrap.style.display = motoristaOnlineModo ? 'none' : '';
+        if (vagasEl) vagasEl.disabled = motoristaOnlineModo;
+        if (st) {
+            const tit = st.querySelector('.ios-banner__title');
+            const sub = st.querySelector('.ios-banner__sub');
+            // Com destino a barra de alcance já diz tudo — some com o box redundante.
+            if (!motoristaOnlineModo || motoristaModoDestino) {
+                st.style.display = 'none';
+            } else {
+                st.style.display = 'flex';
+                st.classList.remove('ios-banner--destino');
+                st.classList.add('ios-banner--amarelo');
+                if (tit) tit.textContent = 'Recebendo todas as chamadas';
+                if (sub) {
+                    sub.style.display = '';
+                    sub.textContent = 'Visível para quem pediu carona perto de você (até 600 m)';
+                }
+            }
+        }
+        atualizarIndicadorModoOperante();
+    }
+
+    async function ativarWakeLock() {
+        try {
+            if ('wakeLock' in navigator && !wakeLockRef) wakeLockRef = await navigator.wakeLock.request('screen');
+        } catch (_) {}
+    }
+
+    async function liberarWakeLock() {
+        try {
+            if (wakeLockRef) { await wakeLockRef.release(); wakeLockRef = null; }
+        } catch (_) {}
+    }
+
+    async function refreshModoMotoristaOnline() {
+        if (!motoristaOnlineModo || !selOfe) return;
+        try {
+            const pos = await obterLocalizacao();
+            await fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pos.lat, lng: pos.lng, disponivel: true }),
+            });
+        } catch (_) {}
+        if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
+        iniciarPedidosAoVivo(selOfe.map);
+    }
+
+    async function entrarModoMotoristaOnline() {
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para continuar', 'error');
+            abrirPerfil();
+            return;
+        }
+        if (!selOfe) await initMapOferecer();
+        const dest = selOfe.getDestino();
+        if (dest) return oferecerCarona();
+        if (!selOfe.origemConfiavel()) {
+            selOfe.recentrar();
+            return msg('Ative sua localização (GPS) para ficar online.', 'error');
+        }
+        const soltar = travarBotao('btnCtaOferecer', 'Entrando…');
+        if (!soltar) return;
+        try {
+            const origem = selOfe.getOrigem();
+            const r = await fetchWithAuth('/api/motorista/online', {
+                method: 'POST',
+                body: JSON.stringify({ lat: origem.lat, lng: origem.lng, vagas: lerVagasOfe() }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            motoristaModoDestino = false;
+            motoristaCaronaId = null;
+            motoristaOnlineModo = true;
+            atualizarUiMotoristaOnline();
+            iniciarBroadcastLocalizacao(true);
+            // Garante GPS fresco no banco (senão some do mapa do passageiro).
+            await enviarLocalizacaoAgora(true);
+            acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
+            iniciarPedidosAoVivo(selOfe.map);
+            iniciarContatosAoVivo(selOfe.map);
+            await ativarWakeLock();
+            registrarPush();
+            registrarEventoUso('motorista_modo_geral', { vagas: lerVagasOfe() });
+        } catch (_) {
+            msg('Erro de conexão. Tente novamente.', 'error');
+        } finally {
+            soltar();
+            atualizarUiMotoristaOnline();
+        }
+    }
+
+    async function sairModoMotoristaOnline(silencioso) {
+        if (motoristaCaronaId) {
+            await fetchWithAuth('/api/caronas/' + motoristaCaronaId, { method: 'DELETE' }).catch(() => {});
+            motoristaCaronaId = null;
+        }
+        motoristaModoDestino = false;
+        motoristaOnlineModo = false;
+        atualizarUiMotoristaOnline();
+        pararContatosAoVivo();
+        // Para o broadcast ANTES do DELETE: senão o próximo tick (a cada 8s) reenvia
+        // disponivel=TRUE e o motorista volta a ficar "online" — caindo no modo
+        // motorista em todo login, mesmo depois de Encerrar.
+        pararBroadcastLocalizacao();
+        await fetchWithAuth('/api/motorista/online', { method: 'DELETE' }).catch(() => {});
+        if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
+        Object.values(pedidoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
+        pedidoFleet.markers = {};
+        limparRotasPassageiroMotorista();
+        if (selOfe && selOfe.limparRota) selOfe.limparRota();
+        atualizarIndicadorModoOperante();
+        await liberarWakeLock();
+    }
+
+    async function toggleModoMotoristaOnline() {
+        if (motoristaOnlineModo) await sairModoMotoristaOnline(false);
+        else await entrarModoMotoristaOnline();
+    }
+
+    /* -------- oferecer carona com destino (visível em 10 km) -------- */
+    async function oferecerCarona() {
+        if (!user.telefone) return msg('Adicione seu WhatsApp no perfil para continuar', 'error');
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para continuar', 'error');
+            abrirPerfil();
+            return;
+        }
+        const dest = selOfe && selOfe.getDestino();
+        if (!dest) return msg('Defina um destino no mapa', 'error');
+        if (!selOfe.origemConfiavel()) {
+            selOfe.recentrar();
+            return msg('Ative sua localização (GPS) para ficar online.', 'error');
+        }
+        const origem = selOfe.getOrigem();
+        const soltar = travarBotao('btnCtaOferecer', 'Publicando…');
+        if (!soltar) return;
+        try {
+            const origemTexto = await geocodeReverso(origem);
+            const vagas = lerVagasOfe();
+            const body = {
+                origem_lat: origem.lat, origem_lng: origem.lng, origem_texto: origemTexto || null,
+                destino_lat: dest.lat, destino_lng: dest.lng, destino_texto: dest.texto,
+                horario: null, vagas, raio_km: lerAlcanceOfe(),
+            };
+            const r = await fetchWithAuth('/api/caronas', { method: 'POST', body: JSON.stringify(body) });
+            const d = await r.json();
+            if (!r.ok) return msg(d.error || 'Erro', 'error');
+            motoristaCaronaId = d.id;
+            motoristaModoDestino = true;
+            motoristaOnlineModo = true;
+            atualizarUiMotoristaOnline();
+            iniciarBroadcastLocalizacao(true);
+            acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
+            iniciarPedidosAoVivo(selOfe.map);
+            iniciarContatosAoVivo(selOfe.map);
+            await ativarWakeLock();
+            registrarPush();
+            registrarEventoUso('motorista_modo_destino', { vagas, destino: dest.texto || null });
+            // Não colapsa na hora: deixa a barra de alcance à mão. Se não mexerem em
+            // ~10 s, agendarDescerSheet() (via barra visível) baixa a alça sozinho.
+            agendarDescerSheet();
+        } catch (e) { msg('Erro de conexão. Tente novamente.', 'error'); }
+        finally {
+            soltar();
+            atualizarUiMotoristaOnline();
+        }
+    }
+    async function verificarRetomarMotorista() {
+        try {
+            const r = await fetchWithAuth('/api/motorista/online');
+            if (!r.ok) return;
+            const st = await r.json();
+            if (!st.online) return;
+            if (!selOfe) await initMapOferecer();
+            if (st.vagas) document.getElementById('vagasOfe').value = st.vagas;
+            motoristaCaronaId = st.carona_id || null;
+            motoristaModoDestino = !!st.carona_id;
+            motoristaOnlineModo = true;
+            if (motoristaModoDestino) {
+                const r2 = await fetchWithAuth('/api/caronas?meus=1');
+                if (r2.ok) {
+                    const c = (await r2.json())[0];
+                    if (c && c.destino_lat != null) {
+                        selOfe.irPara({ lat: +c.destino_lat, lng: +c.destino_lng }, c.destino_texto || '');
+                    }
+                }
+            }
+            atualizarUiMotoristaOnline();
+            iniciarBroadcastLocalizacao(true);
+            acompanharProprioCarro(selOfe.map, selOfe.marcadorCarro);
+            iniciarPedidosAoVivo(selOfe.map);
+            iniciarContatosAoVivo(selOfe.map);
+            await ativarWakeLock();
+        } catch (_) {}
+    }
+
+    function pedidoAgendadoNoFuturo(p) {
+        const d = parseHorarioLocal(p?.horario);
+        if (!d) return false;
+        // Só entra no ar na hora marcada — sem margem de 1 min adiantada.
+        return d.getTime() > Date.now();
+    }
+
+    function fmtAgendamentoCurto(p) {
+        const d = parseHorarioLocal(p?.horario);
+        if (!d) return fmtHorario(p?.horario);
+        return d.toLocaleString('pt-BR', {
+            weekday: 'short', day: '2-digit', month: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        });
+    }
+
+    async function fetchMeusPedidosAbertos() {
+        const r = await fetchWithAuth('/api/pedidos?meus=1');
+        if (!r || !r.ok) return [];
+        return await r.json();
+    }
+
+    async function atualizarUiAgendamentos(pedsPre) {
+        const peds = pedsPre || await fetchMeusPedidosAbertos();
+        const agendados = peds.filter(pedidoAgendadoNoFuturo);
+        const n = agendados.length;
+        const banner = document.getElementById('bannerAgendamentos');
+        const txt = document.getElementById('bannerAgendamentosTxt');
+        const badge = document.getElementById('badgeAgendamentos');
+        const menu = document.getElementById('menuAgendamentos');
+        if (document.getElementById('modoTitulo')?.textContent === 'Passageiro') {
+            if (menu) menu.style.display = 'block';
+        }
+        if (banner) banner.style.display = n ? 'flex' : 'none';
+        if (txt) {
+            txt.textContent = n === 1
+                ? ('Agendada: ' + fmtAgendamentoCurto(agendados[0]))
+                : (n + ' caronas agendadas — toque para ver');
+        }
+        if (badge) {
+            badge.style.display = n ? 'inline-block' : 'none';
+            badge.textContent = n > 9 ? '9+' : String(n);
+        }
+        if (document.getElementById('painelAgendamentos')?.style.display === 'flex') {
+            renderListaAgendamentos(agendados);
+        }
+        return peds;
+    }
+
+    function abrirPainelAgendamentos() {
+        fecharMenu();
+        // Edição que ficou aberta de outra visita não pode travar o refresh da lista.
+        document.querySelectorAll('#listaAgendamentos .agenda-card.editing')
+            .forEach((el) => el.classList.remove('editing'));
+        document.getElementById('painelAgendamentos').style.display = 'flex';
+        loadAgendamentos();
+    }
+
+    async function loadAgendamentos() {
+        const div = document.getElementById('listaAgendamentos');
+        if (!div) return;
+        try {
+            const peds = await fetchMeusPedidosAbertos();
+            const agendados = peds.filter(pedidoAgendadoNoFuturo);
+            renderListaAgendamentos(agendados);
+            await atualizarUiAgendamentos(peds);
+        } catch (_) {
+            div.innerHTML = '<p class="cam-hint">Não foi possível carregar. Tente de novo.</p>';
+        }
+    }
+
+    function renderListaAgendamentos(arr) {
+        const div = document.getElementById('listaAgendamentos');
+        if (!div) return;
+        // Alguém editando um card? NÃO re-renderiza: o poll de 8s reconstruía a
+        // lista inteira e fechava/zerava o formulário no meio da digitação.
+        if (div.querySelector('.agenda-card.editing')) return;
+        if (!arr.length) {
+            div.innerHTML = '<p class="cam-hint">Nenhum agendamento futuro. Escolha destino e horário no mapa para agendar.</p>';
+            return;
+        }
+        div.innerHTML = arr.map(cardAgendamento).join('');
+    }
+
+    function cardAgendamento(p) {
+        const hid = 'agendaH_' + p.id;
+        const pid = 'agendaP_' + p.id;
+        const valH = (() => {
+            const d = parseHorarioLocal(p.horario);
+            return d ? formatDatetimeLocal(d) : '';
+        })();
+        return `<div class="agenda-card" id="agendaCard_${p.id}">
+            <strong>${esc(p.destino_texto || 'Destino no mapa')}</strong>
+            <div class="agenda-card__meta">${ICN.clock} ${esc(fmtAgendamentoCurto(p))} • ${p.pessoas || 1} pessoa(s)</div>
+            <small class="cam-hint">Motoristas serão avisados na hora marcada.</small>
+            <div class="agenda-card__acoes">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditarAgendamento(${p.id})">Editar</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="excluirAgendamento(${p.id})">Excluir</button>
+            </div>
+            <div class="agenda-card__edit">
+                <div class="form-group">
+                    <label for="${hid}">Novo horário</label>
+                    <input type="datetime-local" id="${hid}" step="300" value="${esc(valH)}">
+                </div>
+                <div class="form-group">
+                    <label for="${pid}">Pessoas</label>
+                    <input type="number" id="${pid}" min="1" max="6" value="${p.pessoas || 1}" inputmode="numeric">
+                </div>
+                <button type="button" class="btn btn-primary btn-sm btn-block" onclick="salvarAgendamento(${p.id})">Salvar</button>
+            </div>
+        </div>`;
+    }
+
+    function toggleEditarAgendamento(id) {
+        document.getElementById('agendaCard_' + id)?.classList.toggle('editing');
+    }
+
+    async function salvarAgendamento(id) {
+        const h = document.getElementById('agendaH_' + id)?.value?.trim();
+        const pessoas = +document.getElementById('agendaP_' + id)?.value || 1;
+        if (!h) return msg('Informe o horário.', 'error');
+        const local = parseDatetimeLocalValue(h);
+        if (!local || local.getTime() <= Date.now()) {
+            return msg('Escolha um horário futuro.', 'error');
+        }
+        const r = await fetchWithAuth('/api/pedidos/' + id, {
+            method: 'PATCH',
+            body: JSON.stringify({ horario: h, pessoas }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao salvar', 'error');
+        msg('Agendamento atualizado.');
+        // Fecha a edição ANTES de recarregar: com um card em edição a lista não re-renderiza.
+        document.getElementById('agendaCard_' + id)?.classList.remove('editing');
+        await loadAgendamentos();
+    }
+
+    async function excluirAgendamento(id) {
+        if (!confirm('Cancelar este agendamento?')) return;
+        const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao excluir', 'error');
+        msg('Agendamento cancelado.');
+        // Tira o card excluído na hora — mesmo se outro card estiver em edição
+        // (nesse caso a lista não re-renderiza para não perder a digitação).
+        document.getElementById('agendaCard_' + id)?.remove();
+        await loadAgendamentos();
+        await atualizarUiAgendamentos();
+    }
+
+    async function verificarRetomarPassageiro() {
+        try {
+            const peds = await fetchMeusPedidosAbertos();
+            await atualizarUiAgendamentos(peds);
+            const aoVivo = peds.find((p) => !pedidoAgendadoNoFuturo(p));
+            if (aoVivo) {
+                mostrarChamando({ pedidoId: aoVivo.id });
+                return;
+            }
+            // Só agendamentos futuros: mapa livre para novo pedido (não prende na rota).
+            if (peds.some(pedidoAgendadoNoFuturo) && selPed?.getDestino?.()) {
+                resetMapaParaNovoPedido();
+            }
+        } catch (_) {}
+    }
+
+    async function verificarPedidoAgendadoEntrouNoAr() {
+        if (chamandoPedidoId || chamandoId) return;
+        if (document.getElementById('modoTitulo')?.textContent !== 'Passageiro') return;
+        try {
+            const peds = await fetchMeusPedidosAbertos();
+            await atualizarUiAgendamentos(peds);
+            const aoVivo = peds.find((p) => !pedidoAgendadoNoFuturo(p));
+            if (!aoVivo) return;
+            mostrarChamando({ pedidoId: aoVivo.id });
+        } catch (_) {}
+    }
+
+    /* -------- propostas -------- */
+    const ehMotorista = (p) => (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
+    async function loadPropostas() {
+        // Tolera rede instável/offline: se falhar, mantém o que já está na tela.
+        try {
+            const r = await fetchWithAuth('/api/propostas');
+            if (!r || !r.ok) return;
+            const props = await r.json();
+            renderProp('listaPropMotorista', props.filter(ehMotorista));
+            renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)));
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    // Meus pedidos abertos: ficam visíveis "aguardando motorista" até casar ou o
+    // passageiro cancelar — não somem quando não há ninguém na rota.
+    async function loadMeusPedidos() {
+        const div = document.getElementById('listaMeusPedidos');
+        if (!div) return;
+        try {
+            const r = await fetchWithAuth('/api/pedidos?meus=1');
+            if (!r || !r.ok) return;
+            const peds = await r.json();
+            div.innerHTML = peds.map(cardMeuPedido).join('');
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+    function cardMeuPedido(p) {
+        const ofertas = Number(p.ofertas) || 0;
+        const status = ofertas > 0
+            ? `<span class="badge badge-ativo">${ofertas} oferta(s) — veja abaixo</span>`
+            : (pedidoAgendadoNoFuturo(p)
+                ? '<small>Agendado — motoristas serão avisados na hora marcada.</small>'
+                : '<small>Aguardando um motorista na sua rota…</small>');
+        return `<div class="ride-item">
+            <div class="ride-info">
+                <strong>Solicitação ativa</strong><br>
+                <small>${ICN.pin} ${esc(p.destino_texto || 'Destino no mapa')} • ${ICN.clock} ${fmtHorario(p.horario)} • ${p.pessoas || 1} pessoa(s)</small>
+                <br>${status}
+            </div>
+            <div class="ride-actions"><button class="btn btn-danger btn-sm" onclick="cancelarPedido(${p.id})">Cancelar</button></div>
+        </div>`;
+    }
+    async function cancelarPedido(id) {
+        const r = await fetchWithAuth('/api/pedidos/' + id, { method: 'DELETE' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
+        if (selPed) selPed.limparRota();
+        msg('Solicitação cancelada.');
+        loadMeusPedidos();
+        atualizarUiAgendamentos();
+    }
+    function renderProp(id, arr) {
+        const div = document.getElementById(id);
+        if (!div) return;
+        div.innerHTML = arr.length ? arr.map(cardProposta).join('') : '<p class="cam-hint">Nada por aqui ainda.</p>';
+    }
+    function cardProposta(p) {
+        const tipo = p.carona_id ? 'Passageiro' : 'Motorista';
+        const outro = esc(p.sou_destinatario ? p.de_nome : p.para_nome);
+        const tel = p.sou_destinatario ? p.de_telefone : p.para_telefone;
+        const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
+        const souMotorista = (p.carona_id && p.sou_destinatario) || (p.pedido_id && !p.sou_destinatario);
+        const aceito = p.status === 'aceito';
+
+        let acoes = '';
+        if (p.status === 'pendente' && p.sou_destinatario) {
+            acoes = `<button class="btn btn-success btn-sm" onclick="aceitarProposta(${p.id})">Aceitar</button>
+                     <button class="btn btn-danger btn-sm" onclick="recusarProposta(${p.id})">Recusar</button>`;
+        } else if (aceito) {
+            acoes = `<span class="badge badge-ativo">Confirmado</span>`;
+            // WhatsApp só antes da viagem; com viagem ativa o app rastreia ao vivo.
+            if (tel && !p.viagem_id) {
+                acoes += ` <button type="button" class="btn btn-success btn-sm" onclick="abrirWhatsApp(${esc(JSON.stringify(tel))})" title="${esc(tel)}">${ICN.phone} WhatsApp (${esc(tel)})</button>`;
+            }
+            if (p.viagem_id) {
+                acoes += ` <button class="btn btn-primary btn-sm" onclick="abrirViagem(${p.viagem_id})">Acompanhar</button>`;
+            } else if (souMotorista) {
+                acoes += ` <button class="btn btn-primary btn-sm" onclick="iniciarViagem(${p.id})">Iniciar</button>`;
+            }
+            if (!p.viagem_id) {
+                acoes += ` <button class="btn btn-danger btn-sm" onclick="cancelarProposta(${p.id})">Cancelar</button>`;
+            }
+        } else if (p.status === 'recusado') {
+            acoes = `<span class="badge badge-inativo">cancelado</span>`;
+        }
+
+        // Quando aceito, o passageiro vê selfie + carro + placa do motorista
+        const verMotorista = aceito && !souMotorista && (p.motorista_selfie || p.motorista_carro);
+        const thumb = (verMotorista && p.motorista_selfie) ? p.motorista_selfie : p.selfie_url;
+        const blocoCarro = verMotorista ? `
+                <div class="prop-motorista">
+                    ${p.motorista_carro ? `<img src="${esc(p.motorista_carro)}" class="prop-carro" alt="carro do motorista">` : ''}
+                    <small>${ICN.car} ${esc(p.motorista_placa || 'veículo')}${p.motorista_tag ? ' • ' + esc(p.motorista_tag) : ''}</small>
+                    ${p.motorista_carro_em ? `<br><small class="foto-meta">Foto do carro: ${fmtData(p.motorista_carro_em)}</small>` : ''}
+                    ${p.motorista_selfie_em ? `<br><small class="foto-meta">Selfie do motorista: ${fmtData(p.motorista_selfie_em)}</small>` : ''}
+                </div>` : '';
+
+        return `<div class="ride-item">
+            ${thumb ? `<img src="${esc(thumb)}" class="ride-thumb">` : ''}
+            <div class="ride-info">
+                <strong>${outro}</strong> <small>(${tipo})</small><br>
+                <small>${rota}</small>
+                ${p.mensagem ? `<br><small>"${esc(p.mensagem)}"</small>` : ''}
+                ${blocoCarro}
+            </div>
+            <div class="ride-actions">${acoes}</div>
+        </div>`;
+    }
+    async function cancelarProposta(id) {
+        const r = await fetchWithAuth('/api/propostas/' + id + '/cancelar', { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro ao cancelar', 'error');
+        msg('Carona cancelada.');
+        loadPropostas();
+    }
+    async function aceitarProposta(id) {
+        const r = await fetchWithAuth('/api/propostas/' + id + '/aceitar', { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        loadPropostas();
+        if (d.viagem_id) {
+            const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
+            if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+        } else {
+            msg('Erro ao iniciar a viagem. Tente novamente.', 'error');
+        }
+    }
+    async function recusarProposta(id) {
+        const r = await fetchWithAuth('/api/propostas/' + id + '/recusar', { method: 'POST' });
+        if (r.ok) { msg('Solicitação recusada.'); loadPropostas(); }
+    }
+
+    /* -------- solicitação recebida (estilo Uber): aparece sozinha -------- */
+    let solicitacaoAtual = null;
+    const propostasTratadas = new Set();
+    const viagensAbertas = new Set(); // viagens já abertas no rastreamento (não reabre sozinha)
+    function viagemKey(id) { return String(id); }
+    function viagemJaAberta(id) { return viagensAbertas.has(viagemKey(id)); }
+    function marcarViagemAberta(id) { viagensAbertas.add(viagemKey(id)); }
+    function propostaAceitaComViagem(p) {
+        return p && p.status === 'aceito' && p.viagem_id && p.viagem_status === 'em_andamento';
+    }
+    async function entrarNaViagem(viagemId, mensagem) {
+        if (viagemJaAberta(viagemId) && viagemView && viagemKey(viagemView.id) === viagemKey(viagemId)) return true;
+        fecharChamando();
+        solicitacaoAtual = null;
+        document.getElementById('modalSolicitacao').style.display = 'none';
+        document.getElementById('modalChamando').style.display = 'none';
+        const ok = await abrirViagem(viagemId);
+        if (ok) {
+            if (mensagem) msg(mensagem);
+            return true;
+        }
+        viagensAbertas.delete(viagemKey(viagemId));
+        return false;
+    }
+    function mostrarSolicitacao(p) {
+        buzinar();   // chegou gente pedindo: toca e vibra
+        // O passageiro pode estar vendo o perfil do motorista (modalCarro): fecha,
+        // senão a oferta (Aceitar/Recusar) abre ATRÁS dele e ele nem vê o chamado.
+        try { fecharCarro(); } catch (_) {}
+        solicitacaoAtual = p;
+        const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
+        const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
+        document.getElementById('solNome').textContent = p.de_nome || 'Solicitação';
+        document.querySelector('#modalSolicitacao .sol-badge').textContent =
+            p.carona_id ? 'Nova solicitação' : 'Embarque Aprovado';
+        document.getElementById('solTipo').textContent = tipo;
+        document.getElementById('solRota').innerHTML = `${ICN.pin} ${rota}`;
+        document.getElementById('solMsg').textContent = p.mensagem ? `"${p.mensagem}"` : '';
+        const selfie = document.getElementById('solSelfie');
+        if (p.selfie_url) { selfie.src = p.selfie_url; selfie.style.display = 'block'; }
+        else { selfie.style.display = 'none'; }
+        document.getElementById('modalSolicitacao').style.display = 'flex';
+    }
+    async function responderSolicitacao(aceito) {
+        const p = solicitacaoAtual;
+        if (!p) return;
+        propostasTratadas.add(p.id);
+        solicitacaoAtual = null;
+        document.getElementById('modalSolicitacao').style.display = 'none';
+        const r = await fetchWithAuth('/api/propostas/' + p.id + '/' + (aceito ? 'aceitar' : 'recusar'), { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        loadPropostas();
+        if (aceito && d.viagem_id) {
+            const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
+            if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+        } else if (aceito) {
+            msg('Erro ao iniciar a viagem. Tente novamente.', 'error');
+        } else {
+            msg('Solicitação recusada.');
+        }
+    }
+    /* -------- fila de motoristas na rota: oferta sequencial (mais perto primeiro) -------- */
+    let ofertaFilaAtual = null;
+    let ofertaFilaCronometro = null;
+    function pararCronometroFila() {
+        if (ofertaFilaCronometro) { clearInterval(ofertaFilaCronometro); ofertaFilaCronometro = null; }
+    }
+    function mostrarOfertaFila(o) {
+        ofertaFilaAtual = o;
+        document.getElementById('filaOfNome').textContent = o.passageiro_nome
+            ? `${o.passageiro_nome} está pedindo carona` : 'Passageiro pedindo carona';
+        document.getElementById('filaOfRota').innerHTML =
+            `<div style="margin-bottom:6px;">${ICN.pin} <b>Embarque:</b> ${esc(o.origem_texto || 'local do passageiro')}</div>`
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(o.destino_texto || 'destino no mapa')}</div>`
+            // Encaixe: você não vai até lá, mas passa num ponto em comum — é só
+            // deixar o passageiro nesse ponto (a viagem já nasce com a parada).
+            + (o.encaixe_texto
+                ? `<div style="margin-top:6px;">${ICN.pin} <b>Você deixa em:</b> ${esc(o.encaixe_texto)}</div>`
+                : '');
+        document.getElementById('modalOfertaFila').style.display = 'flex';
+        pararCronometroFila();
+        const tick = () => {
+            const restam = Math.max(0, Math.round((new Date(o.expira_em).getTime() - Date.now()) / 1000));
+            const el = document.getElementById('filaOfCronometro');
+            if (el) el.textContent = restam + 's';
+            if (restam <= 0) { pararCronometroFila(); fecharOfertaFila(); }
+        };
+        tick();
+        ofertaFilaCronometro = setInterval(tick, 1000);
+    }
+    function fecharOfertaFila() {
+        ofertaFilaAtual = null;
+        pararCronometroFila();
+        document.getElementById('modalOfertaFila').style.display = 'none';
+    }
+    async function responderOfertaFila(aceitar) {
+        const o = ofertaFilaAtual;
+        if (!o) return;
+        fecharOfertaFila();
+        const r = await fetchWithAuth('/api/pedido-fila/' + o.id + '/' + (aceitar ? 'aceitar' : 'recusar'), { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Não foi possível responder — talvez tenha vencido o tempo.', 'error');
+        if (aceitar && d.viagem_id) {
+            // Já dirigindo outra perna: NÃO troca de tela — a nova carona entra
+            // encadeada e aparece tracejada no mapa da viagem atual (ramificação).
+            if (viagemView && viagemView.status === 'em_andamento') {
+                // Marca como conhecida: o pollPropostas não pula pra ela sozinho.
+                marcarViagemAberta(d.viagem_id);
+                msg('Nova carona encadeada! Ela aparece tracejada no mapa — finalize a perna atual primeiro.');
+                desenharProximasPernas(viagemView);
+                return;
+            }
+            const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
+            if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+        } else if (!aceitar) {
+            msg('Repassado para o próximo motorista da rota.');
+        }
+    }
+    async function pollOfertaFila() {
+        if (document.hidden) return;
+        if (document.querySelector('.cam-video')) return;   // já em viagem: não interrompe
+        try {
+            const r = await fetchWithAuth('/api/motorista/oferta-atual');
+            if (!r || !r.ok) return;
+            const o = await r.json();
+            if (o && (!ofertaFilaAtual || ofertaFilaAtual.id !== o.id)) mostrarOfertaFila(o);
+            else if (!o && ofertaFilaAtual) fecharOfertaFila();   // expirou/foi cancelada em outro lugar
+        } catch (_) { /* falha silenciosa: só tenta de novo no próximo tick */ }
+    }
+
+    async function pollPropostas() {
+        await verificarPedidoAgendadoEntrouNoAr();
+        if (document.hidden) return;   // app em segundo plano: não consome rede
+        try {
+            const r = await fetchWithAuth('/api/propostas');
+            if (!r || !r.ok) return;
+            const props = await r.json();
+
+            // Chamando…: trata aceite (entra na viagem) ou recusa (fecha a espera).
+            if (chamandoId) {
+                const cp = props.find(p => String(p.id) === String(chamandoId));
+                if (cp && propostaAceitaComViagem(cp) && !viagemJaAberta(cp.viagem_id)) {
+                    propostasTratadas.add(cp.id);
+                    const ok = await entrarNaViagem(cp.viagem_id, 'Carona aceita! Acompanhe ao vivo.');
+                    if (ok) return;
+                }
+                if (!cp || cp.status === 'recusado') {
+                    if (cp && cp.status === 'recusado') {
+                        fecharChamando();
+                        msg('Não foi aceito desta vez.', 'error');
+                    }
+                }
+            }
+            // Procurando motorista (pedido): oferta pendente OU viagem já confirmada.
+            if (chamandoPedidoId) {
+                const aceita = props.find(p => String(p.pedido_id) === String(chamandoPedidoId)
+                    && propostaAceitaComViagem(p));
+                if (aceita && !viagemJaAberta(aceita.viagem_id)) {
+                    propostasTratadas.add(aceita.id);
+                    const ok = await entrarNaViagem(aceita.viagem_id, 'Carona confirmada! Acompanhe ao vivo.');
+                    if (ok) return;
+                }
+                const oferta = props.find(p => String(p.pedido_id) === String(chamandoPedidoId)
+                    && p.sou_destinatario && p.status === 'pendente');
+                if (oferta) { fecharChamando(); msg('Um motorista ofereceu carona!'); }
+            }
+
+            // Carona aceita com viagem EM ANDAMENTO → entra na tela de viagem ao vivo
+            // SOZINHO, com PRIORIDADE sobre qualquer painel/aba/card aberto.
+            const viva = props.find(p => propostaAceitaComViagem(p) && !viagemJaAberta(p.viagem_id));
+            if (viva && !document.querySelector('.cam-video')) {
+                propostasTratadas.add(viva.id);
+                const ok = await entrarNaViagem(viva.viagem_id, 'Carona aceita! Acompanhe ao vivo.');
+                if (ok) return;
+            }
+
+            // não atropela: escolha de papel, câmera, perfil ou um card já aberto
+            if (solicitacaoAtual) return;
+            if (document.getElementById('telaPapel').style.display === 'flex') return;
+            if (document.getElementById('modalPerfil').style.display === 'flex') return;
+            if (document.querySelector('.cam-video')) return;
+            // Painel aberto: não abre modal por cima, mas mantém as listas atualizadas.
+            if (painelAberto()) {
+                renderProp('listaPropMotorista', props.filter(ehMotorista));
+                renderProp('listaPropPassageiro', props.filter(p => !ehMotorista(p)));
+                if (document.getElementById('painelPassageiro').style.display === 'flex') loadMeusPedidos();
+                return;
+            }
+
+            // Esperando aceite/procurando (chamando aberto): não interrompe com outros modais.
+            if (chamandoId || chamandoPedidoId) return;
+
+            // Solicitação pendente recebida → aparece estilo Uber.
+            const pend = props.filter(p => p.sou_destinatario && p.status === 'pendente');
+            const nova = pend.find(p => !propostasTratadas.has(p.id));
+            if (nova) mostrarSolicitacao(nova);
+        } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+    }
+
+    /* -------- viagem + rastreamento ao vivo -------- */
+    const RAIO_CHEGADA_DEST_KM = 0.15;       // ~150 m — reconhece chegada ao destino
+    const KM_MIN_TRECHO_VIAGEM = 0.25;       // embarque e destino precisam ser pontos distintos
+    const AUTO_FINALIZAR_DEST_MS = 12000;    // auto-finaliza após 12 s no destino
+
+    function distanciaViagemPlanejada(vv) {
+        if (!vv?.destino) return 0;
+        const origem = vv.embarqueReal || vv.embarque;
+        if (!origem) return 0;
+        return distKmGps(origem, vv.destino);
+    }
+    function posicaoProximaDestino(vv, pos) {
+        if (!vv?.destino || !pos) return false;
+        return distKmGps(pos, vv.destino) <= RAIO_CHEGADA_DEST_KM;
+    }
+    function viagemPercorreuTrecho(vv) {
+        if (!vv) return false;
+        const kmTela = trackState?.kmTela || 0;
+        if (kmTela >= KM_MIN_TRECHO_VIAGEM) return true;
+        const origem = vv.embarqueReal || vv.embarque;
+        if (origem && vv.posMotorista) {
+            return distKmGps(origem, vv.posMotorista) >= KM_MIN_TRECHO_VIAGEM * 0.6;
+        }
+        return false;
+    }
+    function podeReconhecerChegadaDestino(vv) {
+        if (!vv || vv.status !== 'em_andamento' || vv.fase !== 'destino' || !vv.destino) return false;
+        if (distanciaViagemPlanejada(vv) < KM_MIN_TRECHO_VIAGEM) return false;
+        return viagemPercorreuTrecho(vv);
+    }
+    function resetChegadaDestino(silencioso) {
+        const vv = viagemView;
+        if (!vv || !vv.chegadaDestino) return;
+        vv.chegadaDestino = false;
+        vv.chegadaDestinoDesde = null;
+        vv.autoFinalizarTimer = null;
+        if (vv.chegadaCountdownTimer) {
+            clearInterval(vv.chegadaCountdownTimer);
+            vv.chegadaCountdownTimer = null;
+        }
+        atualizarCabecalhoViagem();
+        if (!silencioso) msg('Ok — finalize manualmente quando chegar ao destino.');
+    }
+    function adiarFinalizacaoDestino() {
+        resetChegadaDestino(false);
+    }
+    function verificarChegadaDestino(vv) {
+        if (!vv || vv.finalizando || vv.status !== 'em_andamento') return;
+        const pos = vv.posMotorista;
+        if (!pos || !podeReconhecerChegadaDestino(vv)) {
+            if (vv.chegadaDestino) resetChegadaDestino(true);
+            return;
+        }
+        const perto = posicaoProximaDestino(vv, pos);
+        if (!perto) {
+            if (vv.chegadaDestino) resetChegadaDestino(true);
+            return;
+        }
+        const agora = Date.now();
+        if (!vv.chegadaDestino) {
+            vv.chegadaDestino = true;
+            vv.chegadaDestinoDesde = agora;
+            if (!vv.chegadaCountdownTimer) {
+                vv.chegadaCountdownTimer = setInterval(() => verificarChegadaDestino(vv), 1000);
+            }
+            atualizarCabecalhoViagem();
+            if (vv.ehMotorista) {
+                msg('Destino reconhecido — finalize agora ou aguarde encerramento automático.');
+            }
+        }
+        const eta = document.getElementById('viagemEta');
+        const restante = Math.max(0, AUTO_FINALIZAR_DEST_MS - (agora - vv.chegadaDestinoDesde));
+        if (eta && vv.ehMotorista) {
+            eta.style.display = 'block';
+            const seg = Math.ceil(restante / 1000);
+            eta.textContent = seg > 0
+                ? `Chegou ao destino · finaliza em ${seg}s (ou toque abaixo)`
+                : 'Chegou ao destino · finalizando…';
+        } else if (eta && !vv.ehMotorista) {
+            eta.style.display = 'block';
+            eta.textContent = 'Chegou ao destino';
+        }
+        if (vv.ehMotorista && restante <= 0 && !vv.autoFinalizarTimer) {
+            vv.autoFinalizarTimer = true;
+            finalizarViagem(vv.id, { automatico: true });
+        }
+    }
+    function distKmGps(a, b) {
+        const R = 6371;
+        const dLat = (b.lat - a.lat) * Math.PI / 180;
+        const dLng = (b.lng - a.lng) * Math.PI / 180;
+        const x = Math.sin(dLat / 2) ** 2
+            + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
+    async function iniciarViagem(propostaId) {
+        const r = await fetchWithAuth('/api/viagens', { method: 'POST', body: JSON.stringify({ proposta_id: propostaId }) });
+        const d = await r.json();
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        msg('Viagem iniciada.');
+        abrirViagem(d.id, true);
+    }
+
+    // Ícones do fluxo (mesma linguagem dos mockups):
+    // - pino DOURADO clássico = destino final do motorista (cravado no mapa)
+    // - selo redondo claro com PEDESTRE = "passageiro desembarca aqui"
+    // - pino BRONZE = desembarque da próxima perna (carona encadeada)
+    const SVG_PIN_MAPA = (fill, borda) => `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">
+        <path d="M17 1C8.2 1 1 8.1 1 16.9 1 24.4 8.4 33.9 13.7 40.1a4.3 4.3 0 0 0 6.6 0C25.6 33.9 33 24.4 33 16.9 33 8.1 25.8 1 17 1z" fill="${fill}" stroke="${borda}" stroke-width="1.6"/>
+        <circle cx="17" cy="16.8" r="6.2" fill="#fff"/>
+    </svg>`;
+    const PIN_OURO_ICON = 'data:image/svg+xml;charset=utf-8,'
+        + encodeURIComponent(SVG_PIN_MAPA('#C9A24B', '#8f6f2a'));
+    const PIN_BRONZE_ICON = 'data:image/svg+xml;charset=utf-8,'
+        + encodeURIComponent(SVG_PIN_MAPA('#8a6d3b', '#5e4a26'));
+    const SVG_PAX_DESCE = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50">
+        <path d="M20 49l-6-11h12z" fill="#F4EBD3" stroke="#C9A24B" stroke-width="1.4"/>
+        <circle cx="20" cy="19" r="17" fill="#F4EBD3" stroke="#C9A24B" stroke-width="2.2"/>
+        <circle cx="22.4" cy="10.6" r="3" fill="#8f6f2a"/>
+        <g stroke="#8f6f2a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 15.5l-2.6 6.4 3.4 3.4 1 5.6"/>
+            <path d="M19.4 21.9l-4 6.8"/>
+            <path d="M21.4 17.2l-4.6 1.6-2.6 3.6"/>
+            <path d="M22.6 18.4l3.6 2.6 2.8.6"/>
+        </g>
+        <rect x="27.2" y="22.6" width="5.4" height="5" rx="1" fill="#8f6f2a"/>
+        <g stroke="#C9A24B" stroke-width="1.8" stroke-linecap="round">
+            <path d="M8.4 12.4h3.4"/><path d="M6.8 16.4h3.4"/><path d="M8.4 20.4h3.4"/>
+        </g>
+    </svg>`;
+    const PAX_DESCE_ICON = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_PAX_DESCE);
+
+    // Perna TRACEJADA (dourada): continuação do motorista / próximas viagens
+    // encadeadas — mesma linguagem visual nos dois papéis.
+    const ROTA_TRACEJADA_OPTS = {
+        strokeOpacity: 0,
+        strokeWeight: 0,
+        zIndex: 38,
+        icons: [{
+            icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.85, strokeWeight: 4, strokeColor: '#C9A24B' },
+            offset: '0',
+            repeat: '14px',
+        }],
+    };
+
+    // RAMIFICAÇÃO (mapa do motorista): as OUTRAS viagens em andamento dele viram
+    // pernas tracejadas — próximo embarque → próximo desembarque — pra ele ver a
+    // ordem do passeio inteiro enquanto dirige a perna atual.
+    async function desenharProximasPernas(vv) {
+        if (!vv || !vv.ehMotorista || !vv.map) return;
+        try {
+            const r = await fetchWithAuth('/api/viagens');
+            if (!r.ok) return;
+            const todas = await r.json();
+            if (!viagemView || viagemView.id !== vv.id) return;   // trocou de tela
+            const outras = (Array.isArray(todas) ? todas : []).filter((x) =>
+                x.status === 'em_andamento'
+                && String(x.motorista_id) === String(user.id)
+                && viagemKey(x.id) !== viagemKey(vv.id)
+                && x.origem_lat != null && x.destino_lat != null);
+            for (const x of outras) {
+                const emb = { lat: +x.origem_lat, lng: +x.origem_lng };
+                const dst = { lat: +x.destino_lat, lng: +x.destino_lng };
+                criarMarcador({ position: emb, map: vv.map, cor: '#22c55e',
+                    title: `Próximo embarque: ${x.passageiro_nome || 'passageiro'}` });
+                // Pino bronze: novo local de desembarque da perna encadeada.
+                criarMarcador({ position: dst, map: vv.map, icon: PIN_BRONZE_ICON, iconW: 30, iconH: 39,
+                    title: `Novo desembarque: ${x.destino_texto || 'destino do passageiro'}` });
+                const rota = criarRotaControle(vv.map, ROTA_TRACEJADA_OPTS);
+                rota.calcular(emb, dst).catch(() => {});
+            }
+        } catch (_) { /* ramificação é informativa: falhou, segue sem */ }
+    }
+
+    async function abrirViagem(viagemId) {
+        const id = viagemKey(viagemId);
+        if (viagemJaAberta(id) && viagemView && viagemKey(viagemView.id) === id) return true;
+        let v;
+        try {
+            const r = await fetchWithAuth('/api/viagens/' + viagemId);
+            v = await r.json().catch(() => null);
+            if (!r.ok || !v || v.status !== 'em_andamento') return false;
+        } catch (_) {
+            return false;
+        }
+        marcarViagemAberta(id);
+        fecharChamando();
+
+        // Mostra a aba da viagem e encerra loops de outras telas (sem marcadores órfãos).
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tabViagem').classList.add('active');
+        syncMapasAbas('tabViagem');
+        document.getElementById('btnViagemAndamento').style.display = 'inline-block';
+        if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+        if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
+        if (selfCar.timer) { clearInterval(selfCar.timer); selfCar.timer = null; }
+        if (selfCar.watchId != null) { navigator.geolocation.clearWatch(selfCar.watchId); selfCar.watchId = null; }
+
+        const ehMotorista = String(v.motorista_id) === String(user.id);
+
+        // Mostra o "outro": passageiro vê o motorista; motorista vê o passageiro.
+        const nome = ehMotorista ? v.passageiro_nome : v.motorista_nome;
+        const selfie = ehMotorista ? v.passageiro_selfie : v.motorista_selfie;
+        const sel = document.getElementById('viagemSelfie');
+        if (selfie) { sel.src = selfie; sel.style.display = 'block'; } else { sel.style.display = 'none'; }
+        document.getElementById('viagemNome').textContent = (nome || '—').trim();
+        document.getElementById('viagemCarro').textContent = ehMotorista ? 'Passageiro' : (v.tag || 'Veículo');
+        const plEl = document.getElementById('viagemPlaca');
+        plEl.textContent = (!ehMotorista && v.placa) ? v.placa : '';
+        plEl.style.display = (!ehMotorista && v.placa) ? 'inline-block' : 'none';
+        const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
+
+        g = await carregarMaps();
+        const embarque = v.origem_lat != null ? { lat: +v.origem_lat, lng: +v.origem_lng } : null;
+        const destino = v.destino_lat != null ? { lat: +v.destino_lat, lng: +v.destino_lng } : null;
+        const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
+        const map = novoMapa('mapViagem', { center: centro, zoom: 16 });
+
+        // Pinos fixos (linguagem dos mockups): embarque (verde), desembarque do
+        // passageiro (selo com pedestre), destino final do motorista (pino dourado).
+        const destTitulo = (v.destino_texto && String(v.destino_texto).trim()) || 'Destino';
+        if (embarque) criarMarcador({ position: embarque, map, cor: '#22c55e', title: 'Embarque' });
+        const paradaMotEarly = (v.destino_motorista_lat != null && v.destino_motorista_lng != null)
+            ? { lat: +v.destino_motorista_lat, lng: +v.destino_motorista_lng }
+            : null;
+        const paradaMotTxtEarly = (v.destino_motorista_texto && String(v.destino_motorista_texto).trim()) || 'Parada do motorista';
+
+        // ROTA ÚNICA COM PARADA: o destino FINAL do motorista (rota publicada) fica
+        // cravado no mapa, e a continuação depois do desembarque do passageiro
+        // aparece tracejada — para os DOIS lados verem o fluxo inteiro: carro →
+        // desembarque do passageiro → destino final do motorista.
+        const destinoFinalMot = (v.motorista_destino_final_lat != null && v.motorista_destino_final_lng != null)
+            ? { lat: +v.motorista_destino_final_lat, lng: +v.motorista_destino_final_lng }
+            : null;
+        const destinoFinalTxt = (v.motorista_destino_final_texto && String(v.motorista_destino_final_texto).trim())
+            || 'Destino do motorista';
+        const temParadaSeparada = !!(paradaMotEarly && destino && distKmGps(paradaMotEarly, destino) > 0.12);
+        const pontoDesembarque = temParadaSeparada ? paradaMotEarly : destino;
+        const continuaAlem = !!(destinoFinalMot && pontoDesembarque
+            && distKmGps(destinoFinalMot, pontoDesembarque) > 0.2);
+
+        // Parada intermediária (parcial/encaixe): é onde o passageiro desce.
+        if (temParadaSeparada) {
+            criarMarcador({ position: paradaMotEarly, map, icon: PAX_DESCE_ICON, iconW: 34, iconH: 42,
+                title: `Passageiro desembarca aqui — ${paradaMotTxtEarly}` });
+        }
+        // Destino da viagem: se o carro SEGUE além dele (rota única com parada), o
+        // ponto é "passageiro desembarca aqui"; se é o fim da linha, bandeira.
+        if (destino) {
+            const ehSoParada = continuaAlem && !temParadaSeparada;
+            criarMarcador({
+                position: destino, map,
+                icon: ehSoParada ? PAX_DESCE_ICON : FLAG_ICON,
+                iconW: ehSoParada ? 34 : 28, iconH: ehSoParada ? 42 : 30,
+                title: ehSoParada ? `Passageiro desembarca aqui — ${destTitulo}` : destTitulo,
+            });
+        }
+        if (continuaAlem) {
+            criarMarcador({ position: destinoFinalMot, map, icon: PIN_OURO_ICON, iconW: 30, iconH: 39,
+                title: `Destino final do motorista — ${destinoFinalTxt}` });
+            const rotaCont = criarRotaControle(map, ROTA_TRACEJADA_OPTS);
+            rotaCont.calcular(pontoDesembarque, destinoFinalMot).catch(() => {});
+        }
+
+        // Rota preta no mapa (dois lados). Parcial: preta até parada do motorista + dourada só o resto.
+        const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 });
+        const rotaCtrlExtra = criarRotaControle(map, { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.92 });
+
+        // Embarque conhecido já no open: motorista vê o pax; pax vê o próprio pulso
+        // (localizar-se no mapa enquanto aguarda o carro).
+        const posPaxInicial = (embarque && (v.fase || 'encontro') === 'encontro')
+            ? { ...embarque }
+            : null;
+
+        // Parada do motorista (carona incompleta): carro até a portaria; passageiro segue à oficina.
+        const paradaMot = paradaMotEarly;
+        const paradaMotTexto = paradaMot ? paradaMotTxtEarly : '';
+
+        viagemView = {
+            id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
+            embarque, destino, map, rotaCtrl, rotaCtrlExtra,
+            paradaMot, paradaMotTexto,
+            destinoTexto: (v.destino_texto && String(v.destino_texto).trim()) || '',
+            origemTexto: (v.origem_texto && String(v.origem_texto).trim()) || '',
+            embarqueReal: (v.fase === 'destino' && embarque) ? { ...embarque } : null,
+            chegadaDestino: false, chegadaDestinoDesde: null, autoFinalizarTimer: null,
+            passageiroSexo: v.passageiro_sexo || (ehMotorista ? null : user?.sexo) || null,
+            posMotorista: null,
+            posPassageiro: posPaxInicial,
+            carMarker: null, pessoaMarker: null, ultimaRota: 0,
+            rotaPath: null, rotaKmTotal: 0, rotaDurMsTotal: 0,
+            rotaExtraChave: null,
+            seguir: true,   // motorista segue a si; passageiro segue o carro
+        };
+        atualizarCabecalhoViagem();
+        // Traça logo a linha preta (embarque→destino/parada) para não ficar mapa “vazio”
+        // enquanto o GPS do carro chega. renderViagem atualiza com a posição ao vivo.
+        (async () => {
+            // Placeholder embarque→destino SÓ depois do embarque (fase 'destino'). Na
+            // fase de ENCONTRO isso mostrava a rota da VIAGEM em vez do carro vindo
+            // buscar o passageiro; a linha certa (carro→passageiro) vem do renderViagem.
+            if ((v.fase || 'encontro') === 'destino') {
+                const alvo0 = (paradaMot && destino && distKmGps(paradaMot, destino) > 0.12)
+                    ? paradaMot
+                    : (destino || null);
+                const de0 = embarque || null;
+                if (de0 && alvo0 && rotaCtrl) {
+                    try {
+                        const resp = await rotaCtrl.calcular(de0, alvo0);
+                        if (viagemView && viagemView.id === viagemId) {
+                            viagemView.rotaPath = resp._path || resp._fallbackLine || null;
+                            viagemView.rotaKmTotal = resp.km || 0;
+                            viagemView.rotaDurMsTotal = resp._durationMillis || 0;
+                            viagemView.ultimaRota = Date.now();
+                        }
+                    } catch (_) { /* ok: loop tenta de novo */ }
+                }
+                if (paradaMot && destino && distKmGps(paradaMot, destino) > 0.12 && rotaCtrlExtra) {
+                    try {
+                        await rotaCtrlExtra.calcular(paradaMot, destino);
+                        if (viagemView && viagemView.id === viagemId) {
+                            viagemView.rotaExtraChave = `${paradaMot.lat},${paradaMot.lng}|${destino.lat},${destino.lng}`;
+                        }
+                    } catch (_) { /* trecho dourado opcional */ }
+                }
+            }
+            if (posPaxInicial || destino || embarque) renderViagem();
+        })();
+
+        // Arrastar o mapa pausa o "seguir" (deixa olhar em volta); o botão recentraliza.
+        map.addListener('dragstart', () => { if (viagemView) viagemView.seguir = false; });
+        const btnRec = document.getElementById('btnRecentrar');
+        if (v.status === 'em_andamento') { if (btnRec) btnRec.style.display = 'flex'; }
+        else if (btnRec) btnRec.style.display = 'none';
+
+        iniciarViagemLoop();
+        initSheetDrag();
+        desenharProximasPernas(viagemView);
+        return true;
+    }
+
+    function rotuloFaseViagem(vv) {
+        if (vv.status !== 'em_andamento') return 'Viagem finalizada';
+        if (vv.chegadaDestino && vv.fase === 'destino') {
+            return vv.destinoTexto ? `Chegou: ${vv.destinoTexto}` : 'Chegou ao destino';
+        }
+        if (vv.ehMotorista) {
+            // Motorista está LEVANDO o passageiro.
+            if (vv.fase === 'encontro') return 'Buscando passageiro';
+            return vv.destinoTexto ? `Levando para ${vv.destinoTexto}` : 'Levando ao destino';
+        }
+        // Passageiro está SENDO LEVADO.
+        if (vv.fase === 'encontro') return 'Motorista a caminho';
+        return vv.destinoTexto ? `Indo para ${vv.destinoTexto}` : 'Viagem em andamento';
+    }
+
+    function atualizarLinhaDestinoViagem() {
+        const el = document.getElementById('viagemDestinoTxt');
+        const vv = viagemView;
+        if (!el) return;
+        // Na fase "destino" o título já diz "Levando para/Indo para X" — não repete
+        // a linha (era ela que ficava igual e, pro passageiro, dizia "Levando para").
+        if (!vv || vv.status !== 'em_andamento' || !vv.destinoTexto || vv.fase !== 'encontro') {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = 'block';
+        el.textContent = (vv.ehMotorista ? 'Destino da carona: ' : 'Seu destino: ') + vv.destinoTexto;
+    }
+
+    function btnViagem(tipo, rotulo, acao) {
+        const cls = `viagem-btn viagem-btn--${tipo}`;
+        if (acao.startsWith('href:')) {
+            return `<a class="${cls}" href="${acao.slice(5)}" target="_blank" rel="noopener">${rotulo}</a>`;
+        }
+        return `<button type="button" class="${cls}" onclick="${acao}">${rotulo}</button>`;
+    }
+
+    // Título + botões conforme papel e fase (viagem ativa = app ao vivo, sem WhatsApp).
+    function atualizarCabecalhoViagem() {
+        const vv = viagemView; if (!vv) return;
+        const fase = document.getElementById('viagemFase');
+        const ctrl = document.getElementById('viagemControles');
+        const eta = document.getElementById('viagemEta');
+        if (fase) fase.textContent = rotuloFaseViagem(vv);
+        atualizarLinhaDestinoViagem();
+        const mapsBtn = btnViagem('outline', `${ICN.pin} Abrir no Google Maps`, 'abrirGoogleMaps()');
+        const btnAnd = document.getElementById('btnViagemAndamento');
+        if (vv.status !== 'em_andamento') {
+            if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+            const destEl = document.getElementById('viagemDestinoTxt');
+            if (destEl) { destEl.style.display = 'none'; destEl.textContent = ''; }
+            ctrl.innerHTML = btnViagem('primary', 'Voltar ao início', 'sairDaViagem()');
+            if (btnAnd) btnAnd.style.display = 'none';
+            return;
+        }
+        if (btnAnd) btnAnd.style.display = 'inline-block';
+        if (vv.ehMotorista) {
+            if (vv.fase === 'encontro') {
+                ctrl.innerHTML = btnViagem('primary', 'Passageiro embarcou', `cheguei(${vv.id})`) + mapsBtn
+                    + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`);
+            } else if (vv.chegadaDestino) {
+                const kmPlan = distanciaViagemPlanejada(vv);
+                const kmTxt = kmPlan >= 0.1 ? ` (${kmPlan.toFixed(1)} km embarque → destino)` : '';
+                ctrl.innerHTML = `<p class="sheet-hint sheet-hint--chegada">Destino reconhecido pelo GPS${kmTxt}.</p>`
+                    + btnViagem('primary', 'Finalizar viagem agora', `finalizarViagem(${vv.id})`)
+                    + btnViagem('outline', 'Ainda não cheguei', 'adiarFinalizacaoDestino()')
+                    + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`)
+                    + mapsBtn;
+            } else {
+                ctrl.innerHTML = btnViagem('danger', 'Finalizar viagem', `finalizarViagem(${vv.id})`)
+                    + btnViagem('outline', 'Cancelar viagem', `cancelarViagem(${vv.id})`)
+                    + mapsBtn;
+            }
+        } else {
+            // Passageiro: sempre deixa claro o destino marcado (nome + rota no mapa).
+            const dest = vv.destinoTexto || 'destino no mapa';
+            const parcial = ehViagemParcial(vv);
+            const parada = vv.paradaMotTexto || 'a parada do motorista';
+            let hint;
+            if (vv.fase === 'encontro') {
+                hint = parcial
+                    ? `Motorista a caminho. Ele vai até <strong>${esc(parada)}</strong> — desembarque lá e peça outra carona até <strong>${esc(dest)}</strong>.`
+                    : `Motorista a caminho. Destino da carona: <strong>${esc(dest)}</strong>`;
+            } else if (vv.chegadaDestino) {
+                hint = `Chegou em <strong>${esc(dest)}</strong> — aguardando motorista finalizar`;
+            } else {
+                hint = parcial
+                    ? `A caminho de <strong>${esc(parada)}</strong>. De lá, peça outra carona até <strong>${esc(dest)}</strong>.`
+                    : `Você está sendo levado para <strong>${esc(dest)}</strong>`;
+            }
+            // Sem "Cancelar viagem" pro passageiro: um cancelamento acidental dele,
+            // já embarcado e a caminho, perderia a medição de km que o admin usa.
+            // Só o motorista controla finalizar/cancelar.
+            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>';
+        }
+    }
+    // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
+    function focoMapaViagem(vv) {
+        if (!vv) return null;
+        if (vv.ehMotorista) return vv.posMotorista;
+        return vv.posMotorista || vv.embarque || vv.destino;
+    }
+    // Alvo atual da rota preta (onde o CARRO vai):
+    // - encontro: passageiro / embarque
+    // - destino: parada do motorista (parcial) ou destino final da viagem
+    function alvoViagem() {
+        const vv = viagemView; if (!vv) return null;
+        if (vv.fase === 'destino') {
+            // Carona incompleta: carro só até a parada; o trecho dourado vai além.
+            if (vv.paradaMot && vv.destino && distKmGps(vv.paradaMot, vv.destino) > 0.12) {
+                return vv.paradaMot;
+            }
+            // NÃO cai no embarque — senão pós-embarque a linha “some” (20 m no próprio local).
+            return vv.destino || null;
+        }
+        return vv.posPassageiro || vv.embarque || vv.destino;
+    }
+    // Destino final do passageiro (só usado no trecho dourado além da parada).
+    function destinoFinalViagem() {
+        const vv = viagemView; if (!vv) return null;
+        return vv.destino || null;
+    }
+    function ehViagemParcial(vv) {
+        if (!vv?.paradaMot || !vv.destino) return false;
+        return distKmGps(vv.paradaMot, vv.destino) > 0.12;
+    }
+    /** Origem da rota preta: GPS do carro > último ponto > embarque real > pin de embarque. */
+    function origemRotaViagem(vv) {
+        if (!vv) return null;
+        return vv.posMotorista
+            || (trackState?.ultimoPonto ? { ...trackState.ultimoPonto } : null)
+            || (vv.embarqueReal ? { ...vv.embarqueReal } : null)
+            || (vv.embarque ? { ...vv.embarque } : null)
+            || null;
+    }
+    /**
+     * Traça (ou re-desenha) a rota preta da viagem.
+     * forcar=true: ignora throttle e limpa path antigo (ex.: logo após “Passageiro embarcou”).
+     */
+    async function tracarRotaViagem(forcar) {
+        const vv = viagemView;
+        if (!vv || vv.status !== 'em_andamento' || !vv.rotaCtrl) return null;
+        const alvo = alvoViagem();
+        const de = origemRotaViagem(vv);
+        if (!de || !alvo) return null;
+
+        // Path em memória mas polyline sumiu do mapa → só redesenha (0 API).
+        if (!forcar && vv.rotaPath?.length >= 2 && vv.rotaCtrl.temLinha
+            && !vv.rotaCtrl.temLinha()
+            && !foraDaRota(de, vv.rotaPath)) {
+            vv.rotaCtrl.desenhar(vv.rotaPath);
+            return { km: vv.rotaKmTotal, reuso: true };
+        }
+
+        const fimRota = vv.rotaPath && vv.rotaPath[vv.rotaPath.length - 1];
+        const alvoMudou = !fimRota || distKmGps(fimRota, alvo) > 0.12;
+        const fora = vv.rotaPath ? foraDaRota(de, vv.rotaPath) : true;
+        const precisa = forcar || !vv.rotaPath || alvoMudou || fora || !vv.rotaCtrl.temLinha?.();
+        if (!precisa) {
+            return { km: vv.rotaKmTotal, reuso: true };
+        }
+        // Throttle só se já tem linha visível (evita spam); pós-embarque forcar ignora.
+        if (!forcar && vv.rotaCtrl.temLinha?.() && Date.now() - (vv.ultimaRota || 0) < 2000) {
+            return null;
+        }
+        if (vv._rotaCalcLock) return null;
+        vv._rotaCalcLock = true;
+        vv.ultimaRota = Date.now();
+        try {
+            const resp = await vv.rotaCtrl.calcular(de, alvo);
+            if (viagemView !== vv) return null;
+            vv.rotaPath = resp._path || resp._fallbackLine || null;
+            vv.rotaKmTotal = resp.km || 0;
+            vv.rotaDurMsTotal = resp._durationMillis || 0;
+            // Se a API limpou e falhou em desenhar, força fallback visual
+            if (vv.rotaPath?.length >= 2 && vv.rotaCtrl.temLinha && !vv.rotaCtrl.temLinha()) {
+                vv.rotaCtrl.desenhar(vv.rotaPath);
+            }
+            return resp;
+        } catch (_) {
+            // Último recurso: reta no mapa
+            try {
+                const fb = [{ lat: +de.lat, lng: +de.lng }, { lat: +alvo.lat, lng: +alvo.lng }];
+                vv.rotaCtrl.desenhar(fb);
+                vv.rotaPath = fb;
+                vv.rotaKmTotal = distKmGps(de, alvo);
+                vv.rotaDurMsTotal = Math.max(60000, Math.round((vv.rotaKmTotal / 0.45) * 60000));
+                return { km: vv.rotaKmTotal, _fallbackLine: fb };
+            } catch (__) { return null; }
+        } finally {
+            vv._rotaCalcLock = false;
+        }
+    }
+    // Fallback com voz: abre a rota da fase atual no Google Maps (o rastreamento
+    // e o registro da viagem continuam no VAP em segundo plano).
+    function abrirGoogleMaps() {
+        const vv = viagemView; if (!vv || !vv.ehMotorista) return;
+        const alvo = alvoViagem(); if (!alvo) return;
+        window.open('https://www.google.com/maps/dir/?api=1&destination=' + alvo.lat + ',' + alvo.lng + '&travelmode=driving&dir_action=navigate', '_blank');
+    }
+    // Recentraliza o mapa e reativa o "seguir" (passageiro: no carro do motorista).
+    function recentrarViagem() {
+        const vv = viagemView; if (!vv || !vv.map) return;
+        vv.seguir = true;
+        const alvo = focoMapaViagem(vv);
+        if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(ZOOM_FOCO_ORIGEM); }
+    }
+    function rotuloProximidadeMotorista(km) {
+        if (km < 0.05) return 'Motorista chegando';
+        const m = Math.round(km * 1000);
+        const min = Math.max(1, Math.round(km / 0.45));   // ~27 km/h urbano
+        return m >= 1000 ? `~${min} min · ${km.toFixed(1)} km` : `~${min} min · ${m} m`;
+    }
+    // Motorista: carro + passageiro + rota até o alvo. Passageiro: só acompanha o carro.
+    async function renderViagem() {
+        const vv = viagemView; if (!vv || vv.status !== 'em_andamento') return;
+        // Carro do motorista (visível nos dois lados).
+        if (vv.posMotorista) {
+            if (vv.carMarker) {
+                const prev = vv.carPosAnterior || vv.posMotorista;
+                atualizarPosicaoCarro(vv.carMarker, vv.posMotorista, prev);
+                vv.carPosAnterior = { ...vv.posMotorista };
+            } else {
+                // Carona aceita: carro laranja com preto (não mais o de partes brancas).
+                vv.carMarker = criarMarcador({
+                    position: vv.posMotorista, map: vv.map,
+                    iconW: 30, iconH: 40, iconVariant: 'laranja', title: 'Motorista', zIndex: 999,
+                });
+                vv.carPosAnterior = { ...vv.posMotorista };
+            }
+        }
+        // Pulso do passageiro só na espera (fase encontro):
+        // - motorista localiza quem buscar
+        // - passageiro se localiza no mapa
+        // Depois do embarque (fase destino): só o carrinho (mais limpo, estilo Uber).
+        const mostrarPulsoPax = !!vv.posPassageiro && vv.fase === 'encontro';
+        if (mostrarPulsoPax) {
+            const sexoPulso = vv.passageiroSexo || user?.sexo || null;
+            const titPulso = vv.ehMotorista ? 'Passageiro' : 'Você';
+            if (vv.pessoaMarker) {
+                vv.pessoaMarker.setPosition(vv.posPassageiro);
+            } else {
+                vv.pessoaMarker = criarPulse(vv.map, vv.posPassageiro, sexoPulso, null, titPulso);
+            }
+        } else if (vv.pessoaMarker) {
+            vv.pessoaMarker.setMap(null); vv.pessoaMarker = null;
+        }
+        const foco = focoMapaViagem(vv);
+        if (foco && vv.seguir !== false) vv.map.panTo(foco);
+
+        const eta = document.getElementById('viagemEta');
+        const alvo = alvoViagem();
+        const deEfetivo = origemRotaViagem(vv);
+
+        const atualizarKmEta = (kmRota, distText, durText) => {
+            if (vv.ehMotorista && vv.fase === 'destino' && kmRota > 0) {
+                if (vv.kmMapsRestante != null && kmRota < vv.kmMapsRestante) {
+                    vv.kmMapsPercorrido = (vv.kmMapsPercorrido || 0) + (vv.kmMapsRestante - kmRota);
+                }
+                vv.kmMapsRestante = kmRota;
+                if (!vv.kmMapsRota) vv.kmMapsRota = kmRota;
+            }
+            if (eta && !vv.chegadaDestino) {
+                eta.style.display = 'block';
+                const kmTela = trackState?.kmTela || 0;
+                const kmMostrar = vv.fase === 'destino' && kmTela >= 0.1
+                    ? ` · ${kmTela.toFixed(1)} km percorridos`
+                    : '';
+                const destSuf = (!vv.ehMotorista && vv.destinoTexto)
+                    ? ` · ${vv.destinoTexto}`
+                    : '';
+                const dur = (!durText || /^0(\s|$)/.test(String(durText))) ? '<1 min' : durText;
+                eta.textContent = `~${dur} · ${distText}${kmMostrar}${destSuf}`;
+            }
+        };
+
+        // Linha preta obrigatória quando há origem+alvo (encontro ou pós-embarque).
+        if (deEfetivo && alvo && vv.rotaCtrl) {
+            const forcar = !!vv._forcarRota;
+            if (vv._forcarRota) vv._forcarRota = false;
+            const resp = await tracarRotaViagem(forcar);
+            if (resp && !resp.reuso) {
+                const leg = resp.routes?.[0]?.legs?.[0];
+                if (leg) atualizarKmEta(resp.km || 0, leg.distance.text, leg.duration.text);
+                else if (resp.km != null) {
+                    const durMs = resp._durationMillis || vv.rotaDurMsTotal || 0;
+                    atualizarKmEta(resp.km, formatarMetros(resp.km * 1000), formatarDuracaoMs(durMs) || '<1 min');
+                }
+            } else if (vv.rotaPath && deEfetivo) {
+                // Path já ok: se a linha sumiu do mapa, redesenha; ETA por projeção.
+                if (vv.rotaCtrl.temLinha && !vv.rotaCtrl.temLinha()) {
+                    vv.rotaCtrl.desenhar(vv.rotaPath);
+                }
+                const p = progressoNaRota(deEfetivo, vv.rotaPath);
+                if (p && vv.rotaKmTotal > 0) {
+                    const durMs = vv.rotaDurMsTotal * (p.kmRestante / vv.rotaKmTotal);
+                    atualizarKmEta(p.kmRestante, formatarMetros(p.kmRestante * 1000), formatarDuracaoMs(durMs) || '<1 min');
+                }
+            }
+        } else if (!vv.ehMotorista && vv.posMotorista && Date.now() - (vv.ultimaRota || 0) > 2000) {
+            vv.ultimaRota = Date.now();
+            if (eta) {
+                eta.style.display = 'block';
+                if (vv.fase === 'encontro') {
+                    const ref = vv.posPassageiro || vv.embarque;
+                    eta.textContent = ref
+                        ? rotuloProximidadeMotorista(distKmGps(ref, vv.posMotorista))
+                        : 'Motorista a caminho';
+                } else if (!vv.chegadaDestino) {
+                    const nome = vv.destinoTexto || 'destino';
+                    eta.textContent = (trackState?.kmTela || 0) >= 0.1
+                        ? `A caminho de ${nome} · ${trackState.kmTela.toFixed(1)} km percorridos`
+                        : `A caminho de ${nome}`;
+                }
+            }
+        }
+
+        // Trecho dourado (só o além da parada do motorista) — sem sobrepor a preta.
+        if (vv.rotaCtrlExtra) {
+            if (vv.fase === 'destino' && ehViagemParcial(vv)) {
+                const parada = vv.paradaMot;
+                const fim = destinoFinalViagem();
+                const chave = `${parada.lat},${parada.lng}|${fim.lat},${fim.lng}`;
+                if (vv.rotaExtraChave !== chave) {
+                    vv.rotaExtraChave = chave;
+                    try {
+                        await vv.rotaCtrlExtra.calcular(parada, fim);
+                    } catch (_) { /* sem trecho extra */ }
+                } else if (vv.rotaCtrlExtra.temLinha && !vv.rotaCtrlExtra.temLinha()) {
+                    // re-calc se sumiu
+                    try { await vv.rotaCtrlExtra.calcular(parada, fim); } catch (_) {}
+                }
+            } else if (vv.rotaExtraChave) {
+                vv.rotaCtrlExtra.limpar();
+                vv.rotaExtraChave = null;
+            }
+        }
+
+        if (vv.fase === 'destino') verificarChegadaDestino(vv);
+    }
+
+    // Viagem concluída: tira a rota, o carro e o bonequinho do mapa (não fica
+    // sobrando o caminho antigo). Mantém só os pinos de embarque/destino.
+    function limparRotaViagem() {
+        const vv = viagemView; if (!vv) return;
+        if (vv.chegadaCountdownTimer) {
+            clearInterval(vv.chegadaCountdownTimer);
+            vv.chegadaCountdownTimer = null;
+        }
+        if (vv.rotaCtrl) { vv.rotaCtrl.setMap(null); vv.rotaCtrl = null; }
+        if (vv.rotaCtrlExtra) { vv.rotaCtrlExtra.setMap(null); vv.rotaCtrlExtra = null; }
+        if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
+        if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
+        const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+        const btnRec = document.getElementById('btnRecentrar'); if (btnRec) btnRec.style.display = 'none';
+    }
+
+    // Alça da viagem: igual ao sheet pedir/oferecer (só classe collapsed).
+    // Colapsado esconde título/ETA/selfie/botões no CSS — sem “pedaço de foto” nem texto solto.
+    function tornarArrastavel(sheet, grip) {
+        if (!sheet || !grip || sheet._dragReady) return;
+        sheet._dragReady = true;
+        bindGripArrasto(sheet, grip);
+    }
+    function initSheetDrag() {
+        const sheet = document.getElementById('viagemSheet');
+        if (sheet) {
+            // Sempre começa aberto (botões completos). Colapsar = só a alça.
+            sheet.classList.remove('collapsed');
+            sheet.style.transform = '';
+        }
+        tornarArrastavel(sheet, document.getElementById('sheetGrip'));
+    }
+
+    // Loop único dos dois lados: cada um transmite a SUA posição (GPS) e busca a
+    // posição do OUTRO no servidor. Assim motorista e passageiro se veem no mapa.
+    function iniciarViagemLoop() {
+        const vv = viagemView;
+        if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        if (acompTimer) clearInterval(acompTimer);
+        trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null, kmTela: 0 };
+        localStorage.setItem('viagemAtiva', vv.id);
+
+        const aplicarGpsProprio = (pt) => {
+            if (!vv || vv.status !== 'em_andamento') return;
+            if (vv.ehMotorista) {
+                vv.posMotorista = pt;
+                if (vv.fase === 'destino') {
+                    const mover = !trackState.ultimoPonto || distKmGps(trackState.ultimoPonto, pt) >= 0.025;
+                    if (mover) {
+                        if (trackState.ultimoPonto) {
+                            trackState.kmTela += distKmGps(trackState.ultimoPonto, pt);
+                        }
+                        trackState.buffer.push({ lat: pt.lat, lng: pt.lng, em: Date.now() });
+                        trackState.ultimoPonto = pt;
+                    }
+                }
+            } else {
+                vv.posPassageiro = pt;
+            }
+            renderViagem();
+        };
+
+        // 1) GPS: 1ª posição rápida (cache/rede), depois alta precisão.
+        // Timeout 12s + highAccuracy travava e o passageiro sumia do mapa.
+        let ultimoEnvioLoc = 0;
+        const enviarLoc = (pt) => {
+            if (Date.now() - ultimoEnvioLoc < 1500) return;
+            ultimoEnvioLoc = Date.now();
+            fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }),
+            }).catch(() => {});
+        };
+        if (navigator.geolocation) {
+            const onGpsOk = (pos) => {
+                const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                aplicarGpsProprio(pt);
+                enviarLoc(pt);
+            };
+            // 1ª fix rápida (rede/cache) — evita mapa sem posição após embarque.
+            navigator.geolocation.getCurrentPosition(
+                onGpsOk,
+                () => {},
+                { enableHighAccuracy: false, maximumAge: 60000, timeout: 4000 },
+            );
+            // watch: começa sem highAccuracy (Chrome costuma estourar timeout com true).
+            // Se falhar, re-tenta com highAccuracy false e timeout maior.
+            const ligarWatch = (highAcc) => {
+                if (trackState?.watchId != null) {
+                    try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
+                }
+                if (!trackState) return;
+                trackState.watchId = navigator.geolocation.watchPosition(
+                    onGpsOk,
+                    (e) => {
+                        console.warn('GPS:', e.message);
+                        if (highAcc && trackState && trackState.viagemId === vv.id) {
+                            ligarWatch(false);
+                        }
+                    },
+                    highAcc
+                        ? { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 }
+                        : { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 },
+                );
+            };
+            ligarWatch(false);
+        }
+
+        // 2) Posição do outro + fase/status — poll mais rápido no começo.
+        let ticksRapidos = 0;
+        async function tick() {
+            try {
+                const r = await fetchWithAuth('/api/viagens/' + vv.id + '/localizacao');
+                if (!r || !r.ok) return;
+                const d = await r.json();
+                if (d.status && d.status !== vv.status) {
+                    vv.status = d.status;
+                    if (vv.status !== 'em_andamento') {
+                        clearInterval(acompTimer);
+                        viagensAbertas.delete(viagemKey(vv.id));
+                        const encerrada = vv.status === 'cancelada';
+                        msg(encerrada ? 'Viagem encerrada.' : 'Viagem concluída. Veja no histórico.');
+                        if (!vv.ehMotorista || encerrada) sairDaViagem();
+                        else { atualizarCabecalhoViagem(); limparRotaViagem(); }
+                        return;
+                    }
+                    atualizarCabecalhoViagem();
+                }
+                if (d.fase && d.fase !== vv.fase) {
+                    vv.fase = d.fase;
+                    vv.ultimaRota = 0;
+                    vv.rotaPath = null;
+                    vv._forcarRota = true;
+                    if (vv.rotaCtrl) vv.rotaCtrl.limpar();
+                    atualizarCabecalhoViagem();
+                }
+                // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
+                if (!vv.ehMotorista && d.motorista) vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
+                if (vv.ehMotorista && d.passageiro) {
+                    vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
+                } else if (vv.ehMotorista && !vv.posPassageiro && vv.embarque && vv.fase === 'encontro') {
+                    // Mantém embarque até o GPS do passageiro chegar ao servidor
+                    vv.posPassageiro = { ...vv.embarque };
+                }
+                renderViagem();
+            } catch (_) { /* rede instável: tenta no próximo ciclo */ }
+            ticksRapidos++;
+            // Após ~12s, desacelera o poll (economia de bateria/rede)
+            if (ticksRapidos === 8 && acompTimer) {
+                clearInterval(acompTimer);
+                acompTimer = setInterval(tick, VIAGEM_POLL_MS);
+            }
+        }
+        tick();
+        // 1,2 s nos primeiros segundos — passageiro aparece rápido após aceite
+        acompTimer = setInterval(tick, 1200);
+        if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
+    }
+    // Motorista chegou ao passageiro: muda para a fase de destino e reinicia medição de km.
+    async function cheguei(viagemId) {
+        await enviarPontos();
+        const r = await fetchWithAuth('/api/viagens/' + viagemId + '/iniciar', { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (viagemView) {
+            viagemView.fase = 'destino';
+            // Descarta rota do encontro (carro→passageiro) e força traçado ao destino.
+            viagemView.ultimaRota = 0;
+            viagemView.rotaPath = null;
+            viagemView.rotaKmTotal = 0;
+            viagemView.rotaDurMsTotal = 0;
+            viagemView.rotaExtraChave = null;
+            viagemView.kmMapsRota = null;
+            viagemView.kmMapsRestante = null;
+            viagemView.kmMapsPercorrido = 0;
+            viagemView._forcarRota = true;
+            viagemView.embarqueReal = viagemView.posMotorista
+                ? { ...viagemView.posMotorista }
+                : (viagemView.embarque ? { ...viagemView.embarque } : null);
+            resetChegadaDestino(true);
+            if (trackState) {
+                trackState.buffer = [];
+                trackState.kmTela = 0;
+                trackState.ultimoPonto = viagemView.posMotorista
+                    ? { ...viagemView.posMotorista }
+                    : (viagemView.embarqueReal ? { ...viagemView.embarqueReal } : null);
+                if (trackState.ultimoPonto) {
+                    trackState.buffer.push({ ...trackState.ultimoPonto, em: Date.now() });
+                }
+            }
+            if (viagemView.rotaCtrl) viagemView.rotaCtrl.limpar();
+            if (viagemView.rotaCtrlExtra) viagemView.rotaCtrlExtra.limpar();
+
+            // Traça já: pos do carro OU embarque — não depende de GPS fresco (timeout comum).
+            const resp = await tracarRotaViagem(true);
+            if (resp && resp.km != null) {
+                viagemView.kmMapsRota = resp.km || 0;
+                viagemView.kmMapsRestante = viagemView.kmMapsRota;
+            }
+            atualizarCabecalhoViagem();
+            await renderViagem();
+        }
+        msg('Passageiro embarcado — km passam a contar para o destino.');
+    }
+    async function enviarPontos() {
+        if (!trackState || !trackState.buffer.length) return;
+        const pontos = trackState.buffer.splice(0, trackState.buffer.length);
+        await fetchWithAuth('/api/viagens/' + trackState.viagemId + '/pontos', { method: 'POST', body: JSON.stringify({ pontos }) });
+    }
+    async function finalizarViagem(viagemId, opts = {}) {
+        if (viagemView?.finalizando) return;
+        if (viagemView) viagemView.finalizando = true;
+        if (viagemView?.chegadaCountdownTimer) {
+            clearInterval(viagemView.chegadaCountdownTimer);
+            viagemView.chegadaCountdownTimer = null;
+        }
+        await enviarPontos();
+        if (trackState) {
+            if (trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+            clearInterval(trackState.timer);
+        }
+        if (acompTimer) clearInterval(acompTimer);
+        localStorage.removeItem('viagemAtiva');
+        // Rota planejada (Maps) só vale se o carro chegou de fato perto do destino;
+        // finalizar sem sair do lugar conta apenas o que foi percorrido (zero).
+        const chegouDestino = viagemView?.kmMapsRestante != null && viagemView.kmMapsRestante <= 0.5;
+        const km_maps = chegouDestino
+            ? Math.max(viagemView?.kmMapsPercorrido || 0, viagemView?.kmMapsRota || 0)
+            : (viagemView?.kmMapsPercorrido || 0);
+        const km_tela = Math.round((trackState?.kmTela || 0) * 100) / 100;
+        const body = {};
+        if (km_maps > 0) body.km_maps = Math.round(km_maps * 100) / 100;
+        if (km_tela > 0) body.km_tela = km_tela;
+        if (viagemView?.posMotorista) {
+            body.lat = viagemView.posMotorista.lat;
+            body.lng = viagemView.posMotorista.lng;
+        }
+        if (opts.automatico) body.automatico = true;
+        let r;
+        try {
+            r = await fetchWithAuth('/api/viagens/' + viagemId + '/finalizar', {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+        } catch (_) {
+            if (viagemView) { viagemView.finalizando = false; viagemView.autoFinalizarTimer = null; }
+            return msg('Sem resposta do servidor. Tente "Cancelar viagem" ou aguarde e tente de novo.', 'error');
+        }
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            if (viagemView) {
+                viagemView.finalizando = false;
+                viagemView.autoFinalizarTimer = null;
+            }
+            return msg(d.error || 'Erro ao finalizar. Use "Cancelar viagem" se estiver preso.', 'error');
+        }
+        if (viagemView) { viagemView.status = 'concluida'; atualizarCabecalhoViagem(); limparRotaViagem(); }
+        const prefixo = opts.automatico ? 'Viagem finalizada automaticamente' : 'Viagem concluída';
+        if (d.deslocamento_valido) {
+            const fonte = d.km_fonte === 'maps' ? 'Google Maps'
+                : d.km_fonte === 'tela' ? 'GPS na tela'
+                : d.km_fonte === 'gps' ? 'GPS'
+                : 'medição';
+            msg(`${prefixo} • ${d.distancia_km || 0} km (${fonte}) — contabilizado no relatório.`);
+        } else {
+            msg('Viagem encerrada sem km suficientes — não entra no rateio/admin.', 'error');
+        }
+        // Carona encadeada esperando? Emenda direto na PRÓXIMA perna (o passageiro
+        // 2 está aguardando vendo "carro em rota") — sem o motorista caçar a tela.
+        emendarProximaPerna();
+    }
+    async function emendarProximaPerna() {
+        try {
+            const r = await fetchWithAuth('/api/viagens');
+            if (!r.ok) return;
+            const todas = await r.json();
+            // Mais de uma perna esperando: atende quem aguarda há MAIS tempo
+            // (a lista vem em created_at DESC — pega a última = mais antiga).
+            const pendentes = (Array.isArray(todas) ? todas : []).filter((x) =>
+                x.status === 'em_andamento' && String(x.motorista_id) === String(user.id));
+            const prox = pendentes[pendentes.length - 1];
+            if (!prox) return;
+            const ok = await abrirViagem(prox.id);
+            if (ok) msg(`Próxima perna: buscar ${prox.passageiro_nome || 'o passageiro'}.`);
+        } catch (_) { /* sem próxima perna: fica na tela de encerramento */ }
+    }
+    async function cancelarViagem(viagemId) {
+        if (!confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
+        try {
+            const r = await fetchWithAuth('/api/viagens/' + viagemId + '/cancelar', { method: 'POST' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) return msg(d.error || 'Não foi possível encerrar. Tente de novo.', 'error');
+            if (viagemView) {
+                viagemView.status = 'cancelada';
+                viagemView.finalizando = false;
+                viagemView.autoFinalizarTimer = null;
+                atualizarCabecalhoViagem();
+                limparRotaViagem();
+            }
+            viagensAbertas.delete(viagemKey(viagemId));
+            msg('Viagem encerrada.');
+            sairDaViagem();
+        } catch (_) {
+            msg('Sem resposta do servidor ao encerrar. Verifique a conexão.', 'error');
+        }
+    }
+    // Sai da tela de viagem (concluída/cancelada) e volta ao mapa do papel atual.
+    // NÃO abre o seletor de papel — usuário permanece onde estava.
+    function sairDaViagem() {
+        if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        if (trackState && trackState.timer) clearInterval(trackState.timer);
+        if (acompTimer) clearInterval(acompTimer);
+        if (viagemView?.id) viagensAbertas.delete(viagemKey(viagemView.id));
+        const papelSalvo = localStorage.getItem('papel')
+            || (viagemView?.ehMotorista ? 'motorista' : 'passageiro');
+        trackState = null;
+        viagemView = null;
+        localStorage.removeItem('viagemAtiva');
+        document.getElementById('btnViagemAndamento').style.display = 'none';
+        // A viagem acabou: a rota antiga não pode ficar presa nos mapas de pedir/oferecer.
+        if (selPed) selPed.limparRota();
+        if (selOfe) selOfe.limparRota();
+        document.getElementById('telaPapel').style.display = 'none';
+        document.body.classList.remove('aguardando-papel');
+        if (papelSalvo === 'motorista' || papelSalvo === 'passageiro') {
+            localStorage.setItem('papel', papelSalvo);
+            escolherPapel(papelSalvo);
+        } else {
+            abrirEscolhaPapel();
+        }
+    }
+
+    /* ===== modo Uber: carros ao vivo, broadcast de posição e acompanhamento ===== */
+    // Ícones SVG profissionais usados nos textos dinâmicos (sem emoji).
+    const ICN = {
+        pin: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+        clock: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+        route: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V9a4 4 0 0 1 4-4h4M18 7v8a4 4 0 0 1-4 4h-4"/></svg>',
+        car: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>',
+        phone: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M6 3h3l2 5-2 1.5a11 11 0 0 0 5.5 5.5L18 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg>',
+        horn: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 10v4h3l6 4V6l-6 4H4z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg>',
+        whats: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 20l1.4-4.2A8 8 0 1 1 9 18.6L4 20z"/><path d="M8.5 9.5c0 3.5 2.5 6 6 6l1-2-2.5-1-1 1c-1-.5-2-1.5-2.5-2.5l1-1-1-2.5z"/></svg>',
+        person: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c1.2-4 4-6 7-6s5.8 2 7 6"/></svg>',
+    };
+
+    // Carros dos motoristas online se movendo no mapa (atualiza a cada 5s).
+    let fleet = { markers: {}, timer: null, map: null, naRota: [], naRotaEm: 0 };
+    let atualizarFrotaAoVivo = null;
+    function limparFrotaAoVivo() {
+        if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
+        const ids = Object.keys(fleet.markers);
+        ids.forEach((id) => {
+            const it = fleet.markers[id];
+            if (it.car) it.car.setMap(null);
+            if (it.rotaCtrl) it.rotaCtrl.limpar();
+            if (it.rotaExtra) it.rotaExtra.limpar();
+            if (it.destinoMk) it.destinoMk.setMap(null);
+        });
+        if (ids.length && carroSel) fecharCarro();
+        fleet.markers = {};
+        fleet.naRota = [];
+        fleet.naRotaEm = 0;
+    }
+    function destinoPublicadoCarro(m) {
+        return m && m.carona_id && m.destino_lat != null
+            ? { lat: +m.destino_lat, lng: +m.destino_lng } : null;
+    }
+    // Frota (passageiro): preta = até onde o motorista vai; dourada = só o resto (parcial).
+    const FLEET_ROTA_OPTS = { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.9 };
+    const FLEET_EXTRA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.92 };
+    const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
+    const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
+
+    // Rota no mapa da frota: só para o carro do modal aberto (evita N×Routes/min).
+    // Preta: carro → parada do motorista. Dourada: só parada → destino do passageiro
+    // (quando a carona é incompleta) — sem duas linhas sobrepostas no mesmo trecho.
+    async function atualizarRotaFrota(item, map, pos, destinoMot) {
+        if (!destinoMot || !pos) {
+            if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
+            if (item.rotaExtra) { item.rotaExtra.limpar(); item.rotaExtra = null; }
+            item.rotaPath = null;
+            item.extraChave = null;
+            return;
+        }
+        // Flightradar: a linha só existe se o passageiro TOCOU no carro (rotaVisivel).
+        // Sem isso, só o carrinho + a bandeira do destino — evita N linhas no mapa.
+        if (!item.rotaVisivel) {
+            if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
+            if (item.rotaExtra) { item.rotaExtra.limpar(); item.rotaExtra = null; }
+            item.rotaPath = null;
+            item.extraChave = null;
+            return;
+        }
+        const destPax = selPed?.getDestino?.() || null;
+        const parcial = destPax && destinoAlemDaParada(destinoMot, destPax);
+
+        const pretaOk = item.rotaCtrl && item.rotaPath && !foraDaRota(pos, item.rotaPath);
+        if (!pretaOk && !item.rotaCalculando) {
+            if (!item.rotaCtrl) item.rotaCtrl = criarRotaControle(map, FLEET_ROTA_OPTS);
+            item.rotaCalculando = true;
+            try {
+                const resp = await item.rotaCtrl.calcular(pos, destinoMot);
+                item.rotaPath = resp._path || resp._fallbackLine || null;
+            } catch (_) { /* sem rota: só o carro */ }
+            finally { item.rotaCalculando = false; }
+        }
+
+        // Trecho dourado: só parada do motorista → destino do passageiro (sem sobrepor a preta).
+        if (parcial) {
+            const extraChave = `${destinoMot.lat},${destinoMot.lng}|${destPax.lat},${destPax.lng}`;
+            if (item.extraChave !== extraChave && !item.extraCalculando) {
+                if (!item.rotaExtra) item.rotaExtra = criarRotaControle(map, FLEET_EXTRA_OPTS);
+                item.extraCalculando = true;
+                try {
+                    await item.rotaExtra.calcular(destinoMot, destPax);
+                    item.extraChave = extraChave;
+                } catch (_) { /* sem trecho dourado */ }
+                finally { item.extraCalculando = false; }
+            }
+        } else if (item.rotaExtra) {
+            item.rotaExtra.limpar();
+            item.extraChave = null;
+        }
+    }
+    function seloFilaCarro(m) {
+        return m && m.carona_id && m.ordem != null ? m.ordem + 1 : undefined;
+    }
+    function iniciarFrotaAoVivo(map) {
+        if (fleet.map && fleet.map !== map) limparFrotaAoVivo();
+        if (fleet.timer) clearInterval(fleet.timer);
+        fleet.map = map;
+        async function tick() {
+            const modalCarroAberto = carroSel && document.getElementById('modalCarro')?.style.display === 'flex';
+            if (document.hidden && !modalCarroAberto) return;
+            try {
+                const o = selPed ? selPed.getOrigem() : null;
+                const dest = selPed && selPed.getDestino ? selPed.getDestino() : null;
+                const r = await fetchWithAuth('/api/motoristas-online' + (o ? `?lat=${o.lat}&lng=${o.lng}` : ''));
+                if (!r.ok) return;
+                let lista = await r.json();
+                // SEM destino do passageiro: mostra só quem tem ROTA publicada (carro +
+                // bandeira no destino). COM destino: mostra todos (inclui amarelos 600 m).
+                if (!dest) lista = (Array.isArray(lista) ? lista : []).filter((m) => m.carona_id);
+                if (o && dest) {
+                    // Fila/ordem muda devagar: consulta a rota a cada ~9 s e reusa entre ticks.
+                    const agora = Date.now();
+                    if (!fleet.naRotaEm || agora - fleet.naRotaEm > 9000) {
+                        const qRota = '?' + new URLSearchParams({
+                            origem_lat: o.lat, origem_lng: o.lng, destino_lat: dest.lat, destino_lng: dest.lng,
+                        }).toString();
+                        fleet.naRota = await fetchWithAuth('/api/motoristas-rota' + qRota).then((rr) => rr.ok ? rr.json() : []).catch(() => []);
+                        fleet.naRotaEm = agora;
+                    }
+                    const naRota = fleet.naRota;
+                    const ordemPorId = new Map((Array.isArray(naRota) ? naRota : [])
+                        .filter((m) => m.carona_id)
+                        .map((m) => [m.id, m.ordem]));
+                    const idsJaListados = new Set(lista.map((m) => m.id));
+                    lista.forEach((m) => { if (m.carona_id && ordemPorId.has(m.id)) m.ordem = ordemPorId.get(m.id); });
+                    (Array.isArray(naRota) ? naRota : []).forEach((m) => {
+                        if (m.carona_id && !idsJaListados.has(m.id)) lista.push(m);
+                    });
+                }
+                const vistos = {};
+                lista.forEach((m) => {
+                    vistos[m.id] = true;
+                    const pos = { lat: +m.lat, lng: +m.lng };
+                    const destCarona = destinoPublicadoCarro(m);
+                    let item = fleet.markers[m.id];
+                    if (item && ((!!item.m.carona_id !== !!m.carona_id) || (!!item.m.online_desde !== !!m.online_desde))) {
+                        item.car.setMap(null);
+                        if (item.rotaCtrl) item.rotaCtrl.limpar();
+                        if (item.rotaExtra) item.rotaExtra.limpar();
+                        if (item.destinoMk) item.destinoMk.setMap(null);
+                        delete fleet.markers[m.id];
+                        item = null;
+                    }
+                    if (item) {
+                        item.m = m;
+                        const prev = item.lastPos;
+                        atualizarPosicaoCarro(item.car, pos, prev);
+                        item.lastPos = pos;
+                        // Só redesenha a linha se estiver alternada (rotaVisivel); senão limpa.
+                        atualizarRotaFrota(item, map, pos, destCarona);
+                    } else {
+                        const car = criarMarcador({
+                            position: pos, map,
+                            iconW: 30, iconH: 40, iconVariant: 'gold',
+                            badge: seloFilaCarro(m),
+                            title: m.nome + (m.placa ? ' • ' + m.placa : '')
+                                + (m.carona_id && m.destino_texto ? ' → ' + m.destino_texto : ' • disponível'),
+                        });
+                        const novo = { m, car, rotaCtrl: null, rotaExtra: null, destinoMk: null, lastPos: pos,
+                            rotaPath: null, rotaCalculando: false, extraChave: null, extraCalculando: false,
+                            rotaVisivel: false };
+                        fleet.markers[m.id] = novo;
+                        // Flightradar: toca no carro (ou na bandeira) → mostra a linha da
+                        // rota; toca de novo → apaga. Nada de rota automática.
+                        const toggleRota = () => {
+                            novo.rotaVisivel = !novo.rotaVisivel;
+                            atualizarRotaFrota(novo, map, novo.lastPos, destinoPublicadoCarro(novo.m));
+                        };
+                        car.addListener('click', toggleRota);
+                        if (destCarona) {
+                            const destinoMk = criarMarcador({
+                                position: destCarona, map, icon: FLAG_ICON, iconW: 28, iconH: 30,
+                                title: 'Destino: ' + (m.destino_texto || ''),
+                            });
+                            destinoMk.addListener('click', toggleRota);
+                            novo.destinoMk = destinoMk;
+                        }
+                    }
+                });
+                const removidos = [];
+                Object.keys(fleet.markers).forEach((id) => {
+                    if (!vistos[id]) {
+                        removidos.push(id);
+                        const it = fleet.markers[id];
+                        it.car.setMap(null);
+                        if (it.rotaCtrl) it.rotaCtrl.limpar();
+                        if (it.rotaExtra) it.rotaExtra.limpar();
+                        if (it.destinoMk) it.destinoMk.setMap(null);
+                        delete fleet.markers[id];
+                    }
+                });
+                sincronizarModalCarroAoVivo(lista, removidos);
+            } catch (_) {}
+        }
+        tick();
+        atualizarFrotaAoVivo = tick;
+        fleet.timer = setInterval(tick, FLEET_POLL_MS);
+    }
+
+    // Passageiros pedindo carona: pulso radar no mapa do MOTORISTA.
+    // Usa AdvancedMarkerElement (mesmo caminho do carrinho) — OverlayView sumia
+    // no celular. Azul = homem, rosa = mulher, cinza = não informado.
+    // Bandeirinha quadriculada (chegada/pedido): mostra no pulso do passageiro no
+    // mapa do MOTORISTA que ali tem alguém pedindo carona.
+    const SVG_BANDEIRA_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#fff" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg>';
+    // Variante DOURADA+PRETA: pulso do PEDIDO do passageiro (o "botão pulsante").
+    const SVG_BANDEIRA_OURO_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" xmlns="http://www.w3.org/2000/svg"><line x1="3.5" y1="2" x2="3.5" y2="22" stroke="#0b0b0d" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="2" width="14" height="9" fill="#EAD298" stroke="#0b0b0d" stroke-width="0.5"/><g fill="#0b0b0d"><rect x="4.5" y="2" width="3.5" height="3"/><rect x="11.5" y="2" width="3.5" height="3"/><rect x="8" y="5" width="3.5" height="3"/><rect x="15" y="5" width="3.5" height="3"/><rect x="4.5" y="8" width="3.5" height="3"/><rect x="11.5" y="8" width="3.5" height="3"/></g></svg>';
+    // No pulso do passageiro a bandeira é dourada+preta (pedido); o destino usa a preta+branca.
+    const SVG_BANDEIRA = '<span class="mp-flag" aria-hidden="true">' + SVG_BANDEIRA_OURO_SVG + '</span>';
+    // Bandeira quadriculada (preta+branca) como ícone de mapa: DESTINO da rota/viagem.
+    const FLAG_ICON = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_BANDEIRA_SVG);
+    function montarConteudoPulse(sexo, titulo, rotulo, comBandeira) {
+        const cor = sexo === 'F' ? '#ff2f92' : sexo === 'M' ? '#3d8bff' : '#b0b6bf';
+        const d = document.createElement('div');
+        d.className = 'map-pulse' + (comBandeira ? ' map-pulse--flag' : '');
+        d.title = titulo || '';
+        d.style.setProperty('--cor', cor);
+        d.innerHTML = '<span class="mp-ring"></span><span class="mp-ring"></span><span class="mp-dot"></span>'
+            + (comBandeira ? SVG_BANDEIRA : '');
+        if (rotulo) {
+            const r = document.createElement('span');
+            r.className = 'mp-rotulo';
+            r.textContent = rotulo;
+            d.appendChild(r);
+        }
+        return d;
+    }
+    function criarPulse(map, pos, sexo, onClick, titulo, rotulo, comBandeira) {
+        const posN = { lat: Number(pos.lat), lng: Number(pos.lng) };
+        const div = montarConteudoPulse(sexo, titulo, rotulo, comBandeira);
+        // Advanced Marker só com Map ID real; DEMO (mapa branco) → OverlayView.
+        if (typeof mapaIdEfetivo === 'function' && mapaIdEfetivo()
+            && typeof _AdvancedMarkerElement === 'function' && _AdvancedMarkerElement) {
+            const mk = new _AdvancedMarkerElement({
+                map: map || null,
+                position: posN,
+                title: titulo || '',
+                content: div,
+                zIndex: 120,
+                gmpClickable: !!onClick,
+            });
+            if (onClick) {
+                mk.addEventListener('gmp-click', (e) => {
+                    try { e?.stop?.(); } catch (_) {}
+                    onClick();
+                });
+                // clique no HTML também (alguns browsers Android)
+                div.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+            } else {
+                div.style.pointerEvents = 'none';
+            }
+            return {
+                div,
+                pos: posN,
+                _mk: mk,
+                setPosition(p) {
+                    this.pos = { lat: Number(p.lat), lng: Number(p.lng) };
+                    mk.position = this.pos;
+                },
+                setMap(m) { mk.map = m || null; },
+            };
+        }
+        // Fallback OverlayView se marker lib não carregou
+        const Overlay = g.maps.OverlayView;
+        class PulseOv extends Overlay {
+            constructor(p, d, cb) {
+                super();
+                this.pos = p;
+                this.div = d;
+                this.cb = cb;
+            }
+            onAdd() {
+                if (!this.div) return;
+                const panes = this.getPanes();
+                const pane = panes?.overlayMouseTarget || panes?.floatPane;
+                if (!pane || this.div.parentNode) return;
+                if (this.cb) this.div.addEventListener('click', (e) => { e.stopPropagation(); this.cb(); });
+                else this.div.style.pointerEvents = 'none';
+                pane.appendChild(this.div);
+            }
+            draw() {
+                if (!this.div || !this.pos) return;
+                if (!this.div.parentNode) {
+                    try { this.onAdd(); } catch (_) { return; }
+                }
+                const proj = this.getProjection();
+                if (!proj) return;
+                const pt = proj.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+                if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
+            }
+            setPosition(p) { this.pos = { lat: Number(p.lat), lng: Number(p.lng) }; this.draw(); }
+            onRemove() { if (this.div?.parentNode) this.div.parentNode.removeChild(this.div); }
+        }
+        const o = new PulseOv(posN, div, onClick);
+        o.setMap(map);
+        return o;
+    }
+
+    function rotuloPulsoPedido(p) {
+        const destPax = p.destino_texto || 'destino no mapa';
+        // Encaixe: destino diferente, mas sua rota passa num ponto em comum —
+        // dá pra levar o passageiro até lá (ele segue do ponto).
+        if (p.compat_rota === 'encaixe') {
+            const pc = p.encaixe_texto || 'um ponto do seu caminho';
+            return `→ ${destPax} (dá pra levar até ${pc})`;
+        }
+        if (p.compat_rota === 'proximo' || p.compat_rota === 'parcial') {
+            const dm = p.destino_motorista_texto || 'seu destino';
+            return `→ ${destPax} (você vai até ${dm})`;
+        }
+        return '→ ' + destPax;
+    }
+
+    // Mapa do motorista:
+    // - preta = trecho do condutor (origem pax → parada/destino do motorista)
+    // - dourada (extra) = só o além da parada (portaria → oficina) — sem sobrepor a preta
+    // - dourada (embarque) = motorista → ponto de encontro (modo amarelo / chegada)
+    const MOTOR_PAX_ROTA_OPTS = { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.88 };
+    const MOTOR_EXTRA_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.92 };
+    const MOTOR_EMBARQUE_ROTA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.9 };
+    let motoristaPaxRotas = { items: {} };
+    let enquadrarMapaMotoristaTimer = null;
+
+    /** Destino do passageiro fica além da parada do motorista (~120 m). */
+    function destinoAlemDaParada(parada, destino, limiarKm = 0.12) {
+        if (!parada || !destino) return false;
+        if (!Number.isFinite(+parada.lat) || !Number.isFinite(+destino.lat)) return false;
+        return distKmGps(parada, destino) > limiarKm;
+    }
+
+    function coletarPassageirosMapaMotorista() {
+        const lista = [];
+        Object.values(pedidoFleet.markers).forEach((mk) => {
+            const p = mk._p;
+            if (p?.origem_lat != null && p?.destino_lat != null) lista.push({ key: 'ped-' + p.id, p });
+        });
+        Object.values(contatoFleet.markers).forEach((mk) => {
+            const c = mk._c;
+            if (c?.origem_lat != null && c?.destino_lat != null && !passageiroIdEmPedidoFleet(c.passageiro_id)) {
+                lista.push({ key: 'px-' + c.passageiro_id, p: c });
+            }
+        });
+        return lista;
+    }
+
+    function limparRotasPassageiroMotorista() {
+        Object.values(motoristaPaxRotas.items).forEach((it) => {
+            if (it.rotaPax) it.rotaPax.limpar();
+            if (it.rotaExtra) it.rotaExtra.limpar();
+            if (it.rotaEmbarque) it.rotaEmbarque.limpar();
+        });
+        motoristaPaxRotas.items = {};
+    }
+
+    // Chave do último enquadramento — evita fitBounds a cada poll (ping-pong).
+    let _enquadroMotChave = '';
+    let _enquadroMotEm = 0;
+
+    /** Zoom ideal para caber ~distKm na tela (modo online ≤ 600 m). */
+    function zoomIdealEncontroKm(distKm) {
+        const d = Math.max(0.08, Number(distKm) || 0.3); // mín. ~80 m de “folga”
+        if (d <= 0.15) return 17;
+        if (d <= 0.35) return 16;
+        if (d <= 0.65) return 16; // ~600 m: legível na tela do celular
+        if (d <= 1.0) return 15;
+        if (d <= 2.0) return 14;
+        if (d <= 4.0) return 13;
+        return 12;
+    }
+
+    /**
+     * Online sem rota: enquadra MOTORISTA + PASSAGEIRO(s) com o melhor zoom.
+     * NÃO usa destino do passageiro (só o rótulo do pulso mostra o nome).
+     * forcar=true: nova solicitação — sempre aplica.
+     */
+    function enquadrarEncontroOnline(forcar) {
+        if (!selOfe?.map || !g?.maps) return;
+        const mot = selOfe.getOrigem?.();
+        if (!mot || !Number.isFinite(+mot.lat)) return;
+        const paxPts = [];
+        Object.values(pedidoFleet.markers).forEach((mk) => {
+            const p = mk._p;
+            if (p?.origem_lat != null) paxPts.push({ lat: +p.origem_lat, lng: +p.origem_lng });
+        });
+        Object.values(contatoFleet.markers).forEach((mk) => {
+            const c = mk._c;
+            if (c?.origem_lat != null) paxPts.push({ lat: +c.origem_lat, lng: +c.origem_lng });
+        });
+        if (!paxPts.length) return;
+
+        let maxDist = 0;
+        let latSum = +mot.lat;
+        let lngSum = +mot.lng;
+        paxPts.forEach((p) => {
+            latSum += p.lat;
+            lngSum += p.lng;
+            maxDist = Math.max(maxDist, distKmGps(mot, p));
+        });
+        const n = 1 + paxPts.length;
+        const center = { lat: latSum / n, lng: lngSum / n };
+        // Folga ~15% para os dois caberem com a sheet embaixo
+        const zoom = zoomIdealEncontroKm(maxDist * 1.15);
+        const chave = paxPts.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).sort().join('|')
+            + `|${(+mot.lat).toFixed(4)},${(+mot.lng).toFixed(4)}|z${zoom}`;
+
+        // Só reaplica se mudou de verdade ou forçou (nova buzina/pedido).
+        if (!forcar && chave === _enquadroMotChave && Date.now() - _enquadroMotEm < 12000) return;
+        _enquadroMotChave = chave;
+        _enquadroMotEm = Date.now();
+
+        // setCenter + setZoom (1 shot) — sem fitBounds + idle que brigam e geram ping-pong
+        selOfe.map.setOptions({ center, zoom });
+    }
+
+    function enquadrarMapaMotorista(forcar) {
+        if (!selOfe?.map || !g?.maps) return;
+        const o = selOfe.getOrigem?.();
+        const dest = selOfe.getDestino?.();
+        const soOnlineSemRota = motoristaOnlineModo && !dest && !motoristaModoDestino;
+
+        // Modo amarelo: só os dois pontos (você + passageiro), zoom ideal ≤ ~600 m.
+        if (soOnlineSemRota) {
+            enquadrarEncontroOnline(!!forcar);
+            return;
+        }
+
+        // Com rota publicada: bounds motorista + destinos (comportamento anterior).
+        const bounds = new g.maps.LatLngBounds();
+        let tem = false;
+        if (o) { bounds.extend(o); tem = true; }
+        if (dest) { bounds.extend(dest); tem = true; }
+        coletarPassageirosMapaMotorista().forEach(({ p }) => {
+            if (p.origem_lat != null) {
+                bounds.extend({ lat: +p.origem_lat, lng: +p.origem_lng });
+                tem = true;
+            }
+            if (p.destino_lat != null) {
+                bounds.extend({ lat: +p.destino_lat, lng: +p.destino_lng });
+            }
+        });
+        if (!tem) return;
+        const chave = bounds.toUrlValue?.(6) || String(bounds);
+        if (!forcar && chave === _enquadroMotChave && Date.now() - _enquadroMotEm < 12000) return;
+        _enquadroMotChave = chave;
+        _enquadroMotEm = Date.now();
+        selOfe.map.fitBounds(bounds, { top: 72, bottom: 200, left: 36, right: 36 });
+        g.maps.event.addListenerOnce(selOfe.map, 'idle', () => {
+            if (selOfe.map.getZoom() > 17) selOfe.map.setZoom(17);
+        });
+    }
+
+    function enquadrarMapaMotoristaDebounced(forcar) {
+        clearTimeout(enquadrarMapaMotoristaTimer);
+        enquadrarMapaMotoristaTimer = setTimeout(() => enquadrarMapaMotorista(!!forcar), 200);
+    }
+
+    async function atualizarRotasPassageiroMotorista(map) {
+        if (!motoristaOnlineModo || !map) {
+            limparRotasPassageiroMotorista();
+            return;
+        }
+        const passageiros = coletarPassageirosMapaMotorista();
+        const vistos = {};
+        const motorPos = selOfe?.getOrigem?.();
+        const destMot = selOfe?.getDestino?.();
+        // Online amarelo: só linha até o passageiro (não abre mapa no destino longe).
+        const soOnlineSemRota = !destMot && !motoristaModoDestino;
+        for (const { key, p } of passageiros) {
+            vistos[key] = true;
+            const origem = { lat: +p.origem_lat, lng: +p.origem_lng };
+            const destino = p.destino_lat != null
+                ? { lat: +p.destino_lat, lng: +p.destino_lng }
+                : null;
+            let item = motoristaPaxRotas.items[key];
+            if (!item) {
+                item = motoristaPaxRotas.items[key] = {
+                    rotaPax: criarRotaControle(map, MOTOR_PAX_ROTA_OPTS),
+                    rotaExtra: criarRotaControle(map, MOTOR_EXTRA_ROTA_OPTS),
+                    rotaEmbarque: criarRotaControle(map, MOTOR_EMBARQUE_ROTA_OPTS),
+                    paxChave: null, paxCalculando: false,
+                    extraChave: null, extraCalculando: false,
+                    embarquePath: null, embarqueCalculando: false,
+                };
+            }
+            // Com rota publicada:
+            // - preta = trecho do condutor (origem pax → parada do motorista, ou destino se total)
+            // - dourada extra = SÓ o restante (parada → destino pax) — sem sobrepor
+            if (soOnlineSemRota) {
+                if (item.rotaPax) item.rotaPax.limpar();
+                if (item.rotaExtra) item.rotaExtra.limpar();
+                item.paxChave = null;
+                item.extraChave = null;
+            } else if (destino) {
+                const parcial = destMot && destinoAlemDaParada(destMot, destino);
+                const fimPreto = parcial ? destMot : destino;
+                const paxChave = `${origem.lat},${origem.lng}|${fimPreto.lat},${fimPreto.lng}|${parcial ? 'p' : 't'}`;
+                if (item.paxChave !== paxChave && !item.paxCalculando) {
+                    item.paxCalculando = true;
+                    try {
+                        await item.rotaPax.calcular(origem, fimPreto);
+                        item.paxChave = paxChave;
+                    } catch (_) { /* sem rota preta */ }
+                    finally { item.paxCalculando = false; }
+                }
+                if (parcial) {
+                    const extraChave = `${destMot.lat},${destMot.lng}|${destino.lat},${destino.lng}`;
+                    if (item.extraChave !== extraChave && !item.extraCalculando) {
+                        item.extraCalculando = true;
+                        try {
+                            await item.rotaExtra.calcular(destMot, destino);
+                            item.extraChave = extraChave;
+                        } catch (_) { /* sem trecho dourado */ }
+                        finally { item.extraCalculando = false; }
+                    }
+                } else if (item.rotaExtra) {
+                    item.rotaExtra.limpar();
+                    item.extraChave = null;
+                }
+            }
+            if (motorPos) {
+                // Linha dourada: motorista → onde o passageiro está (encontro).
+                if ((!item.embarquePath || foraDaRota(motorPos, item.embarquePath)) && !item.embarqueCalculando) {
+                    item.embarqueCalculando = true;
+                    try {
+                        const resp = await item.rotaEmbarque.calcular(motorPos, origem);
+                        item.embarquePath = resp._path || null;
+                    } catch (_) { /* sem rota até embarque */ }
+                    finally { item.embarqueCalculando = false; }
+                }
+            } else if (item.rotaEmbarque) {
+                item.rotaEmbarque.limpar();
+                item.embarquePath = null;
+            }
+        }
+        Object.keys(motoristaPaxRotas.items).forEach((key) => {
+            if (!vistos[key]) {
+                const it = motoristaPaxRotas.items[key];
+                if (it.rotaPax) it.rotaPax.limpar();
+                if (it.rotaExtra) it.rotaExtra.limpar();
+                if (it.rotaEmbarque) it.rotaEmbarque.limpar();
+                delete motoristaPaxRotas.items[key];
+            }
+        });
+        // NÃO enquadra a cada poll — só quando chega solicitação nova (forcar).
+    }
+
+    function passageiroIdEmPedidoFleet(passageiroId) {
+        return Object.values(pedidoFleet.markers).some((mk) => mk._p?.passageiro_id === passageiroId);
+    }
+
+    let pedidoFleet = { markers: {}, timer: null, viuPrimeiraLeva: false };
+    function iniciarPedidosAoVivo(map) {
+        if (pedidoFleet.timer) clearInterval(pedidoFleet.timer);
+        async function tick() {
+            if (document.hidden && !motoristaOnlineModo) return;
+            try {
+                // Passa a posição do motorista: o servidor ordena por proximidade.
+                const o = selOfe ? selOfe.getOrigem() : null;
+                const q = o ? `?lat=${o.lat}&lng=${o.lng}` : '';
+                const r = await fetchWithAuth('/api/pedidos' + q);
+                if (!r || !r.ok) return;
+                const lista = (await r.json()).filter(p => p.passageiro_id !== user.id && p.origem_lat != null && !pedidosRecusadosMot.has(p.id));
+                const vistos = {};
+                let novos = 0;
+                lista.forEach((p) => {
+                    vistos[p.id] = true;
+                    const pos = { lat: +p.origem_lat, lng: +p.origem_lng };
+                    // Sem rótulo de destino no mapa do MOTORISTA: poluía a tela e ele
+                    // já tem a linha preta da rota (e toca no pulso pra ver detalhes).
+                    // O nome do destino aparece só pro passageiro.
+                    const rotulo = '';
+                    if (pedidoFleet.markers[p.id]) {
+                        pedidoFleet.markers[p.id].setPosition(pos);
+                        pedidoFleet.markers[p.id]._p = p;
+                        atualizarRotuloPulso(pedidoFleet.markers[p.id], rotulo);
+                    } else {
+                        const titulo = (p.passageiro_nome || 'Passageiro') + ' — pedindo carona';
+                        const mk = criarPulse(map, pos, p.passageiro_sexo, () => mostrarPedido(mk._p), titulo, rotulo, true);
+                        mk._p = p;
+                        pedidoFleet.markers[p.id] = mk;
+                        if (pedidoFleet.viuPrimeiraLeva) novos++;
+                    }
+                });
+                Object.keys(pedidoFleet.markers).forEach((id) => {
+                    if (!vistos[id]) { pedidoFleet.markers[id].setMap(null); delete pedidoFleet.markers[id]; }
+                });
+                // Buzina só para pedido que CHEGOU depois que o mapa abriu
+                // (a primeira leva é o que já estava lá).
+                if (novos) buzinar();
+                // Nova solicitação: abre o mapa no raio ideal (você + passageiro).
+                if (novos || !pedidoFleet.viuPrimeiraLeva) {
+                    enquadrarMapaMotoristaDebounced(true);
+                }
+                pedidoFleet.viuPrimeiraLeva = true;
+                await atualizarRotasPassageiroMotorista(map);
+            } catch (_) {}
+        }
+        tick();
+        pedidoFleet.timer = setInterval(tick, motoristaOnlineModo ? 8000 : 8000);
+    }
+    // Remove o pulso de um pedido na hora (após o motorista oferecer/aceitar).
+    function removerPulsoPedido(pedidoId) {
+        const mk = pedidoFleet.markers[pedidoId];
+        if (mk) { mk.setMap(null); delete pedidoFleet.markers[pedidoId]; }
+        if (selOfe?.map) atualizarRotasPassageiroMotorista(selOfe.map);
+    }
+    // Mini-mapa do modal: prioriza ENCONTRO (motorista + passageiro) com zoom útil.
+    // Destino do passageiro fica no texto (não no fitBounds), para não “abrir” o mapa.
+    const _miniMapas = {};
+    function limparMiniMapa(elId) {
+        const mm = _miniMapas[elId];
+        if (!mm) return;
+        if (mm.mkO) { mm.mkO.setMap(null); mm.mkO = null; }
+        if (mm.mkD) { mm.mkD.setMap(null); mm.mkD = null; }
+        if (mm.mkMot) { mm.mkMot.setMap(null); mm.mkMot = null; }
+        if (mm.rotaCtrl) mm.rotaCtrl.limpar();
+    }
+    function enquadrarMiniPontos(map, pontos, pad = 48) {
+        const pts = (pontos || []).filter((p) => p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng));
+        if (!pts.length) return;
+        if (pts.length === 1) {
+            map.setCenter(pts[0]);
+            map.setZoom(16);
+            return;
+        }
+        const b = new g.maps.LatLngBounds();
+        pts.forEach((p) => b.extend(p));
+        map.fitBounds(b, pad);
+        g.maps.event.addListenerOnce(map, 'idle', () => {
+            const z = map.getZoom();
+            if (z > 17) map.setZoom(17);
+            if (z < 14) map.setZoom(14);
+        });
+    }
+    // Bandeirinha do passageiro no mini-mapa (balança ao vento). OverlayView simples
+    // (sem depender de Map ID) — funciona nos mini-mapas raster.
+    function criarFlagMini(map, pos) {
+        const ov = new g.maps.OverlayView();
+        ov.pos = { lat: +pos.lat, lng: +pos.lng };
+        ov.onAdd = function () {
+            const d = document.createElement('div');
+            d.className = 'mini-flag';
+            d.innerHTML = SVG_BANDEIRA_SVG;
+            this.div = d;
+            const panes = this.getPanes();
+            (panes?.overlayMouseTarget || panes?.floatPane)?.appendChild(d);
+        };
+        ov.draw = function () {
+            if (!this.div) return;
+            const proj = this.getProjection();
+            if (!proj) return;
+            const pt = proj.fromLatLngToDivPixel(new g.maps.LatLng(this.pos.lat, this.pos.lng));
+            if (pt) { this.div.style.left = pt.x + 'px'; this.div.style.top = pt.y + 'px'; }
+        };
+        ov.onRemove = function () { if (this.div?.parentNode) this.div.parentNode.removeChild(this.div); };
+        ov.setMap(map);
+        return ov;
+    }
+    /**
+     * @param {string} elId
+     * @param {{ lat, lng }|null} paxPos  onde o passageiro está
+     * @param {{ lat, lng }|null} destPos destino (opcional; NÃO entra no zoom de encontro)
+     * @param {{ lat, lng }|null} motPos  GPS do motorista (modo online)
+     * @param {{ modoEncontro?: boolean, metricElId?: string }} opts
+     */
+    function desenharRotaMini(elId, paxPos, destPos, motPos, opts = {}) {
+        const el = document.getElementById(elId);
+        if (!el || !g || !g.maps) { if (el) el.style.display = 'none'; return; }
+        const pax = paxPos && Number.isFinite(+paxPos.lat) ? { lat: +paxPos.lat, lng: +paxPos.lng } : null;
+        const dest = destPos && Number.isFinite(+destPos.lat) ? { lat: +destPos.lat, lng: +destPos.lng } : null;
+        const mot = motPos && Number.isFinite(+motPos.lat) ? { lat: +motPos.lat, lng: +motPos.lng } : null;
+        if (!pax && !mot) { el.style.display = 'none'; return; }
+        el.style.display = 'block';
+        const modoEncontro = !!opts.modoEncontro || (!!mot && !!pax);
+        let mm = _miniMapas[elId];
+        if (!mm) {
+            const map = new g.maps.Map(el, opcoesMapa({
+                zoom: 15, center: pax || mot,
+                disableDefaultUI: true, gestureHandling: 'none',
+                keyboardShortcuts: false, clickableIcons: false, mapTypeId: 'roadmap',
+            }));
+            forcarMapaRaster(map);
+            const rotaCtrl = criarRotaControle(map, { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.95 });
+            mm = _miniMapas[elId] = { map, rotaCtrl, mkO: null, mkD: null, mkMot: null };
+        }
+        limparMiniMapa(elId);
+        const { map, rotaCtrl } = mm;
+        // Passageiro = bandeirinha (balança ao vento). Motorista = carrinho dourado.
+        if (pax) mm.mkO = criarFlagMini(map, pax);
+        if (mot) mm.mkMot = criarMarcador({
+            position: mot, map, iconVariant: 'gold', iconW: 28, iconH: 36, title: 'Você', zIndex: 4,
+        });
+        // Destino: só pin se NÃO for modo encontro (com rota do motorista / pedido completo).
+        if (dest && !modoEncontro) {
+            mm.mkD = criarMarcador({ position: dest, map, cor: '#EAD298', title: 'Destino', zIndex: 2 });
+        }
+        // Distância/tempo entre motorista e a bandeirinha (métrica que faltava).
+        const metricEl = opts.metricElId ? document.getElementById(opts.metricElId) : null;
+        const mostrarMetric = (km, min) => {
+            if (!metricEl) return;
+            if (!(km >= 0)) { metricEl.style.display = 'none'; metricEl.textContent = ''; return; }
+            const distTxt = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+            const minTxt = min ? ` · ~${min} min` : '';
+            metricEl.innerHTML = `${ICN.pin} <strong>${distTxt}</strong> até o passageiro${minTxt}`;
+            metricEl.style.display = 'block';
+        };
+        if (metricEl) {
+            if (mot && pax) {
+                const kmReta = distKmGps(mot, pax);
+                mostrarMetric(kmReta, Math.max(1, Math.round((kmReta / 22) * 60)));
+            } else { mostrarMetric(-1); }
+        }
+        setTimeout(() => {
+            g.maps.event.trigger(map, 'resize');
+            if (modoEncontro && mot && pax) {
+                // Linha curta você → passageiro; zoom nos dois. Usa a distância REAL
+                // da rota (ruas) na métrica quando o cálculo volta.
+                rotaCtrl.calcular(mot, pax).then((resp) => {
+                    if (resp && resp.km >= 0) {
+                        const min = resp._durationMillis ? Math.round(resp._durationMillis / 60000) : 0;
+                        mostrarMetric(resp.km, min);
+                    }
+                }).catch(() => rotaCtrl.limpar());
+                enquadrarMiniPontos(map, [mot, pax], 56);
+            } else if (pax && dest && !modoEncontro) {
+                rotaCtrl.calcular(pax, dest).catch(() => {
+                    rotaCtrl.limpar();
+                    enquadrarMiniPontos(map, [pax, dest], 40);
+                });
+            } else {
+                enquadrarMiniPontos(map, [mot, pax, dest].filter(Boolean), 48);
+            }
+        }, 60);
+    }
+    function htmlDestinoDestaque(texto) {
+        const t = (texto && String(texto).trim()) || 'Destino no mapa';
+        return `<div class="sol-destino-destaque" title="${esc(t)}">`
+            + `<span class="sol-destino-label">Quer ir para</span>`
+            + `<span class="sol-destino-nome">${esc(t)}</span>`
+            + `</div>`;
+    }
+
+    // Motorista toca num passageiro que está chamando e oferece a carona.
+    let pedidoSel = null;
+    let contatoSel = null;
+
+    /** Selfie de validação no modal — o motorista precisa ver quem está pedindo. */
+    function iniciaisNome(nome) {
+        const p = (nome || 'P').trim().split(/\s+/).filter(Boolean);
+        if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+        return (p[0]?.[0] || 'P').toUpperCase();
+    }
+    function aplicarSelfieNoModalPedido(url, nome) {
+        const sf = document.getElementById('pedidoSelfie');
+        const ph = document.getElementById('pedidoSelfiePh');
+        const hint = document.getElementById('pedidoSelfieHint');
+        if (!sf) return;
+        const limpa = () => {
+            sf.onload = null;
+            sf.onerror = null;
+            sf.removeAttribute('src');
+            sf.style.display = 'none';
+        };
+        if (url) {
+            if (ph) ph.style.display = 'none';
+            if (hint) { hint.style.display = 'block'; hint.textContent = 'Foto de validação'; }
+            sf.onerror = () => {
+                limpa();
+                if (ph) {
+                    ph.textContent = iniciaisNome(nome);
+                    ph.style.display = 'flex';
+                }
+                if (hint) { hint.style.display = 'block'; hint.textContent = 'Sem foto — confira o nome'; }
+            };
+            sf.onload = () => { sf.style.display = 'block'; };
+            sf.alt = 'Foto de ' + (nome || 'passageiro');
+            sf.src = url;
+            sf.style.display = 'block';
+        } else {
+            limpa();
+            if (ph) {
+                ph.textContent = iniciaisNome(nome);
+                ph.style.display = 'flex';
+            }
+            if (hint) {
+                hint.style.display = 'block';
+                hint.textContent = 'Sem selfie de validação neste pedido';
+            }
+        }
+    }
+
+    function mostrarPedido(p) {
+        contatoSel = null;
+        pedidoSel = p;
+        const nome = p.passageiro_nome || 'Passageiro';
+        const motPos = selOfe?.getOrigem?.() || null;
+        const semRotaMot = motoristaOnlineModo && !selOfe?.getDestino?.() && !motoristaModoDestino;
+        document.querySelector('#modalPedido .sol-badge').textContent = 'Pedindo carona';
+        const btnSec = document.getElementById('btnRecusarPedido');
+        if (btnSec) btnSec.textContent = 'Recusar';
+        document.getElementById('pedidoNome').textContent = nome;
+        document.getElementById('pedidoRota').innerHTML =
+            htmlDestinoDestaque(p.destino_texto)
+            + `<div class="sol-meta">${ICN.pin} <b>Onde está:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
+            + `<div class="sol-meta">${p.pessoas || 1} pessoa(s)</div>`
+            + (p.compat_rota === 'encaixe'
+                ? `<div class="sol-meta" style="color:#EAD298;">${ICN.route} Sua rota passa por <b>${esc(p.encaixe_texto || 'um ponto do caminho')}</b> — dá para deixar o passageiro lá.</div>`
+                : '');
+        aplicarSelfieNoModalPedido(p.selfie_url, nome);
+        document.getElementById('modalPedido').style.display = 'flex';
+        const o = p.origem_lat != null ? { lat: +p.origem_lat, lng: +p.origem_lng } : null;
+        const d = p.destino_lat != null ? { lat: +p.destino_lat, lng: +p.destino_lng } : null;
+        // Online amarelo: mini-mapa = você + passageiro (perto). Destino só no texto.
+        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: semRotaMot, metricElId: 'pedidoDistancia' });
+        if (semRotaMot) enquadrarMapaMotorista(true);
+    }
+    function fecharPedido() {
+        if (contatoSel?.id) marcarContatoLido(contatoSel.id);
+        document.getElementById('modalPedido').style.display = 'none';
+        contatoSel = null;
+    }
+    // Botão da esquerda: sempre "Recusar". Numa buzina (contato) avisa o passageiro;
+    // num pedido, tira o motorista da fila e o robô segue pro próximo motorista.
+    function acaoSecundariaPedido() {
+        if (contatoSel) return recusarContato();
+        if (pedidoSel) return recusarPedidoMotorista();
+        fecharPedido();
+    }
+    // Motoristas que já recusaram um pedido: o pulso não volta a aparecer no mapa.
+    const pedidosRecusadosMot = new Set();
+    async function recusarPedidoMotorista() {
+        const p = pedidoSel;
+        pedidoSel = null;
+        document.getElementById('modalPedido').style.display = 'none';
+        if (!p?.id) return;
+        pedidosRecusadosMot.add(p.id);
+        removerPulsoPedido(p.id);   // some do mapa do motorista
+        try {
+            await fetchWithAuth('/api/pedidos/' + p.id + '/recusar-motorista', { method: 'POST' });
+            msg('Pedido recusado. Buscando outro motorista para o passageiro.');
+        } catch (_) {
+            msg('Não foi possível recusar. Tente de novo.', 'error');
+        }
+    }
+    async function recusarContato() {
+        const c = contatoSel;
+        contatoSel = null;
+        document.getElementById('modalPedido').style.display = 'none';
+        if (!c?.id) return;
+        removerPulsoContato(c.passageiro_id);   // some do mapa do motorista
+        try {
+            await fetchWithAuth('/api/motorista/contatos/' + c.id + '/recusar', { method: 'POST' });
+            msg('Solicitação recusada. O passageiro foi avisado.');
+        } catch (_) {
+            msg('Não foi possível recusar. Tente de novo.', 'error');
+        }
+    }
+    async function marcarContatoLido(contatoId) {
+        if (!contatoId) return;
+        try {
+            await fetchWithAuth('/api/motorista/contatos/' + contatoId + '/lido', { method: 'POST' });
+        } catch (_) {}
+    }
+    async function oferecerAoPedido() {
+        if (contatoSel) return oferecerAoContato();
+        const p = pedidoSel;
+        fecharPedido();
+        if (!p) return;
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para oferecer.', 'error');
+            abrirPerfil();
+            return;
+        }
+        const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ pedido_id: p.id }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (navigator.vibrate) navigator.vibrate(80);   // vibrasinha curta ao aceitar
+        removerPulsoPedido(p.id);                        // o círculo pulsando some
+        mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id, pessoas: p.pessoas, souMotorista: true });
+    }
+
+    function mostrarContato(c) {
+        contatoSel = c;
+        pedidoSel = null;
+        const nome = c.passageiro_nome || 'Passageiro';
+        const motPos = selOfe?.getOrigem?.() || null;
+        // Buzina no carro amarelo = sempre modo encontro no mini-mapa.
+        document.querySelector('#modalPedido .sol-badge').textContent = 'Quer carona';
+        const btnSec = document.getElementById('btnRecusarPedido');
+        if (btnSec) btnSec.textContent = 'Recusar';
+        document.getElementById('pedidoNome').textContent = nome;
+        document.getElementById('pedidoRota').innerHTML =
+            htmlDestinoDestaque(c.destino_texto)
+            + `<div class="sol-meta">${ICN.pin} <b>Onde está:</b> ${esc(c.origem_texto || 'Perto de você no mapa')}</div>`
+            + `<div class="sol-meta">${c.pessoas || 1} pessoa(s)</div>`;
+        aplicarSelfieNoModalPedido(c.selfie_url, nome);
+        document.getElementById('modalPedido').style.display = 'flex';
+        const o = c.origem_lat != null ? { lat: +c.origem_lat, lng: +c.origem_lng } : null;
+        const d = c.destino_lat != null ? { lat: +c.destino_lat, lng: +c.destino_lng } : null;
+        desenharRotaMini('pedidoMapa', o, d, motPos, { modoEncontro: true, metricElId: 'pedidoDistancia' });
+        // Ao abrir o modal, reforça o mapa de trás nos dois pontos.
+        enquadrarMapaMotorista(true);
+    }
+    async function oferecerAoContato() {
+        const c = contatoSel;
+        fecharPedido();
+        if (!c) return;
+        if (!(await garantirHabilitacaoMotorista())) {
+            msg('Ative o modo motorista no Perfil para oferecer.', 'error');
+            abrirPerfil();
+            return;
+        }
+        const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({ contato_id: c.id }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return msg(d.error || 'Erro', 'error');
+        if (navigator.vibrate) navigator.vibrate(80);
+        await marcarContatoLido(c.id);
+        removerPulsoContato(c.passageiro_id);
+        mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id, pessoas: c.pessoas, souMotorista: true });
+    }
+
+    // Mostra o próprio carro no mapa (atualiza a cada 5s). Se marcadorEmprestado for
+    // passado (ex.: mkOrigem do criarSeletor), reutiliza o mesmo ícone — evita dois
+    // carrinhos no mesmo GPS com rotações diferentes (efeito "hélice").
+    let selfCar = { marker: null, timer: null, watchId: null, lastPos: null, emprestado: false };
+    // Círculo do alcance (só o motorista vê): raio = barra, centrado no carro e
+    // acompanha ele. Aparece quando há destino marcado no mapa de oferecer.
+    let raioCircle = null;
+    function atualizarRaioCarro() {
+        const map = selOfe && selOfe.map;
+        if (!map || !g || !g.maps) return;
+        const temDest = !!(selOfe.getDestino && selOfe.getDestino());
+        const pos = selfCar.lastPos
+            || (selOfe.origemConfiavel && selOfe.origemConfiavel() && selOfe.getOrigem ? selOfe.getOrigem() : null);
+        if (!temDest || !pos) { if (raioCircle) raioCircle.setMap(null); return; }
+        const raioM = lerAlcanceOfe() * 1000;
+        if (!raioCircle) {
+            raioCircle = new g.maps.Circle({
+                map, center: pos, radius: raioM,
+                strokeColor: '#EAD298', strokeOpacity: 0.9, strokeWeight: 2,
+                fillColor: '#EAD298', fillOpacity: 0.08, clickable: false, zIndex: 1,
+            });
+        } else {
+            raioCircle.setMap(map);
+            raioCircle.setCenter(pos);
+            raioCircle.setRadius(raioM);
+        }
+    }
+    function acompanharProprioCarro(map, marcadorEmprestado) {
+        if (selfCar.watchId != null) navigator.geolocation.clearWatch(selfCar.watchId);
+        if (selfCar.timer) clearInterval(selfCar.timer);
+        selfCar.watchId = null;
+        selfCar.timer = null;
+        if (selfCar.marker && !selfCar.emprestado) selfCar.marker.setMap(null);
+        selfCar.marker = marcadorEmprestado || null;
+        selfCar.emprestado = !!marcadorEmprestado;
+        selfCar.lastPos = marcadorEmprestado ? null : selfCar.lastPos;
+        function aplicarPos(pos) {
+            if (selfCar.marker) {
+                atualizarPosicaoCarro(selfCar.marker, pos, selfCar.lastPos);
+            } else {
+                selfCar.marker = criarMarcador({
+                    position: pos, map,
+                    iconW: 30, iconH: 40,
+                    iconVariant: 'gold',
+                    title: 'Você', zIndex: 999,
+                });
+                selfCar.emprestado = false;
+            }
+            selfCar.lastPos = pos;
+            atualizarRaioCarro();   // círculo do alcance segue o carro
+        }
+        selfCar.watchId = navigator.geolocation.watchPosition(
+            (p) => {
+                registrarAmostraVelocidade(p);   // alimenta a velocidade média do resumo
+                aplicarPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+            },
+            () => {},
+            { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 },
+        );
+    }
+
+    let contatoFleet = {
+        markers: {},
+        timer: null,
+        viuPrimeiraLeva: false,
+        passageirosAtivos: new Set(),
+        ultimoContatoTs: new Map(),
+    };
+
+    // Usa a mudança real do contato em vez do relógio do celular. Assim a buzina
+    // toca também quando o mesmo passageiro aperta de novo no carro amarelo.
+    function contatoFoiAtualizado(c) {
+        const ts = c.created_at ? new Date(c.created_at).getTime() : 0;
+        if (!ts || !c.passageiro_id) return false;
+        const key = chavePulsoContato(c.passageiro_id);
+        const anterior = contatoFleet.ultimoContatoTs.get(key) || 0;
+        contatoFleet.ultimoContatoTs.set(key, Math.max(anterior, ts));
+        return contatoFleet.viuPrimeiraLeva && ts > anterior;
+    }
+
+    function chavePulsoContato(passageiroId) {
+        return 'p' + passageiroId;
+    }
+
+    function removerPulsoContato(passageiroId) {
+        const key = chavePulsoContato(passageiroId);
+        const mk = contatoFleet.markers[key];
+        if (mk) { mk.setMap(null); delete contatoFleet.markers[key]; }
+        contatoFleet.passageirosAtivos.delete(passageiroId);
+    }
+
+    function limparPulsosContatoLegados() {
+        Object.keys(contatoFleet.markers).forEach((k) => {
+            if (k.startsWith('c')) {
+                contatoFleet.markers[k].setMap(null);
+                delete contatoFleet.markers[k];
+            }
+        });
+    }
+
+    function atualizarRotuloPulso(mk, rotulo) {
+        if (!mk?.div) return;
+        const el = mk.div.querySelector('.mp-rotulo');
+        if (el) el.textContent = rotulo;
+        else if (rotulo) {
+            const r = document.createElement('span');
+            r.className = 'mp-rotulo';
+            r.textContent = rotulo;
+            mk.div.appendChild(r);
+        }
+    }
+
+    function rotuloPulsoContato(c) {
+        // Só pra onde o passageiro quer ir (limpo). Sem o "(você vai até seu destino)"
+        // que poluía e repetia o destino do próprio motorista.
+        return '→ ' + (c.destino_texto || 'destino no mapa');
+    }
+
+    let contatoTickFn = null;
+    function pollContatosMotoristaOnce() {
+        if (contatoTickFn) contatoTickFn();
+    }
+
+    // Passageiro que buzina/liga/WhatsApp aparece no mapa do motorista (modo amarelo e rota).
+    function iniciarContatosAoVivo(map) {
+        if (contatoFleet.timer) clearInterval(contatoFleet.timer);
+        async function tick() {
+            if (!motoristaOnlineModo) return;
+            try {
+                const r = await fetchWithAuth('/api/motorista/contatos/mapa');
+                if (!r.ok) return;
+                limparPulsosContatoLegados();
+                const lista = await r.json();
+                const vistos = {};
+                let novos = 0;
+                (Array.isArray(lista) ? lista : []).forEach((c) => {
+                    if (c.origem_lat == null || c.origem_lng == null || !c.passageiro_id) return;
+                    const key = chavePulsoContato(c.passageiro_id);
+                    if (contatoFoiAtualizado(c)) novos++;
+                    if (passageiroIdEmPedidoFleet(c.passageiro_id)) return;
+                    vistos[key] = true;
+                    const pos = { lat: +c.origem_lat, lng: +c.origem_lng };
+                    // Buzina: a bolinha pulsando mostra pra onde o passageiro quer ir.
+                    const rotulo = rotuloPulsoContato(c);
+                    const existente = contatoFleet.markers[key];
+                    if (existente) {
+                        existente.setPosition(pos);
+                        existente._c = c;
+                        atualizarRotuloPulso(existente, rotulo);
+                    } else {
+                        const titulo = (c.passageiro_nome || 'Passageiro') + ' — quer carona';
+                        const mk = criarPulse(map, pos, c.passageiro_sexo, () => mostrarContato(c), titulo, rotulo, true);
+                        mk._c = c;
+                        contatoFleet.markers[key] = mk;
+                    }
+                    contatoFleet.passageirosAtivos.add(c.passageiro_id);
+                });
+                Object.keys(contatoFleet.markers).forEach((key) => {
+                    if (!vistos[key]) {
+                        contatoFleet.markers[key].setMap(null);
+                        delete contatoFleet.markers[key];
+                    }
+                });
+                if (novos) {
+                    buzinar();
+                    msg('Passageiro no mapa — toque no pulso para oferecer carona.');
+                }
+                // Nova buzina: enquadra você + passageiro (1x, sem ping-pong).
+                if (novos || !contatoFleet.viuPrimeiraLeva) {
+                    enquadrarMapaMotoristaDebounced(true);
+                }
+                contatoFleet.viuPrimeiraLeva = true;
+                await atualizarRotasPassageiroMotorista(map);
+            } catch (_) {}
+        }
+        contatoTickFn = tick;
+        tick();
+        contatoFleet.timer = setInterval(tick, 3000);
+    }
+
+    function pararContatosAoVivo() {
+        if (contatoFleet.timer) { clearInterval(contatoFleet.timer); contatoFleet.timer = null; }
+        contatoTickFn = null;
+        Object.values(contatoFleet.markers).forEach((mk) => { if (mk.setMap) mk.setMap(null); });
+        contatoFleet.markers = {};
+        contatoFleet.passageirosAtivos = new Set();
+        contatoFleet.viuPrimeiraLeva = false;
+        contatoFleet.ultimoContatoTs = new Map();
+        limparRotasPassageiroMotorista();
+    }
+
+    // Motorista habilitado transmite a própria posição (aparece no mapa de todos).
+    let broadcastTimer = null;
+    let broadcastModoOnline = false;
+    async function enviarLocalizacaoAgora(forcarDisponivel) {
+        try {
+            const pos = await obterLocalizacao();
+            const disponivel = forcarDisponivel || broadcastModoOnline || motoristaOnlineModo;
+            await fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pos.lat, lng: pos.lng, disponivel: !!disponivel }),
+            });
+            return pos;
+        } catch (_) { return null; }
+    }
+    function iniciarBroadcastLocalizacao(modoOnline) {
+        if (modoOnline) broadcastModoOnline = true;
+        if (broadcastTimer) {
+            // Já rodava (ex.: após habilitar): manda um ping já no modo online.
+            if (modoOnline) enviarLocalizacaoAgora(true);
+            return;
+        }
+        const intervalo = () => (viagemView ? 2500 : (broadcastModoOnline ? 3500 : 5000));
+        async function envia() {
+            if (document.hidden && !broadcastModoOnline) return;
+            await enviarLocalizacaoAgora(false);
+        }
+        envia();
+        broadcastTimer = setInterval(envia, intervalo());
+    }
+
+    function pararBroadcastLocalizacao() {
+        if (broadcastTimer) { clearInterval(broadcastTimer); broadcastTimer = null; }
+        broadcastModoOnline = false;
+    }
+
+    // Passageiro acompanha o carro do motorista ao vivo (sem rota de navegação).
+    let acompTimer = null;   // timer do acompanhamento do passageiro (passageiroLoop)
+
+    // Retoma viagem em andamento (servidor) e fixa o papel correto.
+    // Se não houver viagem, o init reabre o último papel salvo (não o seletor).
+    async function retomarViagemSeAtiva() {
+        try {
+            const r = await fetchWithAuth('/api/viagens');
+            if (!r?.ok) {
+                // Offline: se tem id local, ainda bloqueia troca e tenta abrir.
+                const idLocal = localStorage.getItem('viagemAtiva');
+                if (idLocal) {
+                    const papel = localStorage.getItem('papel') || 'passageiro';
+                    if (papel === 'motorista' || papel === 'passageiro') {
+                        localStorage.setItem('papel', papel);
+                        document.body.classList.remove('aguardando-papel');
+                        document.getElementById('telaPapel').style.display = 'none';
+                        document.getElementById('modoTitulo').textContent =
+                            papel === 'motorista' ? 'Motorista' : 'Passageiro';
+                    }
+                    const ok = await abrirViagem(idLocal);
+                    return !!ok;
+                }
+                return false;
+            }
+            const lista = await r.json();
+            const ativa = (Array.isArray(lista) ? lista : [])
+                .find((v) => v.status === 'em_andamento');
+            if (!ativa) {
+                localStorage.removeItem('viagemAtiva');
+                return false;
+            }
+            const papel = String(ativa.motorista_id) === String(user.id) ? 'motorista' : 'passageiro';
+            localStorage.setItem('papel', papel);
+            localStorage.setItem('viagemAtiva', String(ativa.id));
+            // Monta chrome do papel sem trocar de aba para pedir/oferecer (escolherPapel
+            // já detecta viagem e fica em tabViagem se view existir).
+            document.body.classList.remove('aguardando-papel');
+            document.getElementById('telaPapel').style.display = 'none';
+            document.getElementById('modoTitulo').textContent =
+                papel === 'motorista' ? 'Motorista' : 'Passageiro';
+            document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
+            document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
+            document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
+            document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
+            esconderBootSplash();
+            const ok = await abrirViagem(ativa.id);
+            if (ok) atualizarIndicadorModoOperante();
+            return !!ok;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    /** Reabre o último papel (sem seletor) — online/pedidos retomam no verificar*. */
+    function retomarPapelSalvo() {
+        const papel = localStorage.getItem('papel');
+        if (papel === 'motorista' || papel === 'passageiro') {
+            escolherPapel(papel);
+            return true;
+        }
+        return false;
+    }
+
+    async function carregarAppEmSegundoPlano() {
+        try {
+            await sincronizarPerfil();
+            user = JSON.parse(localStorage.getItem('user') || 'null');
+            aplicarPerfilNaTela();
+        } catch (_) {}
+        carregarOpcoesProjetoPerfil().catch(() => {});
+        checarTelefone();
+        checarCadastro();
+        try {
+            await carregarHabilitacao();
+            if (habHoje && !broadcastTimer) iniciarBroadcastLocalizacao(false);
+        } catch (_) {}
+        registrarPush(true);
+        pollPropostas();   // já busca /api/propostas; painel recarrega ao abrir (abrirPainel)
+        setInterval(pollPropostas, 8000);
+        pollOfertaFila();
+        setInterval(pollOfertaFila, 5000);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                // Voltar do app em 2º plano: botão às vezes sumia até o próximo resize.
+                garantirUiAcaoVisivel(false);
+                pollPropostas();
+                pollOfertaFila();
+                // Se a viagem sumiu da tela (troca de papel / reload parcial), retoma.
+                if (!viagemView || viagemView.status !== 'em_andamento') {
+                    const id = localStorage.getItem('viagemAtiva');
+                    if (id) retomarViagemSeAtiva().catch(() => {});
+                }
+                if (document.getElementById('tabPedir')?.classList.contains('active')) {
+                    if (horaPedModoAgenda) atualizarMinQuandoPed();
+                    else tickQuandoPed();
+                }
+                if (motoristaOnlineModo) {
+                    ativarWakeLock();
+                    refreshModoMotoristaOnline();
+                    pollContatosMotoristaOnce();
+                }
+            }
+        });
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (ev) => {
+                if (ev.data && (ev.data.action === 'contato_whatsapp' || ev.data.action === 'contato_mapa')) {
+                    buzinar();
+                    pollContatosMotoristaOnce();
+                }
+                if (ev.data && ev.data.action === 'nova_solicitacao') {
+                    buzinar();
+                    pollPropostas();
+                }
+                if (ev.data && ev.data.action === 'nova_oferta_fila') {
+                    buzinar();
+                    pollOfertaFila();
+                }
+            });
+        }
+    }
+
+    function fecharCamadaVoltar() {
+        fecharMenu();
+        const perfil = document.getElementById('modalPerfil');
+        if (perfil && perfil.style.display === 'flex') {
+            const dados = document.getElementById('perfilViewDados');
+            const fav = document.getElementById('perfilViewFavoritos');
+            if ((dados && dados.style.display === 'block') || (fav && fav.style.display === 'block')) {
+                perfilIrPara('menu');
+                return true;
+            }
+            fecharPerfil();
+            return true;
+        }
+        const camadas = [
+            ['modalChamando', fecharChamando],
+            ['modalOfertaFila', fecharOfertaFila],
+            ['modalCarro', fecharCarro],
+            ['modalPedido', fecharPedido],
+            ['modalVeiculo', () => { document.getElementById('modalVeiculo').style.display = 'none'; }],
+            ['painelPassageiro', () => fecharPainel('painelPassageiro')],
+            ['painelMotorista', () => fecharPainel('painelMotorista')],
+            ['painelFavoritos', () => fecharPainel('painelFavoritos')],
+        ];
+        for (const [id, fn] of camadas) {
+            const el = document.getElementById(id);
+            if (el && el.style.display === 'flex') { fn(); return true; }
+        }
+        const telaPapel = document.getElementById('telaPapel');
+        if (telaPapel && telaPapel.style.display === 'flex') {
+            // Já tem papel salvo: voltar cancela o seletor e restaura a atividade.
+            if (localStorage.getItem('papel')) {
+                voltarParaAtividadeAtual();
+                return true;
+            }
+            return true;   // 1ª escolha: não fecha sem definir papel
+        }
+        const tabViagem = document.getElementById('tabViagem');
+        if (tabViagem && tabViagem.classList.contains('active')) {
+            // Em viagem: não “some” a corrida — só avisa. Botão Em andamento volta.
+            if (viagemView && viagemView.status === 'em_andamento') {
+                msg('Viagem em andamento — use Cancelar ou Finalizar para sair.', 'error');
+                return true;
+            }
+            showTab(localStorage.getItem('papel') === 'motorista' ? 'tabOferecer' : 'tabPedir');
+            return true;
+        }
+        return false;
+    }
+
+    /* -------- posição viva do passageiro -> banco -------- */
+    // A bolinha azul que pulsa no mapa também vai pro servidor enquanto o app
+    // está aberto: alimenta o match por proximidade e calibra a frota fake
+    // (os carros fazem o loop ancorados NESTA posição). Nunca aparece como
+    // motorista (disponivel: false) e cede a vez quando o próprio usuário está
+    // transmitindo como motorista (modo online / viagem).
+    let paxLocTimer = null;
+    let paxLocUltimo = null;
+    function transmitirPosicaoPassageiro() {
+        if (document.hidden || !navigator.geolocation) return;
+        if (typeof motoristaOnlineModo !== 'undefined' && motoristaOnlineModo) return;
+        if (trackState) return;   // em viagem o rastreio da viagem já transmite
+        navigator.geolocation.getCurrentPosition((p) => {
+            const pt = { lat: p.coords.latitude, lng: p.coords.longitude };
+            const agora = Date.now();
+            // Parado: 1 update por minuto; andando (>25 m): a cada ciclo.
+            if (paxLocUltimo && distKmGps(paxLocUltimo, pt) < 0.025 && agora - paxLocUltimo.em < 60000) return;
+            paxLocUltimo = { ...pt, em: agora };
+            fetchWithAuth('/api/localizacao', {
+                method: 'POST',
+                body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: false }),
+            }).catch(() => {});
+        }, () => {}, { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 });
+    }
+    function iniciarTransmissaoPassageiro() {
+        if (paxLocTimer) return;
+        transmitirPosicaoPassageiro();
+        paxLocTimer = setInterval(transmitirPosicaoPassageiro, 7000);
+    }
+
+    /* -------- init -------- */
+    (async function init() {
+        // Altura real já no boot — evita map-stage com 0px e tela limpa sem botão.
+        try {
+            const h0 = window.visualViewport?.height || window.innerHeight || 700;
+            document.documentElement.style.setProperty('--appvh', (h0 * 0.01) + 'px');
+            document.documentElement.style.setProperty('--sheet-kbd', '0px');
+        } catch (_) {}
+        instalarGuardaVoltar(fecharCamadaVoltar);
+        setTimeout(esconderBootSplash, 8000);
+        carregarMaps().catch(() => {});
+        iniciarTransmissaoPassageiro();
+
+        // 1) Viagem em andamento → volta direto nela (papel certo).
+        // 2) Senão, último papel salvo (passageiro/motorista) — não perde o modo.
+        // 3) Só então mostra o seletor Pedir/Oferecer.
+        const retomouViagem = await retomarViagemSeAtiva();
+        if (retomouViagem) {
+            garantirUiAcaoVisivel(true);
+        } else if (!retomarPapelSalvo()) {
+            abrirEscolhaPapel();
+        }
+
+        // Perfil, habilitação, propostas etc. rodam em paralelo — não seguram a tela.
+        carregarAppEmSegundoPlano();
+    })();

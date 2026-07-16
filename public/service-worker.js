@@ -2,7 +2,7 @@
 // Objetivo: o app NÃO é offline, mas não pode quebrar sem internet — ele abre e
 // mostra a última versão carregada. O cache é FIXO (só o "esqueleto" do app),
 // sobrescreve em vez de acumular, e os dados de API nunca são cacheados.
-const VERSION = "v300";
+const VERSION = "v301";
 const CACHE = `vagao-shell-${VERSION}`;
 
 // Lista fixa de arquivos do app (o cache nunca cresce além disto).
@@ -17,7 +17,9 @@ const SHELL = [
   "/admin.html",
   "/seguranca.html",
   "/style.css",
+  "/dashboard.css",
   "/app.js",
+  "/dashboard.js",
   "/logo-vap.png",
   "/pwa.js",
   "/manifest.json",
@@ -30,7 +32,9 @@ const SHELL = [
 // CSS/JS críticos: rede primeiro — evita UI “atrasada” após deploy.
 function isShellCodigo(pathname) {
   return pathname === "/style.css"
+    || pathname === "/dashboard.css"
     || pathname === "/app.js"
+    || pathname === "/dashboard.js"
     || pathname === "/pwa.js"
     || pathname.endsWith(".html");
 }
