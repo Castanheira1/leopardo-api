@@ -1092,6 +1092,40 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(json.atual.em_viagem, true, "atual.em_viagem deveria sinalizar a corrida em andamento");
     });
 
+    /* =================== GPS FANTASMA: ROBÔ SÓ CHAMA GPS VIVO =================== */
+    grupo("GPS fantasma: motorista com GPS parado não é chamado pelo robô");
+    await test("com todos os GPS velhos, ninguém é ofertado e a fila fica vazia", async () => {
+      // Envelhece o GPS de D e E além do limite de visibilidade (20 min > STALE
+      // 15 min do modo amarelo e > FRESH 3 min da rota publicada) direto no banco
+      // — simula app fechado/sem sinal, cenário real de produção.
+      const pg = pgTeste();
+      try {
+        await pg.query(
+          `UPDATE localizacoes_online SET atualizado_em = NOW() - INTERVAL '20 minutes'
+           WHERE usuario_id IN (SELECT id FROM usuarios WHERE matricula IN ($1, $2))`,
+          [uEncD.matricula, uEncE.matricula]
+        );
+      } finally { await pg.end(); }
+      const { status, json } = await api("POST", "/api/pedidos", {
+        token: tokEncF,
+        body: {
+          origem_texto: "Portaria S11D", origem_lat: PORTARIA_ENC.lat, origem_lng: PORTARIA_ENC.lng,
+          destino_texto: "Usina", destino_lat: USINA_ENC.lat, destino_lng: USINA_ENC.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(status, 200, "status pedido");
+      await dormir(300);
+      const rD = await api("GET", "/api/motorista/oferta-atual", { token: tokEncD });
+      const rE = await api("GET", "/api/motorista/oferta-atual", { token: tokEncE });
+      const ofD = rD.json && rD.json.pedido_id === json.id;
+      const ofE = rE.json && rE.json.pedido_id === json.id;
+      assert(!ofD && !ofE, "motorista com GPS parado não deveria ser chamado pelo robô");
+      const fs = await api("GET", `/api/pedidos/${json.id}/fila-status`, { token: tokEncF });
+      eq(fs.status, 200, "status fila-status");
+      eq(fs.json.atual, null, "não deveria haver motorista sendo chamado");
+    });
+
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
     grupo("Localização ao vivo");
     await test("POST /api/localizacao aceita coordenadas válidas", async () => {

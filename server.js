@@ -41,7 +41,9 @@ const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
 const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
-const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 120);
+// 60 s por motorista: com o pedido "para agora" vivendo 10 min, dá tempo de
+// chamar ~9 candidatos (com 120 s só ~5 eram chamados e o resto nunca via a oferta).
+const FILA_OFERTA_TIMEOUT_S = Number(process.env.FILA_OFERTA_TIMEOUT_S || 60);
 // Dois limites de GPS, para não punir sinal instável (túnel, iOS em background):
 //  - FRESH: some do MAPA na hora (mata fantasma visualmente), mas a publicação
 //    continua no banco — o motorista reaparece quando o GPS volta.
@@ -1166,14 +1168,18 @@ function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locais) {
   if (!(totalPax > 0)) return null;
 
   const candidatos = (Array.isArray(locais) ? locais : []).filter((l) => l && l.nome);
+  // Onde o passageiro EMBARCA na rota do motorista: pontos ANTES disso já ficaram
+  // para trás — o carro não volta. (t clampado; se a origem está fora do corredor,
+  // o embarque acontece perto do início e o clamp resolve.)
+  const tEmbarque = Math.min(1, Math.max(0, corredorSegmentoKm(oLat, oLng, cOLat, cOLng, cDLat, cDLng).t));
   let melhor = null;
   for (const p of candidatos) {
     const lat = Number(p.lat), lng = Number(p.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    // Ponto precisa estar no corredor do motorista (com pequena folga no fim —
-    // parar junto ao destino dele ainda é caminho dele).
+    // Ponto precisa estar no corredor do motorista, À FRENTE do embarque (com
+    // pequena folga no fim — parar junto ao destino dele ainda é caminho dele).
     const cor = corredorSegmentoKm(lat, lng, cOLat, cOLng, cDLat, cDLng);
-    if (!(cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1.05)) continue;
+    if (!(cor.dist <= RAIO_ROTA_KM && cor.t >= tEmbarque - 0.02 && cor.t <= 1.05)) continue;
     const restante = haversineKmCoord(lat, lng, dLat, dLng);
     const avanco = totalPax - restante;
     if (avanco < ENCAIXE_AVANCO_MIN_KM) continue;          // não adianta quase nada
@@ -1440,7 +1446,10 @@ async function notificarMotoristasProximos(ped) {
 // Usa a mesma fila sequencial do pedido imediato (usar_fila), não só push 600 m.
 async function ativarPedidoAgendado(ped) {
   try {
-    await iniciarFilaPedido(ped.id);
+    // Mesma busca do pedido imediato: fila de NOTIFICAÇÃO não-exclusiva (melhor
+    // motorista chamado um a um, pulso visível para todos). A exclusiva antiga
+    // escondia o pedido agendado do mapa e bloqueava ofertas manuais.
+    await iniciarFilaPedido(ped.id, { exclusiva: false });
     await pool.query("UPDATE pedidos SET notificado = TRUE WHERE id = $1", [ped.id]);
     const destino = ped.destino_texto ? ` para ${ped.destino_texto}` : "";
     enviarPush(ped.passageiro_id, {
@@ -3139,20 +3148,43 @@ async function criarViagemDaProposta(propostaId) {
   }
   const hab = await habilitacaoAtiva(motorista_id);
 
-  const { rows } = await pool.query(
-    `INSERT INTO viagens
-       (proposta_id, carona_id, pedido_id, motorista_id, passageiro_id, habilitacao_id,
-        origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng,
-        destino_motorista_texto, destino_motorista_lat, destino_motorista_lng)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-     RETURNING *`,
-    [
-      pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
-      embarque.texto || null, embarque.lat || null, embarque.lng || null,
-      destino.texto || null, destino.lat || null, destino.lng || null,
-      paradaMotorista?.texto || null, paradaMotorista?.lat || null, paradaMotorista?.lng || null,
-    ]
-  );
+  // GATE atômico contra double-booking: dois aceites simultâneos (fila + proposta
+  // manual) disputavam o mesmo pedido e criavam DUAS viagens. Só quem conseguir
+  // virar o pedido de 'aberto' para 'atendido' cria a viagem; o outro recebe null.
+  if (pr.pedido_id) {
+    const gate = await pool.query(
+      "UPDATE pedidos SET status = 'atendido' WHERE id = $1 AND status = 'aberto'",
+      [pr.pedido_id]
+    );
+    if (gate.rowCount === 0) return null;
+  }
+
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `INSERT INTO viagens
+         (proposta_id, carona_id, pedido_id, motorista_id, passageiro_id, habilitacao_id,
+          origem_texto, origem_lat, origem_lng, destino_texto, destino_lat, destino_lng,
+          destino_motorista_texto, destino_motorista_lat, destino_motorista_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       RETURNING *`,
+      [
+        pr.id, pr.carona_id, pr.pedido_id, motorista_id, passageiro_id, hab ? hab.id : null,
+        embarque.texto || null, embarque.lat || null, embarque.lng || null,
+        destino.texto || null, destino.lat || null, destino.lng || null,
+        paradaMotorista?.texto || null, paradaMotorista?.lat || null, paradaMotorista?.lng || null,
+      ]
+    ));
+  } catch (e) {
+    // Falhou depois do gate: devolve o pedido pro ar (senão sumia sem viagem).
+    if (pr.pedido_id) {
+      await pool.query(
+        "UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status = 'atendido'",
+        [pr.pedido_id]
+      ).catch(() => {});
+    }
+    throw e;
+  }
   // Cada aceite ocupa 1 vaga. A carona só fecha (concluida) quando as vagas
   // acabam — com mais de uma vaga, ela continua ativa e visível para os
   // demais passageiros até esgotar.
@@ -3165,7 +3197,7 @@ async function criarViagemDaProposta(propostaId) {
       [pr.carona_id]
     );
   }
-  if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
+  // (status 'atendido' já foi garantido pelo gate atômico lá em cima.)
   // Viagem criada: o robô de busca deste pedido para de chamar motoristas
   // (posições vivas da fila são canceladas; quem cancelar a viagem reabre).
   if (pr.pedido_id) {
@@ -3244,7 +3276,17 @@ async function cancelarViagemAtiva(viagemId, usuarioId) {
 // que alimenta a tela de busca — sem isso o robozinho procura no vazio.
 // pedidoIdSemRecusas: desconta quem já recusou aquele pedido — sobra só quem
 // ainda pode aceitar.
+// Cache curto (10 s) por projeto+usuário: o fila-status é sondado a cada 3 s
+// por passageiro em busca — sem cache, cada tela de espera custava uma varredura
+// de projeto por tick. Contagens com recusas de pedido específico não são cacheadas.
+const ONLINE_CACHE_MS = Number(process.env.ONLINE_CACHE_MS || 10 * 1000);
+const _onlineCache = new Map();
 async function contarMotoristasOnline(projetoId, excluirUsuarioId, pedidoIdSemRecusas = null) {
+  const chaveCache = pedidoIdSemRecusas ? null : `${projetoId}:${excluirUsuarioId}`;
+  if (chaveCache) {
+    const hit = _onlineCache.get(chaveCache);
+    if (hit && Date.now() - hit.em < ONLINE_CACHE_MS) return hit.n;
+  }
   const params = [excluirUsuarioId, projetoId];
   let filtroRecusa = "";
   if (pedidoIdSemRecusas) {
@@ -3266,7 +3308,16 @@ async function contarMotoristasOnline(projetoId, excluirUsuarioId, pedidoIdSemRe
        ${filtroRecusa}`,
     params
   );
-  return rows[0]?.n || 0;
+  const n = rows[0]?.n || 0;
+  if (chaveCache) {
+    _onlineCache.set(chaveCache, { n, em: Date.now() });
+    // Poda ocasional: o mapa não cresce além dos passageiros ativos recentes.
+    if (_onlineCache.size > 500) {
+      const corte = Date.now() - ONLINE_CACHE_MS;
+      for (const [k, v] of _onlineCache) if (v.em < corte) _onlineCache.delete(k);
+    }
+  }
+  return n;
 }
 
 /* Ranking do "melhor motorista": quem cobre mais da viagem do passageiro é
@@ -3306,6 +3357,10 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
      ) ca ON TRUE
      WHERE l.disponivel = TRUE
        AND COALESCE(u.ativo, TRUE) = TRUE
+       -- GPS vivo (mesmo critério do mapa do passageiro): sem isso o robô
+       -- chamava motorista fantasma (app fechado, GPS parado até 15 min) que o
+       -- passageiro nem via no mapa — e a espera morria em timeout.
+       AND ${sqlGpsVisivelMapa("l")}
        AND u.id <> $3
        AND u.projeto_id = $4
        AND (ca.vagas IS NULL OR ca.vagas > 0)
@@ -3411,18 +3466,36 @@ async function iniciarFilaPedido(pedidoId, { exclusiva = true } = {}) {
 async function ofertarProximo(pedidoId) {
   const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedidoId])).rows[0];
   if (!ped || ped.status !== "aberto") return;
+  // Seleção + oferta num ÚNICO statement (FOR UPDATE SKIP LOCKED): duas recusas
+  // ou expirações simultâneas não ofertam em dobro nem pulam candidato. A guarda
+  // NOT EXISTS impede segunda oferta viva no mesmo pedido.
   const proximo = (await pool.query(
-    `SELECT * FROM pedido_fila WHERE pedido_id = $1 AND status = 'aguardando' ORDER BY ordem ASC LIMIT 1`,
-    [pedidoId]
+    `UPDATE pedido_fila SET status = 'ofertada', ofertada_em = NOW(),
+            expira_em = NOW() + ($2 || ' seconds')::interval
+     WHERE id = (
+       SELECT id FROM pedido_fila
+       WHERE pedido_id = $1 AND status = 'aguardando'
+         AND NOT EXISTS (SELECT 1 FROM pedido_fila viva
+                         WHERE viva.pedido_id = $1 AND viva.status = 'ofertada'
+                           AND viva.expira_em > NOW())
+       ORDER BY ordem ASC LIMIT 1
+       FOR UPDATE SKIP LOCKED
+     )
+     RETURNING *`,
+    [pedidoId, String(FILA_OFERTA_TIMEOUT_S)]
   )).rows[0];
   if (!proximo) {
-    // Fila esgotada (todo mundo recusou ou não respondeu): o pedido volta ao
-    // mapa dos motoristas próximos, mas o PASSAGEIRO precisa saber — senão fica
-    // esperando um aceite que não vem.
-    const houveFila = (await pool.query(
-      "SELECT 1 FROM pedido_fila WHERE pedido_id = $1 LIMIT 1", [pedidoId]
+    // Nada ofertado: ou já existe oferta viva (outro caminho chegou antes — ok),
+    // ou a fila esgotou (todo mundo recusou/não respondeu). Só no esgotamento o
+    // PASSAGEIRO é avisado — senão fica esperando um aceite que não vem.
+    const st = (await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status = 'aguardando')::int AS aguardando,
+              COUNT(*) FILTER (WHERE status = 'ofertada' AND expira_em > NOW())::int AS vivas
+       FROM pedido_fila WHERE pedido_id = $1`,
+      [pedidoId]
     )).rows[0];
-    if (houveFila) {
+    if (st.total > 0 && st.aguardando === 0 && st.vivas === 0) {
       enviarPush(ped.passageiro_id, {
         title: "Nenhum motorista aceitou ainda",
         body: "Os motoristas chamados não puderam atender. Seu pedido continua visível para quem está por perto.",
@@ -3431,12 +3504,6 @@ async function ofertarProximo(pedidoId) {
     }
     return;
   }
-  await pool.query(
-    `UPDATE pedido_fila SET status = 'ofertada', ofertada_em = NOW(),
-            expira_em = NOW() + ($2 || ' seconds')::interval
-     WHERE id = $1`,
-    [proximo.id, String(FILA_OFERTA_TIMEOUT_S)]
-  );
   // Encaixe: o motorista não vai até o destino do passageiro, mas passa por um
   // ponto em comum — o push já diz onde ele deixaria o passageiro.
   const dicaEncaixe = proximo.encaixe_texto
@@ -3507,7 +3574,12 @@ app.post("/api/pedido-fila/:id/aceitar", verificarAuth, async (req, res) => {
       [req.user.id, ped.passageiro_id, ped.id]
     )).rows[0];
     const viagem = await criarViagemDaProposta(proposta.id);
-    if (!viagem) return res.status(500).json({ error: "Não foi possível iniciar a viagem. Tente novamente." });
+    if (!viagem) {
+      // Outro motorista levou o pedido no mesmo instante (gate atômico): desfaz
+      // o aceite pendurado e avisa com clareza — "tente de novo" aqui enganava.
+      await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [proposta.id]).catch(() => {});
+      return res.status(409).json({ error: "Este pedido acabou de ser atendido por outro motorista." });
+    }
 
     // Trava: ninguém mais da fila pode aceitar este pedido.
     await pool.query(
@@ -3735,6 +3807,12 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
     // Cria a viagem na hora do aceite: já liga os dois, habilita rastreamento e contato.
     const viagem = await criarViagemDaProposta(req.params.id);
     if (!viagem) {
+      // Pedido-based: o pedido acabou de ser atendido por outro caminho (gate
+      // atômico) — desfaz o aceite e explica; "tente novamente" aqui enganava.
+      if (rows[0].pedido_id) {
+        await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [req.params.id]).catch(() => {});
+        return res.status(409).json({ error: "Este pedido acabou de ser atendido por outra carona." });
+      }
       console.error("[aceitar proposta] viagem não criada para proposta", req.params.id);
       return res.status(500).json({ error: "Não foi possível iniciar a viagem. Tente novamente." });
     }

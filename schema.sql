@@ -225,6 +225,12 @@ CREATE INDEX IF NOT EXISTS idx_viagens_motorista ON viagens (motorista_id);
 CREATE INDEX IF NOT EXISTS idx_viagens_passageiro ON viagens (passageiro_id);
 CREATE INDEX IF NOT EXISTS idx_viagens_status ON viagens (status);
 CREATE INDEX IF NOT EXISTS idx_viagens_iniciada ON viagens (iniciada_em);
+-- Parciais (só viagens vivas): ranking/encadeamento e exclusões de mapa
+-- consultam "em_andamento por motorista/passageiro" em todo poll.
+CREATE INDEX IF NOT EXISTS idx_viagens_motorista_andamento
+  ON viagens (motorista_id) WHERE status = 'em_andamento';
+CREATE INDEX IF NOT EXISTS idx_viagens_passageiro_andamento
+  ON viagens (passageiro_id) WHERE status = 'em_andamento';
 
 -- ------------------------------------------------------------
 -- Pontos da rota (rastreamento GPS ao vivo da viagem)
