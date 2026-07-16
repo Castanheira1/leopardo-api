@@ -3283,11 +3283,18 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
   const dest = { lat: Number(ped.destino_lat), lng: Number(ped.destino_lng) };
   const distOrigem = haversine("l.lat", "l.lng", "$1", "$2");
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (u.id) u.id AS motorista_id, l.lat, l.lng,
+    `SELECT DISTINCT ON (u.id) u.id AS motorista_id, l.lat, l.lng, l.vagas AS lo_vagas,
             ${distOrigem} AS dist_km,
             ca.id AS carona_id, ca.origem_lat AS ca_olat, ca.origem_lng AS ca_olng,
             ca.destino_lat AS ca_dlat, ca.destino_lng AS ca_dlng,
-            ca.raio_km AS ca_raio, ca.vagas AS ca_vagas
+            ca.raio_km AS ca_raio, ca.vagas AS ca_vagas,
+            (SELECT COUNT(*)::int FROM viagens vv
+              WHERE vv.motorista_id = u.id AND vv.status = 'em_andamento') AS viagens_ativas,
+            -- Viagens fora de carona (pedido/buzina) não decrementam ca.vagas —
+            -- contam aqui para saber quantos lugares o carro ainda tem de fato.
+            (SELECT COUNT(*)::int FROM viagens vv
+              WHERE vv.motorista_id = u.id AND vv.status = 'em_andamento'
+                AND vv.carona_id IS NULL) AS viagens_fora_carona
      FROM localizacoes_online l
      JOIN usuarios u ON u.id = l.usuario_id
      JOIN habilitacoes_motorista h
@@ -3329,6 +3336,16 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     const gpsNaFaixa = corGpsPax.dist <= RAIO_ROTA_KM && corGpsPax.t >= -0.05 && corGpsPax.t <= 1.05;
     if (!origemNoCorredor && !dentroDoRaio && !gpsNaFaixa) continue;
 
+    // Encadeamento: motorista EM VIAGEM continua no jogo se ainda tem lugar no
+    // carro (vagas declaradas menos passageiros de pedido/buzina a bordo — os
+    // aceites de carona já debitam ca.vagas sozinhos). Carro cheio fica de fora.
+    const emViagem = Number(m.viagens_ativas) > 0;
+    if (emViagem) {
+      const vagasBase = temCarona ? Number(m.ca_vagas ?? 1) : (Number(m.lo_vagas) || 1);
+      const vagasRestantes = vagasBase - (Number(m.viagens_fora_carona) || 0);
+      if (vagasRestantes <= 0) continue;
+    }
+
     let classe = 5;
     let encaixe = null;
     if (temCarona) {
@@ -3346,10 +3363,16 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
       motorista_id: m.motorista_id,
       dist_km: Number.isFinite(distKm) ? distKm : null,
       classe,
+      em_viagem: emViagem,
       encaixe: classe === 2 ? encaixe : null,
     });
   }
-  candidatos.sort((a, b) => (a.classe - b.classe) || ((a.dist_km ?? 1e9) - (b.dist_km ?? 1e9)));
+  // Mesma classe: motorista LIVRE vem antes de quem está finalizando outra
+  // corrida; depois, o mais perto.
+  candidatos.sort((a, b) =>
+    (a.classe - b.classe)
+    || ((a.em_viagem ? 1 : 0) - (b.em_viagem ? 1 : 0))
+    || ((a.dist_km ?? 1e9) - (b.dist_km ?? 1e9)));
   return candidatos;
 }
 
@@ -3540,7 +3563,10 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
       return res.status(403).json({ error: "Sem permissão" });
     }
     const atual = (await pool.query(
-      `SELECT f.motorista_id, f.ordem, u.nome, lo.lat, lo.lng
+      `SELECT f.motorista_id, f.ordem, u.nome, lo.lat, lo.lng,
+              EXISTS (SELECT 1 FROM viagens vv
+                      WHERE vv.motorista_id = f.motorista_id
+                        AND vv.status = 'em_andamento') AS em_viagem
        FROM pedido_fila f
        JOIN usuarios u ON u.id = f.motorista_id
        LEFT JOIN localizacoes_online lo ON lo.usuario_id = f.motorista_id
@@ -3569,6 +3595,9 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
         nome: atual.nome,
         lat: atual.lat != null ? Number(atual.lat) : null,
         lng: atual.lng != null ? Number(atual.lng) : null,
+        // Está terminando outra corrida: o passageiro vê "finalizando outra
+        // corrida e vem te buscar" em vez de achar que o carro sumiu.
+        em_viagem: !!atual.em_viagem,
       } : null,
       total,
       restantes,
@@ -4570,13 +4599,26 @@ app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
               h.placa, h.tag, h.foto_carro_url, h.foto_carro_em,
               h.selfie_url AS motorista_selfie, h.selfie_em AS motorista_selfie_em,
               pr.selfie_url AS passageiro_selfie, pr.selfie_em AS passageiro_selfie_em,
-              pd.selfie_url AS pedido_selfie, pd.selfie_em AS pedido_selfie_em
+              pd.selfie_url AS pedido_selfie, pd.selfie_em AS pedido_selfie_em,
+              -- Destino FINAL do motorista (rota publicada): a viagem é uma parada
+              -- no caminho dele — o mapa desenha a "rota única com parada" até lá.
+              cfinal.destino_texto AS motorista_destino_final_texto,
+              cfinal.destino_lat AS motorista_destino_final_lat,
+              cfinal.destino_lng AS motorista_destino_final_lng
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
        LEFT JOIN habilitacoes_motorista h ON v.habilitacao_id = h.id
        LEFT JOIN propostas pr ON v.proposta_id = pr.id
        LEFT JOIN pedidos pd ON v.pedido_id = pd.id
+       LEFT JOIN LATERAL (
+         SELECT c.destino_texto, c.destino_lat, c.destino_lng
+         FROM caronas c
+         WHERE c.id = v.carona_id
+            OR (c.motorista_id = v.motorista_id AND c.status = 'ativa')
+         ORDER BY (c.id = v.carona_id) DESC, c.created_at DESC
+         LIMIT 1
+       ) cfinal ON TRUE
        WHERE v.id = $1`,
       [req.params.id]
     )).rows[0];
