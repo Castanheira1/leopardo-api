@@ -6075,8 +6075,11 @@
             const r = await fetchWithAuth('/api/viagens');
             if (!r.ok) return;
             const todas = await r.json();
-            const prox = (Array.isArray(todas) ? todas : []).find((x) =>
+            // Mais de uma perna esperando: atende quem aguarda há MAIS tempo
+            // (a lista vem em created_at DESC — pega a última = mais antiga).
+            const pendentes = (Array.isArray(todas) ? todas : []).filter((x) =>
                 x.status === 'em_andamento' && String(x.motorista_id) === String(user.id));
+            const prox = pendentes[pendentes.length - 1];
             if (!prox) return;
             const ok = await abrirViagem(prox.id);
             if (ok) msg(`Próxima perna: buscar ${prox.passageiro_nome || 'o passageiro'}.`);
