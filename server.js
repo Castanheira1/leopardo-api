@@ -83,16 +83,9 @@ app.use(compression({
 }));
 // 1200: o polling legítimo de um motorista em viagem chega perto de 600/15min.
 // Configurável via RATE_LIMIT_MAX (ex.: testes de carga controlados) — padrão inalterado.
-// Frota fake (sim-frota) chama a API via loopback com X-Sim-Frota:1 — isenta só
-// nessas condições, para não consumir o teto global nem enfraquecer clientes reais.
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX || 1200),
-  skip: (req) => {
-    if (String(req.get("X-Sim-Frota") || "") !== "1") return false;
-    const ip = String(req.ip || req.socket?.remoteAddress || "");
-    return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.endsWith("127.0.0.1");
-  },
 }));
 
 // CORS restrito. O front (PWA) é servido pela MESMA origem desta API, então não
@@ -5897,14 +5890,6 @@ app.post("/api/admin/chamados/:id/recusar", verificarAuth, carregarAdminEscopo, 
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
-
-/* ==================== FROTA FAKE (testes visuais, admin) ==================== */
-require("./sim-frota")({
-  app, pool, bcrypt, verificarAuth, carregarAdminEscopo,
-  porta: PORT,
-  // Mesma regra de sessão única (grava sessao_id no usuário fake).
-  assinarToken: (payload) => emitirTokenSessao(payload),
 });
 
 /* ============================ ESTÁTICOS ============================ */

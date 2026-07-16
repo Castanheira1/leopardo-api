@@ -385,9 +385,6 @@
             <button class="adm-nav-item" data-sec="sec-anuncios" onclick="irSecao('sec-anuncios')">
                 <span class="ico">▤</span> Anúncios
             </button>
-            <button class="adm-nav-item" data-sec="sec-simulacao" onclick="irSecao('sec-simulacao')">
-                <span class="ico">⛁</span> Frota fake
-            </button>
         </nav>
 
         <div class="adm-side-foot">
@@ -636,30 +633,6 @@
                 </div>
             </section>
 
-            <section id="sec-simulacao" class="adm-section">
-                <div class="panel">
-                    <div class="panel-head">
-                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M5 17l-2-5h18l-2 5M7 11l2-5h6l2 5"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg></span>
-                        <div>
-                            <h3>Frota fake para testes</h3>
-                            <p class="cap">Cria motoristas simulados circulando de verdade no mapa do projeto, todos a 90 km/h
-                            pela pista real, em loop constante: saem dos locais calibrados do S11D, vêm até onde o
-                            passageiro real está (o banco fornece a localização dele) e voltam — o tempo de cada perna
-                            é a distância real dividida pela velocidade. Metade fica só online (modo amarelo, aparece a
-                            até 600 m do passageiro), metade publica rota (carro branco, até 10 km). Eles respondem de
-                            verdade: aceitam ou recusam a chamada (com atraso humano), dirigem até o passageiro,
-                            confirmam o embarque e concluem a viagem.</p>
-                        </div>
-                    </div>
-                    <div id="simFrotaStatus" class="cap" style="margin-bottom:12px;">Carregando…</div>
-                    <div class="field-row" style="flex-wrap:wrap;gap:10px;">
-                        <button class="btn-gold" id="btnSimLigar" onclick="ligarSimFrota()">Ligar 50 carros</button>
-                        <button class="btn-ghost" onclick="desligarSimFrota(false)">Desligar</button>
-                        <button class="btn-ghost" onclick="desligarSimFrota(true)">Apagar de vez</button>
-                    </div>
-                    <div id="simFrotaMsg" class="cap" style="margin-top:10px;"></div>
-                </div>
-            </section>
         </div>
 
         <footer class="adm-foot">
@@ -688,8 +661,7 @@ const SECOES = {
     'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta (senha pelo Esqueci a senha no login)' },
     'sec-chamados': { titulo: 'Acesso admin', sub: 'Solicitações de acesso ao painel — aprove só após validar a identidade' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
-    'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
-    'sec-simulacao': { titulo: 'Frota fake', sub: 'Motoristas simulados circulando no mapa para testes' },
+    'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
 };
 
 let cacheViagens = [];
@@ -715,8 +687,7 @@ function irSecao(id) {
     if (meta) {
         document.getElementById('topTitulo').textContent = meta.titulo;
         document.getElementById('topSub').textContent = meta.sub;
-    }
-    if (id === 'sec-simulacao') carregarSimFrota();
+    }
     if (id === 'sec-chamados') carregarChamados();
     fecharSidebar();
 }
@@ -784,59 +755,6 @@ function atualizarBadgeChamados(n) {
     } catch (_) {}
 })();
 
-/* -------- frota fake (motoristas simulados p/ teste visual) -------- */
-async function carregarSimFrota() {
-    const el = document.getElementById('simFrotaStatus');
-    try {
-        const r = await fetchWithAuth('/api/admin/sim-frota');
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Erro');
-        if (!d.total) { el.textContent = 'Nenhum carro fake criado ainda.'; return; }
-        const quando = d.ultima_atualizacao ? new Date(d.ultima_atualizacao).toLocaleTimeString('pt-BR') : '—';
-        let txt = d.ativos
-            ? `${d.ativos} de ${d.total} carros circulando (${d.com_rota} com rota publicada) · última posição ${quando}`
-            : `${d.total} carros criados, todos desligados.`;
-        if (d.em_viagem) txt += ` · ${d.em_viagem} em viagem`;
-        if (d.horario_sp) txt += ` · horário SP ${d.horario_sp} (${d.dia_sp || ''})`;
-        if (d.metricas) {
-            const m = d.metricas;
-            txt += ` · API ok/fail ${m.api_ok || 0}/${m.api_fail || 0}`;
-            if (m.ultima_falha) txt += ` (última falha ${m.ultima_falha.status} em ${m.ultima_falha.rota || '?'})`;
-        }
-        if (d.rotinas && d.rotinas.length) {
-            const resumo = d.rotinas.slice(0, 4).map((r) => `${r.turno}/${r.fase}`).join(', ');
-            txt += ` · rotinas: ${resumo}…`;
-        }
-        el.textContent = txt;
-    } catch (e) { el.textContent = e.message; }
-}
-async function ligarSimFrota() {
-    const btn = document.getElementById('btnSimLigar');
-    const msgEl = document.getElementById('simFrotaMsg');
-    btn.disabled = true; msgEl.textContent = 'Ligando (a primeira vez cria os 50 usuários, leva ~1 min)…';
-    try {
-        const r = await fetchWithAuth('/api/admin/sim-frota', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ n: 50 }),
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Erro');
-        msgEl.textContent = `Frota no ar: ${d.total} carros (${d.criados} criados agora, ${d.reativados} reativados).`;
-    } catch (e) { msgEl.textContent = e.message; }
-    finally { btn.disabled = false; carregarSimFrota(); }
-}
-async function desligarSimFrota(apagar) {
-    if (apagar && !confirm('Apagar de vez os usuários fake e todo o histórico deles?')) return;
-    const msgEl = document.getElementById('simFrotaMsg');
-    try {
-        const r = await fetchWithAuth('/api/admin/sim-frota' + (apagar ? '?apagar=1' : ''), { method: 'DELETE' });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Erro');
-        msgEl.textContent = apagar ? `Apagados ${d.apagados} usuários fake.` : `Frota desligada (${d.desligados} carros).`;
-    } catch (e) { msgEl.textContent = e.message; }
-    finally { carregarSimFrota(); }
-}
 
 function toggleSidebar() {
     document.getElementById('admSidebar').classList.toggle('open');

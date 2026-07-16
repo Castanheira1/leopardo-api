@@ -53,8 +53,6 @@ jobs:
 
       - name: Testes de contrato e unitários (sem banco)
         run: |
-          node tests/sim-frota-helpers.test.js
-          node tests/sim-rotina.test.js
           node tests/map-markers.test.js
           node tests/sessao-mapa.test.js
           node tests/ui-sheet.test.js
