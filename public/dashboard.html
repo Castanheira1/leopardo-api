@@ -3250,15 +3250,18 @@
         const empresa = esc(it.nome || 'Motorista');
         const posicao = it.caronaId && it.ordem != null
             ? `<span class="ride-posicao">#${it.ordem + 1} na fila</span>` : '';
-        const parcial = it.compatRota === 'parcial';
+        // encaixe = ponto em comum: o motorista não vai até o destino do
+        // passageiro, mas passa por um ponto que adianta (ex.: Portaria).
+        const encaixe = it.compatRota === 'encaixe';
+        const parcial = it.compatRota === 'parcial' || encaixe;
         const proximo = it.compatRota === 'proximo';
-        const destMot = esc(it.destinoMotorista || it.destino || 'destino do motorista');
+        const destMot = esc((encaixe ? it.encaixeTexto : null) || it.destinoMotorista || it.destino || 'destino do motorista');
         const aoVivo = !it.caronaId
             ? '<span class="ride-badge ride-badge--amarelo">Por perto · 600 m</span>'
             : (it.online
                 ? '<span class="ride-badge ride-badge--live">Ao vivo</span>'
                 : (parcial
-                    ? `<span class="ride-badge ride-badge--parcial">Só até ${destMot}</span>`
+                    ? `<span class="ride-badge ride-badge--parcial">${encaixe ? 'Deixa você em' : 'Só até'} ${destMot}</span>`
                     : (proximo
                         ? `<span class="ride-badge ride-badge--proximo">Passa perto</span>`
                         : '<span class="ride-badge ride-badge--rota">Rota publicada</span>')));
@@ -3373,6 +3376,7 @@
                     online: !!c.motorista_online,
                     compatRota: c.compat_rota || 'total',
                     destinoMotorista: c.destino_texto,
+                    encaixeTexto: c.encaixe_texto || null,
                     lat: c.lat != null ? +c.lat : (c.origem_lat != null ? +c.origem_lat : null),
                     lng: c.lng != null ? +c.lng : (c.origem_lng != null ? +c.origem_lng : null),
                     empresa: c.motorista_empresa || null,
@@ -3397,7 +3401,7 @@
                 });
             });
             indoDestino.sort((a, b) => {
-                const ordem = { total: 0, proximo: 1, parcial: 2 };
+                const ordem = { total: 0, proximo: 1, parcial: 2, encaixe: 3 };
                 const oa = ordem[a.compatRota] ?? 3;
                 const ob = ordem[b.compatRota] ?? 3;
                 if (oa !== ob) return oa - ob;
@@ -4034,6 +4038,7 @@
             carona_vagas: it.vagas,
             vagas: it.vagas,
             compatRota: it.compatRota,
+            encaixeTexto: it.encaixeTexto || null,
             dist: it.dist,
             lat: it.lat,
             lng: it.lng,
@@ -4065,6 +4070,7 @@
         }
         carroSel = m;
         const temRota = !!m.carona_id;
+        const encaixe = m.compatRota === 'encaixe';
         const parcial = m.compatRota === 'parcial';
         const proximo = m.compatRota === 'proximo';
         const badge = document.getElementById('carroBadge');
@@ -4072,7 +4078,8 @@
             let label = 'Motorista por perto';
             let mod = '';
             if (temRota) {
-                if (parcial) { label = 'Rota parcial'; mod = ' drv-badge--parcial'; }
+                if (encaixe) { label = m.encaixeTexto ? `Deixa você em ${m.encaixeTexto}` : 'Passa num ponto do caminho'; mod = ' drv-badge--parcial'; }
+                else if (parcial) { label = 'Rota parcial'; mod = ' drv-badge--parcial'; }
                 else if (proximo) { label = 'Passa perto'; mod = ' drv-badge--proximo'; }
                 else { label = 'Rota publicada'; mod = ' drv-badge--rota'; }
             }
@@ -4965,7 +4972,12 @@
             ? `${o.passageiro_nome} está pedindo carona` : 'Passageiro pedindo carona';
         document.getElementById('filaOfRota').innerHTML =
             `<div style="margin-bottom:6px;">${ICN.pin} <b>Embarque:</b> ${esc(o.origem_texto || 'local do passageiro')}</div>`
-            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(o.destino_texto || 'destino no mapa')}</div>`;
+            + `<div style="color:#EAD298;">${ICN.route} <b>Destino:</b> ${esc(o.destino_texto || 'destino no mapa')}</div>`
+            // Encaixe: você não vai até lá, mas passa num ponto em comum — é só
+            // deixar o passageiro nesse ponto (a viagem já nasce com a parada).
+            + (o.encaixe_texto
+                ? `<div style="margin-top:6px;">${ICN.pin} <b>Você deixa em:</b> ${esc(o.encaixe_texto)}</div>`
+                : '');
         document.getElementById('modalOfertaFila').style.display = 'flex';
         pararCronometroFila();
         const tick = () => {
@@ -6272,6 +6284,12 @@
 
     function rotuloPulsoPedido(p) {
         const destPax = p.destino_texto || 'destino no mapa';
+        // Encaixe: destino diferente, mas sua rota passa num ponto em comum —
+        // dá pra levar o passageiro até lá (ele segue do ponto).
+        if (p.compat_rota === 'encaixe') {
+            const pc = p.encaixe_texto || 'um ponto do seu caminho';
+            return `→ ${destPax} (dá pra levar até ${pc})`;
+        }
         if (p.compat_rota === 'proximo' || p.compat_rota === 'parcial') {
             const dm = p.destino_motorista_texto || 'seu destino';
             return `→ ${destPax} (você vai até ${dm})`;
@@ -6770,7 +6788,10 @@
         document.getElementById('pedidoRota').innerHTML =
             htmlDestinoDestaque(p.destino_texto)
             + `<div class="sol-meta">${ICN.pin} <b>Onde está:</b> ${esc(p.origem_texto || 'Local do passageiro')}</div>`
-            + `<div class="sol-meta">${p.pessoas || 1} pessoa(s)</div>`;
+            + `<div class="sol-meta">${p.pessoas || 1} pessoa(s)</div>`
+            + (p.compat_rota === 'encaixe'
+                ? `<div class="sol-meta" style="color:#EAD298;">${ICN.route} Sua rota passa por <b>${esc(p.encaixe_texto || 'um ponto do caminho')}</b> — dá para deixar o passageiro lá.</div>`
+                : '');
         aplicarSelfieNoModalPedido(p.selfie_url, nome);
         document.getElementById('modalPedido').style.display = 'flex';
         const o = p.origem_lat != null ? { lat: +p.origem_lat, lng: +p.origem_lng } : null;

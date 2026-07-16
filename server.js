@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 const helmet = require("helmet");
@@ -649,6 +650,15 @@ async function garantirTabelaPedidoFila() {
       )`);
     await pool.query("CREATE INDEX IF NOT EXISTS idx_pedido_fila_pedido ON pedido_fila(pedido_id, ordem)");
     await pool.query("CREATE INDEX IF NOT EXISTS idx_pedido_fila_motorista_ativa ON pedido_fila(motorista_id, status)");
+    // exclusiva: fila "dona" do pedido (modo usar_fila antigo — pulso some e só o
+    // da vez responde). FALSE = fila de NOTIFICAÇÃO do pedido broadcast: chama o
+    // melhor motorista um a um, mas o pulso continua no mapa de todos e qualquer
+    // um pode oferecer. encaixe_*: ponto em comum calculado no ranking (o
+    // motorista não vai até o destino do passageiro, mas passa por este ponto).
+    await pool.query("ALTER TABLE pedido_fila ADD COLUMN IF NOT EXISTS exclusiva BOOLEAN NOT NULL DEFAULT TRUE");
+    await pool.query("ALTER TABLE pedido_fila ADD COLUMN IF NOT EXISTS encaixe_texto TEXT");
+    await pool.query("ALTER TABLE pedido_fila ADD COLUMN IF NOT EXISTS encaixe_lat NUMERIC(10,6)");
+    await pool.query("ALTER TABLE pedido_fila ADD COLUMN IF NOT EXISTS encaixe_lng NUMERIC(10,6)");
   } catch (e) {
     console.warn("garantirTabelaPedidoFila:", e.message);
   }
@@ -1080,6 +1090,99 @@ function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDes
   const pertoCor = cor.dist <= RAIO_PROXIMO_KM;
   if (pertoDest || pertoCor) return "proximo";
   return "none";
+}
+
+/* ==================== PONTO EM COMUM ("encaixe") ====================
+ * A geometria de linha reta não enxerga que dois trajetos diferentes dividem
+ * o mesmo tronco de estrada (todo mundo passa pela Portaria). O catálogo de
+ * locais do projeto (locais-favoritos.json — mesmos pontos que o app mostra
+ * no menu Locais) vira a malha de referência: se um local conhecido está no
+ * corredor do MOTORISTA e deixa o PASSAGEIRO bem mais perto do destino dele,
+ * é um encaixe — o motorista leva até ali e o passageiro segue do ponto.
+ */
+
+// Avanço mínimo (km) que o ponto em comum precisa dar ao passageiro para valer
+// a pena (senão viraria "desce onde você já está").
+const ENCAIXE_AVANCO_MIN_KM = Number(process.env.ENCAIXE_AVANCO_MIN_KM || 1);
+
+// Catálogo em memória (recarrega se o arquivo mudar — deploy não exige restart).
+let _catalogoLocais = { mtimeMs: 0, porCodigo: {} };
+function locaisDoProjetoCodigo(codigo) {
+  if (!codigo) return [];
+  try {
+    const arq = path.join(__dirname, "public", "locais-favoritos.json");
+    const st = fs.statSync(arq);
+    if (st.mtimeMs !== _catalogoLocais.mtimeMs) {
+      const bruto = JSON.parse(fs.readFileSync(arq, "utf8"));
+      const porCodigo = {};
+      Object.entries(bruto.projetos || {}).forEach(([cod, proj]) => {
+        const flat = [];
+        (proj.grupos || []).forEach((g) => (g.locais || []).forEach((l) => {
+          if (l.ref && Number.isFinite(+l.ref.lat) && Number.isFinite(+l.ref.lng)) {
+            flat.push({ nome: l.nome, lat: +l.ref.lat, lng: +l.ref.lng });
+          }
+        }));
+        porCodigo[cod.toUpperCase()] = flat;
+      });
+      _catalogoLocais = { mtimeMs: st.mtimeMs, porCodigo };
+    }
+    return _catalogoLocais.porCodigo[String(codigo).toUpperCase()] || [];
+  } catch (e) {
+    console.warn("locaisDoProjetoCodigo:", e.message);
+    return [];
+  }
+}
+
+// projeto_id -> codigo ("S11D"), com cache simples (a tabela projetos é estática).
+const _codigoProjetoCache = new Map();
+async function codigoDoProjeto(projetoId) {
+  if (!projetoId) return null;
+  if (_codigoProjetoCache.has(projetoId)) return _codigoProjetoCache.get(projetoId);
+  try {
+    const { rows } = await pool.query("SELECT codigo FROM projetos WHERE id = $1", [projetoId]);
+    const cod = rows[0]?.codigo || null;
+    _codigoProjetoCache.set(projetoId, cod);
+    return cod;
+  } catch (_) { return null; }
+}
+
+// Melhor ponto em comum entre a rota do MOTORISTA (carOrig->carDest) e a viagem
+// do PASSAGEIRO (origPax->destPax). Candidatos: SÓ locais NOMEADOS do catálogo —
+// o encaixe é um ponto de transbordo conhecido (Portaria, rodoviária…), onde o
+// passageiro desce e consegue outra carona; largar num destino qualquer no meio
+// do nada não é encaixe (e o caso "um pouco além do fim" já é o compat parcial).
+// Critérios: o ponto está no corredor do motorista (RAIO_ROTA_KM) e deixa o
+// passageiro pelo menos ENCAIXE_AVANCO_MIN_KM mais perto do destino. Vence o
+// que deixa MENOS caminho restante.
+// Retorna { nome, lat, lng, restante_km, avanco_km } ou null.
+function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locais) {
+  const oLat = Number(origPax?.lat), oLng = Number(origPax?.lng);
+  const dLat = Number(destPax?.lat), dLng = Number(destPax?.lng);
+  const cOLat = Number(carOrig?.lat), cOLng = Number(carOrig?.lng);
+  const cDLat = Number(carDest?.lat), cDLng = Number(carDest?.lng);
+  if (![oLat, oLng, dLat, dLng, cOLat, cOLng, cDLat, cDLng].every(Number.isFinite)) return null;
+
+  const totalPax = haversineKmCoord(oLat, oLng, dLat, dLng);
+  if (!(totalPax > 0)) return null;
+
+  const candidatos = (Array.isArray(locais) ? locais : []).filter((l) => l && l.nome);
+  let melhor = null;
+  for (const p of candidatos) {
+    const lat = Number(p.lat), lng = Number(p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    // Ponto precisa estar no corredor do motorista (com pequena folga no fim —
+    // parar junto ao destino dele ainda é caminho dele).
+    const cor = corredorSegmentoKm(lat, lng, cOLat, cOLng, cDLat, cDLng);
+    if (!(cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1.05)) continue;
+    const restante = haversineKmCoord(lat, lng, dLat, dLng);
+    const avanco = totalPax - restante;
+    if (avanco < ENCAIXE_AVANCO_MIN_KM) continue;          // não adianta quase nada
+    if (restante <= RAIO_MESMO_DEST_KM) continue;          // isso é compat total, não encaixe
+    if (!melhor || restante < melhor.restante_km) {
+      melhor = { nome: p.nome || null, lat, lng, restante_km: restante, avanco_km: avanco };
+    }
+  }
+  return melhor;
 }
 
 function haversineKmCoord(lat1, lng1, lat2, lng2) {
@@ -2328,7 +2431,10 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       const compatTotal = `(${mesmoDest} OR ${corPax.noSegmento})`;
       const compatParcial = corPax.alemDestino;
       const compatProximo = sqlDestinoProximoCarona(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng");
-      destFiltro = `AND (${compatTotal} OR ${compatParcial} OR ${compatProximo}) AND c.vagas > 0`;
+      // Não filtra por compatibilidade aqui: caronas 'none' ainda podem virar
+      // ENCAIXE por ponto em comum (calculado em JS logo abaixo, com o catálogo
+      // de locais). Quem ficar 'none' sem encaixe sai da resposta.
+      destFiltro = `AND c.vagas > 0`;
       compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' WHEN ${compatProximo} THEN 'proximo' ELSE 'none' END AS compat_rota`;
     } else if (temPos) {
       // Alcance por carona (barra do motorista, default 10 km) em vez de fixo.
@@ -2361,7 +2467,40 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        ORDER BY ${orderBy}`,
       params
     );
-    res.json(rows);
+    if (!temDest) return res.json(rows);
+
+    // Segunda chance por PONTO EM COMUM: carona que não "bate" com o destino do
+    // passageiro (compat none) ainda serve se a rota dela passa por um local
+    // conhecido que adianta o passageiro (todo mundo passa pela Portaria).
+    const origPax = temPos ? { lat: +lat, lng: +lng } : null;
+    const destPax = { lat: +dest_lat, lng: +dest_lng };
+    const locais = locaisDoProjetoCodigo(await codigoDoProjeto(pid));
+    const comEncaixe = [];
+    for (const c of rows) {
+      if (c.compat_rota !== "none") { comEncaixe.push(c); continue; }
+      if (!origPax || c.origem_lat == null || c.destino_lat == null) continue;
+      // Embarque viável: passageiro no corredor da carona ou dentro do alcance dela.
+      const cor = corredorSegmentoKm(origPax.lat, origPax.lng, +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng);
+      const noCorredor = cor.dist <= RAIO_ROTA_KM && cor.t >= -0.05 && cor.t <= 1.05;
+      const distOrigemCarona = haversineKmCoord(origPax.lat, origPax.lng, +c.origem_lat, +c.origem_lng);
+      if (!noCorredor && distOrigemCarona > (Number(c.raio_km) || RAIO_VISIVEL_KM)) continue;
+      const enc = melhorPontoDeEncaixe(
+        origPax, destPax,
+        { lat: +c.origem_lat, lng: +c.origem_lng },
+        { lat: +c.destino_lat, lng: +c.destino_lng },
+        locais
+      );
+      if (!enc) continue;
+      comEncaixe.push({
+        ...c,
+        compat_rota: "encaixe",
+        encaixe_texto: enc.nome || c.destino_texto || null,
+        encaixe_lat: enc.lat,
+        encaixe_lng: enc.lng,
+        encaixe_restante_km: Math.round(enc.restante_km * 10) / 10,
+      });
+    }
+    res.json(comEncaixe);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar caronas" });
@@ -2451,10 +2590,16 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
     // dispara a notificação na hora marcada (notificado continua FALSE até lá).
     if (!agendadoFuturo) {
-      // usar_fila: chama os motoristas da rota um de cada vez (mais perto
-      // primeiro), em vez do broadcast pra todo mundo dentro de 600 m.
+      // usar_fila: fila EXCLUSIVA clássica (pulso oculto, só o da vez responde).
+      // Sem usar_fila (padrão do app): busca inteligente — o pedido vira pulso
+      // no mapa de todos, mas o PUSH vai pro melhor motorista de cada vez
+      // (rota que cobre a viagem > encaixe por ponto em comum > mais perto),
+      // em vez de buzinar pra todo mundo dentro do raio ao mesmo tempo.
       if (usar_fila) await iniciarFilaPedido(ped.id);
-      else await notificarMotoristasProximos(ped);
+      else {
+        await iniciarFilaPedido(ped.id, { exclusiva: false });
+        await pool.query("UPDATE pedidos SET notificado = TRUE WHERE id = $1", [ped.id]).catch(() => {});
+      }
     }
   } catch (err) {
     console.error(err);
@@ -2509,14 +2654,15 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
              -- Passageiro já embarcado/em viagem: o pedido antigo dele não reaparece.
              AND NOT EXISTS (SELECT 1 FROM viagens v
                              WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
-             -- Pedido em busca automática por proximidade (fila sequencial): só
-             -- o motorista da vez responde, pelos endpoints /api/pedido-fila.
-             -- Não vira pulso no mapa dos outros enquanto a fila está VIVA
-             -- (aguardando/ofertada). Se a fila esgotou sem ninguém aceitar, o
-             -- pedido volta ao mapa — senão sumia para sempre.
+             -- Pedido em busca automática EXCLUSIVA (usar_fila): só o motorista
+             -- da vez responde, pelos endpoints /api/pedido-fila. Não vira pulso
+             -- no mapa dos outros enquanto a fila está VIVA (aguardando/ofertada).
+             -- Fila NÃO-exclusiva (busca inteligente do broadcast) não esconde
+             -- nada: o pulso continua para todos.
              AND NOT EXISTS (SELECT 1 FROM pedido_fila f
                              WHERE f.pedido_id = p.id
-                               AND f.status IN ('aguardando', 'ofertada'))
+                               AND f.status IN ('aguardando', 'ofertada')
+                               AND f.exclusiva)
              -- Este motorista já recusou: o pulso não volta pra ele (nem após reload).
              AND NOT EXISTS (SELECT 1 FROM pedido_fila fr
                              WHERE fr.pedido_id = p.id
@@ -2535,6 +2681,9 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
          ORDER BY created_at DESC LIMIT 1`,
         [req.user.id]
       )).rows[0];
+      const locaisEnc = caronaMot?.destino_lat != null
+        ? locaisDoProjetoCodigo(await codigoDoProjeto(pid))
+        : [];
       const enriquecido = rows.map((p) => {
         if (!caronaMot?.destino_lat || p.destino_lat == null) return p;
         const compat = compatRotaPassageiro(
@@ -2542,6 +2691,27 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
           caronaMot.origem_lat, caronaMot.origem_lng,
           caronaMot.destino_lat, caronaMot.destino_lng
         );
+        // Destino "não bate" mas a rota do motorista passa por um ponto em comum
+        // que adianta o passageiro: o pulso mostra até onde dá pra levar.
+        if (compat === "none" && p.origem_lat != null) {
+          const enc = melhorPontoDeEncaixe(
+            { lat: +p.origem_lat, lng: +p.origem_lng },
+            { lat: +p.destino_lat, lng: +p.destino_lng },
+            { lat: +caronaMot.origem_lat, lng: +caronaMot.origem_lng },
+            { lat: +caronaMot.destino_lat, lng: +caronaMot.destino_lng },
+            locaisEnc
+          );
+          if (enc) {
+            return {
+              ...p,
+              compat_rota: "encaixe",
+              destino_motorista_texto: caronaMot.destino_texto,
+              encaixe_texto: enc.nome || caronaMot.destino_texto || null,
+              encaixe_lat: enc.lat,
+              encaixe_lng: enc.lng,
+            };
+          }
+        }
         return {
           ...p,
           compat_rota: compat,
@@ -2563,14 +2733,15 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
          AND COALESCE(u.ativo, TRUE) = TRUE
          AND (p.horario IS NULL OR p.horario <= NOW())
          -- Mesmas regras do mapa: sem solicitação vencida (30 min), sem pedido de
-         -- passageiro já em viagem, e sem pedido em fila por proximidade VIVA
-         -- (fila esgotada devolve o pedido à lista).
+         -- passageiro já em viagem, e sem pedido em fila EXCLUSIVA viva
+         -- (fila esgotada devolve o pedido à lista; fila não-exclusiva não esconde).
          AND COALESCE(p.horario, p.created_at) > NOW() - INTERVAL '30 minutes'
          AND NOT EXISTS (SELECT 1 FROM viagens v
                          WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
          AND NOT EXISTS (SELECT 1 FROM pedido_fila f
                          WHERE f.pedido_id = p.id
-                           AND f.status IN ('aguardando', 'ofertada'))
+                           AND f.status IN ('aguardando', 'ofertada')
+                           AND f.exclusiva)
          -- Quem já recusou não vê o pedido de novo.
          AND NOT EXISTS (SELECT 1 FROM pedido_fila fr
                          WHERE fr.pedido_id = p.id
@@ -2790,9 +2961,11 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       // vez pode responder, e é pelos endpoints /api/pedido-fila/:id — evita
       // dois motoristas aceitando o mesmo pedido ao mesmo tempo. Fila esgotada
       // (todas expiradas/recusadas) libera a oferta manual de novo.
+      // Fila NÃO-exclusiva (busca inteligente do pedido broadcast) não bloqueia:
+      // qualquer motorista pode oferecer mesmo com o robô chamando o melhor.
       const temFila = (await pool.query(
         `SELECT 1 FROM pedido_fila
-         WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada') LIMIT 1`,
+         WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada') AND exclusiva LIMIT 1`,
         [pedido_id]
       )).rows[0];
       if (temFila) return res.status(400).json({ error: "Este pedido está usando busca automática por proximidade" });
@@ -2914,6 +3087,39 @@ async function criarViagemDaProposta(propostaId) {
         paradaMotorista = { texto: car.destino_texto, lat: car.destino_lat, lng: car.destino_lng };
       }
     }
+    // Encaixe (ponto em comum): a fila do pedido já calculou onde este motorista
+    // deixa o passageiro (ex.: Portaria). A viagem nasce com a parada certa.
+    if (!paradaMotorista && ped) {
+      const fx = (await pool.query(
+        `SELECT encaixe_texto, encaixe_lat, encaixe_lng FROM pedido_fila
+         WHERE pedido_id = $1 AND motorista_id = $2 AND encaixe_lat IS NOT NULL
+         ORDER BY id DESC LIMIT 1`,
+        [ped.id, motorista_id]
+      )).rows[0];
+      if (fx) {
+        paradaMotorista = { texto: fx.encaixe_texto || "Ponto combinado no caminho", lat: fx.encaixe_lat, lng: fx.encaixe_lng };
+      } else if (car && car.destino_lat != null && ped.destino_lat != null && ped.origem_lat != null) {
+        // Proposta manual (sem fila): calcula o ponto em comum na hora.
+        const pid = await projetoDoUsuario(passageiro_id);
+        const locais = locaisDoProjetoCodigo(await codigoDoProjeto(pid));
+        const enc = melhorPontoDeEncaixe(
+          { lat: ped.origem_lat, lng: ped.origem_lng },
+          { lat: ped.destino_lat, lng: ped.destino_lng },
+          { lat: car.origem_lat, lng: car.origem_lng },
+          { lat: car.destino_lat, lng: car.destino_lng },
+          locais
+        );
+        // Só vale como parada se o motorista NÃO cobre a viagem toda (senão a
+        // viagem é normal — destino do passageiro).
+        const compat = compatRotaPassageiro(
+          ped.destino_lat, ped.destino_lng,
+          car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng
+        );
+        if (enc && compat !== "total") {
+          paradaMotorista = { texto: enc.nome || "Ponto combinado no caminho", lat: enc.lat, lng: enc.lng };
+        }
+      }
+    }
   } else {
     // Motorista ofereceu a um contato ("quer carona"/buzina). Embarque e destino
     // vêm do contato do passageiro — senão a viagem nasce sem coordenadas e a rota
@@ -2960,6 +3166,15 @@ async function criarViagemDaProposta(propostaId) {
     );
   }
   if (pr.pedido_id) await pool.query("UPDATE pedidos SET status = 'atendido' WHERE id = $1", [pr.pedido_id]);
+  // Viagem criada: o robô de busca deste pedido para de chamar motoristas
+  // (posições vivas da fila são canceladas; quem cancelar a viagem reabre).
+  if (pr.pedido_id) {
+    await pool.query(
+      `UPDATE pedido_fila SET status = 'cancelada'
+       WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada')`,
+      [pr.pedido_id]
+    ).catch(() => {});
+  }
   // Passageiro entrou numa viagem: qualquer OUTRO pedido aberto dele vira passado —
   // senão ele volta a aparecer no mapa dos motoristas enquanto já está sendo levado.
   await pool.query(
@@ -3054,55 +3269,116 @@ async function contarMotoristasOnline(projetoId, excluirUsuarioId, pedidoIdSemRe
   return rows[0]?.n || 0;
 }
 
-// Motoristas habilitados e disponíveis dentro de RAIO_ROTA_KM da rota
-// origem->destino, ordenados do mais perto da ORIGEM pro mais longe.
-async function motoristasNaRota(origem, destino, projetoId, excluirUsuarioId) {
+/* Ranking do "melhor motorista": quem cobre mais da viagem do passageiro é
+ * chamado primeiro. Classes (menor = melhor), desempate por distância à origem:
+ *   0 rota publicada cobre a viagem inteira (compat total)
+ *   1 rota publicada cobre até o destino do motorista (parcial)
+ *   2 rota publicada passa por um PONTO EM COMUM que adianta o passageiro (encaixe)
+ *   3 GPS do motorista já está na faixa da rota do passageiro
+ *   4 rota publicada chega perto do destino (proximo)
+ *   5 só está por perto da origem (600 m amarelo / barra da carona)
+ */
+async function rankearMotoristasParaPedido(ped, projetoId) {
+  const orig = { lat: Number(ped.origem_lat), lng: Number(ped.origem_lng) };
+  const dest = { lat: Number(ped.destino_lat), lng: Number(ped.destino_lng) };
   const distOrigem = haversine("l.lat", "l.lng", "$1", "$2");
-  const naPista = sqlMotoristaNaRotaPassageiro("$1", "$2", "$3", "$4", "l.lat", "l.lng", "u.id");
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (u.id) u.id AS motorista_id, ${distOrigem} AS dist_km
+    `SELECT DISTINCT ON (u.id) u.id AS motorista_id, l.lat, l.lng,
+            ${distOrigem} AS dist_km,
+            ca.id AS carona_id, ca.origem_lat AS ca_olat, ca.origem_lng AS ca_olng,
+            ca.destino_lat AS ca_dlat, ca.destino_lng AS ca_dlng,
+            ca.raio_km AS ca_raio, ca.vagas AS ca_vagas
      FROM localizacoes_online l
      JOIN usuarios u ON u.id = l.usuario_id
      JOIN habilitacoes_motorista h
        ON h.motorista_id = u.id AND h.status = 'ativa' AND ${sqlSelfieValida("h")}
      LEFT JOIN LATERAL (
-       SELECT vagas FROM caronas WHERE motorista_id = u.id AND status = 'ativa'
+       SELECT id, origem_lat, origem_lng, destino_lat, destino_lng, raio_km, vagas
+       FROM caronas WHERE motorista_id = u.id AND status = 'ativa'
        ORDER BY created_at DESC LIMIT 1
      ) ca ON TRUE
      WHERE l.disponivel = TRUE
        AND COALESCE(u.ativo, TRUE) = TRUE
-       AND u.id <> $5
-       AND u.projeto_id = $6
+       AND u.id <> $3
+       AND u.projeto_id = $4
        AND (ca.vagas IS NULL OR ca.vagas > 0)
-       AND ${naPista}
      ORDER BY u.id, h.created_at DESC`,
-    [origem.lat, origem.lng, destino.lat, destino.lng, excluirUsuarioId, projetoId]
+    [orig.lat, orig.lng, ped.passageiro_id, projetoId]
   );
-  rows.sort((a, b) => Number(a.dist_km) - Number(b.dist_km));
-  return rows;
+  const locais = locaisDoProjetoCodigo(await codigoDoProjeto(projetoId));
+
+  const candidatos = [];
+  for (const m of rows) {
+    const gps = { lat: Number(m.lat), lng: Number(m.lng) };
+    const distKm = Number(m.dist_km);
+    const temCarona = m.carona_id && m.ca_olat != null && m.ca_dlat != null;
+    const caOrig = temCarona ? { lat: Number(m.ca_olat), lng: Number(m.ca_olng) } : null;
+    const caDest = temCarona ? { lat: Number(m.ca_dlat), lng: Number(m.ca_dlng) } : null;
+
+    // Embarque viável: a ORIGEM do passageiro está no corredor da carona dele,
+    // OU o motorista está dentro do raio de alcance (600 m amarelo / barra da
+    // carona), OU o GPS dele já está na faixa da rota do passageiro.
+    const corOrigemCarona = temCarona
+      ? corredorSegmentoKm(orig.lat, orig.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng)
+      : null;
+    const origemNoCorredor = !!corOrigemCarona
+      && corOrigemCarona.dist <= RAIO_ROTA_KM && corOrigemCarona.t >= -0.05 && corOrigemCarona.t <= 1.05;
+    const raioAlcance = temCarona ? (Number(m.ca_raio) || RAIO_VISIVEL_KM) : RAIO_ONLINE_KM;
+    const dentroDoRaio = Number.isFinite(distKm) && distKm <= raioAlcance;
+    const corGpsPax = corredorSegmentoKm(gps.lat, gps.lng, orig.lat, orig.lng, dest.lat, dest.lng);
+    const gpsNaFaixa = corGpsPax.dist <= RAIO_ROTA_KM && corGpsPax.t >= -0.05 && corGpsPax.t <= 1.05;
+    if (!origemNoCorredor && !dentroDoRaio && !gpsNaFaixa) continue;
+
+    let classe = 5;
+    let encaixe = null;
+    if (temCarona) {
+      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng);
+      if (compat === "total") classe = 0;
+      else if (compat === "parcial") classe = 1;
+      else {
+        encaixe = melhorPontoDeEncaixe(orig, dest, caOrig, caDest, locais);
+        if (encaixe) classe = 2;
+        else if (compat === "proximo") classe = 4;
+      }
+    }
+    if (classe === 5 && gpsNaFaixa) classe = 3;
+    candidatos.push({
+      motorista_id: m.motorista_id,
+      dist_km: Number.isFinite(distKm) ? distKm : null,
+      classe,
+      encaixe: classe === 2 ? encaixe : null,
+    });
+  }
+  candidatos.sort((a, b) => (a.classe - b.classe) || ((a.dist_km ?? 1e9) - (b.dist_km ?? 1e9)));
+  return candidatos;
 }
 
-// Cria a fila do pedido (uma vez) e oferta ao primeiro (mais perto).
-async function iniciarFilaPedido(pedidoId) {
+// Cria a fila do pedido (uma vez) e oferta ao primeiro (melhor colocado).
+// exclusiva=true  → modo usar_fila clássico: o pulso some e só o da vez responde.
+// exclusiva=false → fila de NOTIFICAÇÃO do pedido broadcast: chama o melhor
+// motorista um a um (sem avisar todo mundo de uma vez), mas o pulso continua
+// no mapa de todos e qualquer motorista pode oferecer por fora.
+async function iniciarFilaPedido(pedidoId, { exclusiva = true } = {}) {
   const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedidoId])).rows[0];
   if (!ped) return;
   const pid = await projetoDoUsuario(ped.passageiro_id);
   if (!pid) return;
-  const candidatos = await motoristasNaRota(
-    { lat: ped.origem_lat, lng: ped.origem_lng },
-    { lat: ped.destino_lat, lng: ped.destino_lng },
-    pid, ped.passageiro_id
-  );
-  // Ninguém na MESMA rota (ex.: motorista perto indo para outro destino): não deixa
-  // o pedido no vácuo. Avisa os motoristas disponíveis num raio (mesmo aviso do
-  // "buzina"/pedido sem fila), pra eles decidirem — senão "pedir carona" não avisa
-  // ninguém enquanto o buzina avisa.
+  const candidatos = await rankearMotoristasParaPedido(ped, pid);
+  // Ninguém alcançável agora: não deixa o pedido no vácuo — avisa os motoristas
+  // disponíveis num raio (mesmo aviso do "buzina"), pra eles decidirem.
   if (!candidatos.length) { await notificarMotoristasProximos(ped); return; }
-  const values = candidatos.map((c, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
-  const params = [pedidoId];
-  candidatos.forEach((c, i) => params.push(c.motorista_id, i, c.dist_km));
+  const values = candidatos
+    .map((c, i) => `($1, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $2, $${i * 6 + 6}, $${i * 6 + 7}, $${i * 6 + 8})`)
+    .join(",");
+  const params = [pedidoId, exclusiva];
+  candidatos.forEach((c, i) => params.push(
+    c.motorista_id, i, c.dist_km,
+    c.encaixe?.nome || null, c.encaixe?.lat ?? null, c.encaixe?.lng ?? null
+  ));
   await pool.query(
-    `INSERT INTO pedido_fila (pedido_id, motorista_id, ordem, dist_km) VALUES ${values}`,
+    `INSERT INTO pedido_fila
+       (pedido_id, motorista_id, ordem, dist_km, exclusiva, encaixe_texto, encaixe_lat, encaixe_lng)
+     VALUES ${values}`,
     params
   );
   await ofertarProximo(pedidoId);
@@ -3138,9 +3414,14 @@ async function ofertarProximo(pedidoId) {
      WHERE id = $1`,
     [proximo.id, String(FILA_OFERTA_TIMEOUT_S)]
   );
+  // Encaixe: o motorista não vai até o destino do passageiro, mas passa por um
+  // ponto em comum — o push já diz onde ele deixaria o passageiro.
+  const dicaEncaixe = proximo.encaixe_texto
+    ? ` Dá para deixar em ${proximo.encaixe_texto}.`
+    : "";
   enviarPush(proximo.motorista_id, {
     title: "Carona pedida perto de você",
-    body: `Passageiro pedindo carona${ped.destino_texto ? ` para ${ped.destino_texto}` : ""}. Você é o mais perto — responda rápido.`,
+    body: `Passageiro pedindo carona${ped.destino_texto ? ` para ${ped.destino_texto}` : ""}. Você é a melhor opção agora — responda rápido.${dicaEncaixe}`,
     url: "/dashboard.html",
     action: "nova_oferta_fila",
   });
@@ -3164,6 +3445,7 @@ app.get("/api/motorista/oferta-atual", verificarAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT f.id, f.ordem, f.dist_km, f.ofertada_em, f.expira_em,
+              f.encaixe_texto, f.encaixe_lat, f.encaixe_lng, f.exclusiva,
               p.id AS pedido_id, p.origem_texto, p.origem_lat, p.origem_lng,
               p.destino_texto, p.destino_lat, p.destino_lng, p.pessoas, p.observacao,
               u.nome AS passageiro_nome
