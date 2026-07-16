@@ -32,6 +32,11 @@ services:
       - key: VAPID_SUBJECT
         value: mailto:contato@vap.app
       # Segredos — preencha no painel do Render (Environment):
+      # Senha do admin semente 000000. Sem ela em produção, se o admin ainda
+      # estiver com a senha padrão do schema.sql (admin123), a conta é
+      # DESATIVADA no boot por segurança.
+      - key: ADMIN_SENHA
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL

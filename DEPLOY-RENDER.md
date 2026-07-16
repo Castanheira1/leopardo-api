@@ -90,7 +90,7 @@ Supabase → **Project Settings → Database → Reset database password**.
 2. Nos logs do Render, confirme: **`Conectado ao PostgreSQL`** e **`Servidor rodando`**.
    - Se aparecer `Erro ao conectar` → revise a `DATABASE_URL` (provavelmente está
      usando a conexão direta IPv6 em vez do pooler).
-3. Login com o admin semente: **matrícula `000000` / senha `admin123`**.
+3. Defina **ADMIN_SENHA** no Environment do Render e faça login com o admin semente: **matrícula `000000` / a senha da env**. (Sem a env, se a senha padrão `admin123` ainda estiver ativa, a conta é desativada no boot por segurança.)
 4. **Troque a senha do admin** imediatamente (painel admin → reset de senha).
 5. Teste o fluxo: registrar usuário → pedir carona (selfie ao vivo) → oferecer
    carona → match → aceitar → viagem com GPS.
@@ -99,7 +99,7 @@ Supabase → **Project Settings → Database → Reset database password**.
 
 ## 6. Notas de segurança (follow-up)
 
-- **Senha do admin semente** (`admin123`): trocar no primeiro acesso.
+- **Senha do admin semente**: definida via `ADMIN_SENHA` (o boot substitui a padrão automaticamente).
 - **Google Maps key:** restringir por referrer/domínio no Google Cloud para não
   ser usada por terceiros (a chave é exposta no front via `/api/config`).
 - **RLS no Supabase:** o app acessa o Postgres direto como `postgres` (via

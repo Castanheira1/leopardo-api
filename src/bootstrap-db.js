@@ -1,5 +1,6 @@
 // Boot do banco: auto-heal de colunas/tabelas, RLS e limpezas de publicação fantasma.
 require("dotenv").config();
+const bcrypt = require("bcrypt");
 const { GPS_STALE_MIN, SQL_GPS_STALE } = require("./config");
 const { pool } = require("./db");
 
@@ -17,12 +18,45 @@ pool.connect()
       garantirColunasLocalizacao, limparPublicacoesFantasma, garantirIndiceCaronaUnica,
       garantirSchemaComercial, garantirTabelaAnuncios, garantirTabelaEventosUso,
       garantirColunasContatosMotorista, garantirRlsSupabase,
+      garantirAdminSemSenhaPadrao,
     ];
     for (const passo of passos) {
       try { await passo(); } catch (e) { console.warn(`${passo.name}:`, e.message); }
     }
   })
   .catch((err) => console.log("Erro ao conectar:", err.message));
+
+// Admin semente (matrícula 000000): a senha padrão admin123 do schema.sql é
+// pública no repositório e NÃO pode valer em produção.
+// - ADMIN_SENHA definida no ambiente: se o admin ainda usa admin123, troca pela
+//   senha da env no boot (idempotente; não sobrescreve senha já trocada à mão).
+// - Produção SEM ADMIN_SENHA: se o admin ainda usa admin123, a conta é
+//   DESATIVADA (login bloqueado) até definirem ADMIN_SENHA ou trocarem a senha.
+// - Dev/teste sem a env: comportamento de sempre (000000/admin123 funciona).
+async function garantirAdminSemSenhaPadrao() {
+  const { rows } = await pool.query(
+    "SELECT id, senha, COALESCE(ativo, TRUE) AS ativo FROM usuarios WHERE matricula = '000000'"
+  );
+  const admin = rows[0];
+  if (!admin) return;
+  const usaPadrao = await bcrypt.compare("admin123", admin.senha || "").catch(() => false);
+  const senhaEnv = process.env.ADMIN_SENHA || "";
+  if (senhaEnv) {
+    if (usaPadrao) {
+      const hash = await bcrypt.hash(senhaEnv, 10);
+      await pool.query("UPDATE usuarios SET senha = $1, ativo = TRUE WHERE id = $2", [hash, admin.id]);
+      console.log("Admin 000000: senha padrão substituída pela ADMIN_SENHA do ambiente.");
+    }
+    return;
+  }
+  if (process.env.NODE_ENV === "production" && usaPadrao && admin.ativo) {
+    await pool.query("UPDATE usuarios SET ativo = FALSE WHERE id = $1", [admin.id]);
+    console.error(
+      "SEGURANÇA: admin 000000 ainda usava a senha padrão admin123 em produção — conta DESATIVADA. " +
+      "Defina ADMIN_SENHA no ambiente (o boot reativa com a nova senha)."
+    );
+  }
+}
 
 // Auto-heal: garante as colunas que o cadastro usa. Bancos antigos podem não
 // tê-las porque uma ordem antiga do schema.sql falhava os ALTER com FK (os
