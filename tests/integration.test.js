@@ -1038,11 +1038,58 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(rMapaE.json.some((p) => p.id === pedidoEncId), "pulso deveria continuar no mapa de E");
     });
 
+    let viagemEncId;
     await test("D aceita e a viagem nasce PARCIAL até o ponto em comum", async () => {
       const { status, json } = await api("POST", `/api/pedido-fila/${ofertaEncId}/aceitar`, { token: tokEncD });
       eq(status, 200, "status aceitar");
       assert(json.viagem_id, "deveria criar a viagem");
       eq(json.parcial, true, "viagem deveria ser parcial (desembarque no ponto em comum)");
+      viagemEncId = json.viagem_id;
+    });
+
+    /* =================== ROTA ÚNICA COM PARADA + ENCADEAMENTO =================== */
+    grupo("Rota única com parada + carona encadeada (vagas)");
+    await test("viagem devolve o destino FINAL do motorista (rota única com parada)", async () => {
+      const { status, json } = await api("GET", `/api/viagens/${viagemEncId}`, { token: tokEncD });
+      eq(status, 200, "status");
+      assert(json.motorista_destino_final_lat != null && json.motorista_destino_final_lng != null,
+        "viagem deveria trazer as coordenadas do destino final do motorista");
+      eq(json.motorista_destino_final_texto, "Usina", "texto do destino final do motorista");
+      // O desembarque do passageiro (ponto em comum) é uma PARADA antes do fim.
+      assert(json.destino_motorista_lat != null, "parada (ponto em comum) deveria estar na viagem");
+    });
+
+    const uEncF = novoUsuario(33, "S11D");   // passageiro 2: quer encadear
+    let tokEncF, pedidoEnc2Id;
+    await test("motorista EM VIAGEM com vaga sobrando é chamado para a próxima perna", async () => {
+      const r0 = await api("POST", "/api/register", { body: uEncF });
+      eq(r0.status, 200, "registro F");
+      tokEncF = r0.json.token;
+      // F pede exatamente a rota publicada de D (compat total). D está em viagem
+      // (levando o passageiro do encaixe), mas a carona tem 2 vagas e só 1 ocupada.
+      const { status, json } = await api("POST", "/api/pedidos", {
+        token: tokEncF,
+        body: {
+          origem_texto: "Portaria S11D", origem_lat: PORTARIA_ENC.lat, origem_lng: PORTARIA_ENC.lng,
+          destino_texto: "Usina", destino_lat: USINA_ENC.lat, destino_lng: USINA_ENC.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(status, 200, "status pedido F");
+      pedidoEnc2Id = json.id;
+      await dormir(300);
+      const rD = await api("GET", "/api/motorista/oferta-atual", { token: tokEncD });
+      assert(rD.json && rD.json.pedido_id === pedidoEnc2Id,
+        "D (rota total, em viagem, com vaga) deveria ser chamado antes do amarelo livre");
+      const rE = await api("GET", "/api/motorista/oferta-atual", { token: tokEncE });
+      eq(rE.json, null, "E não deveria ser chamado enquanto D não responde");
+    });
+
+    await test("passageiro 2 vê no fila-status que o motorista está finalizando outra corrida", async () => {
+      const { status, json } = await api("GET", `/api/pedidos/${pedidoEnc2Id}/fila-status`, { token: tokEncF });
+      eq(status, 200, "status");
+      assert(json.atual, "deveria haver motorista sendo chamado");
+      eq(json.atual.em_viagem, true, "atual.em_viagem deveria sinalizar a corrida em andamento");
     });
 
     /* =================== LOCALIZAÇÃO AO VIVO =================== */

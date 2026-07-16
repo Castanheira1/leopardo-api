@@ -3694,6 +3694,7 @@
     let bolinhaAlvoId = null;
     let bolinhaAlvoPos = null;    // posição ao vivo do motorista chamado (vem da fila)
     let bolinhaAlvoNome = null;
+    let bolinhaAlvoEmViagem = false;   // o chamado está finalizando outra corrida
     let filaStatusTimer = null;
     function alvoRealDaFila() {
         if (bolinhaAlvoId == null) return null;
@@ -3722,6 +3723,19 @@
             bolinhaAlvoPos = (d.atual && d.atual.lat != null && d.atual.lng != null)
                 ? { lat: +d.atual.lat, lng: +d.atual.lng } : null;
             bolinhaAlvoNome = d.atual?.nome || null;
+            bolinhaAlvoEmViagem = !!(d.atual && d.atual.em_viagem);
+            // Motorista escolhido está terminando outra corrida: o passageiro fica
+            // sabendo (em vez de achar que ninguém vem).
+            const subEmV = document.getElementById('chamandoSub');
+            if (subEmV && buscaEstadoUi === 'normal') {
+                if (bolinhaAlvoEmViagem && subEmV.dataset.emViagem !== '1') {
+                    subEmV.dataset.emViagem = '1';
+                    subEmV.textContent = 'O motorista escolhido está finalizando outra corrida e já vem te buscar.';
+                } else if (!bolinhaAlvoEmViagem && subEmV.dataset.emViagem === '1') {
+                    delete subEmV.dataset.emViagem;
+                    subEmV.textContent = 'Avisamos os motoristas perto de você';
+                }
+            }
             // Pedido expirou/foi cancelado (10 min sem aceite): encerra a busca com
             // aviso. Aceite vira 'atendido' → viagem, tratado por pollPropostas.
             if (d.status === 'cancelado') {
@@ -3781,6 +3795,7 @@
         bolinhaAlvoId = null;
         bolinhaAlvoPos = null;
         bolinhaAlvoNome = null;
+        bolinhaAlvoEmViagem = false;
         buscaEstadoUi = 'normal';
         buscaRecusasVistas = null;
         try { bolinhaAvisados.clear(); } catch (_) {}
@@ -3925,7 +3940,9 @@
                 st.path = null;
                 st.destKey = key;
                 avisarMotoristaBolinha(bolinhaAlvoId);   // garante que o motorista foi avisado
-                statusBuscaRodape('Chamando ' + primeiroNome(real.m) + '…');
+                statusBuscaRodape(bolinhaAlvoEmViagem
+                    ? primeiroNome(real.m) + ' finalizando outra corrida…'
+                    : 'Chamando ' + primeiroNome(real.m) + '…');
             } else {
                 const reached = !st.path || st.segIdx >= st.path.length - 1;
                 const alvoMudou = st.destKey !== key;
@@ -5002,6 +5019,15 @@
         const d = await r.json().catch(() => ({}));
         if (!r.ok) return msg(d.error || 'Não foi possível responder — talvez tenha vencido o tempo.', 'error');
         if (aceitar && d.viagem_id) {
+            // Já dirigindo outra perna: NÃO troca de tela — a nova carona entra
+            // encadeada e aparece tracejada no mapa da viagem atual (ramificação).
+            if (viagemView && viagemView.status === 'em_andamento') {
+                // Marca como conhecida: o pollPropostas não pula pra ela sozinho.
+                marcarViagemAberta(d.viagem_id);
+                msg('Nova carona encadeada! Ela aparece tracejada no mapa — finalize a perna atual primeiro.');
+                desenharProximasPernas(viagemView);
+                return;
+            }
             const ok = await entrarNaViagem(d.viagem_id, 'Aceito! Acompanhe ao vivo.');
             if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
         } else if (!aceitar) {
@@ -5193,6 +5219,47 @@
         abrirViagem(d.id, true);
     }
 
+    // Perna TRACEJADA (dourada): continuação do motorista / próximas viagens
+    // encadeadas — mesma linguagem visual nos dois papéis.
+    const ROTA_TRACEJADA_OPTS = {
+        strokeOpacity: 0,
+        strokeWeight: 0,
+        zIndex: 38,
+        icons: [{
+            icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.85, strokeWeight: 4, strokeColor: '#C9A24B' },
+            offset: '0',
+            repeat: '14px',
+        }],
+    };
+
+    // RAMIFICAÇÃO (mapa do motorista): as OUTRAS viagens em andamento dele viram
+    // pernas tracejadas — próximo embarque → próximo desembarque — pra ele ver a
+    // ordem do passeio inteiro enquanto dirige a perna atual.
+    async function desenharProximasPernas(vv) {
+        if (!vv || !vv.ehMotorista || !vv.map) return;
+        try {
+            const r = await fetchWithAuth('/api/viagens');
+            if (!r.ok) return;
+            const todas = await r.json();
+            if (!viagemView || viagemView.id !== vv.id) return;   // trocou de tela
+            const outras = (Array.isArray(todas) ? todas : []).filter((x) =>
+                x.status === 'em_andamento'
+                && String(x.motorista_id) === String(user.id)
+                && viagemKey(x.id) !== viagemKey(vv.id)
+                && x.origem_lat != null && x.destino_lat != null);
+            for (const x of outras) {
+                const emb = { lat: +x.origem_lat, lng: +x.origem_lng };
+                const dst = { lat: +x.destino_lat, lng: +x.destino_lng };
+                criarMarcador({ position: emb, map: vv.map, cor: '#22c55e',
+                    title: `Próximo embarque: ${x.passageiro_nome || 'passageiro'}` });
+                criarMarcador({ position: dst, map: vv.map, cor: '#9aa0a6',
+                    title: `Desembarque: ${x.destino_texto || 'destino do passageiro'}` });
+                const rota = criarRotaControle(vv.map, ROTA_TRACEJADA_OPTS);
+                rota.calcular(emb, dst).catch(() => {});
+            }
+        } catch (_) { /* ramificação é informativa: falhou, segue sem */ }
+    }
+
     async function abrirViagem(viagemId) {
         const id = viagemKey(viagemId);
         if (viagemJaAberta(id) && viagemView && viagemKey(viagemView.id) === id) return true;
@@ -5249,6 +5316,24 @@
         }
         // Destino da viagem: bandeira quadriculada (fica até concluir), nos dois lados.
         if (destino) criarMarcador({ position: destino, map, icon: FLAG_ICON, iconW: 28, iconH: 30, title: destTitulo });
+
+        // ROTA ÚNICA COM PARADA: o destino FINAL do motorista (rota publicada) fica
+        // cravado no mapa, e a continuação depois do desembarque do passageiro
+        // aparece tracejada — para os DOIS lados verem o fluxo inteiro: carro →
+        // desembarque do passageiro → destino final do motorista.
+        const destinoFinalMot = (v.motorista_destino_final_lat != null && v.motorista_destino_final_lng != null)
+            ? { lat: +v.motorista_destino_final_lat, lng: +v.motorista_destino_final_lng }
+            : null;
+        const destinoFinalTxt = (v.motorista_destino_final_texto && String(v.motorista_destino_final_texto).trim())
+            || 'Destino do motorista';
+        const pontoDesembarque = (paradaMotEarly && destino && distKmGps(paradaMotEarly, destino) > 0.12)
+            ? paradaMotEarly
+            : destino;
+        if (destinoFinalMot && pontoDesembarque && distKmGps(destinoFinalMot, pontoDesembarque) > 0.2) {
+            criarMarcador({ position: destinoFinalMot, map, cor: '#C9A24B', title: destinoFinalTxt });
+            const rotaCont = criarRotaControle(map, ROTA_TRACEJADA_OPTS);
+            rotaCont.calcular(pontoDesembarque, destinoFinalMot).catch(() => {});
+        }
 
         // Rota preta no mapa (dois lados). Parcial: preta até parada do motorista + dourada só o resto.
         const rotaCtrl = criarRotaControle(map, { strokeColor: '#000000', strokeWeight: 6, strokeOpacity: 0.95 });
@@ -5323,6 +5408,7 @@
 
         iniciarViagemLoop();
         initSheetDrag();
+        desenharProximasPernas(viagemView);
         return true;
     }
 
@@ -5935,6 +6021,21 @@
         } else {
             msg('Viagem encerrada sem km suficientes — não entra no rateio/admin.', 'error');
         }
+        // Carona encadeada esperando? Emenda direto na PRÓXIMA perna (o passageiro
+        // 2 está aguardando vendo "carro em rota") — sem o motorista caçar a tela.
+        emendarProximaPerna();
+    }
+    async function emendarProximaPerna() {
+        try {
+            const r = await fetchWithAuth('/api/viagens');
+            if (!r.ok) return;
+            const todas = await r.json();
+            const prox = (Array.isArray(todas) ? todas : []).find((x) =>
+                x.status === 'em_andamento' && String(x.motorista_id) === String(user.id));
+            if (!prox) return;
+            const ok = await abrirViagem(prox.id);
+            if (ok) msg(`Próxima perna: buscar ${prox.passageiro_nome || 'o passageiro'}.`);
+        } catch (_) { /* sem próxima perna: fica na tela de encerramento */ }
     }
     async function cancelarViagem(viagemId) {
         if (!confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
