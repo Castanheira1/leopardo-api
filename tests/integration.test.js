@@ -1126,6 +1126,180 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(fs.json.atual, null, "não deveria haver motorista sendo chamado");
     });
 
+    /* ============= DOUBLE-BOOKING: 1 pedido, 2 aceites simultâneos ============= */
+    // Aceite pela FILA (robô) e aceite de uma PROPOSTA MANUAL disputando o MESMO
+    // pedido no mesmo instante criavam DUAS viagens. O gate atômico
+    // ('aberto'→'atendido' antes de inserir a viagem) tem que deixar UM vencer e
+    // devolver erro claro (409/404) ao outro — nunca duas viagens pro mesmo pedido.
+    grupo("Double-booking: dois aceites simultâneos no mesmo pedido");
+    const DB_ORIG = { lat: -6.500000, lng: -50.050000 };
+    const DB_DEST = { lat: -6.520000, lng: -50.090000 };
+    const uDbG = novoUsuario(40, "S11D");   // motorista chamado pela fila
+    const uDbH = novoUsuario(41, "S11D");   // motorista que oferta manualmente
+    const uDbP = novoUsuario(42, "S11D");   // passageiro
+    let tokDbG, tokDbH, tokDbP;
+    await test("fila + proposta manual no mesmo pedido: um vencedor e UMA viagem só", async () => {
+      for (const [u, set] of [[uDbG, (t) => (tokDbG = t)], [uDbH, (t) => (tokDbH = t)], [uDbP, (t) => (tokDbP = t)]]) {
+        const r = await api("POST", "/api/register", { body: u });
+        eq(r.status, 200, "registro");
+        set(r.json.token);
+      }
+      // G e H habilitados e online na mesma origem — os dois candidatos do robô.
+      for (const tok of [tokDbG, tokDbH]) {
+        const h = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "DBK" + Math.floor(Math.random() * 9000 + 1000), tag: "DoubleBook",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(h.status, 200, "habilitação");
+        const on = await api("POST", "/api/motorista/online", { token: tok, body: { lat: DB_ORIG.lat, lng: DB_ORIG.lng } });
+        eq(on.status, 200, "online");
+      }
+      // P abre o pedido broadcast: o robô chama o melhor colocado pela fila.
+      const ped = await api("POST", "/api/pedidos", {
+        token: tokDbP,
+        body: {
+          origem_texto: "Origem DB", origem_lat: DB_ORIG.lat, origem_lng: DB_ORIG.lng,
+          destino_texto: "Destino DB", destino_lat: DB_DEST.lat, destino_lng: DB_DEST.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(ped.status, 200, "status pedido");
+      const pedidoId = ped.json.id;
+      await dormir(300);
+      // Quem a fila ofertou aceita pela fila; o OUTRO manda a proposta manual
+      // (permitido: a fila do broadcast é NÃO-exclusiva).
+      const oG = await api("GET", "/api/motorista/oferta-atual", { token: tokDbG });
+      const oH = await api("GET", "/api/motorista/oferta-atual", { token: tokDbH });
+      const gOfertado = oG.json && oG.json.pedido_id === pedidoId;
+      const hOfertado = oH.json && oH.json.pedido_id === pedidoId;
+      assert(gOfertado || hOfertado, "a fila deveria ter ofertado a um dos dois motoristas");
+      const filaTok = gOfertado ? tokDbG : tokDbH;
+      const ofertaId = gOfertado ? oG.json.id : oH.json.id;
+      const propTok = gOfertado ? tokDbH : tokDbG;
+      const prop = await api("POST", "/api/propostas", { token: propTok, body: { pedido_id: pedidoId } });
+      eq(prop.status, 200, "proposta manual criada");
+      const propostaId = prop.json.id;
+      // DISPARO SIMULTÂNEO: motorista aceita pela fila E passageiro aceita a proposta.
+      const [rFila, rProp] = await Promise.all([
+        api("POST", `/api/pedido-fila/${ofertaId}/aceitar`, { token: filaTok }),
+        api("POST", `/api/propostas/${propostaId}/aceitar`, { token: tokDbP }),
+      ]);
+      // Exatamente um 200; o perdedor recebe erro claro (409 do gate, ou 404 por
+      // o pedido já não estar 'aberto') — jamais os dois vencendo.
+      const oks = [rFila.status, rProp.status].filter((s) => s === 200);
+      eq(oks.length, 1, "exatamente um aceite deveria vencer");
+      const perdedor = rFila.status === 200 ? rProp.status : rFila.status;
+      assert(perdedor === 409 || perdedor === 404, `o perdedor deveria receber 409/404, veio ${perdedor}`);
+      // Prova de fogo: UMA viagem só para o pedido, e o pedido fica 'atendido'.
+      const pg = pgTeste();
+      try {
+        const v = await pg.query("SELECT COUNT(*)::int AS n FROM viagens WHERE pedido_id = $1", [pedidoId]);
+        eq(v.rows[0].n, 1, "deveria existir exatamente UMA viagem para o pedido (sem double-booking)");
+        const p = await pg.query("SELECT status FROM pedidos WHERE id = $1", [pedidoId]);
+        eq(p.rows[0].status, "atendido", "pedido deveria terminar 'atendido'");
+      } finally { await pg.end(); }
+    });
+
+    /* ============= OFERTA ÚNICA NA FILA: sem oferta dupla nem pulo ============= */
+    // A seleção+oferta virou um único UPDATE (FOR UPDATE SKIP LOCKED + guarda de
+    // oferta viva): respostas concorrentes à mesma oferta avançam a fila UMA vez
+    // só (nunca dois motoristas ofertados ao mesmo tempo, nunca um candidato
+    // pulado), e o "fila esgotada" só vale quando não há aguardando NEM oferta viva.
+    grupo("Oferta única na fila: sem oferta dupla nem candidato pulado");
+    const OD_ORIG = { lat: -6.300000, lng: -50.500000 };
+    const OD_DEST = { lat: -6.320000, lng: -50.540000 };
+    const uOdA = novoUsuario(43, "S11D");
+    const uOdB = novoUsuario(44, "S11D");
+    const uOdC = novoUsuario(45, "S11D");
+    const uOdP = novoUsuario(46, "S11D");
+    let tokOdA, tokOdB, tokOdC, tokOdP, pedidoOdId;
+    const tokensOd = () => [tokOdA, tokOdB, tokOdC];
+
+    async function contarFilaOd(pedidoId) {
+      const pg = pgTeste();
+      try {
+        const r = await pg.query(
+          `SELECT COUNT(*) FILTER (WHERE status = 'aguardando')::int AS aguardando,
+                  COUNT(*) FILTER (WHERE status = 'ofertada' AND expira_em > NOW())::int AS vivas,
+                  COUNT(*) FILTER (WHERE status = 'recusada')::int AS recusadas
+           FROM pedido_fila WHERE pedido_id = $1`,
+          [pedidoId]
+        );
+        return r.rows[0];
+      } finally { await pg.end(); }
+    }
+    async function tokenOfertadoOd(pedidoId) {
+      for (const tok of tokensOd()) {
+        const r = await api("GET", "/api/motorista/oferta-atual", { token: tok });
+        if (r.json && r.json.pedido_id === pedidoId) return { tok, ofertaId: r.json.id };
+      }
+      return null;
+    }
+
+    await test("recusa concorrente da mesma oferta avança a fila UMA vez (sem oferta dupla)", async () => {
+      for (const [u, set] of [
+        [uOdA, (t) => (tokOdA = t)], [uOdB, (t) => (tokOdB = t)],
+        [uOdC, (t) => (tokOdC = t)], [uOdP, (t) => (tokOdP = t)],
+      ]) {
+        const r = await api("POST", "/api/register", { body: u });
+        eq(r.status, 200, "registro");
+        set(r.json.token);
+      }
+      for (const tok of tokensOd()) {
+        const h = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "ODF" + Math.floor(Math.random() * 9000 + 1000), tag: "OfertaUnica",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(h.status, 200, "habilitação");
+        const on = await api("POST", "/api/motorista/online", { token: tok, body: { lat: OD_ORIG.lat, lng: OD_ORIG.lng } });
+        eq(on.status, 200, "online");
+      }
+      const ped = await api("POST", "/api/pedidos", {
+        token: tokOdP,
+        body: {
+          origem_texto: "Origem OD", origem_lat: OD_ORIG.lat, origem_lng: OD_ORIG.lng,
+          destino_texto: "Destino OD", destino_lat: OD_DEST.lat, destino_lng: OD_DEST.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1,
+        },
+      });
+      eq(ped.status, 200, "status pedido");
+      pedidoOdId = ped.json.id;
+      await dormir(300);
+      const primeiro = await tokenOfertadoOd(pedidoOdId);
+      assert(primeiro, "a fila deveria ter ofertado ao primeiro colocado");
+      // O motorista da vez recusa pelos DOIS caminhos ao mesmo tempo (modal da fila
+      // + recusa pelo pulso): não pode virar oferta dupla nem pular candidato.
+      await Promise.all([
+        api("POST", `/api/pedido-fila/${primeiro.ofertaId}/recusar`, { token: primeiro.tok }),
+        api("POST", `/api/pedidos/${pedidoOdId}/recusar-motorista`, { token: primeiro.tok }),
+      ]);
+      await dormir(300);
+      const c = await contarFilaOd(pedidoOdId);
+      eq(c.vivas, 1, "só pode haver UMA oferta viva depois da recusa (nada de oferta dupla)");
+      eq(c.aguardando, 1, "o terceiro colocado deveria seguir aguardando (candidato não pulado)");
+      assert(c.recusadas >= 1, "o motorista que recusou deveria contar como recusa");
+      const segundo = await tokenOfertadoOd(pedidoOdId);
+      assert(segundo && segundo.tok !== primeiro.tok, "a vez deveria passar para o PRÓXIMO da fila");
+    });
+
+    await test("quando o último recusa, o passageiro vê a fila esgotada (atual=null), sem oferta fantasma", async () => {
+      // Recusa os que sobraram, um de cada vez, até esgotar a fila.
+      for (let i = 0; i < 3; i++) {
+        const atual = await tokenOfertadoOd(pedidoOdId);
+        if (!atual) break;
+        await api("POST", `/api/pedido-fila/${atual.ofertaId}/recusar`, { token: atual.tok });
+        await dormir(200);
+      }
+      const c = await contarFilaOd(pedidoOdId);
+      eq(c.vivas, 0, "não deveria sobrar oferta viva");
+      eq(c.aguardando, 0, "não deveria sobrar ninguém aguardando");
+      const fs = await api("GET", `/api/pedidos/${pedidoOdId}/fila-status`, { token: tokOdP });
+      eq(fs.status, 200, "status fila-status");
+      eq(fs.json.atual, null, "fila esgotada: nenhum motorista sendo chamado (sem oferta fantasma)");
+    });
+
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
     grupo("Localização ao vivo");
     await test("POST /api/localizacao aceita coordenadas válidas", async () => {
