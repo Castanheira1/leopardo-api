@@ -1462,6 +1462,10 @@ async function ativarPedidoAgendado(ped) {
   }
 }
 
+// Intervalo do agendador (ativa pedidos cujo horário marcado já chegou). 60s em
+// produção; a suíte de integração baixa via env para exercitar a ativação sem
+// esperar o minuto cheio.
+const AGENDADO_TICK_MS = Number(process.env.AGENDADO_TICK_MS || 60 * 1000);
 setInterval(async () => {
   try {
     const { rows } = await pool.query(`
@@ -1473,7 +1477,7 @@ setInterval(async () => {
   } catch (err) {
     console.error("Erro ao notificar pedidos agendados:", err.message);
   }
-}, 60 * 1000);
+}, AGENDADO_TICK_MS);
 
 // Keep-alive: o plano FREE do Render hiberna o serviço após ~15 min sem
 // tráfego — a próxima visita paga 30-60s de partida a frio e os agendadores
