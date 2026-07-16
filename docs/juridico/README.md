@@ -22,7 +22,7 @@ manutenção. Estão em formato Markdown (renderizam direto no GitHub).
 
 ## Antes de usar em produção
 
-1. **Preencher os campos entre colchetes `[ ]`** em todos os documentos: razão social,
+1. ~~Preencher os campos entre colchetes~~ **Feito** (controlador pessoa física + DPO preenchidos em 16/07/2026; atualizar para razão social/CNPJ quando a PJ for constituída). Eram: razão social,
    CNPJ, endereço, nome/e-mail do Encarregado (DPO), cidade/UF do foro e canal de suporte.
 2. **Revisão jurídica** por advogado(a) — estes são modelos adaptados ao VAP, não
    parecer legal.

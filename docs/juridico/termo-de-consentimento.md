@@ -11,8 +11,7 @@
 
 ## 1. Partes
 
-**Controlador dos dados:** [RAZÃO SOCIAL], inscrita no CNPJ nº [CNPJ], com sede em
-[ENDEREÇO] (doravante "Controlador"), responsável pelo aplicativo VAP.
+**Controlador dos dados:** Wanderlei Ribeiro de Castro Castanheira, CPF 035.320.691-13, pessoa física responsável pelo aplicativo VAP (doravante "Controlador"). Assim que a pessoa jurídica for constituída, este termo será atualizado com a razão social e o CNPJ correspondentes.
 
 **Titular dos dados:** você, colaborador(a) usuário(a) do aplicativo, identificado(a)
 pela matrícula informada no cadastro (doravante "Titular").
@@ -113,8 +112,8 @@ tratamento; acessar, corrigir e atualizar seus dados; solicitar anonimização, 
 ou eliminação de dados desnecessários ou tratados em desconformidade; pedir
 portabilidade; obter informação sobre compartilhamento; e **revogar este consentimento**.
 
-Para exercer, contate o Encarregado (DPO): **[NOME DO ENCARREGADO]** —
-**[EMAIL-DPO]**.
+Para exercer, contate o Encarregado (DPO): **Wanderlei Ribeiro de Castro Castanheira** —
+**castanheira.wrc@gmail.com**.
 
 **Revogação:** a revogação do consentimento impede o uso do aplicativo, por ser o
 consentimento indispensável às finalidades de segurança do serviço. Os dados já

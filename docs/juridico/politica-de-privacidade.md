@@ -10,14 +10,13 @@
 
 ## 1. Quem é o controlador dos dados
 
-O controlador dos dados pessoais tratados neste aplicativo é **[RAZÃO SOCIAL DO
-CONTROLADOR]**, inscrita no CNPJ **[CNPJ]**, com sede em **[ENDEREÇO]**. O aplicativo é de
+O controlador dos dados pessoais tratados neste aplicativo é **Wanderlei Ribeiro de Castro Castanheira** (CPF 035.320.691-13), pessoa física responsável pelo VAP. Assim que a pessoa jurídica for constituída, esta política será atualizada com a razão social e o CNPJ correspondentes. O aplicativo é de
 uso interno, destinado a organizar caronas entre colaboradores.
 
 ## 2. Encarregado (DPO) e contato
 
 Para exercer seus direitos ou tirar dúvidas, fale com o Encarregado pelo Tratamento de
-Dados Pessoais: **[NOME DO ENCARREGADO]** — **[EMAIL-DPO]**.
+Dados Pessoais: **Wanderlei Ribeiro de Castro Castanheira** — **castanheira.wrc@gmail.com**.
 
 ## 3. Quais dados coletamos
 

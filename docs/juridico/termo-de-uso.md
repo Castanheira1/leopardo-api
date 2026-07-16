@@ -215,8 +215,8 @@ o tratamento dos dados conforme a Política de Privacidade e a legislação apli
 ## 13. Suporte
 
 Dúvidas, solicitações e denúncias podem ser encaminhadas pelo canal oficial de
-atendimento: **[EMAIL/CANAL DE SUPORTE]**. Solicitações relativas a dados pessoais devem
-ser direcionadas ao Encarregado (DPO): **[NOME DO ENCARREGADO] — [EMAIL-DPO]**.
+atendimento: **castanheira.wrc@gmail.com**. Solicitações relativas a dados pessoais devem
+ser direcionadas ao Encarregado (DPO): **Wanderlei Ribeiro de Castro Castanheira — castanheira.wrc@gmail.com**.
 
 ---
 
@@ -234,7 +234,7 @@ Consentimento**. Parte do tratamento ocorre com base no **consentimento** do Usu
 (uso de imagem e localização) e parte com base em outras hipóteses legais previstas na
 LGPD — em especial a **execução de contrato/procedimentos preliminares** e o **legítimo
 interesse** (operação do serviço, segurança e rateio). O Usuário pode exercer seus
-direitos junto ao Encarregado (DPO): **[NOME DO ENCARREGADO] — [EMAIL-DPO]**.
+direitos junto ao Encarregado (DPO): **Wanderlei Ribeiro de Castro Castanheira — castanheira.wrc@gmail.com**.
 
 ---
 
