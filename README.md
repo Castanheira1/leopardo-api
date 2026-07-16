@@ -72,7 +72,8 @@ Após o `schema.sql`: admin **000000 / admin123** (altere em produção).
 ## Estrutura
 
 ```
-├── server.js          # Backend (Express + Postgres + Supabase Storage)
+├── server.js          # Ponto de entrada (Express + Postgres + Supabase Storage)
+├── src/               # Backend por domínio (config, db, auth, serviços, rotas)
 ├── schema.sql         # Esquema do banco
 ├── .env.example
 └── public/

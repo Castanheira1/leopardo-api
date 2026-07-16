@@ -49,7 +49,9 @@ jobs:
         run: npm ci
 
       - name: Sintaxe do backend
-        run: node --check server.js
+        run: |
+          node --check server.js
+          for f in src/*.js src/rotas/*.js src/services/*.js; do node --check "$f"; done
 
       - name: Testes de contrato e unitários (sem banco)
         run: |

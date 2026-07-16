@@ -24,8 +24,9 @@ user-facing strings in Portuguese to match the existing style.
 
 ## Tech stack
 
-- **Backend:** Node.js (**>= 22** — required, see below) + Express 4, single file
-  `server.js`.
+- **Backend:** Node.js (**>= 22** — required, see below) + Express 4. `server.js` is
+  the entry point (middleware pipeline + route registration order); the logic lives in
+  `src/` split by domain (see layout below).
 - **DB:** PostgreSQL (Supabase). Accessed directly via `pg` `Pool` using `DATABASE_URL`
   — **not** via the Supabase JS client / PostgREST. RLS is therefore not relied upon.
 - **Auth:** JWT (`jsonwebtoken`, 8h expiry) + `bcrypt` password hashes.
@@ -40,7 +41,19 @@ user-facing strings in Portuguese to match the existing style.
 ## Repository layout
 
 ```
-server.js            # ENTIRE backend: Express app, all routes, DB pool, Supabase upload
+server.js            # Entry point: global middleware + require order of src/rotas/* (= Express registration order)
+src/
+  app.js             # The shared Express instance (required by every route module)
+  config.js          # Env constants: radii, GPS freshness, timezone, JWT secret check
+  db.js              # pg Pool (Supabase session pooler) + session timezone
+  bootstrap-db.js    # Boot: auto-heal columns/tables, RLS, ghost-publication cleanup
+  push.js            # Web Push (VAPID) setup + enviarPush
+  storage.js         # Supabase Storage upload/remove, multer, 30-day photo retention
+  auth.js            # Single-session JWT (sessao_id), verificarAuth/Admin/Escopo, authLimiter
+  usuarios.js        # User helpers: project cache, selfie, habilitacaoAtiva, front shape
+  datas.js / geo.js / km.js   # Helpers: BR wall-clock dates, route geometry + encaixe, km measurement
+  services/          # Business logic shared by routes: viagens, fila (driver search), rateio
+  rotas/             # One module per API domain, registered in server.js order
 schema.sql           # Full DB schema (idempotent; safe to re-run). Apply manually.
 package.json         # scripts: start / dev (nodemon) / test. engines: node >=22
 .node-version        # pins Node 22 for Render (read by Render's build)
@@ -132,7 +145,7 @@ Tables: `usuarios`, `habilitacoes_motorista`, `caronas`, `pedidos`, `propostas`,
   pedido: `aberto/atendido/cancelado`; proposta: `pendente/aceito/recusado`;
   viagem: `em_andamento/concluida/cancelada`).
 
-## Backend conventions (`server.js`)
+## Backend conventions (`server.js` + `src/`)
 
 - **Single-file Express app.** Routes are grouped by section banners
   (`/* === AUTH === */`, `/* === CARONAS === */`, etc.). Keep that structure.

@@ -4,7 +4,20 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const appJs = fs.readFileSync(path.join(root, "public/app.js"), "utf8");
 const dash = fs.readFileSync(path.join(root, "public/dashboard.html"), "utf8");
-const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
+// O back-end foi modularizado (server.js + src/**). O contrato de sessão vale
+// para o conjunto: concatena tudo para os greps abaixo continuarem válidos.
+function lerBackend() {
+  const partes = [fs.readFileSync(path.join(root, "server.js"), "utf8")];
+  for (const dir of ["src", "src/rotas", "src/services"]) {
+    const abs = path.join(root, dir);
+    if (!fs.existsSync(abs)) continue;
+    for (const f of fs.readdirSync(abs)) {
+      if (f.endsWith(".js")) partes.push(fs.readFileSync(path.join(abs, f), "utf8"));
+    }
+  }
+  return partes.join("\n");
+}
+const server = lerBackend();
 const sw = fs.readFileSync(path.join(root, "public/service-worker.js"), "utf8");
 let failed = 0;
 function ok(c, m) {
