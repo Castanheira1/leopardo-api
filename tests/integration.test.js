@@ -298,8 +298,8 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(r2.json.length, 2, "persistido");
     });
 
-    // Conta dedicada: não reutiliza tokDriver (usado no restante da suíte).
-    const uExcluir = novoUsuario(41, "S11D");
+    // Conta dedicada: n alto para não colidir com fixtures da fila (20–51).
+    const uExcluir = novoUsuario(91, "S11D");
     let tokExcluir;
     await test("DELETE /api/perfil sem senha → 400", async () => {
       const reg = await api("POST", "/api/register", { body: uExcluir });

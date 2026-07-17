@@ -1,9 +1,10 @@
 // VAP — ponto de entrada. A lógica vive em src/ (config, infra, serviços e
 // rotas por domínio); este arquivo monta o pipeline HTTP na MESMA ordem do
 // antigo monólito: middlewares globais → boot do banco → rotas →
-// estáticos → tratador de erro → listen.
+// estáticos → tratador de erro → listen (+ Socket.io para app nativo).
 require("dotenv").config();
 
+const http = require("http");
 const express = require("express");
 const path = require("path");
 const helmet = require("helmet");
@@ -101,6 +102,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Erro interno no servidor" });
 });
 
-app.listen(PORT, () => {
+// http.Server explícito: Express + Socket.io (clientes nativos). PWA não usa WS.
+const httpServer = http.createServer(app);
+const { attachRealtime } = require("./src/realtime");
+attachRealtime(httpServer);
+
+httpServer.listen(PORT, () => {
   console.log(`VAP rodando em http://localhost:${PORT}`);
 });

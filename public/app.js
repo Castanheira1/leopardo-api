@@ -223,44 +223,106 @@ async function fetchWithAuth(url, options = {}) {
     return resp;
 }
 
-/* -------------------- Notificações push (Web Push) -------------------- */
+/* -------------------- Notificações push (Web Push PWA | FCM nativo) -------------------- */
 function _b64ToUint8(base64) {
     const pad = '='.repeat((4 - (base64.length % 4)) % 4);
     const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
     const raw = atob(b64);
     return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
-// Inscreve o aparelho para receber notificações. Idempotente e à prova de erro:
-// se o navegador não suporta, a permissão é negada ou não há chave, apenas sai.
+// Inscreve o aparelho para receber notificações. Idempotente e à prova de erro.
+// Nativo: @capacitor/push-notifications → token FCM/APNs.
+// PWA: Service Worker + Web Push (VAPID) — caminho original intacto.
 let _pushPronto = false;
+async function registrarPushNativo() {
+    const Push = window.VapPlatform && VapPlatform.plugin
+        ? VapPlatform.plugin('PushNotifications')
+        : (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.PushNotifications);
+    if (!Push) return false;
+    try {
+        let perm = await Push.checkPermissions();
+        if (perm.receive !== 'granted') {
+            perm = await Push.requestPermissions();
+        }
+        if (perm.receive !== 'granted') return false;
+
+        await Push.register();
+
+        // Evita listeners duplicados em reentradas.
+        if (!registrarPushNativo._bound) {
+            registrarPushNativo._bound = true;
+            await Push.addListener('registration', async (token) => {
+                try {
+                    const value = token && (token.value || token);
+                    if (!value) return;
+                    const platform = (window.Capacitor && Capacitor.getPlatform && Capacitor.getPlatform()) || 'android';
+                    const r = await fetchWithAuth('/api/push/device-token', {
+                        method: 'POST',
+                        body: JSON.stringify({ token: value, platform }),
+                    });
+                    if (r && r.ok) _pushPronto = true;
+                } catch (_) {}
+            });
+            await Push.addListener('registrationError', (err) => {
+                console.warn('Push nativo registrationError:', err);
+            });
+            await Push.addListener('pushNotificationActionPerformed', (ev) => {
+                try {
+                    const data = (ev && ev.notification && ev.notification.data) || {};
+                    const url = data.url || '/dashboard.html';
+                    if (url && !String(location.href).includes(String(url).replace(/^\//, ''))) {
+                        location.href = url;
+                    }
+                } catch (_) {}
+            });
+        }
+        return true;
+    } catch (e) {
+        console.warn('registrarPushNativo:', e && e.message);
+        return false;
+    }
+}
+
+async function registrarPushWeb(silencioso) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+    if (Notification.permission === 'denied') return;
+    // Modo silencioso (no carregamento): só sincroniza se a permissão já existe,
+    // sem disparar o popup. O popup só aparece num gesto do usuário.
+    if (Notification.permission === 'default' && silencioso) return;
+
+    const cfg = await (await fetch('/api/config')).json();
+    if (!cfg.pushPublicKey) return;   // servidor sem VAPID: push desligado
+
+    if (Notification.permission === 'default') {
+        const p = await Notification.requestPermission();
+        if (p !== 'granted') return;
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+        sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _b64ToUint8(cfg.pushPublicKey),
+        });
+    }
+    const r = await fetchWithAuth('/api/push/subscribe', { method: 'POST', body: JSON.stringify(sub) });
+    if (r && r.ok) _pushPronto = true;
+}
+
 async function registrarPush(silencioso = false) {
     try {
         if (_pushPronto) return;
-        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
         if (!localStorage.getItem('token')) return;
-        if (Notification.permission === 'denied') return;
-        // Modo silencioso (no carregamento): só sincroniza se a permissão já existe,
-        // sem disparar o popup. O popup só aparece num gesto do usuário.
-        if (Notification.permission === 'default' && silencioso) return;
 
-        const cfg = await (await fetch('/api/config')).json();
-        if (!cfg.pushPublicKey) return;   // servidor sem VAPID: push desligado
-
-        if (Notification.permission === 'default') {
-            const p = await Notification.requestPermission();
-            if (p !== 'granted') return;
+        const nativo = window.VapPlatform && VapPlatform.isNative && VapPlatform.isNative();
+        if (nativo) {
+            const ok = await registrarPushNativo();
+            if (ok) return;
+            // Sem plugin/Firebase ainda: não cai no Web Push (SW no Cap nativo é frágil).
+            return;
         }
-
-        const reg = await navigator.serviceWorker.ready;
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-            sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: _b64ToUint8(cfg.pushPublicKey),
-            });
-        }
-        const r = await fetchWithAuth('/api/push/subscribe', { method: 'POST', body: JSON.stringify(sub) });
-        if (r && r.ok) _pushPronto = true;
+        await registrarPushWeb(silencioso);
     } catch (_) { /* nunca quebra o app por causa de notificação */ }
 }
 

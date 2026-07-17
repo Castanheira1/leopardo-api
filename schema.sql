@@ -370,6 +370,17 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions (usuario_id);
 
+-- Tokens FCM/APNs do app Capacitor (push nativo)
+CREATE TABLE IF NOT EXISTS push_device_tokens (
+    id SERIAL PRIMARY KEY,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    platform VARCHAR(20) NOT NULL DEFAULT 'android',
+    criado_em TIMESTAMPTZ DEFAULT NOW(),
+    atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_device_usuario ON push_device_tokens (usuario_id);
+
 -- Locais favoritos pessoais (cada usuário marca no Perfil)
 CREATE TABLE IF NOT EXISTS usuarios_favoritos (
     id SERIAL PRIMARY KEY,

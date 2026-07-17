@@ -27,6 +27,12 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Mantém GPS/JS vivos com tela apagada durante a carona (só nativo). -->
+        <service
+            android:name=".TripTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 
     <!-- Permissions -->
@@ -39,6 +45,11 @@
     <!-- Localização (uso em primeiro plano): mapa, match por proximidade e rota. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Rastreamento contínuo da viagem (Foreground Service + background). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

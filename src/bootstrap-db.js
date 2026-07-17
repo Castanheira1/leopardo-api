@@ -417,6 +417,17 @@ async function garantirTabelaPush() {
         criado_em TIMESTAMPTZ DEFAULT NOW()
       )`);
     await pool.query("CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_subscriptions(usuario_id)");
+    // Tokens FCM/APNs do app Capacitor (push nativo).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_device_tokens (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        platform VARCHAR(20) NOT NULL DEFAULT 'android',
+        criado_em TIMESTAMPTZ DEFAULT NOW(),
+        atualizado_em TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_push_device_usuario ON push_device_tokens(usuario_id)");
   } catch (e) {
     console.warn("garantirTabelaPush:", e.message);
   }

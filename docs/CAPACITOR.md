@@ -55,18 +55,27 @@ npm run cap:ios       # abre no Xcode (requer macOS)
 - **iOS:** requer macOS + Xcode. Não foi possível validar o build aqui por
   não haver Xcode neste ambiente Linux.
 
-## Próximos passos (fora deste scaffold)
+## Isolamento nativo × PWA (já no código)
 
-Conforme o plano faseado discutido: depois de validar que o app abre e fala
-com o backend nos dois modos acima, os próximos incrementos são, nesta ordem:
+O front detecta a plataforma com `Capacitor.isNativePlatform()` (`public/platform.js`):
 
-1. Push nativo (`@capacitor/push-notifications`, FCM/APNs) como
-   complemento ao Web Push que já existe (`server.js`, `push_subscriptions`) —
-   necessário para notificações confiáveis com o app **encerrado** pelo SO,
-   principalmente no iOS.
-2. Geolocalização em segundo plano (`@capacitor/geolocation` +
-   plugin de background location), habilitada só enquanto o motorista está
-   com o toggle "disponível" ligado.
-3. Publicação nas lojas (Play Store / App Store): ícones, splash screen,
-   política de privacidade (já existe em `public/politica-privacidade.html`),
-   contas de desenvolvedor.
+| Recurso | PWA (navegador) | App nativo (Capacitor) |
+|---|---|---|
+| Coordenadas na viagem | HTTP poll (`setInterval`) | Socket.io + fallback poll lento |
+| Push | Web Push (VAPID + SW) | `@capacitor/push-notifications` → FCM/APNs |
+| GPS com tela apagada | limitação do browser | Foreground Service (`TripTracking`) |
+| Buffer de rota offline | Preferences → `localStorage` | Preferences (nativo) |
+
+### Ativar push nativo de ponta a ponta
+
+1. Crie projeto no Firebase, baixe `android/app/google-services.json`.
+2. No Render, defina `FCM_SERVER_KEY` (Cloud Messaging → Server key).
+3. `npx cap sync android` e rebuild do APK/AAB.
+4. iOS: certificados APNs no Firebase + capabilities Push no Xcode.
+
+### Rebuild nativo após mudanças
+
+```bash
+npm install
+npx cap sync
+```

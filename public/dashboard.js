@@ -5206,12 +5206,36 @@
 
     // Loop único dos dois lados: cada um transmite a SUA posição (GPS) e busca a
     // posição do OUTRO no servidor. Assim motorista e passageiro se veem no mapa.
+    // Isolamento: nativo usa Socket.io (+ FG service); PWA mantém HTTP polling.
     function iniciarViagemLoop() {
         const vv = viagemView;
-        if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        if (trackState && trackState.watchId != null) {
+            try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
+            if (trackState.nativeWatchId != null && window.VapPlatform) {
+                VapPlatform.clearWatchNative(trackState.nativeWatchId);
+            }
+        }
         if (acompTimer) clearInterval(acompTimer);
-        trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null, kmTela: 0 };
+        if (window.VapRealtime) VapRealtime.leaveViagem();
+
+        const nativo = !!(window.VapPlatform && VapPlatform.isNative && VapPlatform.isNative());
+        trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null, kmTela: 0, nativo, nativeWatchId: null };
         localStorage.setItem('viagemAtiva', vv.id);
+
+        // Restaura pontos não enviados (túnel / offline) do Preferences/localStorage.
+        if (window.VapPlatform && VapPlatform.RouteBuffer) {
+            VapPlatform.RouteBuffer.load(vv.id).then((salvos) => {
+                if (!trackState || trackState.viagemId !== vv.id || !salvos.length) return;
+                trackState.buffer = salvos.concat(trackState.buffer || []);
+            }).catch(() => {});
+        }
+
+        if (nativo && window.VapPlatform) {
+            VapPlatform.startTripTracking({
+                title: 'VAP',
+                body: 'Rastreando sua viagem',
+            });
+        }
 
         const aplicarGpsProprio = (pt) => {
             if (!vv || vv.status !== 'em_andamento') return;
@@ -5223,8 +5247,12 @@
                         if (trackState.ultimoPonto) {
                             trackState.kmTela += distKmGps(trackState.ultimoPonto, pt);
                         }
-                        trackState.buffer.push({ lat: pt.lat, lng: pt.lng, em: Date.now() });
+                        const ponto = { lat: pt.lat, lng: pt.lng, em: Date.now() };
+                        trackState.buffer.push(ponto);
                         trackState.ultimoPonto = pt;
+                        if (window.VapPlatform && VapPlatform.RouteBuffer) {
+                            VapPlatform.RouteBuffer.append(vv.id, ponto).catch(() => {});
+                        }
                     }
                 }
             } else {
@@ -5239,17 +5267,21 @@
         const enviarLoc = (pt) => {
             if (Date.now() - ultimoEnvioLoc < 1500) return;
             ultimoEnvioLoc = Date.now();
+            // Nativo + socket conectado: WS. Senão (PWA ou WS caiu): HTTP.
+            if (nativo && window.VapRealtime && VapRealtime.connected() && VapRealtime.emitLoc(vv.id, pt)) {
+                return;
+            }
             fetchWithAuth('/api/localizacao', {
                 method: 'POST',
                 body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }),
             }).catch(() => {});
         };
+        const onGpsOk = (pos) => {
+            const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            aplicarGpsProprio(pt);
+            enviarLoc(pt);
+        };
         if (navigator.geolocation) {
-            const onGpsOk = (pos) => {
-                const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                aplicarGpsProprio(pt);
-                enviarLoc(pt);
-            };
             // 1ª fix rápida (rede/cache) — evita mapa sem posição após embarque.
             navigator.geolocation.getCurrentPosition(
                 onGpsOk,
@@ -5279,54 +5311,96 @@
             ligarWatch(false);
         }
 
-        // 2) Posição do outro + fase/status — poll mais rápido no começo.
-        let ticksRapidos = 0;
-        async function tick() {
+        // 2) Posição do outro + fase/status
+        function aplicarMetaLoc(d) {
+            if (!d || !vv) return;
+            if (d.status && d.status !== vv.status) {
+                vv.status = d.status;
+                if (vv.status !== 'em_andamento') {
+                    if (acompTimer) clearInterval(acompTimer);
+                    if (window.VapRealtime) VapRealtime.leaveViagem();
+                    if (window.VapPlatform) VapPlatform.stopTripTracking();
+                    viagensAbertas.delete(viagemKey(vv.id));
+                    const encerrada = vv.status === 'cancelada';
+                    msg(encerrada ? 'Viagem encerrada.' : 'Viagem concluída. Veja no histórico.');
+                    if (!vv.ehMotorista || encerrada) sairDaViagem();
+                    else { atualizarCabecalhoViagem(); limparRotaViagem(); }
+                    return true; // encerrou
+                }
+                atualizarCabecalhoViagem();
+            }
+            if (d.fase && d.fase !== vv.fase) {
+                vv.fase = d.fase;
+                vv.ultimaRota = 0;
+                vv.rotaPath = null;
+                vv._forcarRota = true;
+                if (vv.rotaCtrl) vv.rotaCtrl.limpar();
+                atualizarCabecalhoViagem();
+            }
+            if (!vv.ehMotorista && d.motorista) {
+                vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
+            }
+            if (vv.ehMotorista && d.passageiro) {
+                vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
+            } else if (vv.ehMotorista && !vv.posPassageiro && vv.embarque && vv.fase === 'encontro') {
+                vv.posPassageiro = { ...vv.embarque };
+            }
+            renderViagem();
+            return false;
+        }
+
+        async function tickHttp() {
             try {
                 const r = await fetchWithAuth('/api/viagens/' + vv.id + '/localizacao');
                 if (!r || !r.ok) return;
                 const d = await r.json();
-                if (d.status && d.status !== vv.status) {
-                    vv.status = d.status;
-                    if (vv.status !== 'em_andamento') {
-                        clearInterval(acompTimer);
-                        viagensAbertas.delete(viagemKey(vv.id));
-                        const encerrada = vv.status === 'cancelada';
-                        msg(encerrada ? 'Viagem encerrada.' : 'Viagem concluída. Veja no histórico.');
-                        if (!vv.ehMotorista || encerrada) sairDaViagem();
-                        else { atualizarCabecalhoViagem(); limparRotaViagem(); }
-                        return;
-                    }
-                    atualizarCabecalhoViagem();
-                }
-                if (d.fase && d.fase !== vv.fase) {
-                    vv.fase = d.fase;
-                    vv.ultimaRota = 0;
-                    vv.rotaPath = null;
-                    vv._forcarRota = true;
-                    if (vv.rotaCtrl) vv.rotaCtrl.limpar();
-                    atualizarCabecalhoViagem();
-                }
-                // Cada lado pega a posição do OUTRO pelo servidor (a sua vem do GPS local).
-                if (!vv.ehMotorista && d.motorista) vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
-                if (vv.ehMotorista && d.passageiro) {
-                    vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
-                } else if (vv.ehMotorista && !vv.posPassageiro && vv.embarque && vv.fase === 'encontro') {
-                    // Mantém embarque até o GPS do passageiro chegar ao servidor
-                    vv.posPassageiro = { ...vv.embarque };
-                }
-                renderViagem();
+                // normaliza forma do payload HTTP
+                aplicarMetaLoc({
+                    status: d.status,
+                    fase: d.fase,
+                    motorista: d.motorista || (d.lat != null ? { lat: d.lat, lng: d.lng } : null),
+                    passageiro: d.passageiro,
+                });
             } catch (_) { /* rede instável: tenta no próximo ciclo */ }
-            ticksRapidos++;
-            // Após ~12s, desacelera o poll (economia de bateria/rede)
-            if (ticksRapidos === 8 && acompTimer) {
-                clearInterval(acompTimer);
-                acompTimer = setInterval(tick, VIAGEM_POLL_MS);
-            }
         }
-        tick();
-        // 1,2 s nos primeiros segundos — passageiro aparece rápido após aceite
-        acompTimer = setInterval(tick, 1200);
+
+        if (nativo && window.VapRealtime) {
+            // Socket.io: peer em tempo real; poll HTTP só como fallback lento (15s).
+            VapRealtime.joinViagem(vv.id, {
+                onPeerLoc: (payload) => {
+                    if (!vv || vv.status !== 'em_andamento') return;
+                    const pt = { lat: +payload.lat, lng: +payload.lng };
+                    if (payload.papel === 'motorista' && !vv.ehMotorista) vv.posMotorista = pt;
+                    if (payload.papel === 'passageiro' && vv.ehMotorista) vv.posPassageiro = pt;
+                    if (payload.fase && payload.fase !== vv.fase) {
+                        aplicarMetaLoc({ status: payload.status, fase: payload.fase });
+                    }
+                    renderViagem();
+                },
+                onMeta: (payload) => {
+                    aplicarMetaLoc({ status: payload.status, fase: payload.fase });
+                },
+            }).then(() => {
+                // 1ª leitura HTTP garante fase/status mesmo se WS atrasar
+                tickHttp();
+            }).catch(() => {
+                tickHttp();
+            });
+            acompTimer = setInterval(tickHttp, 15000);
+        } else {
+            // PWA: polling HTTP original (rápido no início, depois VIAGEM_POLL_MS).
+            let ticksRapidos = 0;
+            async function tick() {
+                await tickHttp();
+                ticksRapidos++;
+                if (ticksRapidos === 8 && acompTimer) {
+                    clearInterval(acompTimer);
+                    acompTimer = setInterval(tick, VIAGEM_POLL_MS);
+                }
+            }
+            tick();
+            acompTimer = setInterval(tick, 1200);
+        }
         if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
     }
     // Motorista chegou ao passageiro: muda para a fase de destino e reinicia medição de km.
@@ -5376,9 +5450,35 @@
         msg('Passageiro embarcado — km passam a contar para o destino.');
     }
     async function enviarPontos() {
-        if (!trackState || !trackState.buffer.length) return;
-        const pontos = trackState.buffer.splice(0, trackState.buffer.length);
-        await fetchWithAuth('/api/viagens/' + trackState.viagemId + '/pontos', { method: 'POST', body: JSON.stringify({ pontos }) });
+        if (!trackState) return;
+        const viagemId = trackState.viagemId;
+        let pontos = trackState.buffer.splice(0, trackState.buffer.length);
+
+        // Preferências: puxa o que ficou persistido (offline/túnel) e limpa a chave.
+        if (window.VapPlatform && VapPlatform.RouteBuffer) {
+            try {
+                const salvos = await VapPlatform.RouteBuffer.takeAll(viagemId);
+                if (salvos.length) pontos = salvos.concat(pontos);
+            } catch (_) {}
+        }
+        if (!pontos.length) return;
+
+        try {
+            const r = await fetchWithAuth('/api/viagens/' + viagemId + '/pontos', {
+                method: 'POST',
+                body: JSON.stringify({ pontos }),
+            });
+            if (!r || !r.ok) throw new Error('falha envio pontos');
+            // sucesso: buffer persistente já limpo via takeAll
+        } catch (_) {
+            // Rede caiu: devolve ao buffer em memória + Preferences.
+            if (trackState && trackState.viagemId === viagemId) {
+                trackState.buffer = pontos.concat(trackState.buffer || []);
+            }
+            if (window.VapPlatform && VapPlatform.RouteBuffer) {
+                try { await VapPlatform.RouteBuffer.restore(viagemId, pontos); } catch (_) {}
+            }
+        }
     }
     async function finalizarViagem(viagemId, opts = {}) {
         if (viagemView?.finalizando) return;
@@ -5389,10 +5489,20 @@
         }
         await enviarPontos();
         if (trackState) {
-            if (trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+            if (trackState.watchId != null) {
+                try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
+            }
+            if (trackState.nativeWatchId != null && window.VapPlatform) {
+                VapPlatform.clearWatchNative(trackState.nativeWatchId);
+            }
             clearInterval(trackState.timer);
         }
         if (acompTimer) clearInterval(acompTimer);
+        if (window.VapRealtime) VapRealtime.leaveViagem();
+        if (window.VapPlatform) VapPlatform.stopTripTracking();
+        if (window.VapPlatform && VapPlatform.RouteBuffer && viagemId) {
+            VapPlatform.RouteBuffer.clear(viagemId).catch(() => {});
+        }
         localStorage.removeItem('viagemAtiva');
         // Rota planejada (Maps) só vale se o carro chegou de fato perto do destino;
         // finalizar sem sair do lugar conta apenas o que foi percorrido (zero).
@@ -5480,9 +5590,16 @@
     // Sai da tela de viagem (concluída/cancelada) e volta ao mapa do papel atual.
     // NÃO abre o seletor de papel — usuário permanece onde estava.
     function sairDaViagem() {
-        if (trackState && trackState.watchId != null) navigator.geolocation.clearWatch(trackState.watchId);
+        if (trackState && trackState.watchId != null) {
+            try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
+        }
+        if (trackState && trackState.nativeWatchId != null && window.VapPlatform) {
+            VapPlatform.clearWatchNative(trackState.nativeWatchId);
+        }
         if (trackState && trackState.timer) clearInterval(trackState.timer);
         if (acompTimer) clearInterval(acompTimer);
+        if (window.VapRealtime) VapRealtime.leaveViagem();
+        if (window.VapPlatform) VapPlatform.stopTripTracking();
         if (viagemView?.id) viagensAbertas.delete(viagemKey(viagemView.id));
         const papelSalvo = localStorage.getItem('papel')
             || (viagemView?.ehMotorista ? 'motorista' : 'passageiro');
