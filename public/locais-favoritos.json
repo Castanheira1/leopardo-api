@@ -1,6 +1,6 @@
 {
   "versao": 1,
-  "descricao": "Catálogo de locais por projeto. Coordenadas 'ref' calibradas via Google Places (scripts/verificar-locais.js). Ao tocar num local, o app tenta o Google ao vivo (só aceita se o NOME bater) e usa 'ref' como fallback. 'google': true marca os pontos confirmados pelo Google; os demais são posições curadas aproximadas (o Google não indexa esses nomes internos).",
+  "descricao": "Catálogo de locais POR PROJETO (chave = projetos.codigo). O app NÃO é duplicado: um único dashboard.js lê só projetos[codigoDoUsuario]. S11D está calibrado; os demais têm estrutura pronta (grupos vazios) — só preencher locais. ref = lat/lng curados; google:true = confirmado via Places (scripts/verificar-locais.js).",
   "projetos": {
     "S11D": {
       "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
@@ -160,7 +160,7 @@
               "nome": "Pérola Negra-Usina",
               "busca": "Pérola Negra S11D Usina",
               "ref": {
-                "lat": -6.427950,
+                "lat": -6.42795,
                 "lng": -50.239585
               }
             },
@@ -501,7 +501,195 @@
             }
           ]
         }
+      ],
+      "calibrado": true
+    },
+    "SALOBO": {
+      "nome": "Salobo",
+      "regiao": {
+        "lat": -5.79,
+        "lng": -50.53,
+        "raio_km": 40
+      },
+      "calibrado": false,
+      "nota": "Estrutura pronta. Preencha grupos[].locais com { nome, busca, ref:{lat,lng}, google?:true }. Rode scripts/verificar-locais.js --write se quiser validar no Google.",
+      "grupos": [
+        {
+          "titulo": "Acessos e apoio",
+          "locais": []
+        },
+        {
+          "titulo": "Usina / planta",
+          "locais": []
+        },
+        {
+          "titulo": "Mina / frente",
+          "locais": []
+        },
+        {
+          "titulo": "Oficinas e manutenção",
+          "locais": []
+        },
+        {
+          "titulo": "Canteiros e obras",
+          "locais": []
+        },
+        {
+          "titulo": "Outros pontos",
+          "locais": []
+        }
+      ]
+    },
+    "CARAJAS": {
+      "nome": "Carajás",
+      "regiao": {
+        "lat": -6.06,
+        "lng": -50.17,
+        "raio_km": 40
+      },
+      "calibrado": false,
+      "nota": "Estrutura pronta. Preencha grupos[].locais com { nome, busca, ref:{lat,lng}, google?:true }. Rode scripts/verificar-locais.js --write se quiser validar no Google.",
+      "grupos": [
+        {
+          "titulo": "Acessos e apoio",
+          "locais": []
+        },
+        {
+          "titulo": "Usina / planta",
+          "locais": []
+        },
+        {
+          "titulo": "Mina / frente",
+          "locais": []
+        },
+        {
+          "titulo": "Oficinas e manutenção",
+          "locais": []
+        },
+        {
+          "titulo": "Canteiros e obras",
+          "locais": []
+        },
+        {
+          "titulo": "Outros pontos",
+          "locais": []
+        }
+      ]
+    },
+    "PARAUAPEBAS": {
+      "nome": "Parauapebas",
+      "regiao": {
+        "lat": -6.067,
+        "lng": -49.902,
+        "raio_km": 35
+      },
+      "calibrado": false,
+      "nota": "Estrutura pronta. Preencha grupos[].locais com { nome, busca, ref:{lat,lng}, google?:true }. Rode scripts/verificar-locais.js --write se quiser validar no Google.",
+      "grupos": [
+        {
+          "titulo": "Acessos e apoio",
+          "locais": []
+        },
+        {
+          "titulo": "Usina / planta",
+          "locais": []
+        },
+        {
+          "titulo": "Mina / frente",
+          "locais": []
+        },
+        {
+          "titulo": "Oficinas e manutenção",
+          "locais": []
+        },
+        {
+          "titulo": "Canteiros e obras",
+          "locais": []
+        },
+        {
+          "titulo": "Outros pontos",
+          "locais": []
+        }
+      ]
+    },
+    "SOSSEGO": {
+      "nome": "Sossego",
+      "regiao": {
+        "lat": -6.43,
+        "lng": -50.05,
+        "raio_km": 40
+      },
+      "calibrado": false,
+      "nota": "Estrutura pronta. Preencha grupos[].locais com { nome, busca, ref:{lat,lng}, google?:true }. Rode scripts/verificar-locais.js --write se quiser validar no Google.",
+      "grupos": [
+        {
+          "titulo": "Acessos e apoio",
+          "locais": []
+        },
+        {
+          "titulo": "Usina / planta",
+          "locais": []
+        },
+        {
+          "titulo": "Mina / frente",
+          "locais": []
+        },
+        {
+          "titulo": "Oficinas e manutenção",
+          "locais": []
+        },
+        {
+          "titulo": "Canteiros e obras",
+          "locais": []
+        },
+        {
+          "titulo": "Outros pontos",
+          "locais": []
+        }
+      ]
+    },
+    "ONCA-PUMA": {
+      "nome": "Onça Puma",
+      "regiao": {
+        "lat": -6.75,
+        "lng": -51.08,
+        "raio_km": 40
+      },
+      "calibrado": false,
+      "nota": "Estrutura pronta. Preencha grupos[].locais com { nome, busca, ref:{lat,lng}, google?:true }. Rode scripts/verificar-locais.js --write se quiser validar no Google.",
+      "grupos": [
+        {
+          "titulo": "Acessos e apoio",
+          "locais": []
+        },
+        {
+          "titulo": "Usina / planta",
+          "locais": []
+        },
+        {
+          "titulo": "Mina / frente",
+          "locais": []
+        },
+        {
+          "titulo": "Oficinas e manutenção",
+          "locais": []
+        },
+        {
+          "titulo": "Canteiros e obras",
+          "locais": []
+        },
+        {
+          "titulo": "Outros pontos",
+          "locais": []
+        }
       ]
     }
-  }
+  },
+  "como_adicionar_projeto": [
+    "1) Criar/ativar linha em tabela projetos (dono.html ou este script)",
+    "2) Garantir chave em projetos.<CODIGO> neste JSON (esqueleto)",
+    "3) Preencher grupos[].locais com nome, busca, ref.lat/lng",
+    "4) Ajustar regiao (centro + raio_km) do canteiro",
+    "5) Deploy do public/ (Render). Não precisa novo app."
+  ]
 }

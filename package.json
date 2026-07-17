@@ -13,7 +13,8 @@
     "test:pg": "bash scripts/test-com-pg-local.sh",
     "cap:sync": "cap sync",
     "cap:android": "cap open android",
-    "cap:ios": "cap open ios"
+    "cap:ios": "cap open ios",
+    "projetos:estrutura": "node scripts/garantir-estrutura-projetos.js"
   },
   "keywords": [
     "carona",
