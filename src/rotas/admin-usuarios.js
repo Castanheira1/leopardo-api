@@ -5,7 +5,12 @@ const app = require("../app");
 const { PORT } = require("../config");
 const { pool } = require("../db");
 const { pushConfigurado } = require("../push");
-const { carregarAdminEscopo, verificarAuth } = require("../auth");
+const {
+  carregarAdminEscopo,
+  ehSuperAdmin,
+  verificarAdmin,
+  verificarAuth,
+} = require("../auth");
 const { invalidarProjetoCache, resolverProjetoId, sqlSelfieValida } = require("../usuarios");
 
 app.post("/api/admin/usuarios/:matricula/desativar", verificarAuth, carregarAdminEscopo, async (req, res) => {
@@ -198,7 +203,7 @@ async function notificarChamadoAdmin(chamado) {
     <p><strong>WhatsApp:</strong> ${chamado.telefone || "—"}</p>
     <p><strong>Email:</strong> ${chamado.email || "—"}</p>
     <p><strong>Justificativa:</strong><br>${(chamado.justificativa || "—").replace(/\n/g, "<br>")}</p>
-    <p style="margin-top:20px"><a href="${baseUrl}/admin.html">Abrir painel admin para aprovar ou recusar</a></p>
+    <p style="margin-top:20px"><a href="${baseUrl}/dono.html">Abrir dashboard do dono para aprovar ou recusar</a></p>
   `;
   try {
     const r = await fetch("https://api.resend.com/emails", {
@@ -256,86 +261,147 @@ app.post("/api/admin/chamados", async (req, res) => {
   }
 });
 
-// Fila de solicitações admin do projeto (painel comercial).
-app.get("/api/admin/chamados", verificarAuth, carregarAdminEscopo, async (req, res) => {
-  const pid = req.adminEscopo.admin_projeto_id;
-  const status = req.query.status || "pendente";
+// Lista chamados: dono vê TODOS os projetos; admin de canteiro só o próprio.
+app.get("/api/admin/chamados", verificarAuth, verificarAdmin, async (req, res) => {
+  const status = String(req.query.status || "pendente");
   try {
-    const { rows } = await pool.query(
-      `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
-       FROM admin_chamados c
-       LEFT JOIN projetos p ON p.id = c.projeto_id
-       WHERE c.projeto_id = $1 AND c.status = $2
-       ORDER BY c.created_at DESC`,
-      [pid, status]
-    );
-    res.json(rows);
+    if (ehSuperAdmin(req.user)) {
+      const { rows } = await pool.query(
+        `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
+         FROM admin_chamados c
+         LEFT JOIN projetos p ON p.id = c.projeto_id
+         WHERE c.status = $1
+         ORDER BY c.created_at DESC`,
+        [status]
+      );
+      return res.json(rows);
+    }
+    // Admin de canteiro: precisa de escopo de projeto.
+    return carregarAdminEscopo(req, res, async () => {
+      const pid = req.adminEscopo.admin_projeto_id;
+      if (!pid) return res.status(403).json({ error: "Admin sem projeto vinculado" });
+      try {
+        const { rows } = await pool.query(
+          `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
+           FROM admin_chamados c
+           LEFT JOIN projetos p ON p.id = c.projeto_id
+           WHERE c.projeto_id = $1 AND c.status = $2
+           ORDER BY c.created_at DESC`,
+          [pid, status]
+        );
+        res.json(rows);
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Aprova chamado: cria ou promove usuário a admin do projeto (senha inicial 123456).
-app.post("/api/admin/chamados/:id/aprovar", verificarAuth, carregarAdminEscopo, async (req, res) => {
-  const pid = req.adminEscopo.admin_projeto_id;
+/** Promove matrícula a admin do projeto do chamado. Só após aprovação. */
+async function promoverAdminCanteiro(c) {
+  const pid = c.projeto_id;
+  if (!pid) throw new Error("Chamado sem projeto");
+  const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [c.matricula]);
+  if (bloqueada.rows.length > 0) {
+    const err = new Error("Matrícula bloqueada — não é possível aprovar");
+    err.status = 400;
+    throw err;
+  }
+  const senha_hash = await bcrypt.hash("123456", 10);
+  const existente = (await pool.query("SELECT id FROM usuarios WHERE matricula = $1", [c.matricula])).rows[0];
+  if (existente) {
+    await pool.query(
+      `UPDATE usuarios SET
+         is_admin = TRUE, admin_projeto_id = $1, projeto_id = $1,
+         nome = COALESCE($2, nome), empresa_nome = COALESCE($3, empresa_nome),
+         telefone = COALESCE($4, telefone), email = COALESCE($5, email),
+         ativo = TRUE
+       WHERE id = $6`,
+      [pid, c.nome, c.empresa_nome, c.telefone, c.email, existente.id]
+    );
+    invalidarProjetoCache(existente.id);
+  } else {
+    await pool.query(
+      `INSERT INTO usuarios (nome, matricula, senha_hash, telefone, email, is_admin, empresa_nome, projeto_id, admin_projeto_id, ativo, politica_aceita_em, politica_versao)
+       VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$7,TRUE,NOW(),'1.0')`,
+      [c.nome, c.matricula, senha_hash, c.telefone, c.email, c.empresa_nome, pid]
+    );
+  }
+}
+
+// Aprova: dono (qualquer projeto) ou admin do canteiro do chamado.
+// Até aprovar, o solicitante NÃO tem is_admin — só o chamado pendente.
+app.post("/api/admin/chamados/:id/aprovar", verificarAuth, verificarAdmin, async (req, res) => {
   const chamadoId = parseInt(req.params.id, 10);
   if (!chamadoId) return res.status(400).json({ error: "ID inválido" });
 
   try {
     const { rows: chamados } = await pool.query(
-      "SELECT * FROM admin_chamados WHERE id = $1 AND projeto_id = $2 AND status = 'pendente'",
-      [chamadoId, pid]
+      "SELECT * FROM admin_chamados WHERE id = $1 AND status = 'pendente'",
+      [chamadoId]
     );
     const c = chamados[0];
     if (!c) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
 
-    const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [c.matricula]);
-    if (bloqueada.rows.length > 0) {
-      return res.status(400).json({ error: "Matrícula bloqueada — não é possível aprovar" });
+    if (!ehSuperAdmin(req.user)) {
+      // Admin de canteiro só aprova do próprio projeto.
+      return carregarAdminEscopo(req, res, async () => {
+        try {
+          if (req.adminEscopo.admin_projeto_id !== c.projeto_id) {
+            return res.status(403).json({ error: "Só o dono ou o admin deste canteiro pode aprovar" });
+          }
+          await promoverAdminCanteiro(c);
+          await pool.query("UPDATE admin_chamados SET status = 'aprovado' WHERE id = $1", [chamadoId]);
+          res.json({
+            message: `Admin aprovado! Matrícula ${c.matricula} — senha inicial: 123456 (peça para trocar no primeiro login).`,
+          });
+        } catch (e) {
+          console.error(e);
+          res.status(e.status || 500).json({ error: e.message || "Erro ao aprovar solicitação" });
+        }
+      });
     }
 
-    const senha_hash = await bcrypt.hash("123456", 10);
-    const existente = (await pool.query("SELECT id FROM usuarios WHERE matricula = $1", [c.matricula])).rows[0];
-
-    if (existente) {
-      await pool.query(
-        `UPDATE usuarios SET
-           is_admin = TRUE, admin_projeto_id = $1, projeto_id = $1,
-           nome = COALESCE($2, nome), empresa_nome = COALESCE($3, empresa_nome),
-           telefone = COALESCE($4, telefone), email = COALESCE($5, email),
-           ativo = TRUE
-         WHERE id = $6`,
-        [pid, c.nome, c.empresa_nome, c.telefone, c.email, existente.id]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO usuarios (nome, matricula, senha_hash, telefone, email, is_admin, empresa_nome, projeto_id, admin_projeto_id, ativo)
-         VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$7,TRUE)`,
-        [c.nome, c.matricula, senha_hash, c.telefone, c.email, c.empresa_nome, pid]
-      );
-    }
-
+    await promoverAdminCanteiro(c);
     await pool.query("UPDATE admin_chamados SET status = 'aprovado' WHERE id = $1", [chamadoId]);
     res.json({
-      message: `Admin aprovado! Matrícula ${c.matricula} — senha inicial: 123456 (peça para trocar no primeiro login).`,
+      message: `Admin do canteiro aprovado! Matrícula ${c.matricula} — senha inicial: 123456 (peça para trocar).`,
     });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Erro ao aprovar solicitação" });
+    res.status(e.status || 500).json({ error: e.message || "Erro ao aprovar solicitação" });
   }
 });
 
-app.post("/api/admin/chamados/:id/recusar", verificarAuth, carregarAdminEscopo, async (req, res) => {
-  const pid = req.adminEscopo.admin_projeto_id;
+app.post("/api/admin/chamados/:id/recusar", verificarAuth, verificarAdmin, async (req, res) => {
   const chamadoId = parseInt(req.params.id, 10);
   if (!chamadoId) return res.status(400).json({ error: "ID inválido" });
 
   try {
-    const { rowCount } = await pool.query(
-      "UPDATE admin_chamados SET status = 'recusado' WHERE id = $1 AND projeto_id = $2 AND status = 'pendente'",
-      [chamadoId, pid]
+    const { rows } = await pool.query(
+      "SELECT * FROM admin_chamados WHERE id = $1 AND status = 'pendente'",
+      [chamadoId]
     );
-    if (rowCount === 0) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
+    const c = rows[0];
+    if (!c) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
+
+    if (!ehSuperAdmin(req.user)) {
+      return carregarAdminEscopo(req, res, async () => {
+        try {
+          if (req.adminEscopo.admin_projeto_id !== c.projeto_id) {
+            return res.status(403).json({ error: "Só o dono ou o admin deste canteiro pode recusar" });
+          }
+          await pool.query("UPDATE admin_chamados SET status = 'recusado' WHERE id = $1", [chamadoId]);
+          res.json({ message: "Solicitação recusada." });
+        } catch (e) {
+          res.status(500).json({ error: e.message });
+        }
+      });
+    }
+
+    await pool.query("UPDATE admin_chamados SET status = 'recusado' WHERE id = $1", [chamadoId]);
     res.json({ message: "Solicitação recusada." });
   } catch (e) {
     res.status(500).json({ error: e.message });

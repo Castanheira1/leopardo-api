@@ -194,6 +194,10 @@
             <button type="button" class="adm-nav-item active" data-sec="sec-visao" onclick="irSecao('sec-visao')">
                 <span class="ico">◈</span> Visão executiva
             </button>
+            <button type="button" class="adm-nav-item" data-sec="sec-acesso" onclick="irSecao('sec-acesso')">
+                <span class="ico">✦</span> Acesso admin canteiro
+                <span id="badgeChamados" style="display:none;margin-left:auto;background:var(--gold);color:#0a0a0a;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 8px;">0</span>
+            </button>
             <button type="button" class="adm-nav-item" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
                 <span class="ico">▦</span> Projetos (todos)
             </button>
@@ -284,6 +288,48 @@
                 </div>
             </section>
 
+            <!-- Aprovação de admin de canteiro (bloqueado até você aprovar) -->
+            <section id="sec-acesso" class="adm-section">
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Solicitações de admin de canteiro</h3>
+                            <p class="cap">
+                                Quem pede em <strong>Cadastro → Solicitar acesso admin</strong> fica
+                                <strong>sem acesso ao painel</strong> até você aprovar aqui.
+                                Valide identidade (WhatsApp/ligação) antes de liberar. Senha inicial após aprovar: <code>123456</code>.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="field-row" style="margin-bottom:12px;">
+                        <label class="cap" for="filtroChamados">Status</label>
+                        <select id="filtroChamados" onchange="carregarChamados()" style="padding:8px 10px;border-radius:8px;background:#fff;color:#111;border:1px solid #d1d5db;">
+                            <option value="pendente">Pendentes (bloqueados)</option>
+                            <option value="aprovado">Aprovados</option>
+                            <option value="recusado">Recusados</option>
+                        </select>
+                        <button type="button" class="btn-ghost" onclick="carregarChamados()">Atualizar fila</button>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="adm" id="tabChamados" style="min-width:720px;">
+                            <thead>
+                                <tr>
+                                    <th>Quem</th>
+                                    <th>Projeto</th>
+                                    <th>Contato</th>
+                                    <th>Justificativa</th>
+                                    <th>Quando</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div id="chamadosVazio" class="empty" style="display:none;">Nenhuma solicitação neste filtro.</div>
+                    <div id="chamadosMsg" class="cap" style="margin-top:10px;"></div>
+                </div>
+            </section>
+
             <!-- Gestão de projetos -->
             <section id="sec-projetos" class="adm-section">
                 <div class="panel">
@@ -348,6 +394,7 @@ checkAuth(true, { superOnly: true, redirectAdmin: 'admin.html' });
 
 const SECOES = {
     'sec-visao': { titulo: 'Visão executiva', sub: 'Aderência, custo e operação em todos os canteiros' },
+    'sec-acesso': { titulo: 'Acesso admin canteiro', sub: 'Aprove ou recuse — até aprovar, o painel fica bloqueado para eles' },
     'sec-projetos': { titulo: 'Projetos', sub: 'Criar, ativar e precificar canteiros do VAP' },
     'sec-saude': { titulo: 'Saúde do VAP', sub: 'Infraestrutura e erros globais' },
 };
@@ -383,10 +430,80 @@ function irSecao(id) {
         document.getElementById('topSub').textContent = meta.sub;
     }
     if (id === 'sec-visao') carregarDono();
+    if (id === 'sec-acesso') carregarChamados();
     if (id === 'sec-projetos') carregarProjetos();
     if (id === 'sec-saude') carregarSaude();
     fecharSidebar();
 }
+
+function linkWhatsApp(tel) {
+    const d = String(tel || '').replace(/\D/g, '');
+    if (!d) return '#';
+    const n = d.length >= 10 && !d.startsWith('55') ? '55' + d : d;
+    return 'https://wa.me/' + n;
+}
+function atualizarBadgeChamados(n) {
+    const b = document.getElementById('badgeChamados');
+    if (!b) return;
+    b.textContent = n;
+    b.style.display = n > 0 ? 'inline-block' : 'none';
+}
+async function carregarChamados() {
+    const status = document.getElementById('filtroChamados')?.value || 'pendente';
+    const tbody = document.querySelector('#tabChamados tbody');
+    const vazio = document.getElementById('chamadosVazio');
+    const msg = document.getElementById('chamadosMsg');
+    if (msg) msg.textContent = '';
+    try {
+        const r = await fetchWithAuth('/api/admin/chamados?status=' + encodeURIComponent(status));
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro ao listar');
+        tbody.innerHTML = d.map((c) => `<tr>
+            <td><strong>${esc(c.nome)}</strong><br><span class="cap">Mat. ${esc(c.matricula)} · ${esc(c.empresa_nome || '—')}</span></td>
+            <td><strong>${esc(c.projeto_codigo || '—')}</strong><br><span class="cap">${esc(c.projeto_nome || '')}</span></td>
+            <td><a href="${linkWhatsApp(c.telefone)}" target="_blank" rel="noopener">${esc(c.telefone)}</a><br><span class="cap">${esc(c.email)}</span></td>
+            <td style="max-width:240px;">${esc(c.justificativa || '—')}</td>
+            <td class="cap">${new Date(c.created_at).toLocaleString('pt-BR')}</td>
+            <td style="white-space:nowrap;">${status === 'pendente'
+                ? `<button type="button" class="btn-gold" style="width:auto;padding:6px 10px;margin-right:4px;" onclick="aprovarChamado(${c.id},'${esc(c.matricula)}')">Aprovar</button>
+                   <button type="button" class="btn-ghost" onclick="recusarChamado(${c.id})">Recusar</button>`
+                : `<span class="cap">${esc(status)}</span>`}</td>
+        </tr>`).join('');
+        if (vazio) vazio.style.display = d.length ? 'none' : 'block';
+        if (status === 'pendente') atualizarBadgeChamados(d.length);
+    } catch (e) {
+        tbody.innerHTML = '';
+        if (vazio) vazio.style.display = 'none';
+        if (msg) msg.textContent = e.message;
+    }
+}
+async function aprovarChamado(id, matricula) {
+    if (!confirm(`Aprovar admin de canteiro para matrícula ${matricula}?\n\nSó confirme se já validou a identidade.`)) return;
+    await acaoChamado(id, 'aprovar');
+}
+async function recusarChamado(id) {
+    if (!confirm('Recusar esta solicitação? A pessoa continua sem acesso ao painel.')) return;
+    await acaoChamado(id, 'recusar');
+}
+async function acaoChamado(id, acao) {
+    let msg = '';
+    try {
+        const r = await fetchWithAuth(`/api/admin/chamados/${id}/${acao}`, { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+        msg = d.message || 'Feito.';
+    } catch (e) { msg = e.message; }
+    await carregarChamados();
+    const el = document.getElementById('chamadosMsg');
+    if (el) el.textContent = msg;
+}
+// Badge de pendências no boot
+(async function badgeChamadosBoot() {
+    try {
+        const r = await fetchWithAuth('/api/admin/chamados?status=pendente');
+        if (r && r.ok) atualizarBadgeChamados((await r.json()).length);
+    } catch (_) {}
+})();
 
 function atualizarSecaoAtiva() {
     const ativa = document.querySelector('.adm-section.active')?.id || 'sec-visao';
