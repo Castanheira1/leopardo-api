@@ -126,15 +126,24 @@ fotos de segurança apagadas em 30 dias.
 
 ## 7. Pontos de atenção
 
-- **Localização é só em primeiro plano** (*when in use*). **Não** adicione
-  `ACCESS_BACKGROUND_LOCATION` nem *Always* no iOS — dispara revisão extra e justificativa.
-- **App tipo "webview"**: a Apple (diretriz 4.2) às vezes questiona apps que são só um site
-  embrulhado. O VAP tem função nativa real (câmera, GPS, push, vibração), o que ajuda; se
-  pedirem, explique o uso nativo. Se necessário, dá para migrar para assets embarcados +
-  URLs de API absolutas.
-- **Backend no Render (plano free) "dorme"**: o primeiro acesso após ocioso demora (cold
-  start). Para uma boa avaliação na loja, considere um plano que não hiberne.
-- **Guarde o keystore Android** e as credenciais Apple — perdê-los impede atualizar o app.
+- **Localização em segundo plano (já no código):** o app declara
+  `ACCESS_BACKGROUND_LOCATION` + `FOREGROUND_SERVICE_LOCATION` (Android) e
+  *Always* + `UIBackgroundModes=location` (iOS) porque o **rastreio ao vivo da
+  viagem** precisa continuar com a tela apagada. No **Google Play Console** preencha
+  a declaração de *Background location* (justificativa: segurança da carona /
+  acompanhamento motorista–passageiro; ideal: vídeo curto mostrando a notificação
+  “Rastreando sua viagem”). Na Apple, explique o mesmo no App Review notes.
+- **Push nativo (FCM HTTP v1):** a API legada `fcm/send` foi desligada em 2024.
+  Configure no Render `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON da service account do
+  Firebase) e coloque `android/app/google-services.json` no projeto nativo.
+  Web Push (VAPID) no PWA continua independente.
+- **iOS Privacy Manifest:** `ios/App/App/PrivacyInfo.xcprivacy` (UserDefaults etc.)
+  — obrigatório no upload ao App Store Connect desde 2024.
+- **App tipo "webview" / 4.2:** o VAP usa bundle local + API HTTPS + recursos nativos
+  (câmera, GPS, foreground service, push). Se a Apple questionar, cite isso.
+- **Backend no Render (plano free) "dorme"**: cold start — prefira plano que não hiberne
+  durante a revisão da loja.
+- **Guarde o keystore Android** e as credenciais Apple.
 
 ---
 
@@ -146,5 +155,10 @@ fotos de segurança apagadas em 30 dias.
 - [ ] URL da política preenchida nas duas lojas
 - [ ] Questionário de dados respondido (seção 6)
 - [ ] Android: `versionCode`/`versionName` atualizados, AAB assinado
+- [ ] Android: `google-services.json` + `FIREBASE_SERVICE_ACCOUNT_JSON` no backend
+- [ ] Android: `assetlinks.json` com SHA-256 real do keystore
+- [ ] Android Play: formulário de *Background location* preenchido
+- [ ] iOS: `PrivacyInfo.xcprivacy` no target (já no repo)
+- [ ] iOS: `apple-app-site-association` com Team ID real
 - [ ] iOS: Version/Build atualizados, archive enviado
 - [ ] Backend de produção acordado e respondendo antes da revisão
