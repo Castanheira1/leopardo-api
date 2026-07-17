@@ -1,9 +1,11 @@
-// Perfil, aceite da política (LGPD) e locais favoritos.
+// Perfil, aceite da política (LGPD), locais favoritos e exclusão de conta.
 require("dotenv").config();
+const bcrypt = require("bcrypt");
 const app = require("../app");
 const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { buscarUsuarioFront, invalidarProjetoCache, resolverProjetoId } = require("../usuarios");
+const { apagarFotoStorage } = require("../storage");
 
 app.get("/api/perfil", verificarAuth, async (req, res) => {
   try {
@@ -161,6 +163,98 @@ app.put("/api/perfil/favoritos", verificarAuth, async (req, res) => {
     res.status(500).json({ error: "Erro ao salvar favoritos" });
   } finally {
     client.release();
+  }
+});
+
+// LGPD + lojas (Google/Apple): exclusão de conta pelo próprio usuário.
+// Apaga o registro em `usuarios` (CASCADE nas tabelas filhas). Exige a senha
+// para evitar exclusão acidental. Não bloqueia a matrícula — o colaborador
+// pode se cadastrar de novo se quiser.
+app.delete("/api/perfil", verificarAuth, async (req, res) => {
+  const senha = String(req.body?.senha || "");
+  if (!senha) {
+    return res.status(400).json({ error: "Informe sua senha para confirmar a exclusão da conta." });
+  }
+
+  const uid = req.user.id;
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, senha_hash, is_admin, matricula FROM usuarios WHERE id = $1",
+      [uid]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+
+    // Conta bootstrap do sistema: não permite autoexclusão (quebraria o painel).
+    if (user.matricula === "000000") {
+      return res.status(400).json({
+        error: "A conta administradora padrão não pode ser excluída por este caminho.",
+      });
+    }
+
+    // 403 (não 401): a sessão continua válida; só a confirmação da exclusão falhou.
+    // O cliente usa fetchWithAuth, que faz logout em qualquer 401.
+    const ok = await bcrypt.compare(senha, user.senha_hash);
+    if (!ok) return res.status(403).json({ error: "Senha incorreta." });
+
+    const viagemAtiva = await pool.query(
+      `SELECT id FROM viagens
+       WHERE status = 'em_andamento' AND (motorista_id = $1 OR passageiro_id = $1)
+       LIMIT 1`,
+      [uid]
+    );
+    if (viagemAtiva.rows.length) {
+      return res.status(409).json({
+        error: "Finalize ou cancele a viagem em andamento antes de excluir a conta.",
+      });
+    }
+
+    // URLs de foto para limpar no Storage depois do DELETE (best-effort).
+    const fotos = await pool.query(
+      `SELECT selfie_url AS url FROM habilitacoes_motorista WHERE motorista_id = $1 AND selfie_url IS NOT NULL
+       UNION ALL
+       SELECT foto_carro_url FROM habilitacoes_motorista WHERE motorista_id = $1 AND foto_carro_url IS NOT NULL
+       UNION ALL
+       SELECT selfie_url FROM pedidos WHERE passageiro_id = $1 AND selfie_url IS NOT NULL
+       UNION ALL
+       SELECT selfie_url FROM propostas WHERE de_usuario_id = $1 AND selfie_url IS NOT NULL
+       UNION ALL
+       SELECT selfie_url FROM contatos_motorista
+         WHERE (motorista_id = $1 OR passageiro_id = $1) AND selfie_url IS NOT NULL`,
+      [uid]
+    );
+    const urlsFotos = [...new Set(fotos.rows.map((r) => r.url).filter(Boolean))];
+
+    // Encerra ofertas/pedidos abertos antes do CASCADE (estado limpo p/ o outro lado).
+    await pool.query(
+      "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
+      [uid]
+    );
+    await pool.query(
+      "UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto'",
+      [uid]
+    );
+    await pool.query(
+      `UPDATE propostas SET status = 'recusado'
+       WHERE status = 'pendente' AND (de_usuario_id = $1 OR para_usuario_id = $1)`,
+      [uid]
+    );
+
+    await pool.query("DELETE FROM usuarios WHERE id = $1", [uid]);
+    invalidarProjetoCache(uid);
+
+    // Storage fora da transação: falha de rede não deve reverter a exclusão.
+    for (const url of urlsFotos) {
+      await apagarFotoStorage(url).catch(() => {});
+    }
+
+    res.json({
+      success: true,
+      message: "Conta excluída. Seus dados pessoais foram removidos.",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao excluir a conta" });
   }
 });
 

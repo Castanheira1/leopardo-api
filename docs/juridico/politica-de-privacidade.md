@@ -72,8 +72,12 @@ pode solicitar a exclusão a qualquer momento (item 8).
 Você pode, a qualquer momento: confirmar a existência de tratamento; acessar, corrigir ou
 atualizar seus dados; solicitar anonimização, bloqueio ou exclusão de dados desnecessários;
 pedir a portabilidade; obter informação sobre compartilhamento; e **revogar o
-consentimento**. Para exercer, escreva ao Encarregado (item 2). Parte dos dados você mesmo
-edita no seu perfil dentro do app.
+consentimento**.
+
+**Exclusão de conta no app:** em *Perfil → Excluir conta* você pode apagar a própria conta.
+Confirmamos com a sua senha e removemos seus dados pessoais (cadastro, favoritos, fotos de
+segurança e localização). Ofertas e pedidos abertos são cancelados. Se preferir, escreva
+também ao Encarregado (item 2). Parte dos demais dados você edita no perfil dentro do app.
 
 ## 9. Cookies e armazenamento local
 

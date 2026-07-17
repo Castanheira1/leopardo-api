@@ -298,6 +298,43 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(r2.json.length, 2, "persistido");
     });
 
+    // Conta dedicada: não reutiliza tokDriver (usado no restante da suíte).
+    const uExcluir = novoUsuario(41, "S11D");
+    let tokExcluir;
+    await test("DELETE /api/perfil sem senha → 400", async () => {
+      const reg = await api("POST", "/api/register", { body: uExcluir });
+      eq(reg.status, 200, "register");
+      tokExcluir = reg.json.token;
+      const { status, json } = await api("DELETE", "/api/perfil", {
+        token: tokExcluir, body: {},
+      });
+      eq(status, 400, "status");
+      assert(json && /senha/i.test(json.error || ""), "mensagem de senha");
+    });
+    await test("DELETE /api/perfil senha errada → 403", async () => {
+      const { status } = await api("DELETE", "/api/perfil", {
+        token: tokExcluir, body: { senha: "000000" },
+      });
+      eq(status, 403, "status");
+    });
+    await test("DELETE /api/perfil exclui a conta e invalida o token", async () => {
+      const { status, json } = await api("DELETE", "/api/perfil", {
+        token: tokExcluir, body: { senha: uExcluir.senha },
+      });
+      eq(status, 200, "status");
+      assert(json && json.success === true, "success");
+      const r2 = await api("GET", "/api/perfil", { token: tokExcluir });
+      eq(r2.status, 401, "token morto após exclusão");
+      const login = await api("POST", "/api/login", {
+        body: { matricula: uExcluir.matricula, senha: uExcluir.senha },
+      });
+      eq(login.status, 401, "login com conta apagada");
+    });
+    await test("matrícula liberada após exclusão: pode cadastrar de novo", async () => {
+      const { status } = await api("POST", "/api/register", { body: uExcluir });
+      eq(status, 200, "status");
+    });
+
     /* =================== HABILITAÇÃO =================== */
     grupo("Habilitação do motorista");
     await test("POST /api/habilitacao ativa modo motorista", async () => {

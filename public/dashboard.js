@@ -1346,9 +1346,14 @@
             aplicarPerfilNaTela();
         } catch (_) {}
     }
-    // Navega entre o hub do Perfil e as sub-telas (dados / favoritos).
+    // Navega entre o hub do Perfil e as sub-telas (dados / favoritos / excluir).
     function perfilIrPara(view) {
-        const views = { menu: 'perfilMenu', dados: 'perfilViewDados', favoritos: 'perfilViewFavoritos' };
+        const views = {
+            menu: 'perfilMenu',
+            dados: 'perfilViewDados',
+            favoritos: 'perfilViewFavoritos',
+            excluir: 'perfilViewExcluir',
+        };
         Object.values(views).forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -1359,6 +1364,12 @@
             renderPerfilFavoritos();
             const box = document.querySelector('#modalPerfil .cam-box');
             if (box) box.scrollTop = 0;
+        }
+        if (view === 'excluir') {
+            const senhaEl = document.getElementById('perfilExcluirSenha');
+            const msgEl = document.getElementById('perfilExcluirMsg');
+            if (senhaEl) senhaEl.value = '';
+            if (msgEl) msgEl.textContent = '';
         }
     }
     async function abrirPerfil(view) {
@@ -1422,6 +1433,41 @@
             } else setMsg(d.error || 'Erro ao salvar', '#ef9a9a');
         } catch (_) {
             setMsg('Erro de conexão. Tente novamente.', '#ef9a9a');
+        }
+    }
+
+    // Exclusão de conta (LGPD + Google Play / App Store): exige senha e confirmação.
+    async function excluirConta() {
+        const senhaEl = document.getElementById('perfilExcluirSenha');
+        const out = document.getElementById('perfilExcluirMsg');
+        const btn = document.getElementById('btnExcluirConta');
+        const setMsg = (t, cor) => { if (out) { out.textContent = t; out.style.color = cor || ''; } };
+        const senha = (senhaEl?.value || '').trim();
+        if (!/^\d{6}$/.test(senha)) {
+            return setMsg('Informe a senha de 6 dígitos para confirmar.', '#b91c1c');
+        }
+        if (!confirm('Tem certeza? Sua conta e dados pessoais serão apagados permanentemente.')) {
+            return;
+        }
+        if (btn) { btn.disabled = true; btn.textContent = 'Excluindo…'; }
+        setMsg('Excluindo conta…', '');
+        try {
+            const r = await fetchWithAuth('/api/perfil', {
+                method: 'DELETE',
+                body: JSON.stringify({ senha }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                setMsg(d.error || 'Não foi possível excluir a conta.', '#b91c1c');
+                if (btn) { btn.disabled = false; btn.textContent = 'Excluir minha conta'; }
+                return;
+            }
+            setMsg('Conta excluída. Saindo…', '#166534');
+            // logout() limpa token/user e manda para o login.
+            setTimeout(() => logout(), 600);
+        } catch (_) {
+            setMsg('Erro de conexão. Tente novamente.', '#b91c1c');
+            if (btn) { btn.disabled = false; btn.textContent = 'Excluir minha conta'; }
         }
     }
 

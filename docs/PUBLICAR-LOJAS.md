@@ -113,7 +113,8 @@ fotos de segurança apagadas em 30 dias.
 
 - **Google Play → Segurança dos dados:** marque coleta de *Localização aproximada e precisa*,
   *Fotos*, *Informações pessoais* (nome, email, telefone), *Atividade no app*. Dados
-  criptografados em trânsito (HTTPS): **sim**. Usuário pode pedir exclusão: **sim** (via DPO).
+  criptografados em trânsito (HTTPS): **sim**. Usuário pode pedir exclusão: **sim**
+  (no app: Perfil → Excluir conta; também via DPO).
 - **Apple → App Privacy:** *Location*, *User Content (Photos)*, *Contact Info*, *Identifiers/
   Usage* — vinculados à identidade do usuário; uso: funcionalidade do app. Sem rastreamento
   de anúncios.

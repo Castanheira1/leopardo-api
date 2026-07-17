@@ -268,6 +268,10 @@
                     <span class="perfil-nav-tit">Meus locais favoritos</span>
                     <small class="perfil-nav-sub">Locais que aparecem só para você</small>
                 </button>
+                <button type="button" class="perfil-nav-btn perfil-nav-danger" onclick="perfilIrPara('excluir')">
+                    <span class="perfil-nav-tit">Excluir conta</span>
+                    <small class="perfil-nav-sub">Apaga seus dados pessoais (LGPD)</small>
+                </button>
                 <div class="perfil-secao">
                     <p id="habStatusPerfil" class="hab-status" style="display:none;" role="status"></p>
                     <div class="hab-actions" id="habActionsPerfil">
@@ -331,6 +335,32 @@
                 </div>
                 <div class="cam-actions">
                     <button type="button" class="btn btn-secondary" onclick="perfilIrPara('menu')">Voltar</button>
+                </div>
+            </div>
+
+            <!-- Excluir conta (LGPD + exigência das lojas) -->
+            <div id="perfilViewExcluir" class="perfil-view" style="display:none;">
+                <div class="perfil-header">
+                    <button type="button" class="perfil-voltar" onclick="perfilIrPara('menu')" aria-label="Voltar">‹</button>
+                    <h3>Excluir conta</h3>
+                </div>
+                <div class="perfil-secao">
+                    <p class="perfil-excluir-aviso">
+                        Esta ação é <strong>permanente</strong>. Apagamos seus dados pessoais
+                        (nome, matrícula, telefone, email, favoritos, fotos de segurança e
+                        localização). Ofertas e pedidos abertos serão cancelados.
+                    </p>
+                    <p class="perfil-excluir-aviso" style="margin-top:8px;">
+                        Se houver viagem em andamento, finalize ou cancele antes.
+                        Você poderá se cadastrar de novo com a mesma matrícula depois.
+                    </p>
+                    <label for="perfilExcluirSenha" style="margin-top:12px;display:block;">Confirme com sua senha (6 dígitos)</label>
+                    <input id="perfilExcluirSenha" class="map-search" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••••">
+                    <button type="button" class="btn btn-danger btn-sm" id="btnExcluirConta" onclick="excluirConta()">Excluir minha conta</button>
+                    <div id="perfilExcluirMsg" class="cam-status"></div>
+                </div>
+                <div class="cam-actions">
+                    <button type="button" class="btn btn-secondary" onclick="perfilIrPara('menu')">Cancelar</button>
                 </div>
             </div>
 
