@@ -41,6 +41,12 @@
             font-size: .6rem; letter-spacing: .16em; font-weight: 800;
             background: var(--gold); color: #0a0a0a; padding: 3px 8px; border-radius: 4px;
         }
+        .adm-nav-label {
+            font-size: .62rem; text-transform: uppercase; letter-spacing: .12em;
+            color: var(--muted); font-weight: 800; padding: 14px 18px 6px;
+        }
+        body.adm-modo-dono .adm-nav-label#navLabelDono { color: var(--gold); }
+        body.adm-modo-dono #navDono { border-left: 3px solid var(--gold); }
         .adm-side-block { padding: 12px 18px 14px; }
         .adm-side-block + .adm-side-block { border-top: 1px solid var(--line); }
         .adm-side-block .blk-title {
@@ -364,6 +370,19 @@
         </div>
 
         <nav class="adm-nav" aria-label="Seções do painel">
+            <!-- Dono da empresa: multi-projeto (só super admin) — em primeiro lugar de propósito -->
+            <div class="adm-nav-label" id="navLabelDono" style="display:none;">Empresa</div>
+            <button class="adm-nav-item" id="navDono" style="display:none;" data-sec="sec-dono" onclick="irSecao('sec-dono')">
+                <span class="ico">◈</span> Visão do dono
+            </button>
+            <button class="adm-nav-item" id="navProjetos" style="display:none;" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
+                <span class="ico">▦</span> Projetos
+            </button>
+            <button class="adm-nav-item" id="navSaude" style="display:none;" data-sec="sec-saude" onclick="irSecao('sec-saude')">
+                <span class="ico">♥</span> Saúde
+            </button>
+
+            <div class="adm-nav-label" id="navLabelCanteiro">Canteiro / projeto</div>
             <button class="adm-nav-item active" data-sec="sec-resumo" onclick="irSecao('sec-resumo')">
                 <span class="ico">▣</span> Resumo comercial
             </button>
@@ -385,15 +404,6 @@
             </button>
             <button class="adm-nav-item" data-sec="sec-anuncios" onclick="irSecao('sec-anuncios')">
                 <span class="ico">▤</span> Anúncios
-            </button>
-            <button class="adm-nav-item" id="navDono" style="display:none;" data-sec="sec-dono" onclick="irSecao('sec-dono')">
-                <span class="ico">◈</span> Visão do dono
-            </button>
-            <button class="adm-nav-item" id="navSaude" style="display:none;" data-sec="sec-saude" onclick="irSecao('sec-saude')">
-                <span class="ico">♥</span> Saúde
-            </button>
-            <button class="adm-nav-item" id="navProjetos" style="display:none;" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
-                <span class="ico">▦</span> Projetos
             </button>
         </nav>
 
@@ -417,7 +427,7 @@
                     <div class="adm-avatar" id="admAvatar">A</div>
                     <div>
                         <div class="adm-user-name" id="admUserName">Administrador</div>
-                        <div class="adm-user-role">Painel do projeto</div>
+                        <div class="adm-user-role" id="admUserRole">Painel do projeto</div>
                     </div>
                 </div>
             </div>
@@ -1095,15 +1105,27 @@ async function carregarContexto() {
     const d = await r.json();
     if (!r.ok) { mostrarToast(d.error || 'Sem acesso ao projeto', 'error'); return null; }
     const nome = d.projeto_nome || d.projeto_codigo || 'Projeto';
-    document.getElementById('tituloProjeto').textContent = nome;
-    document.getElementById('subProjeto').innerHTML =
-        `Código <strong>${esc(d.projeto_codigo || '—')}</strong><br>Contrato <strong>${esc(fmtMoeda(d.valor_contrato_mensal))}</strong>`;
-    document.getElementById('valorContrato').value = d.valor_contrato_mensal || '';
-    // Visão do dono, Saúde global e gestão de projetos: só o super admin.
+    document.getElementById('tituloProjeto').textContent = d.super_admin && !d.projeto_id
+        ? 'Visão da empresa'
+        : nome;
+    document.getElementById('subProjeto').innerHTML = d.super_admin && !d.projeto_id
+        ? `Dashboard do <strong>dono</strong><br>Todos os canteiros`
+        : `Código <strong>${esc(d.projeto_codigo || '—')}</strong><br>Contrato <strong>${esc(fmtMoeda(d.valor_contrato_mensal))}</strong>`;
+    const vc = document.getElementById('valorContrato');
+    if (vc) vc.value = d.valor_contrato_mensal || '';
+
+    // Visão do dono = dashboard executivo multi-projeto (super admin / dono da empresa).
     if (d.super_admin) {
         document.getElementById('navDono').style.display = '';
         document.getElementById('navSaude').style.display = '';
         document.getElementById('navProjetos').style.display = '';
+        const lab = document.getElementById('navLabelDono');
+        if (lab) lab.style.display = '';
+        document.body.classList.add('adm-modo-dono');
+        const role = document.getElementById('admUserRole');
+        if (role) role.textContent = 'Dono da empresa';
+        const tag = document.querySelector('.adm-tag');
+        if (tag) tag.textContent = 'DONO';
     }
     return d;
 }
@@ -1396,7 +1418,13 @@ async function excluirAnuncio(id) {
 })();
 
 async function carregarTudo() {
-    await carregarContexto();
+    const ctx = await carregarContexto();
+    // Dono da empresa: a home do painel é a Visão do dono (multi-projeto).
+    if (ctx && ctx.super_admin) {
+        irSecao('sec-dono');
+        // Sem projeto vinculado: só o dashboard executivo (não força rateio de canteiro).
+        if (!ctx.projeto_id) return;
+    }
     await carregarKpisEGraficos();
     await carregarRateio();
     await carregarPushStatus();

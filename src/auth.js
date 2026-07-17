@@ -65,9 +65,9 @@ const verificarAuth = async (req, res, next) => {
   }
 };
 
-// Super admin (dono do produto): pode gerenciar projetos, ver saúde global e o
-// dashboard executivo. Gate por matrícula (SUPER_ADMIN_MATRICULAS, padrão 000000).
-const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "000000")
+// Super admin / dono da empresa: visão multi-projeto, saúde e onboarding.
+// Matrículas em SUPER_ADMIN_MATRICULAS (padrão: 000000 = ops, 900000 = dono).
+const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "000000,900000")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 function ehSuperAdmin(user) {
@@ -100,6 +100,16 @@ const carregarAdminEscopo = async (req, res, next) => {
     );
     if (!rows.length) return res.status(403).json({ error: "Administrador inválido ou inativo" });
     if (!rows[0].admin_projeto_id) {
+      // Dono da empresa pode operar sem um único canteiro (vê todos os projetos).
+      if (ehSuperAdmin(req.user)) {
+        req.adminEscopo = {
+          admin_projeto_id: null,
+          projeto_nome: "Todos os projetos",
+          projeto_codigo: "—",
+          valor_contrato_mensal: 0,
+        };
+        return next();
+      }
       return res.status(403).json({ error: "Admin sem projeto vinculado (admin_projeto_id)" });
     }
     req.adminEscopo = rows[0];

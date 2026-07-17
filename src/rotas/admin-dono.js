@@ -1,8 +1,8 @@
-// Dashboard executivo do DONO (super admin): visão consolidada de TODOS os
-// projetos para reunião — aderência, custo por km/viagem/colaborador, execução
-// total x parcial, recusas da fila, pico por hora (operação 24 h) e km/dia.
-// Contrato é FIXO por projeto: quanto mais gente usa, menor o custo unitário —
-// é exatamente o que este payload deixa visível, projeto a projeto.
+// Dashboard executivo do DONO DA EMPRESA (super admin: matrículas em
+// SUPER_ADMIN_MATRICULAS, ex. 900000): visão consolidada de TODOS os projetos
+// para reunião — aderência, custo por km/viagem/colaborador, execução total x
+// parcial, recusas da fila, pico por hora e km/dia.
+// Contrato é FIXO por projeto: quanto mais gente usa, menor o custo unitário.
 require("dotenv").config();
 const app = require("../app");
 const { pool } = require("../db");
