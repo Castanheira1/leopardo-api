@@ -71,6 +71,7 @@ require("./src/rotas/contatos");
 require("./src/rotas/admin");
 require("./src/rotas/admin-rateio");
 require("./src/rotas/admin-usuarios");
+require("./src/rotas/admin-dono");
 
 /* ============================ ESTÁTICOS ============================ */
 // Imagens/fontes mudam raramente: cache de 7 dias no navegador corta requisições

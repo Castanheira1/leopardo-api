@@ -385,7 +385,10 @@
             <button class="adm-nav-item" data-sec="sec-anuncios" onclick="irSecao('sec-anuncios')">
                 <span class="ico">▤</span> Anúncios
             </button>
-            <button class="adm-nav-item" data-sec="sec-saude" onclick="irSecao('sec-saude')">
+            <button class="adm-nav-item" id="navDono" style="display:none;" data-sec="sec-dono" onclick="irSecao('sec-dono')">
+                <span class="ico">◈</span> Visão do dono
+            </button>
+            <button class="adm-nav-item" id="navSaude" style="display:none;" data-sec="sec-saude" onclick="irSecao('sec-saude')">
                 <span class="ico">♥</span> Saúde
             </button>
             <button class="adm-nav-item" id="navProjetos" style="display:none;" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
@@ -639,6 +642,48 @@
                 </div>
             </section>
 
+            <section id="sec-dono" class="adm-section">
+                <div class="kpi-strip" id="donoKpis"></div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg></span>
+                        <div><h3>Aderência e custo por projeto</h3><p class="cap">Contrato fixo: quanto mais colaboradores usando, menor o custo por km e por pessoa. Aderência baixa = risco de contrato — aja antes da renovação.</p></div>
+                    </div>
+                    <div style="overflow-x:auto;">
+                    <table class="adm" id="tabDono" style="width:100%;min-width:900px;">
+                        <thead><tr>
+                            <th>Projeto</th><th class="num">Ativos</th><th class="num">Usaram</th><th class="num">Aderência</th>
+                            <th class="num">Viagens</th><th class="num">Parciais</th><th class="num">km</th><th class="num">km/dia</th>
+                            <th class="num">Custo/km</th><th class="num">Custo/viagem</th><th class="num">Custo/colab.·mês</th>
+                            <th class="num">Pedidos atend.</th><th class="num">Recusas</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                        <div><h3>Horário de pico (24 h)</h3><p class="cap">Viagens iniciadas por hora local no período — a Vale roda 24 h; enxergue os turnos.</p></div>
+                    </div>
+                    <div class="spark" id="donoPico" style="height:110px;"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span>
+                        <div><h3>Passageiros transportados por sexo</h3></div>
+                    </div>
+                    <div class="chart" id="donoSexo"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg></span>
+                        <div><h3>Aderência por projeto</h3><p class="cap">% dos colaboradores ativos que usaram o app no período.</p></div>
+                    </div>
+                    <div class="chart" id="donoAderencia"></div>
+                </div>
+            </section>
+
             <section id="sec-saude" class="adm-section">
                 <div class="panel">
                     <div class="panel-head">
@@ -707,6 +752,7 @@ const SECOES = {
     'sec-chamados': { titulo: 'Acesso admin', sub: 'Solicitações de acesso ao painel — aprove só após validar a identidade' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
     'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
+    'sec-dono': { titulo: 'Visão do dono', sub: 'Todos os projetos: aderência, custo unitário e operação — pronto pra reunião' },
     'sec-saude': { titulo: 'Saúde', sub: 'Status do serviço e erros registrados em produção' },
     'sec-projetos': { titulo: 'Projetos', sub: 'Onboarding de canteiros/sites (somente super admin)' },
 };
@@ -738,7 +784,65 @@ function irSecao(id) {
     if (id === 'sec-chamados') carregarChamados();
     if (id === 'sec-saude') carregarSaude();
     if (id === 'sec-projetos') carregarProjetos();
+    if (id === 'sec-dono') carregarDono();
     fecharSidebar();
+}
+
+/* -------- visão do dono (dashboard executivo, todos os projetos) -------- */
+function corAderencia(pct) {
+    if (pct >= 40) return '#1a7f37';
+    if (pct >= 15) return '#b8860b';
+    return '#b30000';
+}
+async function carregarDono() {
+    const kpis = document.getElementById('donoKpis');
+    try {
+        const r = await fetchWithAuth('/api/admin/dono/dashboard' + periodoQuery());
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+        const c = d.consolidado;
+        kpis.innerHTML = [
+            { t: 'Aderência global', v: `${c.aderencia_pct}%`, cor: corAderencia(c.aderencia_pct) },
+            { t: 'Colab. usando / ativos', v: `${c.engajados} / ${c.usuarios_ativos}` },
+            { t: 'Viagens', v: c.viagens },
+            { t: 'km rodados', v: c.km },
+            { t: 'Custo por km', v: fmtMoeda(c.custo_por_km) },
+            { t: 'Custo por viagem', v: fmtMoeda(c.custo_por_viagem) },
+            { t: 'Recusas de motorista', v: c.recusas },
+            { t: 'Contratos/mês', v: fmtMoeda(c.contrato_mensal) },
+        ].map((k) => `<div class="kpi"><div class="cap">${esc(k.t)}</div>
+            <div style="font-size:1.15rem;font-weight:800;${k.cor ? `color:${k.cor};` : ''}">${esc(String(k.v))}</div></div>`).join('');
+
+        document.querySelector('#tabDono tbody').innerHTML = d.projetos.map((p) => `
+            <tr>
+                <td><strong>${esc(p.nome)}</strong> <span class="cap">${esc(p.codigo)}${p.ativo ? '' : ' · INATIVO'}</span></td>
+                <td class="num">${p.usuarios.ativos}</td>
+                <td class="num">${p.usuarios.engajados}</td>
+                <td class="num" style="font-weight:800;color:${corAderencia(p.usuarios.aderencia_pct)}">${p.usuarios.aderencia_pct}%</td>
+                <td class="num">${p.viagens.concluidas}</td>
+                <td class="num">${p.viagens.parciais}</td>
+                <td class="num">${p.viagens.km}</td>
+                <td class="num">${p.viagens.km_dia}</td>
+                <td class="num">${fmtMoeda(p.custo.por_km)}</td>
+                <td class="num">${fmtMoeda(p.custo.por_viagem)}</td>
+                <td class="num">${fmtMoeda(p.custo.por_colaborador_mes)}</td>
+                <td class="num">${p.pedidos.atendidos}/${p.pedidos.total} (${p.pedidos.taxa_atendimento_pct}%)</td>
+                <td class="num">${p.fila.recusas}</td>
+            </tr>`).join('') || '<tr><td colspan="13" class="empty">Sem dados no período.</td></tr>';
+
+        const maxPico = Math.max(...c.pico, 1);
+        document.getElementById('donoPico').innerHTML = c.pico.map((v, h) => `
+            <div class="col" title="${h}h: ${v} viagem(ns)">
+                <span class="bar" style="height:${Math.max(3, Math.round((v / maxPico) * 100))}%"></span>
+                <span class="cl">${h % 3 === 0 ? h + 'h' : ''}</span>
+            </div>`).join('');
+
+        chartGenero(document.getElementById('donoSexo'), c.sexo.m, c.sexo.f);
+        barrasH(document.getElementById('donoAderencia'),
+            d.projetos.filter((p) => p.usuarios.ativos > 0).map((p) => ({
+                k: p.nome, v: p.usuarios.aderencia_pct, disp: `${p.usuarios.aderencia_pct}%`,
+            })));
+    } catch (e) { kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
 }
 
 /* -------- projetos (onboarding, super admin) -------- */
@@ -994,8 +1098,12 @@ async function carregarContexto() {
     document.getElementById('subProjeto').innerHTML =
         `Código <strong>${esc(d.projeto_codigo || '—')}</strong><br>Contrato <strong>${esc(fmtMoeda(d.valor_contrato_mensal))}</strong>`;
     document.getElementById('valorContrato').value = d.valor_contrato_mensal || '';
-    // Gestão de projetos: só o super admin (dono do produto) vê a seção.
-    if (d.super_admin) document.getElementById('navProjetos').style.display = '';
+    // Visão do dono, Saúde global e gestão de projetos: só o super admin.
+    if (d.super_admin) {
+        document.getElementById('navDono').style.display = '';
+        document.getElementById('navSaude').style.display = '';
+        document.getElementById('navProjetos').style.display = '';
+    }
     return d;
 }
 

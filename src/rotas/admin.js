@@ -3,16 +3,16 @@ require("dotenv").config();
 const app = require("../app");
 const { pool } = require("../db");
 const { apagarFotoStorage, supabaseConfigurado, upload, uploadToSupabase } = require("../storage");
-const { carregarAdminEscopo, verificarAdmin, verificarAuth } = require("../auth");
+const { carregarAdminEscopo, ehSuperAdmin, exigirSuperAdmin, verificarAdmin, verificarAuth } = require("../auth");
 const { projetoDoUsuario } = require("../usuarios");
 const { periodoFromQuery } = require("../datas");
 const { sqlViagemKmValido, sqlViagemNoPeriodo } = require("../km");
 
 /* ============================ ADMIN ============================ */
 
-// Saúde do sistema (erros registrados são GLOBAIS, não por projeto — quem
-// opera o produto é admin; basta verificarAdmin, sem escopo de projeto).
-app.get("/api/admin/erros", verificarAuth, verificarAdmin, async (req, res) => {
+// Saúde do sistema: os erros são GLOBAIS (podem citar dados de qualquer
+// projeto), então só o super admin (dono) enxerga.
+app.get("/api/admin/erros", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   try {
     const [recentes, porDia] = await Promise.all([
       pool.query(
@@ -45,19 +45,6 @@ app.get("/api/admin/context", verificarAuth, carregarAdminEscopo, async (req, re
    dono do produto. Gate por matrícula via SUPER_ADMIN_MATRICULAS (padrão: o
    admin semente 000000). Projeto criado aqui já aparece no cadastro na hora
    (o registro e o resolverProjetoId leem do banco). */
-const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "000000")
-  .split(",").map((s) => s.trim()).filter(Boolean);
-
-function ehSuperAdmin(user) {
-  return !!user?.is_admin && SUPER_ADMIN_MATRICULAS.includes(String(user.matricula));
-}
-
-const exigirSuperAdmin = (req, res, next) => {
-  if (!ehSuperAdmin(req.user)) {
-    return res.status(403).json({ error: "Apenas o super admin gerencia projetos" });
-  }
-  next();
-};
 
 app.get("/api/admin/projetos", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   try {

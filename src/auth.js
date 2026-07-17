@@ -65,6 +65,22 @@ const verificarAuth = async (req, res, next) => {
   }
 };
 
+// Super admin (dono do produto): pode gerenciar projetos, ver saúde global e o
+// dashboard executivo. Gate por matrícula (SUPER_ADMIN_MATRICULAS, padrão 000000).
+const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "000000")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+
+function ehSuperAdmin(user) {
+  return !!user?.is_admin && SUPER_ADMIN_MATRICULAS.includes(String(user.matricula));
+}
+
+const exigirSuperAdmin = (req, res, next) => {
+  if (!ehSuperAdmin(req.user)) {
+    return res.status(403).json({ error: "Apenas o super admin (dono) tem acesso" });
+  }
+  next();
+};
+
 const verificarAdmin = (req, res, next) => {
   if (!req.user?.is_admin) return res.status(403).json({ error: "Apenas administradores" });
   next();
@@ -102,4 +118,6 @@ module.exports = {
   verificarAuth,
   verificarAdmin,
   carregarAdminEscopo,
+  ehSuperAdmin,
+  exigirSuperAdmin,
 };

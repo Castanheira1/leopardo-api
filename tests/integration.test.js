@@ -1514,6 +1514,25 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(Array.isArray(r2.json.recentes), "recentes não é lista");
     });
 
+    /* ---- Dashboard executivo do dono ---- */
+    grupo("Visão do dono (dashboard executivo)");
+    await test("driver comum não vê o dashboard do dono → 403", async () => {
+      const { status } = await api("GET", "/api/admin/dono/dashboard", { token: tokDriver });
+      eq(status, 403, "status");
+    });
+    await test("super admin recebe consolidado + projetos com métricas", async () => {
+      const { status, json } = await api("GET", "/api/admin/dono/dashboard", { token: tokAdmin });
+      eq(status, 200, "status");
+      assert(json.consolidado && typeof json.consolidado.aderencia_pct === "number", "sem consolidado");
+      assert(Array.isArray(json.projetos) && json.projetos.length >= 4, "sem lista de projetos");
+      const s11d = json.projetos.find((p) => p.codigo === "S11D");
+      assert(s11d, "S11D ausente");
+      assert(s11d.usuarios.ativos > 0, "S11D sem usuários ativos");
+      assert(s11d.viagens.concluidas >= 1, "S11D deveria ter viagem concluída no período");
+      assert(Array.isArray(s11d.pico) && s11d.pico.length === 24, "pico deve ter 24 horas");
+      assert(typeof s11d.custo.por_km === "number", "custo por km ausente");
+    });
+
     /* ---- Projetos dinâmicos (onboarding, super admin) ---- */
     grupo("Projetos dinâmicos (super admin 000000)");
     const codigoNovo = `TST${String(uniq).slice(-5)}`;
