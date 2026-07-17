@@ -6,165 +6,299 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/icon-192.png" type="image/png">
-    <meta name="theme-color" content="#0a0a0a">
+    <meta name="theme-color" content="#f5f3ee">
     <script src="/pwa.js" defer></script>
     <script src="/platform.js"></script>
     <title>VAP — Dashboard do dono</title>
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
+        /* Padrão “lista de locais” / painel-claro: fundo creme, cartões brancos, dourado suave */
         :root {
-            --bg: #0e0e0e; --bg-main: #141414; --card: #1c1c1c; --card-2: #242424;
-            --ink: #f1f3f5; --muted: #9ca3af; --line: #2e2e2e;
-            --gold: #d4a843; --gold-bright: #ead298;
-            --side-w: 280px;
-            --good: #4ade80; --warn: #fbbf24; --crit: #f87171;
+            --bg: #f5f3ee;
+            --bg-main: #f0ebe3;
+            --card: #ffffff;
+            --card-2: #faf7ef;
+            --ink: #23211c;
+            --muted: #6b675f;
+            --line: #ece8df;
+            --gold: #C4971A;
+            --gold-deep: #9a7412;
+            --gold-soft: #faf3df;
+            --side-w: 288px;
+            --good: #1a7f37;
+            --warn: #b8860b;
+            --crit: #b30000;
+            --shadow: 0 1px 3px rgba(20, 18, 12, 0.06);
+            --radius: 14px;
         }
-        body { background: var(--bg) !important; color: var(--ink); margin: 0; }
+        * { box-sizing: border-box; }
+        body {
+            background: var(--bg) !important;
+            color: var(--ink);
+            margin: 0;
+            font-family: inherit;
+            -webkit-font-smoothing: antialiased;
+        }
         .adm-app { display: flex; min-height: 100vh; background: var(--bg-main); }
+
+        /* Sidebar clara */
         .adm-sidebar {
-            width: var(--side-w); flex-shrink: 0; background: #0a0a0a; color: #fff;
-            display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
-            overflow-y: auto; z-index: 40; border-right: 1px solid var(--line);
+            width: var(--side-w); flex-shrink: 0;
+            background: #fff;
+            color: var(--ink);
+            display: flex; flex-direction: column;
+            position: sticky; top: 0; height: 100vh;
+            overflow-y: auto; z-index: 40;
+            border-right: 1px solid var(--line);
+            box-shadow: 1px 0 0 rgba(20,18,12,.02);
         }
-        .adm-side-brand { display: flex; align-items: center; gap: 10px; padding: 20px 18px 16px; }
-        .adm-side-brand img { height: 32px; }
+        .adm-side-brand { display: flex; align-items: center; gap: 10px; padding: 20px 18px 14px; }
+        .adm-side-brand img { height: 30px; }
         .adm-tag {
-            font-size: .6rem; letter-spacing: .16em; font-weight: 800;
-            background: var(--gold); color: #0a0a0a; padding: 3px 8px; border-radius: 4px;
+            font-size: .58rem; letter-spacing: .14em; font-weight: 800;
+            background: var(--gold); color: #fff; padding: 4px 9px; border-radius: 999px;
         }
         .adm-side-block { padding: 12px 18px 14px; border-top: 1px solid var(--line); }
-        .adm-side-block:first-of-type { border-top: none; }
         .blk-title {
-            font-size: .62rem; text-transform: uppercase; letter-spacing: .12em;
-            color: var(--gold); margin-bottom: 10px; font-weight: 800;
+            font-size: .62rem; text-transform: uppercase; letter-spacing: .1em;
+            color: var(--gold-deep); margin-bottom: 8px; font-weight: 800;
         }
-        .adm-proj-nome { font-size: 1.05rem; font-weight: 800; line-height: 1.25; }
-        .adm-proj-meta { font-size: .78rem; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+        .adm-proj-nome { font-size: 1.05rem; font-weight: 700; line-height: 1.25; color: var(--ink); }
+        .adm-proj-meta { font-size: .78rem; color: var(--muted); margin-top: 4px; line-height: 1.45; }
         .adm-filtro { display: grid; gap: 8px; }
-        .adm-filtro label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 3px; }
-        .adm-filtro input[type="date"], .adm-filtro input[type="text"], .adm-filtro input[type="number"] {
-            width: 100%; background: #fff !important; border: 1px solid #d1d5db !important;
-            color: #111827 !important; padding: 8px 10px; border-radius: 8px; font-size: .84rem;
+        .adm-filtro label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 3px; font-weight: 600; }
+        .adm-filtro input[type="date"],
+        .adm-filtro input[type="text"],
+        .adm-filtro input[type="number"],
+        .field-row input,
+        select.soft-select {
+            width: 100%;
+            background: #f3f4f6 !important;
+            border: 1px solid rgba(0,0,0,.1) !important;
+            color: #111 !important;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: .88rem;
             color-scheme: light;
         }
+        .adm-filtro input:focus, .field-row input:focus, select.soft-select:focus {
+            border-color: rgba(196,151,26,.55) !important;
+            outline: none;
+            background: #fff !important;
+        }
+
         .btn-side, .btn-side-outline, .btn-gold, .btn-ghost {
-            width: 100%; padding: 10px 12px; border-radius: 10px; font-weight: 700;
+            padding: 11px 14px; border-radius: 12px; font-weight: 700;
             font-size: .84rem; cursor: pointer; border: none;
+            transition: background .15s, border-color .15s, transform .1s;
         }
-        .btn-side { background: var(--gold); color: #0a0a0a; }
+        .btn-side {
+            width: 100%; background: var(--gold); color: #fff;
+            box-shadow: 0 1px 2px rgba(154,116,18,.25);
+        }
+        .btn-side:hover { background: var(--gold-deep); }
         .btn-side-outline {
-            background: transparent; color: var(--gold-bright);
-            border: 1px solid rgba(212,168,67,.4); margin-top: 6px;
+            width: 100%; margin-top: 6px;
+            background: #fff; color: var(--gold-deep);
+            border: 1px solid #e6d9b4;
         }
-        .btn-gold { background: var(--gold); color: #0a0a0a; width: auto; }
+        .btn-side-outline:hover { background: var(--gold-soft); }
+        .btn-gold {
+            background: var(--gold); color: #fff; width: auto;
+            box-shadow: 0 1px 2px rgba(154,116,18,.2);
+        }
+        .btn-gold:hover { background: var(--gold-deep); }
         .btn-ghost {
-            width: auto; background: transparent; border: 1px solid var(--line);
-            color: var(--muted); padding: 6px 12px; font-size: .78rem;
+            width: auto; background: #fff; border: 1px solid var(--line);
+            color: var(--muted); padding: 7px 12px; font-size: .78rem;
         }
-        .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
-        .adm-nav { padding: 8px 10px 16px; display: grid; gap: 4px; flex: 1; }
+        .btn-ghost:hover { border-color: #e6d9b4; color: var(--gold-deep); background: var(--gold-soft); }
+
+        .adm-nav { padding: 10px 12px 16px; display: grid; gap: 6px; flex: 1; }
         .adm-nav-item {
             display: flex; align-items: center; gap: 10px; width: 100%;
-            background: transparent; border: none; color: #cfd2d6; text-align: left;
-            padding: 11px 12px; border-radius: 10px; cursor: pointer; font-size: .9rem; font-weight: 600;
+            background: #fff; border: 1px solid var(--line); color: var(--ink);
+            text-align: left; padding: 12px 14px; border-radius: var(--radius);
+            cursor: pointer; font-size: .9rem; font-weight: 600;
+            box-shadow: var(--shadow);
         }
-        .adm-nav-item:hover { background: rgba(255,255,255,.05); color: #fff; }
-        .adm-nav-item.active { background: var(--gold-dim, rgba(212,168,67,.15)); color: var(--gold-bright); }
-        .adm-nav-item .ico { opacity: .85; width: 1.1em; text-align: center; }
+        .adm-nav-item:hover { background: #faf7ef; border-color: #e6d9b4; }
+        .adm-nav-item.active {
+            background: var(--gold-soft);
+            border-color: rgba(196,151,26,.45);
+            color: var(--ink);
+        }
+        .adm-nav-item .ico { color: var(--gold); width: 1.15em; text-align: center; }
+        .adm-nav-item #badgeChamados {
+            background: var(--gold) !important; color: #fff !important;
+        }
+
         .adm-side-foot {
             padding: 14px 18px 18px; border-top: 1px solid var(--line);
-            display: flex; flex-direction: column; gap: 8px;
+            display: flex; flex-direction: column; gap: 8px; background: #faf9f6;
         }
         .adm-side-foot .user { font-size: .85rem; color: var(--muted); }
+        .adm-side-foot .user small { display: block; color: var(--gold-deep); font-weight: 600; }
         .adm-side-sair {
-            background: transparent; border: 1px solid var(--line); color: #fff;
-            padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: .82rem;
+            background: #fff; border: 1px solid var(--line); color: var(--ink);
+            padding: 9px 12px; border-radius: 10px; cursor: pointer; font-size: .82rem; font-weight: 600;
         }
+        .adm-side-sair:hover { border-color: #e6d9b4; background: var(--gold-soft); }
+
         .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
         .adm-topbar {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 16px 22px; border-bottom: 1px solid var(--line); background: var(--bg);
+            padding: 16px 22px; border-bottom: 1px solid var(--line);
+            background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
             position: sticky; top: 0; z-index: 20;
         }
-        .adm-topbar h1 { margin: 0; font-size: 1.15rem; font-weight: 800; }
-        .adm-topbar .sub { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+        .adm-topbar h1 { margin: 0; font-size: 1.2rem; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+        .adm-topbar .sub { font-size: .8rem; color: var(--muted); margin-top: 3px; }
         .adm-menu-btn {
-            display: none; background: transparent; border: 1px solid var(--line);
-            color: #fff; border-radius: 8px; padding: 8px 10px; cursor: pointer; margin-right: 10px;
+            display: none; background: #fff; border: 1px solid var(--line);
+            color: var(--ink); border-radius: 10px; padding: 8px 10px; cursor: pointer; margin-right: 10px;
         }
         .adm-user { display: flex; align-items: center; gap: 10px; }
         .adm-avatar {
-            width: 36px; height: 36px; border-radius: 50%; background: var(--gold);
-            color: #0a0a0a; display: flex; align-items: center; justify-content: center; font-weight: 800;
+            width: 38px; height: 38px; border-radius: 50%;
+            background: linear-gradient(145deg, #EAD298, var(--gold));
+            color: #3a2e0a; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; box-shadow: var(--shadow);
         }
-        .adm-user-name { font-weight: 700; font-size: .9rem; }
+        .adm-user-name { font-weight: 700; font-size: .9rem; color: var(--ink); }
         .adm-user-role { font-size: .72rem; color: var(--muted); }
-        .adm-content { padding: 18px 22px 0; }
-        .adm-section { display: none; }
+
+        .adm-content { padding: 20px 22px 8px; max-width: 1100px; }
+        .adm-section { display: none; animation: fadeIn .22s ease; }
         .adm-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
         .kpi-strip {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
             gap: 10px; margin-bottom: 16px;
         }
         .kpi {
-            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            padding: 12px 14px;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 14px 14px 12px;
+            box-shadow: var(--shadow);
         }
-        .kpi .cap { font-size: .72rem; color: var(--muted); margin-bottom: 4px; }
+        .kpi .cap {
+            font-size: .68rem; color: var(--muted); margin-bottom: 6px;
+            text-transform: uppercase; letter-spacing: .04em; font-weight: 700;
+        }
+        .kpi .val-line { font-size: 1.2rem; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+
         .panel {
-            background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-            padding: 16px 18px; margin-bottom: 14px;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 18px 18px 16px;
+            margin-bottom: 14px;
+            box-shadow: var(--shadow);
         }
-        .panel-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
-        .panel-head h3 { margin: 0; font-size: 1rem; }
-        .cap { font-size: .78rem; color: var(--muted); line-height: 1.4; }
-        .empty { color: var(--muted); font-size: .88rem; padding: 12px 0; }
+        .panel-head { margin-bottom: 14px; }
+        .panel-head h3 {
+            margin: 0 0 4px; font-size: 1rem; font-weight: 700; color: var(--ink);
+        }
+        .cap { font-size: .8rem; color: var(--muted); line-height: 1.45; }
+        .cap strong { color: var(--ink); font-weight: 600; }
+        .empty { color: var(--muted); font-size: .9rem; padding: 20px 8px; text-align: center; }
+
+        /* Lista estilo fav-item (locais) */
+        .soft-list { display: flex; flex-direction: column; gap: 8px; }
+        .soft-item {
+            display: flex; align-items: center; gap: 12px; width: 100%;
+            background: #fff; border: 1px solid rgba(0,0,0,.07);
+            border-radius: var(--radius); padding: 13px 14px;
+            box-shadow: var(--shadow); text-align: left;
+            transition: background .12s, border-color .12s;
+        }
+        .soft-item:hover { background: #faf7ef; border-color: #e6d9b4; }
+        .soft-pin {
+            flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px;
+            background: var(--gold-soft); color: var(--gold);
+            display: flex; align-items: center; justify-content: center; font-size: 1rem;
+        }
+        .soft-item-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .soft-nome {
+            font-weight: 600; color: #111; font-size: .95rem;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .soft-sub { font-size: 12.5px; color: #6b7280; line-height: 1.35; }
+        .soft-meta {
+            flex-shrink: 0; text-align: right; font-size: 13px; font-weight: 600; color: #4b5563;
+        }
+        .soft-meta .big { display: block; font-size: 1.05rem; color: var(--ink); font-weight: 700; }
+        .soft-chev { flex-shrink: 0; color: #c4c0b6; font-size: 1.1rem; }
+        .soft-badge {
+            font-size: .65rem; font-weight: 800; letter-spacing: .04em;
+            padding: 3px 8px; border-radius: 999px; text-transform: uppercase;
+        }
+        .soft-badge.on { background: #e8f5ec; color: var(--good); }
+        .soft-badge.off { background: #fdecea; color: var(--crit); }
+        .soft-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+
         table.adm { border-collapse: collapse; width: 100%; font-size: .82rem; }
         table.adm th, table.adm td {
-            padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left;
+            padding: 10px 10px; border-bottom: 1px solid var(--line); text-align: left; color: var(--ink);
         }
-        table.adm th { color: var(--muted); font-weight: 700; font-size: .72rem; text-transform: uppercase; }
-        table.adm .num { text-align: right; font-variant-numeric: tabular-nums; }
-        .spark { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
+        table.adm th {
+            color: var(--muted); font-weight: 700; font-size: .68rem;
+            text-transform: uppercase; letter-spacing: .04em; background: #faf9f6;
+        }
+        table.adm tbody tr:hover { background: #faf7ef; }
+        table.adm .num { text-align: right; font-variant-numeric: tabular-nums; color: #3a382f; }
+        table.adm a { color: var(--gold-deep); font-weight: 600; text-decoration: none; }
+        table.adm a:hover { text-decoration: underline; }
+
+        .spark { display: flex; align-items: flex-end; gap: 3px; height: 110px; padding: 4px 0; }
         .spark .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-        .spark .bar { width: 100%; background: var(--gold); border-radius: 3px 3px 0 0; min-height: 2px; }
-        .spark .cl { font-size: .55rem; color: var(--muted); margin-top: 3px; }
+        .spark .bar {
+            width: 100%; background: linear-gradient(180deg, #EAD298, var(--gold));
+            border-radius: 4px 4px 0 0; min-height: 2px;
+        }
+        .spark .cl { font-size: .55rem; color: var(--muted); margin-top: 4px; }
         .chart { min-height: 40px; }
-        .bar-row { display: grid; grid-template-columns: 100px 1fr 70px; gap: 8px; align-items: center; margin-bottom: 8px; font-size: .8rem; }
-        .bar-track { background: var(--card-2); border-radius: 6px; height: 10px; overflow: hidden; }
-        .bar-fill { display: block; height: 100%; border-radius: 6px; background: var(--gold); }
+        .bar-row {
+            display: grid; grid-template-columns: minmax(80px, 110px) 1fr 56px;
+            gap: 8px; align-items: center; margin-bottom: 10px; font-size: .8rem;
+        }
+        .bar-row .k { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-track { background: #f0ebe3; border-radius: 8px; height: 10px; overflow: hidden; }
+        .bar-fill { display: block; height: 100%; border-radius: 8px; background: var(--gold); }
+        .bar-row .v { text-align: right; color: var(--muted); font-weight: 600; }
         .legend { display: flex; gap: 16px; margin-top: 10px; font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
         .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
         .field-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-        .field-row input {
-            background: #fff !important; border: 1px solid #d1d5db !important; color: #111 !important;
-            padding: 10px 12px; border-radius: 10px; font-size: .9rem;
-        }
+        .field-row input { width: auto; min-width: 120px; }
+
         .adm-foot {
-            padding: 16px 22px 24px; color: var(--muted); font-size: .75rem;
+            padding: 18px 22px 28px; color: var(--muted); font-size: .75rem;
             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
         }
-        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 35; }
+        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(35,33,28,.35); z-index: 35; }
         .adm-overlay.open { display: block; }
-        .proj-card {
-            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-            border-bottom: 1px solid var(--line); padding: 12px 0;
-        }
-        .proj-card .meta { flex: 1; min-width: 180px; }
+
         @media (max-width: 900px) {
             .adm-sidebar {
                 position: fixed; left: 0; top: 0; transform: translateX(-100%);
-                transition: transform .22s ease;
+                transition: transform .22s ease; box-shadow: 8px 0 32px rgba(20,18,12,.12);
             }
             .adm-sidebar.open { transform: translateX(0); }
             .adm-menu-btn { display: inline-flex; }
             .adm-content { padding: 16px 14px 0; }
             .adm-topbar { padding: 12px 14px; }
+            .soft-item { flex-wrap: wrap; }
+            .soft-meta { text-align: left; width: 100%; padding-left: 48px; }
+            .soft-actions { width: 100%; padding-left: 48px; justify-content: flex-start; }
         }
     </style>
 </head>
-<body>
+<body class="dono-suave">
 <div class="adm-overlay" id="admOverlay" onclick="fecharSidebar()"></div>
 
 <div class="adm-app">
@@ -238,26 +372,21 @@
                     <div class="panel-head">
                         <div>
                             <h3>Aderência e custo por projeto</h3>
-                            <p class="cap">Contrato fixo por canteiro: quanto mais gente usa, menor o custo unitário. Inclui projetos atuais e os que você criar depois.</p>
+                            <p class="cap">Mesmo padrão da lista de locais: cartões suaves. Contrato fixo — quanto mais uso, menor o custo unitário.</p>
                         </div>
                     </div>
-                    <div style="overflow-x:auto;">
-                        <table class="adm" id="tabDono" style="min-width:900px;">
+                    <div class="soft-list" id="listaProjetosVisao"></div>
+                    <div style="overflow-x:auto;margin-top:14px;">
+                        <table class="adm" id="tabDono" style="min-width:720px;">
                             <thead>
                                 <tr>
                                     <th>Projeto</th>
-                                    <th class="num">Ativos</th>
-                                    <th class="num">Usaram</th>
                                     <th class="num">Aderência</th>
                                     <th class="num">Viagens</th>
-                                    <th class="num">Parciais</th>
                                     <th class="num">km</th>
-                                    <th class="num">km/dia</th>
                                     <th class="num">Custo/km</th>
                                     <th class="num">Custo/viagem</th>
-                                    <th class="num">Custo/colab.·mês</th>
                                     <th class="num">Pedidos</th>
-                                    <th class="num">Recusas</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -303,28 +432,14 @@
                     </div>
                     <div class="field-row" style="margin-bottom:12px;">
                         <label class="cap" for="filtroChamados">Status</label>
-                        <select id="filtroChamados" onchange="carregarChamados()" style="padding:8px 10px;border-radius:8px;background:#fff;color:#111;border:1px solid #d1d5db;">
+                        <select id="filtroChamados" class="soft-select" onchange="carregarChamados()" style="width:auto;min-width:180px;">
                             <option value="pendente">Pendentes (bloqueados)</option>
                             <option value="aprovado">Aprovados</option>
                             <option value="recusado">Recusados</option>
                         </select>
                         <button type="button" class="btn-ghost" onclick="carregarChamados()">Atualizar fila</button>
                     </div>
-                    <div style="overflow-x:auto;">
-                        <table class="adm" id="tabChamados" style="min-width:720px;">
-                            <thead>
-                                <tr>
-                                    <th>Quem</th>
-                                    <th>Projeto</th>
-                                    <th>Contato</th>
-                                    <th>Justificativa</th>
-                                    <th>Quando</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
+                    <div class="soft-list" id="listaChamados"></div>
                     <div id="chamadosVazio" class="empty" style="display:none;">Nenhuma solicitação neste filtro.</div>
                     <div id="chamadosMsg" class="cap" style="margin-top:10px;"></div>
                 </div>
@@ -450,7 +565,7 @@ function atualizarBadgeChamados(n) {
 }
 async function carregarChamados() {
     const status = document.getElementById('filtroChamados')?.value || 'pendente';
-    const tbody = document.querySelector('#tabChamados tbody');
+    const lista = document.getElementById('listaChamados');
     const vazio = document.getElementById('chamadosVazio');
     const msg = document.getElementById('chamadosMsg');
     if (msg) msg.textContent = '';
@@ -458,21 +573,26 @@ async function carregarChamados() {
         const r = await fetchWithAuth('/api/admin/chamados?status=' + encodeURIComponent(status));
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Erro ao listar');
-        tbody.innerHTML = d.map((c) => `<tr>
-            <td><strong>${esc(c.nome)}</strong><br><span class="cap">Mat. ${esc(c.matricula)} · ${esc(c.empresa_nome || '—')}</span></td>
-            <td><strong>${esc(c.projeto_codigo || '—')}</strong><br><span class="cap">${esc(c.projeto_nome || '')}</span></td>
-            <td><a href="${linkWhatsApp(c.telefone)}" target="_blank" rel="noopener">${esc(c.telefone)}</a><br><span class="cap">${esc(c.email)}</span></td>
-            <td style="max-width:240px;">${esc(c.justificativa || '—')}</td>
-            <td class="cap">${new Date(c.created_at).toLocaleString('pt-BR')}</td>
-            <td style="white-space:nowrap;">${status === 'pendente'
-                ? `<button type="button" class="btn-gold" style="width:auto;padding:6px 10px;margin-right:4px;" onclick="aprovarChamado(${c.id},'${esc(c.matricula)}')">Aprovar</button>
-                   <button type="button" class="btn-ghost" onclick="recusarChamado(${c.id})">Recusar</button>`
-                : `<span class="cap">${esc(status)}</span>`}</td>
-        </tr>`).join('');
+        lista.innerHTML = d.map((c) => `
+            <div class="soft-item">
+                <div class="soft-pin">✦</div>
+                <div class="soft-item-txt">
+                    <div class="soft-nome">${esc(c.nome)}</div>
+                    <div class="soft-sub">Mat. ${esc(c.matricula)} · ${esc(c.empresa_nome || '—')} · <strong>${esc(c.projeto_codigo || '—')}</strong> ${esc(c.projeto_nome || '')}</div>
+                    <div class="soft-sub">${esc(c.justificativa || 'Sem justificativa')} · ${new Date(c.created_at).toLocaleString('pt-BR')}</div>
+                    <div class="soft-sub"><a href="${linkWhatsApp(c.telefone)}" target="_blank" rel="noopener">${esc(c.telefone)}</a> · ${esc(c.email)}</div>
+                </div>
+                <div class="soft-actions">
+                    ${status === 'pendente'
+                        ? `<button type="button" class="btn-gold" onclick="aprovarChamado(${c.id},'${esc(c.matricula)}')">Aprovar</button>
+                           <button type="button" class="btn-ghost" onclick="recusarChamado(${c.id})">Recusar</button>`
+                        : `<span class="soft-badge ${status === 'aprovado' ? 'on' : 'off'}">${esc(status)}</span>`}
+                </div>
+            </div>`).join('');
         if (vazio) vazio.style.display = d.length ? 'none' : 'block';
         if (status === 'pendente') atualizarBadgeChamados(d.length);
     } catch (e) {
-        tbody.innerHTML = '';
+        lista.innerHTML = '';
         if (vazio) vazio.style.display = 'none';
         if (msg) msg.textContent = e.message;
     }
@@ -586,24 +706,37 @@ async function carregarDono() {
             { t: 'Recusas', v: c.recusas },
             { t: 'Contratos/mês', v: fmtMoeda(c.contrato_mensal) },
         ].map((k) => `<div class="kpi"><div class="cap">${esc(k.t)}</div>
-            <div style="font-size:1.15rem;font-weight:800;${k.cor ? `color:${k.cor};` : ''}">${esc(String(k.v))}</div></div>`).join('');
+            <div class="val-line" style="${k.cor ? `color:${k.cor};` : ''}">${esc(String(k.v))}</div></div>`).join('');
+
+        const listaVisao = document.getElementById('listaProjetosVisao');
+        if (listaVisao) {
+            listaVisao.innerHTML = d.projetos.length
+                ? d.projetos.map((p) => `
+                <div class="soft-item">
+                    <div class="soft-pin">◎</div>
+                    <div class="soft-item-txt">
+                        <div class="soft-nome">${esc(p.nome)} <span class="cap">· ${esc(p.codigo)}</span></div>
+                        <div class="soft-sub">${p.usuarios.engajados}/${p.usuarios.ativos} usaram · ${p.viagens.concluidas} viagens · ${p.viagens.km} km</div>
+                        <div class="soft-sub">${fmtMoeda(p.custo.por_km)}/km · ${fmtMoeda(p.custo.por_viagem)}/viagem · ${p.pedidos.atendidos}/${p.pedidos.total} pedidos</div>
+                    </div>
+                    <div class="soft-meta">
+                        <span class="big" style="color:${corAderencia(p.usuarios.aderencia_pct)}">${p.usuarios.aderencia_pct}%</span>
+                        <span class="soft-badge ${p.ativo ? 'on' : 'off'}">${p.ativo ? 'Ativo' : 'Inativo'}</span>
+                    </div>
+                </div>`).join('')
+                : '<div class="empty">Sem dados no período.</div>';
+        }
 
         document.querySelector('#tabDono tbody').innerHTML = d.projetos.map((p) => `
             <tr>
                 <td><strong>${esc(p.nome)}</strong> <span class="cap">${esc(p.codigo)}${p.ativo ? '' : ' · INATIVO'}</span></td>
-                <td class="num">${p.usuarios.ativos}</td>
-                <td class="num">${p.usuarios.engajados}</td>
-                <td class="num" style="font-weight:800;color:${corAderencia(p.usuarios.aderencia_pct)}">${p.usuarios.aderencia_pct}%</td>
+                <td class="num" style="font-weight:700;color:${corAderencia(p.usuarios.aderencia_pct)}">${p.usuarios.aderencia_pct}%</td>
                 <td class="num">${p.viagens.concluidas}</td>
-                <td class="num">${p.viagens.parciais}</td>
                 <td class="num">${p.viagens.km}</td>
-                <td class="num">${p.viagens.km_dia}</td>
                 <td class="num">${fmtMoeda(p.custo.por_km)}</td>
                 <td class="num">${fmtMoeda(p.custo.por_viagem)}</td>
-                <td class="num">${fmtMoeda(p.custo.por_colaborador_mes)}</td>
                 <td class="num">${p.pedidos.atendidos}/${p.pedidos.total}</td>
-                <td class="num">${p.fila.recusas}</td>
-            </tr>`).join('') || '<tr><td colspan="13" class="empty">Sem dados no período.</td></tr>';
+            </tr>`).join('') || '<tr><td colspan="7" class="empty">Sem dados no período.</td></tr>';
 
         const maxPico = Math.max(...c.pico, 1);
         document.getElementById('donoPico').innerHTML = c.pico.map((v, h) => `
@@ -629,19 +762,24 @@ async function carregarProjetos() {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Erro');
         if (!d.length) { el.innerHTML = '<div class="empty">Nenhum projeto ainda. Crie o primeiro acima.</div>'; return; }
+        el.className = 'soft-list';
         el.innerHTML = d.map((p) => `
-            <div class="proj-card">
-                <div class="meta">
-                    <strong>${esc(p.nome)}</strong> <span class="cap">(${esc(p.codigo)})</span><br>
-                    <span class="cap">${p.usuarios} usuário(s) ativos · contrato
+            <div class="soft-item">
+                <div class="soft-pin">▦</div>
+                <div class="soft-item-txt">
+                    <div class="soft-nome">${esc(p.nome)}</div>
+                    <div class="soft-sub">${esc(p.codigo)} · ${p.usuarios} usuário(s) ativos</div>
+                    <div class="soft-sub" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px;">
+                        <span>Contrato R$/mês</span>
                         <input type="number" min="0" step="0.01" value="${Number(p.valor_contrato_mensal) || 0}"
-                            style="width:110px;padding:4px 6px;margin-left:4px;"
-                            id="ctr_${p.id}" title="Contrato mensal">
-                        <button type="button" class="btn-ghost" onclick="salvarContrato(${p.id})">Salvar R$</button>
-                    </span>
+                            id="ctr_${p.id}" title="Contrato mensal" style="width:110px;">
+                        <button type="button" class="btn-ghost" onclick="salvarContrato(${p.id})">Salvar</button>
+                    </div>
                 </div>
-                <span class="cap" style="font-weight:700;color:${p.ativo ? 'var(--good)' : 'var(--crit)'};">${p.ativo ? 'ATIVO' : 'INATIVO'}</span>
-                <button type="button" class="btn-ghost" onclick="alternarProjeto(${p.id}, ${p.ativo ? 'false' : 'true'})">${p.ativo ? 'Desativar' : 'Reativar'}</button>
+                <div class="soft-actions">
+                    <span class="soft-badge ${p.ativo ? 'on' : 'off'}">${p.ativo ? 'Ativo' : 'Inativo'}</span>
+                    <button type="button" class="btn-ghost" onclick="alternarProjeto(${p.id}, ${p.ativo ? 'false' : 'true'})">${p.ativo ? 'Desativar' : 'Reativar'}</button>
+                </div>
             </div>`).join('');
     } catch (e) {
         el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
