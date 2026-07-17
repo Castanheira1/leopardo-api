@@ -74,7 +74,6 @@ async function garantirUsuarioDonoEmpresa() {
       [matricula]
     );
     const senhaDesejada = process.env.DONO_SENHA || process.env.ADMIN_SENHA || SENHA_PADRAO_DONO;
-    const projId = (await pool.query("SELECT id FROM projetos ORDER BY id ASC LIMIT 1")).rows[0]?.id || null;
 
     if (!rows.length) {
       const hash = await bcrypt.hash(senhaDesejada, 10);
@@ -83,10 +82,10 @@ async function garantirUsuarioDonoEmpresa() {
            nome, funcao, matricula, senha_hash, is_admin, admin_projeto_id, projeto_id,
            ativo, empresa_nome, telefone, email, politica_aceita_em, politica_versao
          ) VALUES (
-           'Dono da empresa', 'Dono', $1, $2, TRUE, $3, $3, TRUE,
-           'VAP', '00000000000', $4, NOW(), '1.0'
+           'Dono da empresa', 'Dono', $1, $2, TRUE, NULL, NULL, TRUE,
+           'VAP', '00000000000', $3, NOW(), '1.0'
          )`,
-        [matricula, hash, projId, `dono@${matricula}.vap.local`]
+        [matricula, hash, `dono@${matricula}.vap.local`]
       );
       console.log(
         `Dono da empresa: conta criada (matrícula ${matricula}). ` +
@@ -97,17 +96,18 @@ async function garantirUsuarioDonoEmpresa() {
       return;
     }
 
-    // Garante flags de dono sem sobrescrever senha já personalizada.
+    // Dono global: is_admin, mas SEM amarrar a um único canteiro (admin_projeto_id null)
+    // — o dashboard é multi-projeto em dono.html. Pode abrir admin.html se quiser
+    // um canteiro específico depois de vincular manualmente.
     await pool.query(
       `UPDATE usuarios SET
          is_admin = TRUE,
          ativo = TRUE,
          funcao = COALESCE(NULLIF(funcao, ''), 'Dono'),
          nome = CASE WHEN nome IS NULL OR nome = '' OR nome = 'Dono da empresa' THEN 'Dono da empresa' ELSE nome END,
-         admin_projeto_id = COALESCE(admin_projeto_id, $2),
-         projeto_id = COALESCE(projeto_id, $2)
+         admin_projeto_id = NULL
        WHERE id = $1`,
-      [rows[0].id, projId]
+      [rows[0].id]
     );
 
     const usaPadrao = await bcrypt.compare(SENHA_PADRAO_DONO, rows[0].senha_hash || "").catch(() => false);

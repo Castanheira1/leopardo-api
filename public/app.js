@@ -16,11 +16,29 @@ function aplicarSaudacaoUsuario(el, nome) {
     el.appendChild(b);
 }
 
-function checkAuth(adminOnly = false) {
+// adminOnly: exige is_admin.
+// opts.superOnly: só dono/super admin (matrículas SUPER_ADMIN no servidor; no
+//   client usamos flag user.super_admin se existir, senão heurística 000000/900000
+//   e redireciona admin de canteiro para opts.redirectAdmin || admin.html).
+// opts.redirectAdmin: destino se superOnly falhar.
+function checkAuth(adminOnly = false, opts = {}) {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || 'null');
     if (!token || !user) { location.href = 'index.html'; return; }
-    if (adminOnly && !user.is_admin) { avisoProximaPagina('Acesso restrito a administradores.'); location.href = 'dashboard.html'; return; }
+    if (adminOnly && !user.is_admin) {
+        avisoProximaPagina('Acesso restrito a administradores.');
+        location.href = 'dashboard.html';
+        return;
+    }
+    if (opts.superOnly) {
+        const ehDono = user.super_admin === true
+            || ['000000', '900000'].includes(String(user.matricula || ''));
+        if (!ehDono) {
+            avisoProximaPagina('Acesso restrito ao dono da empresa.');
+            location.href = opts.redirectAdmin || 'admin.html';
+            return;
+        }
+    }
     aplicarSaudacaoUsuario(document.getElementById('userName'), user.nome);
     // Sessão é global por navegador (token no localStorage). Se outra aba logar com
     // outro usuário, o token daqui é trocado sem aviso e a tela passaria a agir como
@@ -30,6 +48,13 @@ function checkAuth(adminOnly = false) {
     // para continuar usando o app. Verifica no servidor e, se pendente, mostra o
     // portão bloqueante. Fire-and-forget (não trava o resto do carregamento).
     verificarConsentimentoLGPD();
+}
+
+/** True se a matrícula está na lista de dono (espelha SUPER_ADMIN_MATRICULAS padrão). */
+function ehDonoEmpresa(user) {
+    if (!user || !user.is_admin) return false;
+    if (user.super_admin === true) return true;
+    return ['000000', '900000'].includes(String(user.matricula || ''));
 }
 
 // O evento 'storage' dispara SÓ nas OUTRAS abas do mesmo navegador — exatamente a
