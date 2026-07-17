@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "PREENCHER_TEAM_ID.com.vap.carona",
+        "paths": ["*"]
+      }
+    ]
+  }
+}

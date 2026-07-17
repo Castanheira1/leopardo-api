@@ -74,6 +74,13 @@ require("./src/rotas/admin-usuarios");
 require("./src/rotas/admin-dono");
 
 /* ============================ ESTÁTICOS ============================ */
+// Vínculo domínio ↔ app nativo (lojas): a Apple exige o arquivo SEM extensão
+// servido como application/json — o static devolveria octet-stream.
+app.get("/.well-known/apple-app-site-association", (req, res) => {
+  res.type("application/json");
+  res.sendFile(path.join(__dirname, "public", ".well-known", "apple-app-site-association"));
+});
+
 // Imagens/fontes mudam raramente: cache de 7 dias no navegador corta requisições
 // repetidas (CPU/banda na instância free do Render). HTML/JS/CSS e o
 // service-worker ficam em no-cache: o navegador revalida sempre (304 barato) e

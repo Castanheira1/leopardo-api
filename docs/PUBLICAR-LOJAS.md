@@ -17,6 +17,21 @@ backend publicado (`https://leopardo-api.onrender.com`). App ID: **`com.vap.caro
   - Política de Privacidade: `https://leopardo-api.onrender.com/politica-privacidade.html`
   - Termos de Uso: `https://leopardo-api.onrender.com/termos-de-uso.html`
 - Ícones em `public/` (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`).
+- **Ícones e splash NATIVOS gerados** em todos os tamanhos exigidos pelas lojas
+  (38 Android + 7 iOS), a partir de `assets/icon-only.png` (1024×1024) e
+  `assets/splash.png` / `assets/splash-dark.png` (2732×2732, logo VAP em fundo
+  preto). Para regerar (só se o logo mudar): `npx capacitor-assets generate`.
+  Atenção: a ferramenta tenta reescrever o `public/manifest.json` do PWA
+  apontando para uma pasta `icons/` na raiz — reverta o manifest
+  (`git checkout -- public/manifest.json`) e apague `icons/` se acontecer.
+- **Vínculo domínio ↔ app** servido pelo backend em `/.well-known/` (o
+  `apple-app-site-association` sai com `Content-Type: application/json`, como a
+  Apple exige). Falta preencher com os dados que só existem depois das contas:
+  1. Android — `public/.well-known/assetlinks.json`: após gerar o keystore, rode
+     `keytool -list -v -keystore vap-release.jks -alias vap` e cole o SHA-256 em
+     `sha256_cert_fingerprints` (formato `AA:BB:...`).
+  2. iOS — `public/.well-known/apple-app-site-association`: troque
+     `PREENCHER_TEAM_ID` pelo Team ID da conta Apple Developer.
 
 ---
 
