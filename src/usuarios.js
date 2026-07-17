@@ -1,6 +1,6 @@
 // Helpers de usuário: projeto (com cache 60s), selfie, habilitação ativa, shape do front e validações.
 require("dotenv").config();
-const { CODIGOS_PROJETO, HAB_SELFIE_HORAS, SQL_GPS_FRESH } = require("./config");
+const { HAB_SELFIE_HORAS, SQL_GPS_FRESH } = require("./config");
 const { pool } = require("./db");
 
 /** Última selfie de validação do passageiro (pedido / proposta). */
@@ -62,8 +62,9 @@ async function buscarSelfieRecente(userId) {
 
 async function resolverProjetoId(projeto_id, projeto_codigo) {
   if (projeto_codigo) {
+    // O banco é a fonte da verdade (projetos criados pelo painel valem na hora);
+    // a consulta abaixo já rejeita código inexistente ou projeto inativo.
     const cod = String(projeto_codigo).trim().toUpperCase();
-    if (!CODIGOS_PROJETO.includes(cod)) return null;
     const { rows } = await pool.query(
       "SELECT id FROM projetos WHERE codigo = $1 AND COALESCE(ativo, TRUE) = TRUE",
       [cod]

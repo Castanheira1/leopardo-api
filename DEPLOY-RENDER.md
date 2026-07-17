@@ -108,3 +108,8 @@ Supabase → **Project Settings → Database → Reset database password**.
   API PostgREST pública não exponha os dados.
 - **CORS:** hoje está `origin: "*"`. Para um app interno, vale restringir ao
   domínio final depois que a URL estiver definida.
+
+## Monitoramento
+
+- **Health-check com banco**: `GET /api/health` responde 200 com `{"db":true}` quando o Postgres está acessível (503 se não). Aponte um monitor externo gratuito (ex.: UptimeRobot, checagem a cada 5 min) para `https://SEU-APP.onrender.com/api/health` e você é avisado de queda sem depender de usuário reclamar.
+- **Erros em produção**: tudo que o servidor loga como erro fica registrado (painel admin → Saúde, retenção de 30 dias) e o primeiro erro de cada janela de 30 min chega por email (`RESEND_API_KEY` + `ADMIN_EMAIL_NOTIFICACAO`).

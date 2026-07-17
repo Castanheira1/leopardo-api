@@ -3,6 +3,7 @@ require("dotenv").config();
 const bcrypt = require("bcrypt");
 const { GPS_STALE_MIN, SQL_GPS_STALE } = require("./config");
 const { pool } = require("./db");
+const { garantirTabelaErros } = require("./erros");
 
 pool.connect()
   .then(async (client) => {
@@ -17,7 +18,7 @@ pool.connect()
       garantirTabelaPedidoFila, garantirColunasViagens, garantirColunasPedidos,
       garantirColunasLocalizacao, limparPublicacoesFantasma, garantirIndiceCaronaUnica,
       garantirSchemaComercial, garantirTabelaAnuncios, garantirTabelaEventosUso,
-      garantirColunasContatosMotorista, garantirRlsSupabase,
+      garantirColunasContatosMotorista, garantirTabelaErros, garantirRlsSupabase,
       garantirAdminSemSenhaPadrao,
     ];
     for (const passo of passos) {
@@ -222,6 +223,7 @@ async function garantirRlsSupabase() {
     "anuncios",
     "contatos_motorista",
     "eventos_uso",
+    "eventos_erro",
     "pedido_fila",
     "admin_chamados",
     "caronas",

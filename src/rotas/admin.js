@@ -3,19 +3,130 @@ require("dotenv").config();
 const app = require("../app");
 const { pool } = require("../db");
 const { apagarFotoStorage, supabaseConfigurado, upload, uploadToSupabase } = require("../storage");
-const { carregarAdminEscopo, verificarAuth } = require("../auth");
+const { carregarAdminEscopo, verificarAdmin, verificarAuth } = require("../auth");
 const { projetoDoUsuario } = require("../usuarios");
 const { periodoFromQuery } = require("../datas");
 const { sqlViagemKmValido, sqlViagemNoPeriodo } = require("../km");
 
 /* ============================ ADMIN ============================ */
+
+// Saúde do sistema (erros registrados são GLOBAIS, não por projeto — quem
+// opera o produto é admin; basta verificarAdmin, sem escopo de projeto).
+app.get("/api/admin/erros", verificarAuth, verificarAdmin, async (req, res) => {
+  try {
+    const [recentes, porDia] = await Promise.all([
+      pool.query(
+        "SELECT id, origem, mensagem, criado_em FROM eventos_erro ORDER BY criado_em DESC LIMIT 100"
+      ),
+      pool.query(
+        `SELECT date_trunc('day', criado_em) AS dia, COUNT(*)::int AS total
+         FROM eventos_erro WHERE criado_em > NOW() - INTERVAL '7 days'
+         GROUP BY 1 ORDER BY 1 DESC`
+      ),
+    ]);
+    res.json({ recentes: recentes.rows, por_dia: porDia.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/admin/context", verificarAuth, carregarAdminEscopo, async (req, res) => {
   res.json({
     projeto_id: req.adminEscopo.admin_projeto_id,
     projeto_nome: req.adminEscopo.projeto_nome,
     projeto_codigo: req.adminEscopo.projeto_codigo,
     valor_contrato_mensal: Number(req.adminEscopo.valor_contrato_mensal) || 0,
+    super_admin: ehSuperAdmin(req.user),
   });
+});
+
+/* ==================== PROJETOS (onboarding, só super admin) ====================
+   Admin comum é escopado a UM projeto; criar/desativar projeto é operação do
+   dono do produto. Gate por matrícula via SUPER_ADMIN_MATRICULAS (padrão: o
+   admin semente 000000). Projeto criado aqui já aparece no cadastro na hora
+   (o registro e o resolverProjetoId leem do banco). */
+const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "000000")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+
+function ehSuperAdmin(user) {
+  return !!user?.is_admin && SUPER_ADMIN_MATRICULAS.includes(String(user.matricula));
+}
+
+const exigirSuperAdmin = (req, res, next) => {
+  if (!ehSuperAdmin(req.user)) {
+    return res.status(403).json({ error: "Apenas o super admin gerencia projetos" });
+  }
+  next();
+};
+
+app.get("/api/admin/projetos", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT p.id, p.nome, p.codigo, COALESCE(p.ativo, TRUE) AS ativo,
+             COALESCE(p.valor_contrato_mensal, 0) AS valor_contrato_mensal,
+             (SELECT COUNT(*)::int FROM usuarios u
+              WHERE u.projeto_id = p.id AND COALESCE(u.ativo, TRUE) = TRUE) AS usuarios
+      FROM projetos p ORDER BY p.nome`);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/projetos", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
+  try {
+    const nome = String(req.body?.nome || "").trim();
+    const codigo = String(req.body?.codigo || "").trim().toUpperCase();
+    const valor = Number(req.body?.valor_contrato_mensal) || 0;
+    if (nome.length < 2 || nome.length > 100) {
+      return res.status(400).json({ error: "Nome do projeto: 2 a 100 caracteres" });
+    }
+    if (!/^[A-Z0-9][A-Z0-9-]{1,29}$/.test(codigo)) {
+      return res.status(400).json({ error: "Código: 2 a 30 caracteres, letras/números/hífen (ex.: S11D)" });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO projetos (nome, codigo, valor_contrato_mensal, ativo)
+       VALUES ($1, $2, $3, TRUE)
+       ON CONFLICT (codigo) DO NOTHING
+       RETURNING id, nome, codigo`,
+      [nome, codigo, valor]
+    );
+    if (!rows.length) return res.status(409).json({ error: `Já existe projeto com o código ${codigo}` });
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch("/api/admin/projetos/:id", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: "id inválido" });
+    const sets = [];
+    const vals = [];
+    if (req.body?.nome !== undefined) {
+      const nome = String(req.body.nome).trim();
+      if (nome.length < 2 || nome.length > 100) return res.status(400).json({ error: "Nome inválido" });
+      vals.push(nome); sets.push(`nome = $${vals.length}`);
+    }
+    if (req.body?.ativo !== undefined) {
+      vals.push(!!req.body.ativo); sets.push(`ativo = $${vals.length}`);
+    }
+    if (req.body?.valor_contrato_mensal !== undefined) {
+      const v = Number(req.body.valor_contrato_mensal);
+      if (!Number.isFinite(v) || v < 0) return res.status(400).json({ error: "Valor inválido" });
+      vals.push(v); sets.push(`valor_contrato_mensal = $${vals.length}`);
+    }
+    if (!sets.length) return res.status(400).json({ error: "Nada para atualizar" });
+    vals.push(id);
+    const { rowCount } = await pool.query(
+      `UPDATE projetos SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals
+    );
+    if (!rowCount) return res.status(404).json({ error: "Projeto não encontrado" });
+    res.json({ message: "Projeto atualizado" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get("/api/admin/overview", verificarAuth, carregarAdminEscopo, async (req, res) => {

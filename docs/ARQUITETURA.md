@@ -120,6 +120,9 @@ npm run dev              # nodemon, http://localhost:3000
 | `RAIO_MATCH_KM` | no (default `3`) | match proximity radius in km |
 | `PORT` | no (default `3000`) | |
 | `NODE_ENV` | — | when `production`, Postgres SSL is enabled with `rejectUnauthorized: false` |
+| `ADMIN_SENHA` | **production** | replaces the seed admin's default password on boot; without it in production, a seed admin still on `admin123` is **deactivated** |
+| `SUPER_ADMIN_MATRICULAS` | no (default `000000`) | comma-separated matrículas allowed to create/deactivate projects in the panel |
+| `RESEND_API_KEY` + `ADMIN_EMAIL_NOTIFICACAO` | for alerts | admin-access requests **and** production error alerts (30-min throttle) |
 
 ## Database
 

@@ -59,7 +59,6 @@ if (!JWT_SECRET) {
 }
 
 
-const CODIGOS_PROJETO = ["S11D", "SALOBO", "CARAJAS", "SOSSEGO"];
 const HAB_SELFIE_HORAS = 12;
 
 
@@ -86,6 +85,5 @@ module.exports = {
   KM_VELOCIDADE_MAX_H,
   RAIO_CHEGADA_DEST_KM,
   FUSO_APP,
-  CODIGOS_PROJETO,
   HAB_SELFIE_HORAS,
 };

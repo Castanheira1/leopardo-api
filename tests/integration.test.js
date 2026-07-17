@@ -1497,6 +1497,62 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status } = await api("GET", "/api/admin/seguranca", { token: tokAdmin });
       eq(status, 200, "status");
     });
+
+    /* ---- Observabilidade ---- */
+    grupo("Saúde e registro de erros");
+    await test("GET /api/health → 200 com db:true", async () => {
+      const { status, json } = await api("GET", "/api/health");
+      eq(status, 200, "status");
+      eq(json.db, true, "db");
+      assert(json.versao, "sem versão");
+    });
+    await test("GET /api/admin/erros exige admin (driver → 403; admin → 200)", async () => {
+      const r1 = await api("GET", "/api/admin/erros", { token: tokDriver });
+      eq(r1.status, 403, "driver deveria ser barrado");
+      const r2 = await api("GET", "/api/admin/erros", { token: tokAdmin });
+      eq(r2.status, 200, "admin");
+      assert(Array.isArray(r2.json.recentes), "recentes não é lista");
+    });
+
+    /* ---- Projetos dinâmicos (onboarding, super admin) ---- */
+    grupo("Projetos dinâmicos (super admin 000000)");
+    const codigoNovo = `TST${String(uniq).slice(-5)}`;
+    let idProjetoNovo;
+    await test("driver comum não gerencia projetos → 403", async () => {
+      const { status } = await api("GET", "/api/admin/projetos", { token: tokDriver });
+      eq(status, 403, "status");
+    });
+    await test("super admin cria projeto novo", async () => {
+      const { status, json } = await api("POST", "/api/admin/projetos", {
+        token: tokAdmin, body: { nome: "Projeto Teste Integração", codigo: codigoNovo },
+      });
+      eq(status, 201, "status");
+      eq(json.codigo, codigoNovo, "codigo");
+      idProjetoNovo = json.id;
+    });
+    await test("código duplicado → 409", async () => {
+      const { status } = await api("POST", "/api/admin/projetos", {
+        token: tokAdmin, body: { nome: "Duplicado", codigo: codigoNovo },
+      });
+      eq(status, 409, "status");
+    });
+    await test("cadastro já funciona no projeto novo (sem deploy)", async () => {
+      const { status, json } = await api("POST", "/api/register", {
+        body: novoUsuario(97, codigoNovo),
+      });
+      eq(status, 200, "status");
+      eq(json.user.projeto_codigo, codigoNovo, "projeto");
+    });
+    await test("projeto desativado some do cadastro", async () => {
+      const r1 = await api("PATCH", `/api/admin/projetos/${idProjetoNovo}`, {
+        token: tokAdmin, body: { ativo: false },
+      });
+      eq(r1.status, 200, "patch");
+      const r2 = await api("POST", "/api/register", { body: novoUsuario(98, codigoNovo) });
+      eq(r2.status, 400, "register deveria recusar projeto inativo");
+      const r3 = await api("GET", "/api/projetos");
+      assert(!r3.json.some((p) => p.codigo === codigoNovo), "ainda listado no público");
+    });
     await test("admin desativa e reativa usuário do projeto", async () => {
       let r = await api("POST", `/api/admin/usuarios/${encodeURIComponent(uPax.matricula)}/desativar`, {
         token: tokAdmin, body: { motivo: "Teste integração" },

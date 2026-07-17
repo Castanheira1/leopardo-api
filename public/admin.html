@@ -385,6 +385,12 @@
             <button class="adm-nav-item" data-sec="sec-anuncios" onclick="irSecao('sec-anuncios')">
                 <span class="ico">▤</span> Anúncios
             </button>
+            <button class="adm-nav-item" data-sec="sec-saude" onclick="irSecao('sec-saude')">
+                <span class="ico">♥</span> Saúde
+            </button>
+            <button class="adm-nav-item" id="navProjetos" style="display:none;" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
+                <span class="ico">▦</span> Projetos
+            </button>
         </nav>
 
         <div class="adm-side-foot">
@@ -633,6 +639,45 @@
                 </div>
             </section>
 
+            <section id="sec-saude" class="adm-section">
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+                        <div><h3>Status do serviço</h3><p class="cap">Banco, versão e tempo no ar — o mesmo que um monitor externo vê em <code>/api/health</code>.</p></div>
+                    </div>
+                    <div id="saudeStatus" class="cap">Carregando…</div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                        <div><h3>Erros registrados (últimos 7 dias)</h3><p class="cap">Tudo que o servidor logou como erro (rotas, crashes, agendadores). Retenção de 30 dias. O primeiro erro de cada janela de 30 min também chega por email.</p></div>
+                    </div>
+                    <div id="saudeErros"><div class="empty">Carregando…</div></div>
+                </div>
+            </section>
+
+            <section id="sec-projetos" class="adm-section">
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>
+                        <div><h3>Novo projeto</h3><p class="cap">Cria um canteiro/site novo. Ele aparece na hora na tela de cadastro; o admin local do projeto entra pela fila de "Acesso admin".</p></div>
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;gap:10px;">
+                        <input type="text" id="projNome" placeholder="Nome (ex.: Onça Puma)" maxlength="100" style="flex:2;min-width:180px;">
+                        <input type="text" id="projCodigo" placeholder="CÓDIGO (ex.: ONCA-PUMA)" maxlength="30" style="flex:1;min-width:140px;text-transform:uppercase;">
+                        <button class="btn-gold" onclick="criarProjeto()">Criar projeto</button>
+                    </div>
+                    <div id="projMsg" class="cap" style="margin-top:10px;"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+                        <div><h3>Projetos existentes</h3><p class="cap">Desativar tira o projeto do cadastro e bloqueia novos vínculos — usuários existentes não são afetados.</p></div>
+                    </div>
+                    <div id="listaProjetos"><div class="empty">Carregando…</div></div>
+                </div>
+            </section>
+
         </div>
 
         <footer class="adm-foot">
@@ -661,7 +706,9 @@ const SECOES = {
     'sec-usuarios': { titulo: 'Usuários', sub: 'Bloqueio de conta (senha pelo Esqueci a senha no login)' },
     'sec-chamados': { titulo: 'Acesso admin', sub: 'Solicitações de acesso ao painel — aprove só após validar a identidade' },
     'sec-operacao': { titulo: 'Operação', sub: 'Motoristas habilitados e viagens recentes' },
-    'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
+    'sec-anuncios': { titulo: 'Anúncios', sub: 'Vitrine de cards exibida na tela de espera dos passageiros' },
+    'sec-saude': { titulo: 'Saúde', sub: 'Status do serviço e erros registrados em produção' },
+    'sec-projetos': { titulo: 'Projetos', sub: 'Onboarding de canteiros/sites (somente super admin)' },
 };
 
 let cacheViagens = [];
@@ -687,9 +734,88 @@ function irSecao(id) {
     if (meta) {
         document.getElementById('topTitulo').textContent = meta.titulo;
         document.getElementById('topSub').textContent = meta.sub;
-    }
+    }
     if (id === 'sec-chamados') carregarChamados();
+    if (id === 'sec-saude') carregarSaude();
+    if (id === 'sec-projetos') carregarProjetos();
     fecharSidebar();
+}
+
+/* -------- projetos (onboarding, super admin) -------- */
+async function carregarProjetos() {
+    const el = document.getElementById('listaProjetos');
+    try {
+        const r = await fetchWithAuth('/api/admin/projetos');
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+        if (!d.length) { el.innerHTML = '<div class="empty">Nenhum projeto.</div>'; return; }
+        el.innerHTML = d.map((p) => `
+            <div style="display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(128,128,128,.2);padding:10px 0;flex-wrap:wrap;">
+                <div style="flex:1;min-width:160px;">
+                    <strong>${esc(p.nome)}</strong> <span class="cap">(${esc(p.codigo)})</span><br>
+                    <span class="cap">${p.usuarios} usuário(s) ativos · contrato ${esc(fmtMoeda(p.valor_contrato_mensal))}</span>
+                </div>
+                <span class="cap" style="font-weight:700;color:${p.ativo ? '#1a7f37' : '#b30000'};">${p.ativo ? 'ATIVO' : 'INATIVO'}</span>
+                <button class="btn-ghost" onclick="alternarProjeto(${p.id}, ${p.ativo ? 'false' : 'true'})">${p.ativo ? 'Desativar' : 'Reativar'}</button>
+            </div>`).join('');
+    } catch (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+}
+async function criarProjeto() {
+    const msg = document.getElementById('projMsg');
+    const nome = document.getElementById('projNome').value.trim();
+    const codigo = document.getElementById('projCodigo').value.trim().toUpperCase();
+    try {
+        const r = await fetchWithAuth('/api/admin/projetos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, codigo }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+        msg.textContent = `Projeto ${d.codigo} criado — já disponível no cadastro.`;
+        document.getElementById('projNome').value = '';
+        document.getElementById('projCodigo').value = '';
+    } catch (e) { msg.textContent = e.message; }
+    finally { carregarProjetos(); }
+}
+async function alternarProjeto(id, ativo) {
+    try {
+        const r = await fetchWithAuth('/api/admin/projetos/' + id, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+    } catch (e) { mostrarToast(e.message, 'error'); }
+    finally { carregarProjetos(); }
+}
+
+/* -------- saúde do serviço (status + erros registrados) -------- */
+async function carregarSaude() {
+    const st = document.getElementById('saudeStatus');
+    try {
+        const r = await fetch('/api/health');
+        const d = await r.json();
+        const h = Math.floor(d.uptime_s / 3600), m = Math.floor((d.uptime_s % 3600) / 60);
+        st.innerHTML = (d.db
+            ? '<span style="color:#1a7f37;font-weight:700;">● Banco OK</span>'
+            : '<span style="color:#b30000;font-weight:700;">● SEM BANCO</span>')
+            + ` · versão ${esc(d.versao)} · no ar há ${h}h${String(m).padStart(2, '0')}`;
+    } catch (e) { st.textContent = 'Falha ao consultar /api/health: ' + e.message; }
+    const el = document.getElementById('saudeErros');
+    try {
+        const r = await fetchWithAuth('/api/admin/erros');
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro');
+        if (!d.recentes.length) { el.innerHTML = '<div class="empty">Nenhum erro registrado. 🎉</div>'; return; }
+        const porDia = d.por_dia.map((x) => `${new Date(x.dia).toLocaleDateString('pt-BR')}: <strong>${x.total}</strong>`).join(' · ');
+        el.innerHTML = `<p class="cap" style="margin-bottom:10px;">${porDia}</p>` + d.recentes.map((e2) => `
+            <div style="border-bottom:1px solid rgba(128,128,128,.2);padding:8px 0;">
+                <div class="cap">${new Date(e2.criado_em).toLocaleString('pt-BR')} · <strong>${esc(e2.origem)}</strong></div>
+                <div style="font-size:.82rem;white-space:pre-wrap;word-break:break-word;">${esc(String(e2.mensagem || '').slice(0, 400))}</div>
+            </div>`).join('');
+    } catch (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
 }
 
 /* -------- chamados de acesso admin (fila de aprovação) -------- */
@@ -868,6 +994,8 @@ async function carregarContexto() {
     document.getElementById('subProjeto').innerHTML =
         `Código <strong>${esc(d.projeto_codigo || '—')}</strong><br>Contrato <strong>${esc(fmtMoeda(d.valor_contrato_mensal))}</strong>`;
     document.getElementById('valorContrato').value = d.valor_contrato_mensal || '';
+    // Gestão de projetos: só o super admin (dono do produto) vê a seção.
+    if (d.super_admin) document.getElementById('navProjetos').style.display = '';
     return d;
 }
 

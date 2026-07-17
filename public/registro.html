@@ -583,6 +583,8 @@
         let passo = 1;
         const TOTAL = 3;
         const labels = ['Quem é você?', 'Onde você trabalha?', 'Seus dados de acesso'];
+        // Fallback se /api/projetos falhar (offline); a fonte real é o banco,
+        // então projeto novo criado no painel aparece aqui sem deploy.
         const PROJETOS_FIXOS = [
             { codigo: 'S11D', label: 'S11D' },
             { codigo: 'SALOBO', label: 'SALOBO' },
@@ -602,16 +604,25 @@
             });
         }
 
-        function renderProjetosFixos() {
+        const escProj = (v) => String(v).replace(/[&<>"']/g, (c) =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        function renderProjetos(lista) {
             const grid = document.getElementById('projetoGrid');
-            grid.innerHTML = PROJETOS_FIXOS.map(p =>
-                `<button type="button" class="projeto-card" data-codigo="${p.codigo}" onclick="setProjeto('${p.codigo}')">${p.label}</button>`
+            grid.innerHTML = lista.map(p =>
+                `<button type="button" class="projeto-card" data-codigo="${p.codigo}" onclick="setProjeto('${p.codigo}')">${escProj(p.label)}</button>`
             ).join('');
             const select = document.getElementById('a_projeto');
             select.innerHTML = '<option value="">Selecione o projeto</option>' +
-                PROJETOS_FIXOS.map(p => `<option value="${p.codigo}">${p.label}</option>`).join('');
+                lista.map(p => `<option value="${p.codigo}">${escProj(p.label)}</option>`).join('');
         }
-        renderProjetosFixos();
+        renderProjetos(PROJETOS_FIXOS);
+        // Lista viva do banco (projetos ativos). Só letras/números/hífen no código
+        // (validado no servidor), então interpolar direto no HTML é seguro.
+        fetch('/api/projetos').then(r => r.ok ? r.json() : null).then(rows => {
+            if (Array.isArray(rows) && rows.length) {
+                renderProjetos(rows.map(p => ({ codigo: p.codigo, label: p.nome || p.codigo })));
+            }
+        }).catch(() => {});
 
         function atualizarUI() {
             document.querySelectorAll('.wizard-step').forEach(s => {

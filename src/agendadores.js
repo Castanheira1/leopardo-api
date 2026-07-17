@@ -6,6 +6,10 @@ const { limparPublicacoesFantasma } = require("./bootstrap-db");
 const { enviarPush } = require("./push");
 const { aplicarRetencaoFotos } = require("./storage");
 const { ativarPedidoAgendado, expirarFilasVencidas } = require("./services/fila");
+const { limparErrosAntigos } = require("./erros");
+
+// Retenção do registro de erros (30 dias) — 1x/dia.
+setInterval(() => { limparErrosAntigos(); }, 24 * 60 * 60 * 1000);
 
 // Intervalo do agendador (ativa pedidos cujo horário marcado já chegou). 60s em
 // produção; a suíte de integração baixa via env para exercitar a ativação sem

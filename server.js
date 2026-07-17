@@ -13,6 +13,8 @@ const compression = require("compression");
 
 const app = require("./src/app");
 const { PORT } = require("./src/config");
+// Cedo de propósito: patcha console.error e captura uncaught/unhandled desde o boot.
+require("./src/erros");
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression({

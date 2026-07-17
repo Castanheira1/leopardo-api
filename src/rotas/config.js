@@ -15,6 +15,23 @@ app.get("/api/config", (req, res) => {
   });
 });
 
+// Health-check para monitor externo (UptimeRobot etc.): confirma DB de verdade.
+// 200 com db:true = saudável; 503 = app de pé mas sem banco. O healthCheckPath
+// do Render continua no /api/config (app de pé) para não reiniciar em falha de DB.
+const INICIO_PROCESSO = Date.now();
+const VERSAO_APP = require("../../package.json").version;
+app.get("/api/health", async (req, res) => {
+  let db = false;
+  try { await pool.query("SELECT 1"); db = true; } catch (_) {}
+  res.status(db ? 200 : 503).json({
+    ok: db,
+    db,
+    versao: VERSAO_APP,
+    uptime_s: Math.round((Date.now() - INICIO_PROCESSO) / 1000),
+    agora: new Date().toISOString(),
+  });
+});
+
 // Rota pela pista (Routes API REST). Cache agressivo + teto de chamadas Google
 // para não estourar fatura (frota fake + mapa do passageiro).
 function decodificarPolylineServer(str) {

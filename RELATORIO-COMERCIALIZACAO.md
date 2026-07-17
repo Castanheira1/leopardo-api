@@ -132,3 +132,27 @@ camada jurídica).
 LGPD) e os itens de autenticação antes de cobrar de clientes.** Feito isso, é
 comercializável. Posso implementar as correções de XSS/CORS/senha se você quiser —
 é o próximo passo natural.
+
+---
+
+## Atualização — 2026-07-17
+
+Tudo que era bloqueador ou "fortemente recomendado" foi fechado, exceto a
+política de senha (decisão do dono do produto):
+
+| Item | Situação |
+|---|---|
+| XSS armazenado | **Fechado** (escape em todo o front + testes de contrato) |
+| LGPD (política/termos/consentimento) | **Fechado**, incl. controlador/DPO preenchidos (pessoa física; trocar por CNPJ quando houver PJ) |
+| CORS aberto | **Fechado** (allowlist via `CORS_ORIGINS`) |
+| Admin padrão `000000/admin123` | **Fechado**: `ADMIN_SENHA` no ambiente substitui no boot; em produção sem a env, a conta é desativada |
+| Arquitetura monolítica | **Fechado**: `server.js` (96 linhas) + `src/` por domínio; `dashboard.html` dividido em HTML/JS/CSS |
+| CI | **Fechado**: sintaxe + contrato + integração com Postgres efêmero a cada PR |
+| Observabilidade | **Fechado**: `GET /api/health` (com check de DB) p/ monitor externo; registro central de erros (30 dias) com alerta por email (throttle 30 min) e seção Saúde no painel |
+| Onboarding de projeto | **Fechado**: projetos vêm do banco; super admin cria/desativa pelo painel (seção Projetos) e o cadastro reflete na hora |
+| Frota fake no produto | **Removida** |
+| Senha de 6 dígitos | **Pendente por decisão** (mitigada por rate-limit por IP) |
+
+Pendências operacionais (fora do código): definir `ADMIN_SENHA` no Render,
+apontar um monitor externo (ex.: UptimeRobot) para `/api/health`, e decidir
+billing/SLA (o rateio exportável já dá a base de cobrança por projeto).
