@@ -90,13 +90,41 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      - name: Capacitor sync (aponta para o backend de produção)
+      - name: Capacitor sync (bundle local + plugins; sem server.url)
         run: npx cap sync android
 
-      - name: Gerar APK de debug e AAB de release (sem assinatura)
+      # Assinatura opcional: se os secrets existirem, grava o .jks e assina o AAB.
+      # Secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+      #          ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (opcional = store password)
+      - name: Preparar keystore (se secrets presentes)
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$HOME/vap-release.jks"
+            echo "path=$HOME/vap-release.jks" >> "$GITHUB_OUTPUT"
+            echo "has_signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_signing=false" >> "$GITHUB_OUTPUT"
+            echo "Sem secrets de keystore — AAB unsigned (ok para validar build)."
+          fi
+
+      - name: Gerar APK de debug e AAB de release
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
+          # Alias padrão se o secret não estiver definido
+          export ANDROID_KEY_ALIAS="${ANDROID_KEY_ALIAS:-vap}"
+          export ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
           ./gradlew assembleDebug bundleRelease --no-daemon
 
       - name: Publicar artefatos

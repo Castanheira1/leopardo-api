@@ -5222,11 +5222,11 @@
         trackState = { viagemId: vv.id, buffer: [], ultimoPonto: null, kmTela: 0, nativo, nativeWatchId: null };
         localStorage.setItem('viagemAtiva', vv.id);
 
-        // Restaura pontos não enviados (túnel / offline) do Preferences/localStorage.
+        // Restaura pontos não enviados (túnel / offline) — snapshot único, sem duplicar.
         if (window.VapPlatform && VapPlatform.RouteBuffer) {
             VapPlatform.RouteBuffer.load(vv.id).then((salvos) => {
                 if (!trackState || trackState.viagemId !== vv.id || !salvos.length) return;
-                trackState.buffer = salvos.concat(trackState.buffer || []);
+                trackState.buffer = salvos.slice();
             }).catch(() => {});
         }
 
@@ -5250,8 +5250,9 @@
                         const ponto = { lat: pt.lat, lng: pt.lng, em: Date.now() };
                         trackState.buffer.push(ponto);
                         trackState.ultimoPonto = pt;
+                        // Snapshot do buffer (substitui prefs — evita ponto duplicado memória+prefs).
                         if (window.VapPlatform && VapPlatform.RouteBuffer) {
-                            VapPlatform.RouteBuffer.append(vv.id, ponto).catch(() => {});
+                            VapPlatform.RouteBuffer.persist(vv.id, trackState.buffer).catch(() => {});
                         }
                     }
                 }
@@ -5452,16 +5453,15 @@
     async function enviarPontos() {
         if (!trackState) return;
         const viagemId = trackState.viagemId;
-        let pontos = trackState.buffer.splice(0, trackState.buffer.length);
-
-        // Preferências: puxa o que ficou persistido (offline/túnel) e limpa a chave.
-        if (window.VapPlatform && VapPlatform.RouteBuffer) {
-            try {
-                const salvos = await VapPlatform.RouteBuffer.takeAll(viagemId);
-                if (salvos.length) pontos = salvos.concat(pontos);
-            } catch (_) {}
+        // Fonte única: memória. Prefs é espelho do mesmo array (persist).
+        const pontos = trackState.buffer.splice(0, trackState.buffer.length);
+        if (!pontos.length) {
+            // Limpa prefs se memória já estava vazia (viagem sem pontos novos).
+            if (window.VapPlatform && VapPlatform.RouteBuffer) {
+                try { await VapPlatform.RouteBuffer.clear(viagemId); } catch (_) {}
+            }
+            return;
         }
-        if (!pontos.length) return;
 
         try {
             const r = await fetchWithAuth('/api/viagens/' + viagemId + '/pontos', {
@@ -5469,14 +5469,19 @@
                 body: JSON.stringify({ pontos }),
             });
             if (!r || !r.ok) throw new Error('falha envio pontos');
-            // sucesso: buffer persistente já limpo via takeAll
+            // Sucesso: limpa espelho offline.
+            if (window.VapPlatform && VapPlatform.RouteBuffer) {
+                try { await VapPlatform.RouteBuffer.clear(viagemId); } catch (_) {}
+            }
         } catch (_) {
-            // Rede caiu: devolve ao buffer em memória + Preferences.
+            // Rede caiu: devolve à memória e grava snapshot offline.
             if (trackState && trackState.viagemId === viagemId) {
                 trackState.buffer = pontos.concat(trackState.buffer || []);
-            }
-            if (window.VapPlatform && VapPlatform.RouteBuffer) {
-                try { await VapPlatform.RouteBuffer.restore(viagemId, pontos); } catch (_) {}
+                if (window.VapPlatform && VapPlatform.RouteBuffer) {
+                    try { await VapPlatform.RouteBuffer.persist(viagemId, trackState.buffer); } catch (_) {}
+                }
+            } else if (window.VapPlatform && VapPlatform.RouteBuffer) {
+                try { await VapPlatform.RouteBuffer.persist(viagemId, pontos); } catch (_) {}
             }
         }
     }

@@ -61,10 +61,18 @@ O front detecta a plataforma com `Capacitor.isNativePlatform()` (`public/platfor
 
 | Recurso | PWA (navegador) | App nativo (Capacitor) |
 |---|---|---|
+| Origem do UI | Render (mesma origem da API) | **Bundle local** (`webDir`) — sem `server.url` |
+| API | relativa `/api/...` | absoluta `https://leopardo-api.onrender.com` se origin for `capacitor://` |
 | Coordenadas na viagem | HTTP poll (`setInterval`) | Socket.io + fallback poll lento |
 | Push | Web Push (VAPID + SW) | `@capacitor/push-notifications` → FCM/APNs |
-| GPS com tela apagada | limitação do browser | Foreground Service (`TripTracking`) |
+| GPS com tela apagada | limitação do browser | Android FG Service; iOS `UIBackgroundModes=location` |
 | Buffer de rota offline | Preferences → `localStorage` | Preferences (nativo) |
+
+### Dev com WebView remoto (opcional)
+
+```bash
+CAPACITOR_SERVER_URL=https://leopardo-api.onrender.com npx cap sync
+```
 
 ### Ativar push nativo de ponta a ponta
 
@@ -72,6 +80,11 @@ O front detecta a plataforma com `Capacitor.isNativePlatform()` (`public/platfor
 2. No Render, defina `FCM_SERVER_KEY` (Cloud Messaging → Server key).
 3. `npx cap sync android` e rebuild do APK/AAB.
 4. iOS: certificados APNs no Firebase + capabilities Push no Xcode.
+
+### Assinatura Android no CI (opcional)
+
+Secrets no GitHub: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Sem eles o CI gera AAB unsigned.
 
 ### Rebuild nativo após mudanças
 

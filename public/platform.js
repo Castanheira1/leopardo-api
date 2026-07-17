@@ -1,9 +1,12 @@
 // Isolamento de plataforma (PWA vs Capacitor nativo).
-// PWA: tudo via browser (localStorage, Web Push, HTTP poll).
-// Nativo: Preferences, Push Notifications, Geolocation FG, Socket.io.
-// Não quebra a web — só ativa extras quando Capacitor.isNativePlatform().
+// PWA: same-origin, localStorage, Web Push, HTTP poll.
+// Nativo (bundle local): API absoluta + plugins Capacitor.
+// Nativo (server.url remoto): same-origin do host — apiBase vazio.
 (function (global) {
   "use strict";
+
+  // Backend de produção (bundle local do app nativo).
+  var DEFAULT_API_HOST = "https://leopardo-api.onrender.com";
 
   function cap() {
     return global.Capacitor || null;
@@ -11,7 +14,7 @@
 
   function isNative() {
     try {
-      const C = cap();
+      var C = cap();
       if (!C) return false;
       if (typeof C.isNativePlatform === "function") return !!C.isNativePlatform();
       return C.getPlatform && C.getPlatform() !== "web";
@@ -21,17 +24,55 @@
   }
 
   function plugin(name) {
-    const C = cap();
+    var C = cap();
     if (!C || !C.Plugins) return null;
     return C.Plugins[name] || null;
+  }
+
+  /**
+   * Base da API.
+   * - PWA / same-origin: "" (caminhos /api/... relativos)
+   * - Capacitor com assets locais (capacitor:// ou localhost): host de produção
+   * - Capacitor com server.url no Render: "" (já está no host certo)
+   */
+  function apiBase() {
+    try {
+      if (!isNative()) return "";
+      var o = String((global.location && global.location.origin) || "");
+      if (!o || o === "null") return DEFAULT_API_HOST;
+      // Origens do WebView com bundle embutido
+      if (
+        o.indexOf("capacitor://") === 0 ||
+        o.indexOf("ionic://") === 0 ||
+        o.indexOf("http://localhost") === 0 ||
+        o.indexOf("https://localhost") === 0 ||
+        o.indexOf("http://127.0.0.1") === 0
+      ) {
+        return DEFAULT_API_HOST;
+      }
+      // server.url apontando para o backend: same-origin
+      return "";
+    } catch (_) {
+      return isNative() ? DEFAULT_API_HOST : "";
+    }
+  }
+
+  function apiUrl(path) {
+    if (path == null || path === "") return path;
+    var p = String(path);
+    if (/^https?:\/\//i.test(p) || p.indexOf("//") === 0) return p;
+    var base = apiBase();
+    if (!base) return p;
+    if (p.charAt(0) !== "/") p = "/" + p;
+    return base + p;
   }
 
   // ---------- Preferences (nativo) com fallback localStorage (PWA) ----------
   async function prefGet(key) {
     try {
-      const P = plugin("Preferences");
+      var P = plugin("Preferences");
       if (P && typeof P.get === "function") {
-        const r = await P.get({ key });
+        var r = await P.get({ key: key });
         return r && r.value != null ? r.value : null;
       }
     } catch (_) { /* fallback */ }
@@ -43,11 +84,11 @@
   }
 
   async function prefSet(key, value) {
-    const str = value == null ? "" : String(value);
+    var str = value == null ? "" : String(value);
     try {
-      const P = plugin("Preferences");
+      var P = plugin("Preferences");
       if (P && typeof P.set === "function") {
-        await P.set({ key, value: str });
+        await P.set({ key: key, value: str });
         return;
       }
     } catch (_) { /* fallback */ }
@@ -58,9 +99,9 @@
 
   async function prefRemove(key) {
     try {
-      const P = plugin("Preferences");
+      var P = plugin("Preferences");
       if (P && typeof P.remove === "function") {
-        await P.remove({ key });
+        await P.remove({ key: key });
         return;
       }
     } catch (_) { /* fallback */ }
@@ -69,50 +110,41 @@
     } catch (_) {}
   }
 
-  // Buffer de pontos da rota (persistente — sobrevive a perda de rede/túnel).
-  const RouteBuffer = {
-    _key(viagemId) {
+  // Buffer de pontos da rota — snapshot único (sem duplicar memória+prefs).
+  // Fluxo: load no início da viagem → pontos só na memória → persist() grava
+  // o array inteiro → takeAll limpa prefs e devolve o que estava salvo (offline).
+  var RouteBuffer = {
+    _key: function (viagemId) {
       return "vap_route_buf_" + String(viagemId);
     },
-    async load(viagemId) {
+    load: async function (viagemId) {
       try {
-        const raw = await prefGet(this._key(viagemId));
+        var raw = await prefGet(this._key(viagemId));
         if (!raw) return [];
-        const arr = JSON.parse(raw);
+        var arr = JSON.parse(raw);
         return Array.isArray(arr) ? arr : [];
       } catch (_) {
         return [];
       }
     },
-    async save(viagemId, pontos) {
-      const list = Array.isArray(pontos) ? pontos.slice(-2000) : [];
+    /** Substitui o snapshot persistido (não concatena — evita duplicata). */
+    save: async function (viagemId, pontos) {
+      var list = Array.isArray(pontos) ? pontos.slice(-2000) : [];
+      if (!list.length) {
+        await prefRemove(this._key(viagemId));
+        return;
+      }
       await prefSet(this._key(viagemId), JSON.stringify(list));
     },
-    async append(viagemId, ponto) {
-      const list = await this.load(viagemId);
-      list.push(ponto);
-      await this.save(viagemId, list);
-      return list;
+    persist: async function (viagemId, pontosEmMemoria) {
+      await this.save(viagemId, pontosEmMemoria || []);
     },
-    async appendMany(viagemId, pontos) {
-      if (!pontos || !pontos.length) return this.load(viagemId);
-      const list = await this.load(viagemId);
-      for (const p of pontos) list.push(p);
-      await this.save(viagemId, list);
-      return list;
-    },
-    /** Lê e limpa o buffer. Se o envio falhar, chame restore(). */
-    async takeAll(viagemId) {
-      const list = await this.load(viagemId);
+    takeAll: async function (viagemId) {
+      var list = await this.load(viagemId);
       await prefRemove(this._key(viagemId));
       return list;
     },
-    async restore(viagemId, pontos) {
-      if (!pontos || !pontos.length) return;
-      const atuais = await this.load(viagemId);
-      await this.save(viagemId, pontos.concat(atuais));
-    },
-    async clear(viagemId) {
+    clear: async function (viagemId) {
       await prefRemove(this._key(viagemId));
     },
   };
@@ -121,7 +153,7 @@
   async function startTripTracking(opts) {
     if (!isNative()) return false;
     try {
-      const T = plugin("TripTracking");
+      var T = plugin("TripTracking");
       if (T && typeof T.start === "function") {
         await T.start({
           title: (opts && opts.title) || "VAP",
@@ -138,7 +170,7 @@
   async function stopTripTracking() {
     if (!isNative()) return false;
     try {
-      const T = plugin("TripTracking");
+      var T = plugin("TripTracking");
       if (T && typeof T.stop === "function") {
         await T.stop();
         return true;
@@ -149,12 +181,11 @@
     return false;
   }
 
-  // ---------- Geolocation nativa (opcional; fallback navigator) ----------
   async function watchPositionNative(onOk, onErr, options) {
-    const G = plugin("Geolocation");
+    var G = plugin("Geolocation");
     if (!G || typeof G.watchPosition !== "function") return null;
     try {
-      const id = await G.watchPosition(options || { enableHighAccuracy: true, timeout: 12000 }, (pos, err) => {
+      var id = await G.watchPosition(options || { enableHighAccuracy: true, timeout: 12000 }, function (pos, err) {
         if (err) {
           if (onErr) onErr(err);
           return;
@@ -177,23 +208,47 @@
   }
 
   async function clearWatchNative(id) {
-    const G = plugin("Geolocation");
+    var G = plugin("Geolocation");
     if (!G || id == null) return;
     try {
-      await G.clearWatch({ id });
+      await G.clearWatch({ id: id });
     } catch (_) {}
   }
 
+  // Prefixa /api/... com o host de produção no app nativo com bundle local.
+  // PWA e server.url remoto: no-op (mesma origem).
+  function installFetchPatch() {
+    if (global.__vapFetchPatched) return;
+    if (typeof global.fetch !== "function") return;
+    var orig = global.fetch.bind(global);
+    global.fetch = function (input, init) {
+      try {
+        if (typeof input === "string" && input.charAt(0) === "/") {
+          input = apiUrl(input);
+        } else if (input && typeof input.url === "string" && input.url.charAt(0) === "/") {
+          input = apiUrl(input.url);
+        }
+      } catch (_) {}
+      return orig(input, init);
+    };
+    global.__vapFetchPatched = true;
+  }
+
+  installFetchPatch();
+
   global.VapPlatform = {
-    isNative,
-    plugin,
-    prefGet,
-    prefSet,
-    prefRemove,
-    RouteBuffer,
-    startTripTracking,
-    stopTripTracking,
-    watchPositionNative,
-    clearWatchNative,
+    isNative: isNative,
+    plugin: plugin,
+    apiBase: apiBase,
+    apiUrl: apiUrl,
+    DEFAULT_API_HOST: DEFAULT_API_HOST,
+    prefGet: prefGet,
+    prefSet: prefSet,
+    prefRemove: prefRemove,
+    RouteBuffer: RouteBuffer,
+    startTripTracking: startTripTracking,
+    stopTripTracking: stopTripTracking,
+    watchPositionNative: watchPositionNative,
+    clearWatchNative: clearWatchNative,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -210,7 +210,9 @@ async function fetchWithAuth(url, options = {}) {
     const headers = { 'Authorization': `Bearer ${token}` };
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
-    const resp = await fetch(url, { ...options, headers, credentials: 'include' });
+    // platform.js já patcha fetch(/api) no nativo com bundle local; apiUrl reforça.
+    const finalUrl = (window.VapPlatform && VapPlatform.apiUrl) ? VapPlatform.apiUrl(url) : url;
+    const resp = await fetch(finalUrl, { ...options, headers, credentials: 'include' });
     if (resp.status === 401) {
         let msg401 = 'Sessão expirada. Entre novamente.';
         try {

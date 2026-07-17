@@ -7,6 +7,7 @@ const { verificarAuth } = require("../auth");
 const { haversineKmCoord } = require("../geo");
 const { calcularKmGpsViagem, resolverKmMedicaoViagem } = require("../km");
 const { cancelarViagemAtiva, criarViagemDaProposta } = require("../services/viagens");
+const { emitViagemMeta } = require("../realtime");
 
 /* ============================ VIAGENS ============================ */
 // Inicia a viagem a partir de uma proposta aceita (apenas o motorista inicia)
@@ -26,6 +27,7 @@ app.post("/api/viagens", verificarAuth, async (req, res) => {
 
     const viagem = await criarViagemDaProposta(proposta_id);
     if (!viagem) return res.status(404).json({ error: "Proposta não aceita ou inexistente" });
+    emitViagemMeta(viagem.id, { status: viagem.status, fase: viagem.fase });
     res.json(viagem);
   } catch (err) {
     console.error(err);
@@ -127,6 +129,7 @@ app.post("/api/viagens/:id/iniciar", verificarAuth, async (req, res) => {
          AND vp.registrado_em < (SELECT embarque_em FROM viagens WHERE id = $1)`,
       [req.params.id]
     );
+    emitViagemMeta(rows[0].id, { status: rows[0].status, fase: rows[0].fase });
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -170,6 +173,7 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
        WHERE id = $1 RETURNING *`,
       [req.params.id, med.km, med.valido, med.km_maps, med.km_tela, med.fonte]
     );
+    emitViagemMeta(rows[0].id, { status: rows[0].status, fase: rows[0].fase || "destino" });
     res.json({
       ...rows[0],
       deslocamento_valido: med.valido,
@@ -190,6 +194,12 @@ app.post("/api/viagens/:id/cancelar", verificarAuth, async (req, res) => {
   try {
     const r = await cancelarViagemAtiva(+req.params.id, req.user.id);
     if (!r.ok) return res.status(r.status).json({ error: r.error });
+    if (r.viagem) {
+      emitViagemMeta(r.viagem.id || req.params.id, {
+        status: r.viagem.status || "cancelada",
+        fase: r.viagem.fase,
+      });
+    }
     res.json({ success: true, viagem: r.viagem });
   } catch (err) {
     console.error(err);

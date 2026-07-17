@@ -52,6 +52,17 @@
 	<string>O VAP usa a câmera para a selfie ao vivo e a foto do veículo, que garantem a segurança das caronas.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O VAP usa sua localização para mostrar motoristas e passageiros próximos, calcular a rota e registrar a viagem.</string>
+	<!-- Background durante viagem ativa (tela apagada / app em 2º plano). -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O VAP continua usando a localização em segundo plano apenas durante uma carona em andamento, para o outro participante acompanhar a rota com segurança.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>O VAP continua usando a localização em segundo plano apenas durante uma carona em andamento, para o outro participante acompanhar a rota com segurança.</string>
+	<!-- location: GPS da viagem; remote-notification: push FCM/APNs com app fechado. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>remote-notification</string>
+	</array>
 	<!-- Sem criptografia proprietária: dispensa o formulário de conformidade de exportação. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

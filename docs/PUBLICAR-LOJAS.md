@@ -7,12 +7,15 @@ backend publicado (`https://leopardo-api.onrender.com`). App ID: **`com.vap.caro
 
 ## 0. O que já está pronto no repositório
 
-- **`capacitor.config.ts`** aponta para o backend de produção por padrão.
+- **`capacitor.config.ts`**: bundle local por padrão (sem `server.url` = não é só web-frame).
+  A API é chamada em `https://leopardo-api.onrender.com` quando o app é nativo.
+  Dev remoto: `CAPACITOR_SERVER_URL=... npx cap sync`.
 - **Permissões nativas declaradas** (sem elas as lojas rejeitam / o recurso trava):
-  - Android (`android/app/src/main/AndroidManifest.xml`): `CAMERA`, `ACCESS_FINE_LOCATION`,
-    `ACCESS_COARSE_LOCATION`, `INTERNET`, `VIBRATE`.
-  - iOS (`ios/App/App/Info.plist`): `NSCameraUsageDescription`,
-    `NSLocationWhenInUseUsageDescription`, `ITSAppUsesNonExemptEncryption=false`.
+  - Android: `CAMERA`, localização fine/coarse/**background**, `FOREGROUND_SERVICE(_LOCATION)`,
+    `POST_NOTIFICATIONS`, `INTERNET`, `VIBRATE` + serviço `TripTrackingService`.
+  - iOS: câmera, location when-in-use + always (texto de uso), `UIBackgroundModes`
+    location + remote-notification, `ITSAppUsesNonExemptEncryption=false`.
+- **Excluir conta** no app (Perfil → Excluir conta) — exigência das lojas.
 - **Documentos jurídicos publicados** (URLs exigidas pelas lojas):
   - Política de Privacidade: `https://leopardo-api.onrender.com/politica-privacidade.html`
   - Termos de Uso: `https://leopardo-api.onrender.com/termos-de-uso.html`
