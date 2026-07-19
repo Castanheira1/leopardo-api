@@ -39,9 +39,12 @@ async function criarViagemDaProposta(propostaId) {
       [motorista_id]
     )).rows[0];
     if (car && car.destino_lat != null && ped?.destino_lat != null) {
+      const pidEarly = await projetoDoUsuario(passageiro_id);
+      const locaisEarly = locaisDoProjetoCodigo(await codigoDoProjeto(pidEarly));
       const compat = compatRotaPassageiro(
         ped.destino_lat, ped.destino_lng,
-        car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng
+        car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng,
+        locaisEarly
       );
       if (compat === "parcial") {
         paradaMotorista = { texto: car.destino_texto, lat: car.destino_lat, lng: car.destino_lng };
@@ -73,7 +76,8 @@ async function criarViagemDaProposta(propostaId) {
         // viagem é normal — destino do passageiro).
         const compat = compatRotaPassageiro(
           ped.destino_lat, ped.destino_lng,
-          car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng
+          car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng,
+          locais
         );
         if (enc && compat !== "total") {
           paradaMotorista = { texto: enc.nome || "Ponto combinado no caminho", lat: enc.lat, lng: enc.lng };

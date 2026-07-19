@@ -5,7 +5,7 @@ const { FILA_OFERTA_TIMEOUT_S, RAIO_ONLINE_KM, RAIO_ROTA_KM, RAIO_VISIVEL_KM, sq
 const { pool } = require("../db");
 const { enviarPush } = require("../push");
 const { projetoDoUsuario, sqlSelfieValida } = require("../usuarios");
-const { codigoDoProjeto, compatRotaPassageiro, corredorSegmentoKm, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe } = require("../geo");
+const { codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, corredorSegmentoKm, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe } = require("../geo");
 
 // Notifica motoristas ONLINE (disponivel) dentro de RAIO_ONLINE_KM (600 m).
 // Marca o pedido como notificado. Usado no POST (pedido "para agora") e pelo
@@ -187,11 +187,12 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     const caOrig = temCarona ? { lat: Number(m.ca_olat), lng: Number(m.ca_olng) } : null;
     const caDest = temCarona ? { lat: Number(m.ca_dlat), lng: Number(m.ca_dlng) } : null;
 
-    // Embarque viável: a ORIGEM do passageiro está no corredor da carona dele,
-    // OU o motorista está dentro do raio de alcance (600 m amarelo / barra da
-    // carona), OU o GPS dele já está na faixa da rota do passageiro.
+    // Embarque viável: a ORIGEM do passageiro está na PISTA da carona (polilinha
+    // pelos locais do catálogo, não só a reta), OU o motorista está dentro do
+    // raio de alcance (600 m amarelo / barra da carona), OU o GPS dele já está
+    // na faixa da rota do passageiro.
     const corOrigemCarona = temCarona
-      ? corredorSegmentoKm(orig.lat, orig.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng)
+      ? corredorRotaCaronaKm(orig.lat, orig.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, locais)
       : null;
     const origemNoCorredor = !!corOrigemCarona
       && corOrigemCarona.dist <= RAIO_ROTA_KM && corOrigemCarona.t >= -0.05 && corOrigemCarona.t <= 1.05;
@@ -214,7 +215,7 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     let classe = 5;
     let encaixe = null;
     if (temCarona) {
-      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng);
+      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, locais);
       if (compat === "total") classe = 0;
       else if (compat === "parcial") classe = 1;
       else {

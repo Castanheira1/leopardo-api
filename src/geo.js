@@ -1,8 +1,11 @@
-// Geometria de rota em SQL e JS: haversine, corredor do segmento e compatibilidade de match.
+// Geometria de rota em SQL e JS: haversine, corredor do segmento/polilinha e match.
+// A reta origem→destino NÃO é a pista da mina: expandimos a carona pelos locais
+// do catálogo que estão "no caminho" (desvio limitado) e medimos o corredor
+// nessa polilinha — assim CMD no acostamento de MRO→Canteiro 07 casa como total.
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
-const { RAIO_MESMO_DEST_KM, RAIO_PROXIMO_KM, RAIO_ROTA_KM } = require("./config");
+const { RAIO_MESMO_DEST_KM, RAIO_PROXIMO_KM, RAIO_ROTA_KM, ROTA_DESVIO_MAX_KM } = require("./config");
 const { pool } = require("./db");
 
 // Expressão Haversine (km) entre uma coluna (latCol/lngCol) e parâmetros $i/$j
@@ -118,7 +121,148 @@ function corredorSegmentoKm(lat, lng, aLat, aLng, bLat, bLng) {
   return { t: tRaw, dist };
 }
 
-function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng) {
+/**
+ * Desvio (km) de ir O→P→D em relação a O→D.
+ * 0 = P está exatamente no caminho geodésico; grande = P é desvio forte.
+ */
+function desvioCaminhoKm(oLat, oLng, pLat, pLng, dLat, dLng) {
+  const base = haversineKmCoord(oLat, oLng, dLat, dLng);
+  const d1 = haversineKmCoord(oLat, oLng, pLat, pLng);
+  const d2 = haversineKmCoord(pLat, pLng, dLat, dLng);
+  if (!(base > 0.01)) return d1;
+  return d1 + d2 - base;
+}
+
+/**
+ * P está no caminho da carona O→D?
+ * Critério: O→P→D não alonga mais que ROTA_DESVIO_MAX_KM (sem inventar
+ * polilinha com buffer — evita puxar CCP pra rota Portaria→Centro).
+ */
+function pontoNoCaminho(oLat, oLng, pLat, pLng, dLat, dLng, desvioMax) {
+  const oLa = Number(oLat), oLn = Number(oLng);
+  const pLa = Number(pLat), pLn = Number(pLng);
+  const dLa = Number(dLat), dLn = Number(dLng);
+  if (![oLa, oLn, pLa, pLn, dLa, dLn].every(Number.isFinite)) return false;
+  const max = Number.isFinite(desvioMax) ? desvioMax
+    : (Number.isFinite(ROTA_DESVIO_MAX_KM) ? ROTA_DESVIO_MAX_KM : 2.5);
+  const base = haversineKmCoord(oLa, oLn, dLa, dLn);
+  const d1 = haversineKmCoord(oLa, oLn, pLa, pLn);
+  const d2 = haversineKmCoord(pLa, pLn, dLa, dLn);
+  if (!(base > 0.01)) return d1 <= RAIO_ROTA_KM;
+  if (d1 + d2 > base + max) return false;
+  // Não conta ponto "atrás" da origem nem muito além do destino da carona.
+  if (d1 > base + max * 0.35) return false;
+  return true;
+}
+
+/**
+ * Locais do catálogo que estão no caminho O→D (combinações válidas na carona).
+ * Ordenados por distância à origem (progresso na viagem).
+ */
+function pontosNoCaminhoCarona(carOrigLat, carOrigLng, carDestLat, carDestLng, locais) {
+  const oLat = Number(carOrigLat), oLng = Number(carOrigLng);
+  const dLat = Number(carDestLat), dLng = Number(carDestLng);
+  if (![oLat, oLng, dLat, dLng].every(Number.isFinite)) return [];
+  const out = [];
+  for (const p of Array.isArray(locais) ? locais : []) {
+    const lat = Number(p.lat), lng = Number(p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (!pontoNoCaminho(oLat, oLng, lat, lng, dLat, dLng)) continue;
+    out.push({
+      lat, lng, nome: p.nome || null,
+      dOrig: haversineKmCoord(oLat, oLng, lat, lng),
+      desvio: desvioCaminhoKm(oLat, oLng, lat, lng, dLat, dLng),
+    });
+  }
+  out.sort((a, b) => a.dOrig - b.dOrig || a.desvio - b.desvio);
+  return out;
+}
+
+/**
+ * Expande O→D como lista de pontos no caminho (catálogo) + extremos.
+ * Só para inspeção/debug — o match usa pontoNoCaminho, não buffer de polilinha.
+ */
+function expandirRotaPista(carOrigLat, carOrigLng, carDestLat, carDestLng, locais) {
+  const oLat = Number(carOrigLat), oLng = Number(carOrigLng);
+  const dLat = Number(carDestLat), dLng = Number(carDestLng);
+  if (![oLat, oLng, dLat, dLng].every(Number.isFinite)) return [];
+  const inicio = { lat: oLat, lng: oLng, nome: null };
+  const fim = { lat: dLat, lng: dLng, nome: null };
+  const vias = pontosNoCaminhoCarona(oLat, oLng, dLat, dLng, locais)
+    .filter((p) => p.dOrig >= 0.08 && haversineKmCoord(p.lat, p.lng, dLat, dLng) >= 0.08);
+  return [inicio, ...vias.map(({ lat, lng, nome }) => ({ lat, lng, nome })), fim];
+}
+
+/** Legado: distância a polilinha (mantido se algum caller ainda montar pts). */
+function corredorPolilinhaKm(lat, lng, pts) {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(ln) || !Array.isArray(pts) || pts.length < 2) {
+    return { t: 0, dist: Infinity };
+  }
+  let total = 0;
+  const segs = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const len = haversineKmCoord(a.lat, a.lng, b.lat, b.lng);
+    segs.push({ a, b, len: len > 1e-9 ? len : 1e-9 });
+    total += len > 1e-9 ? len : 0;
+  }
+  if (!(total > 0)) {
+    return { t: 0, dist: haversineKmCoord(la, ln, pts[0].lat, pts[0].lng) };
+  }
+  let bestDist = Infinity, bestT = 0, bestAlem = false, acc = 0;
+  for (let i = 0; i < segs.length; i++) {
+    const { a, b, len } = segs[i];
+    const cor = corredorSegmentoKm(la, ln, a.lat, a.lng, b.lat, b.lng);
+    const tClamp = Math.min(1, Math.max(0, cor.t));
+    const dist = cor.dist;
+    const tGlobal = (acc + tClamp * len) / total;
+    const alem = i === segs.length - 1 && cor.t > 1;
+    if (dist < bestDist - 1e-9 || (Math.abs(dist - bestDist) < 1e-9 && alem)) {
+      bestDist = dist;
+      bestT = alem ? Math.max(1.0001, (acc + len) / total + (cor.t - 1) * (len / total)) : tGlobal;
+      bestAlem = alem;
+    }
+    acc += len;
+  }
+  if (bestAlem && bestT <= 1) bestT = 1.0001;
+  return { t: bestT, dist: bestDist };
+}
+
+/**
+ * Posição de um ponto em relação à carona O→D.
+ * Preferência: "no caminho" (desvio) → dist=0, t=progresso O→D.
+ * Senão: reta geométrica (parcial/próximo clássicos).
+ */
+function corredorRotaCaronaKm(lat, lng, carOrigLat, carOrigLng, carDestLat, carDestLng, _locais) {
+  const la = Number(lat), ln = Number(lng);
+  const oLat = Number(carOrigLat), oLng = Number(carOrigLng);
+  const dLat = Number(carDestLat), dLng = Number(carDestLng);
+  if (![la, ln, oLat, oLng, dLat, dLng].every(Number.isFinite)) {
+    return { t: 0, dist: Infinity };
+  }
+  const base = haversineKmCoord(oLat, oLng, dLat, dLng);
+  const dOrig = haversineKmCoord(oLat, oLng, la, ln);
+  if (pontoNoCaminho(oLat, oLng, la, ln, dLat, dLng)) {
+    const t = base > 0.01 ? Math.min(1, Math.max(0, dOrig / base)) : 0;
+    return { t, dist: 0 };
+  }
+  // Além do destino na mesma direção: O→D→P com D no caminho O→P.
+  if (base > 0.01 && pontoNoCaminho(oLat, oLng, dLat, dLng, la, ln)) {
+    const dDest = haversineKmCoord(dLat, dLng, la, ln);
+    return { t: 1 + dDest / base, dist: 0 };
+  }
+  return corredorSegmentoKm(la, ln, oLat, oLng, dLat, dLng);
+}
+
+/**
+ * Compatibilidade do DESTINO do passageiro com a rota do motorista.
+ * total  = destino do pax no caminho O→D da carona
+ * parcial = motorista para antes: D da carona está no caminho O→destino_pax
+ * @param {Array|null} [_locais] reservado (API estável); match usa geometria de caminho
+ */
+function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, _locais) {
   const dl = Number(pDestLat);
   const dg = Number(pDestLng);
   const oLat = Number(carOrigLat);
@@ -128,8 +272,20 @@ function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDes
   if (![dl, dg, oLat, oLng, dLat, dLng].every(Number.isFinite)) return "none";
 
   const mesmo = haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_MESMO_DEST_KM;
+  if (mesmo) return "total";
+
+  // Destino do passageiro está no caminho da carona (ex.: CMD entre MRO e C07).
+  if (pontoNoCaminho(oLat, oLng, dl, dg, dLat, dLng)) return "total";
+
+  // Motorista só vai até o meio: o destino DELE está no caminho até o do pax
+  // (ex.: Portaria→Centro enquanto pax vai Portaria→CMD).
+  if (pontoNoCaminho(oLat, oLng, dLat, dLng, dl, dg)
+    && haversineKmCoord(dLat, dLng, dl, dg) > RAIO_MESMO_DEST_KM) {
+    return "parcial";
+  }
+
   const cor = corredorSegmentoKm(dl, dg, oLat, oLng, dLat, dLng);
-  if (mesmo || (cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1)) return "total";
+  if (cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1) return "total";
   if (cor.dist <= RAIO_ROTA_KM && cor.t > 1) return "parcial";
 
   const pertoDest = haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_PROXIMO_KM;
@@ -192,14 +348,9 @@ async function codigoDoProjeto(projetoId) {
   } catch (_) { return null; }
 }
 
-// Melhor ponto em comum entre a rota do MOTORISTA (carOrig->carDest) e a viagem
-// do PASSAGEIRO (origPax->destPax). Candidatos: SÓ locais NOMEADOS do catálogo —
-// o encaixe é um ponto de transbordo conhecido (Portaria, rodoviária…), onde o
-// passageiro desce e consegue outra carona; largar num destino qualquer no meio
-// do nada não é encaixe (e o caso "um pouco além do fim" já é o compat parcial).
-// Critérios: o ponto está no corredor do motorista (RAIO_ROTA_KM) e deixa o
-// passageiro pelo menos ENCAIXE_AVANCO_MIN_KM mais perto do destino. Vence o
-// que deixa MENOS caminho restante.
+// Melhor ponto em comum: local do catálogo que está NO CAMINHO da carona
+// (desvio O→P→D pequeno) e adianta o passageiro. NÃO usa buffer de polilinha
+// (isso puxava CCP para Portaria→Centro). Vence o que deixa MENOS restante.
 // Retorna { nome, lat, lng, restante_km, avanco_km } ou null.
 function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locais) {
   const oLat = Number(origPax?.lat), oLng = Number(origPax?.lng);
@@ -211,25 +362,23 @@ function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locais) {
   const totalPax = haversineKmCoord(oLat, oLng, dLat, dLng);
   if (!(totalPax > 0)) return null;
 
-  const candidatos = (Array.isArray(locais) ? locais : []).filter((l) => l && l.nome);
-  // Onde o passageiro EMBARCA na rota do motorista: pontos ANTES disso já ficaram
-  // para trás — o carro não volta. (t clampado; se a origem está fora do corredor,
-  // o embarque acontece perto do início e o clamp resolve.)
-  const tEmbarque = Math.min(1, Math.max(0, corredorSegmentoKm(oLat, oLng, cOLat, cOLng, cDLat, cDLng).t));
+  // Embarque: progresso do pax na carona (km desde a origem do motorista).
+  const dEmb = pontoNoCaminho(cOLat, cOLng, oLat, oLng, cDLat, cDLng)
+    ? haversineKmCoord(cOLat, cOLng, oLat, oLng)
+    : 0;
+
+  const noCaminho = pontosNoCaminhoCarona(cOLat, cOLng, cDLat, cDLng, locais);
   let melhor = null;
-  for (const p of candidatos) {
-    const lat = Number(p.lat), lng = Number(p.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    // Ponto precisa estar no corredor do motorista, À FRENTE do embarque (com
-    // pequena folga no fim — parar junto ao destino dele ainda é caminho dele).
-    const cor = corredorSegmentoKm(lat, lng, cOLat, cOLng, cDLat, cDLng);
-    if (!(cor.dist <= RAIO_ROTA_KM && cor.t >= tEmbarque - 0.02 && cor.t <= 1.05)) continue;
-    const restante = haversineKmCoord(lat, lng, dLat, dLng);
+  for (const p of noCaminho) {
+    if (!p.nome) continue;
+    // À frente do embarque (com folga).
+    if (p.dOrig + 0.05 < dEmb) continue;
+    const restante = haversineKmCoord(p.lat, p.lng, dLat, dLng);
     const avanco = totalPax - restante;
-    if (avanco < ENCAIXE_AVANCO_MIN_KM) continue;          // não adianta quase nada
-    if (restante <= RAIO_MESMO_DEST_KM) continue;          // isso é compat total, não encaixe
+    if (avanco < ENCAIXE_AVANCO_MIN_KM) continue;
+    if (restante <= RAIO_MESMO_DEST_KM) continue; // seria total, não encaixe
     if (!melhor || restante < melhor.restante_km) {
-      melhor = { nome: p.nome || null, lat, lng, restante_km: restante, avanco_km: avanco };
+      melhor = { nome: p.nome, lat: p.lat, lng: p.lng, restante_km: restante, avanco_km: avanco };
     }
   }
   return melhor;
@@ -263,6 +412,12 @@ module.exports = {
   sqlPedidoCombinaComCaronaProximo,
   sqlMotoristaNaRotaPassageiro,
   corredorSegmentoKm,
+  desvioCaminhoKm,
+  pontoNoCaminho,
+  pontosNoCaminhoCarona,
+  expandirRotaPista,
+  corredorPolilinhaKm,
+  corredorRotaCaronaKm,
   compatRotaPassageiro,
   ENCAIXE_AVANCO_MIN_KM,
   _catalogoLocais,

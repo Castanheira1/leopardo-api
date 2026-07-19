@@ -177,7 +177,8 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
         const compat = compatRotaPassageiro(
           p.destino_lat, p.destino_lng,
           caronaMot.origem_lat, caronaMot.origem_lng,
-          caronaMot.destino_lat, caronaMot.destino_lng
+          caronaMot.destino_lat, caronaMot.destino_lng,
+          locaisEnc
         );
         // Destino "não bate" mas a rota do motorista passa por um ponto em comum
         // que adianta o passageiro: o pulso mostra até onde dá pra levar.

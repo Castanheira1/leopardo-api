@@ -15,7 +15,7 @@ const RAIO_VISIVEL_KM = Number(process.env.RAIO_VISIVEL_KM || 10);
 const RAIO_PUSH_PERTO_KM = Number(process.env.RAIO_PUSH_PERTO_KM || 1);
 // Raio (km) do modo motorista online: pedidos no mapa, visibilidade e push (600 m).
 const RAIO_ONLINE_KM = Number(process.env.RAIO_ONLINE_KM || 0.6);
-// Raio (km) da faixa ao redor da ROTA (linha reta origem->destino) escolhida
+// Raio (km) da faixa ao redor da ROTA (pista expandida ou linha reta) escolhida
 // pelo passageiro: motorista "na pista" entra na fila se estiver a até esta
 // distância do trajeto (não só perto da origem).
 const RAIO_ROTA_KM = Number(process.env.RAIO_ROTA_KM || 1.5);
@@ -23,6 +23,12 @@ const RAIO_ROTA_KM = Number(process.env.RAIO_ROTA_KM || 1.5);
 const RAIO_MESMO_DEST_KM = Number(process.env.RAIO_MESMO_DEST_KM || 1.5);
 // Campus / POIs próximos (ex.: Portaria ↔ Central ~3,2 km no S11D).
 const RAIO_PROXIMO_KM = Number(process.env.RAIO_PROXIMO_KM || 4);
+// Desvio máximo (km) para um local do catálogo ser "no caminho" da carona:
+// dist(orig,P)+dist(P,dest) <= dist(orig,dest) + este valor. Com isso a rota
+// vira polilinha pela pista real (ex.: MRO→CMD→Canteiro 07), não só reta.
+// 1.8 km: folga de pista torta sem “engolir” usina inteira (ex.: CCP em
+// Portaria→Centro). CMD em MRO→C07 tem desvio ~0,7 e continua no caminho.
+const ROTA_DESVIO_MAX_KM = Number(process.env.ROTA_DESVIO_MAX_KM || 1.8);
 // Fila de chamada sequencial (mais perto primeiro): quanto tempo cada
 // motorista tem pra responder antes de passar pro próximo da fila.
 // 60 s por motorista: com o pedido "para agora" vivendo 10 min, dá tempo de
@@ -73,6 +79,7 @@ module.exports = {
   RAIO_ROTA_KM,
   RAIO_MESMO_DEST_KM,
   RAIO_PROXIMO_KM,
+  ROTA_DESVIO_MAX_KM,
   FILA_OFERTA_TIMEOUT_S,
   GPS_FRESH_MIN,
   GPS_STALE_MIN,

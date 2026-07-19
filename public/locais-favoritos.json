@@ -255,26 +255,8 @@
               "google": true
             },
             {
-              "nome": "Complexo Serra Sul (S11D)",
-              "busca": "Mina de Ferro do Complexo Serra Sul S11D",
-              "ref": {
-                "lat": -6.405713,
-                "lng": -50.325258
-              },
-              "google": true
-            },
-            {
               "nome": "Britagem de Compactos",
               "busca": "Britagem de Compactos Serra Sul Vale",
-              "ref": {
-                "lat": -6.412088,
-                "lng": -50.335902
-              },
-              "google": true
-            },
-            {
-              "nome": "Mirante Britagem de Compactos",
-              "busca": "Mirante Britagem de Compactos Serra Sul",
               "ref": {
                 "lat": -6.412088,
                 "lng": -50.335902

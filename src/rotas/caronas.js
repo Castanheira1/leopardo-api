@@ -6,7 +6,7 @@ const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { exigirProjeto, habilitacaoAtiva, projetoDoUsuario, registrarEventoUso } = require("../usuarios");
 const { horarioValido } = require("../datas");
-const { codigoDoProjeto, corredorSegmentoKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
+const { codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
 
 /* ============================ CARONAS ============================ */
 app.post("/api/caronas", verificarAuth, async (req, res) => {
@@ -163,18 +163,34 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     );
     if (!temDest) return res.json(rows);
 
-    // Segunda chance por PONTO EM COMUM: carona que não "bate" com o destino do
-    // passageiro (compat none) ainda serve se a rota dela passa por um local
-    // conhecido que adianta o passageiro (todo mundo passa pela Portaria).
+    // Reavalia compat na PISTA real (catálogo) — o SQL ainda usa reta; aqui
+    // CMD no caminho de MRO→Canteiro vira total. Encaixe cobre o resto.
     const origPax = temPos ? { lat: +lat, lng: +lng } : null;
     const destPax = { lat: +dest_lat, lng: +dest_lng };
     const locais = locaisDoProjetoCodigo(await codigoDoProjeto(pid));
     const comEncaixe = [];
     for (const c of rows) {
-      if (c.compat_rota !== "none") { comEncaixe.push(c); continue; }
-      if (!origPax || c.origem_lat == null || c.destino_lat == null) continue;
-      // Embarque viável: passageiro no corredor da carona ou dentro do alcance dela.
-      const cor = corredorSegmentoKm(origPax.lat, origPax.lng, +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng);
+      if (c.origem_lat == null || c.destino_lat == null) {
+        if (c.compat_rota !== "none") comEncaixe.push(c);
+        continue;
+      }
+      // Compat pela polilinha da pista (não só a reta do SQL).
+      const compatJs = compatRotaPassageiro(
+        destPax.lat, destPax.lng,
+        +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng,
+        locais
+      );
+      if (compatJs !== "none") {
+        comEncaixe.push({ ...c, compat_rota: compatJs });
+        continue;
+      }
+      if (!origPax) continue;
+      // Embarque viável: passageiro na pista da carona ou dentro do alcance dela.
+      const cor = corredorRotaCaronaKm(
+        origPax.lat, origPax.lng,
+        +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng,
+        locais
+      );
       const noCorredor = cor.dist <= RAIO_ROTA_KM && cor.t >= -0.05 && cor.t <= 1.05;
       const distOrigemCarona = haversineKmCoord(origPax.lat, origPax.lng, +c.origem_lat, +c.origem_lng);
       if (!noCorredor && distOrigemCarona > (Number(c.raio_km) || RAIO_VISIVEL_KM)) continue;
