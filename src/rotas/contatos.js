@@ -34,7 +34,7 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
       [motoristaId]
     )).rows[0];
     const caronaAtiva = (await pool.query(
-      `SELECT id, destino_texto, destino_lat, destino_lng, origem_lat, origem_lng, vagas FROM caronas
+      `SELECT id, destino_texto, destino_lat, destino_lng, origem_lat, origem_lng, vagas, rota_pontos FROM caronas
        WHERE motorista_id = $1 AND status = 'ativa' AND vagas > 0
        ORDER BY created_at DESC LIMIT 1`,
       [motoristaId]
@@ -67,12 +67,17 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
     let compatContato = "none";
     if (caronaContato?.destino_lat != null && destino_lat != null && destino_lng != null) {
       const pidCont = await projetoDoUsuario(req.user.id);
-      const locaisCont = locaisDoProjetoCodigo(await codigoDoProjeto(pidCont));
+      const codCont = await codigoDoProjeto(pidCont);
+      const locaisCont = locaisDoProjetoCodigo(codCont);
       compatContato = compatRotaPassageiro(
         destino_lat, destino_lng,
         caronaContato.origem_lat, caronaContato.origem_lng,
         caronaContato.destino_lat, caronaContato.destino_lng,
-        locaisCont
+        {
+          locais: locaisCont,
+          codigo: codCont,
+          rota_pontos: caronaContato.rota_pontos || null,
+        }
       );
       if (compatContato === "total") {
         return res.status(400).json({

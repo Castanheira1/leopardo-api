@@ -33,18 +33,24 @@ async function criarViagemDaProposta(propostaId) {
     // viagem continua sendo o do passageiro; a parada do motorista (desembarque)
     // fica registrada pra tela desenhar preto→parada + dourado→destino final.
     const car = (await pool.query(
-      `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto
+      `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto, rota_pontos
        FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
        ORDER BY created_at DESC LIMIT 1`,
       [motorista_id]
     )).rows[0];
     if (car && car.destino_lat != null && ped?.destino_lat != null) {
       const pidEarly = await projetoDoUsuario(passageiro_id);
-      const locaisEarly = locaisDoProjetoCodigo(await codigoDoProjeto(pidEarly));
+      const codEarly = await codigoDoProjeto(pidEarly);
+      const locaisEarly = locaisDoProjetoCodigo(codEarly);
+      const optsEarly = {
+        locais: locaisEarly,
+        codigo: codEarly,
+        rota_pontos: car.rota_pontos || null,
+      };
       const compat = compatRotaPassageiro(
         ped.destino_lat, ped.destino_lng,
         car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng,
-        locaisEarly
+        optsEarly
       );
       if (compat === "parcial") {
         paradaMotorista = { texto: car.destino_texto, lat: car.destino_lat, lng: car.destino_lng };
@@ -64,20 +70,26 @@ async function criarViagemDaProposta(propostaId) {
       } else if (car && car.destino_lat != null && ped.destino_lat != null && ped.origem_lat != null) {
         // Proposta manual (sem fila): calcula o ponto em comum na hora.
         const pid = await projetoDoUsuario(passageiro_id);
-        const locais = locaisDoProjetoCodigo(await codigoDoProjeto(pid));
+        const cod = await codigoDoProjeto(pid);
+        const locais = locaisDoProjetoCodigo(cod);
+        const optsRota = {
+          locais,
+          codigo: cod,
+          rota_pontos: car.rota_pontos || null,
+        };
         const enc = melhorPontoDeEncaixe(
           { lat: ped.origem_lat, lng: ped.origem_lng },
           { lat: ped.destino_lat, lng: ped.destino_lng },
           { lat: car.origem_lat, lng: car.origem_lng },
           { lat: car.destino_lat, lng: car.destino_lng },
-          locais
+          optsRota
         );
         // Só vale como parada se o motorista NÃO cobre a viagem toda (senão a
         // viagem é normal — destino do passageiro).
         const compat = compatRotaPassageiro(
           ped.destino_lat, ped.destino_lng,
           car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng,
-          locais
+          optsRota
         );
         if (enc && compat !== "total") {
           paradaMotorista = { texto: enc.nome || "Ponto combinado no caminho", lat: enc.lat, lng: enc.lng };

@@ -6,7 +6,7 @@ const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { exigirProjeto, habilitacaoAtiva, projetoDoUsuario, registrarEventoUso } = require("../usuarios");
 const { horarioValido } = require("../datas");
-const { codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
+const { calcularRotaCarona, codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
 
 /* ============================ CARONAS ============================ */
 app.post("/api/caronas", verificarAuth, async (req, res) => {
@@ -34,16 +34,28 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
       [req.user.id]
     );
 
+    // Caminho na malha do projeto (troncos/vias) — gravado na carona pro match.
+    const cod = await codigoDoProjeto(pid);
+    const rota = calcularRotaCarona(
+      { lat: +origem_lat, lng: +origem_lng, nome: origem_texto || null },
+      { lat: +destino_lat, lng: +destino_lng, nome: destino_texto || null },
+      cod
+    );
+    const rotaPontos = JSON.stringify(rota.pontos || []);
+    const rotaKm = Number.isFinite(rota.km) ? Math.round(rota.km * 1000) / 1000 : null;
+
     const { rows } = await pool.query(
       `INSERT INTO caronas
          (motorista_id, habilitacao_id, origem_texto, origem_lat, origem_lng,
-          destino_texto, destino_lat, destino_lng, horario, vagas, observacao, raio_km)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          destino_texto, destino_lat, destino_lng, horario, vagas, observacao, raio_km,
+          rota_pontos, rota_km)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14)
        RETURNING *`,
       [
         req.user.id, hab.id, origem_texto || null, origem_lat, origem_lng,
         destino_texto || null, destino_lat, destino_lng,
         horarioValido(horario), vagas || 1, observacao || null, nraio,
+        rotaPontos, rotaKm,
       ]
     );
     const nvagas = Math.min(6, Math.max(parseInt(vagas, 10) || 1, 1));
@@ -163,22 +175,27 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     );
     if (!temDest) return res.json(rows);
 
-    // Reavalia compat na PISTA real (catálogo) — o SQL ainda usa reta; aqui
-    // CMD no caminho de MRO→Canteiro vira total. Encaixe cobre o resto.
+    // Reavalia compat na malha/rota_pontos — o SQL ainda usa reta como pré-filtro.
     const origPax = temPos ? { lat: +lat, lng: +lng } : null;
     const destPax = { lat: +dest_lat, lng: +dest_lng };
-    const locais = locaisDoProjetoCodigo(await codigoDoProjeto(pid));
+    const cod = await codigoDoProjeto(pid);
+    const locais = locaisDoProjetoCodigo(cod);
     const comEncaixe = [];
     for (const c of rows) {
       if (c.origem_lat == null || c.destino_lat == null) {
         if (c.compat_rota !== "none") comEncaixe.push(c);
         continue;
       }
-      // Compat pela polilinha da pista (não só a reta do SQL).
+      const optsRota = {
+        locais,
+        codigo: cod,
+        rota_pontos: c.rota_pontos || null,
+      };
+      // Compat pela polilinha da pista (malha gravada ou calculada).
       const compatJs = compatRotaPassageiro(
         destPax.lat, destPax.lng,
         +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng,
-        locais
+        optsRota
       );
       if (compatJs !== "none") {
         comEncaixe.push({ ...c, compat_rota: compatJs });
@@ -189,7 +206,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       const cor = corredorRotaCaronaKm(
         origPax.lat, origPax.lng,
         +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng,
-        locais
+        optsRota
       );
       const noCorredor = cor.dist <= RAIO_ROTA_KM && cor.t >= -0.05 && cor.t <= 1.05;
       const distOrigemCarona = haversineKmCoord(origPax.lat, origPax.lng, +c.origem_lat, +c.origem_lng);
@@ -198,7 +215,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
         origPax, destPax,
         { lat: +c.origem_lat, lng: +c.origem_lng },
         { lat: +c.destino_lat, lng: +c.destino_lng },
-        locais
+        optsRota
       );
       if (!enc) continue;
       comEncaixe.push({

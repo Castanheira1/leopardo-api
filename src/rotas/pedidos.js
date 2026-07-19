@@ -164,21 +164,27 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
         params
       );
       const caronaMot = (await pool.query(
-        `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto
+        `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto, rota_pontos
          FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
          ORDER BY created_at DESC LIMIT 1`,
         [req.user.id]
       )).rows[0];
+      const codPed = await codigoDoProjeto(pid);
       const locaisEnc = caronaMot?.destino_lat != null
-        ? locaisDoProjetoCodigo(await codigoDoProjeto(pid))
+        ? locaisDoProjetoCodigo(codPed)
         : [];
+      const optsRota = {
+        locais: locaisEnc,
+        codigo: codPed,
+        rota_pontos: caronaMot?.rota_pontos || null,
+      };
       const enriquecido = rows.map((p) => {
         if (!caronaMot?.destino_lat || p.destino_lat == null) return p;
         const compat = compatRotaPassageiro(
           p.destino_lat, p.destino_lng,
           caronaMot.origem_lat, caronaMot.origem_lng,
           caronaMot.destino_lat, caronaMot.destino_lng,
-          locaisEnc
+          optsRota
         );
         // Destino "não bate" mas a rota do motorista passa por um ponto em comum
         // que adianta o passageiro: o pulso mostra até onde dá pra levar.
@@ -188,7 +194,7 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
             { lat: +p.destino_lat, lng: +p.destino_lng },
             { lat: +caronaMot.origem_lat, lng: +caronaMot.origem_lng },
             { lat: +caronaMot.destino_lat, lng: +caronaMot.destino_lng },
-            locaisEnc
+            optsRota
           );
           if (enc) {
             return {

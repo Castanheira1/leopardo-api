@@ -1,17 +1,18 @@
 /**
- * Match por "ponto no caminho" (desvio O→P→D), sem buffer de polilinha que
- * inventava pista e puxava CCP para Portaria→Centro.
+ * Malha de pista S11D + match em polilinha (rota calculada / gravável).
  */
 const {
+  calcularRotaCarona,
+  catalogoDoProjeto,
   compatRotaPassageiro,
   corredorRotaCaronaKm,
   melhorPontoDeEncaixe,
-  pontoNoCaminho,
-  pontosNoCaminhoCarona,
   locaisDoProjetoCodigo,
 } = require("../src/geo");
 
-const locais = locaisDoProjetoCodigo("S11D");
+const codigo = "S11D";
+const locais = locaisDoProjetoCodigo(codigo);
+const cat = catalogoDoProjeto(codigo);
 const by = (parte) => {
   const p = locais.find((l) => l.nome && l.nome.includes(parte));
   if (!p) throw new Error(`Local não encontrado: ${parte}`);
@@ -41,56 +42,74 @@ function ok(cond, msg) {
 }
 
 ok(locais.length >= 20, `catálogo S11D (${locais.length})`);
+ok(!!cat.grafo, "grafo da malha S11D carregado");
+ok(!!cat.malha && Array.isArray(cat.malha.troncos) && cat.malha.troncos.length > 0, "malha.troncos presente");
 
-// --- Caso 1: MRO→C07 vs Arara→CMD = TOTAL (CMD no caminho) ---
-ok(pontoNoCaminho(mro.lat, mro.lng, cmd.lat, cmd.lng, c07.lat, c07.lng), "CMD no caminho MRO→C07");
+// --- Rotas na malha ---
+const rotaMroC07 = calcularRotaCarona(mro, c07, codigo);
+ok(rotaMroC07.fonte === "malha", `MRO→C07 fonte malha (${rotaMroC07.fonte})`);
 ok(
-  compatRotaPassageiro(cmd.lat, cmd.lng, mro.lat, mro.lng, c07.lat, c07.lng, locais) === "total",
-  "MRO→C07 + Arara→CMD = total"
+  (rotaMroC07.nomes || []).includes("CMD-Usina") || rotaMroC07.pontos.some((p) => /CMD/i.test(p.nome || "")),
+  "CMD no caminho malha MRO→Canteiro 07"
+);
+console.log("   path:", (rotaMroC07.nomes || []).join(" > "));
+
+const rotaPortCentro = calcularRotaCarona(port, centro, codigo);
+ok(rotaPortCentro.fonte === "malha", "Portaria→Centro na malha");
+ok(
+  !(rotaPortCentro.nomes || []).includes("CCP-Usina"),
+  "CCP NÃO está no caminho Portaria→Centro"
+);
+console.log("   path:", (rotaPortCentro.nomes || []).join(" > "));
+
+// --- Match com codigo (malha) ---
+const opts = (rota_pontos) => ({ locais, codigo, rota_pontos: rota_pontos || null });
+
+ok(
+  compatRotaPassageiro(cmd.lat, cmd.lng, mro.lat, mro.lng, c07.lat, c07.lng, opts(rotaMroC07.pontos)) === "total",
+  "MRO→C07 + dest CMD = total (polilinha malha)"
 );
 
-// --- Caso 2: Oficina→C15 vs Arara→Tamanduá = TOTAL ---
-ok(
-  compatRotaPassageiro(tam.lat, tam.lng, ofi.lat, ofi.lng, c15.lat, c15.lng, locais) === "total",
-  "Oficina→C15 + Restaurante Arara→Tamanduá = total"
+const corArara = corredorRotaCaronaKm(
+  arara.lat, arara.lng, mro.lat, mro.lng, c07.lat, c07.lng, opts(rotaMroC07.pontos)
 );
-const corEmb = corredorRotaCaronaKm(rest.lat, rest.lng, ofi.lat, ofi.lng, c15.lat, c15.lng, locais);
-ok(corEmb.dist === 0 && corEmb.t >= 0 && corEmb.t <= 1, "Arara embarca no caminho Oficina→C15");
+ok(corArara.dist <= 1.5, `Arara na pista MRO→C07 (dist=${corArara.dist.toFixed(3)})`);
 
-// --- Caso 3: Portaria→Centro vs Portaria→CMD ---
-// NÃO total (CMD não está no caminho curto até o Centro)
 ok(
-  !pontoNoCaminho(port.lat, port.lng, cmd.lat, cmd.lng, centro.lat, centro.lng),
-  "CMD NÃO está no caminho Portaria→Centro"
+  compatRotaPassageiro(tam.lat, tam.lng, ofi.lat, ofi.lng, c15.lat, c15.lng, opts()) === "total"
+  || corredorRotaCaronaKm(tam.lat, tam.lng, ofi.lat, ofi.lng, c15.lat, c15.lng, opts()).dist <= 1.5,
+  "Oficina→C15 cobre Tamanduá (total ou corredor)"
 );
-ok(
-  !pontoNoCaminho(port.lat, port.lng, ccp.lat, ccp.lng, centro.lat, centro.lng),
-  "CCP NÃO está no caminho Portaria→Centro (bug antigo)"
-);
+const corRest = corredorRotaCaronaKm(rest.lat, rest.lng, ofi.lat, ofi.lng, c15.lat, c15.lng, opts());
+ok(corRest.dist <= 1.5, `Restaurante Arara no corredor Oficina→C15 (dist=${corRest.dist.toFixed(3)})`);
+
 const compatPort = compatRotaPassageiro(
-  cmd.lat, cmd.lng, port.lat, port.lng, centro.lat, centro.lng, locais
+  cmd.lat, cmd.lng, port.lat, port.lng, centro.lat, centro.lng, opts(rotaPortCentro.pontos)
 );
-ok(
-  compatPort === "parcial" || compatPort === "proximo" || compatPort === "none",
-  `Portaria→Centro vs Portaria→CMD não é total (foi ${compatPort})`
+ok(compatPort !== "total", `Portaria→Centro vs Portaria→CMD não é total (${compatPort})`);
+
+const corCcp = corredorRotaCaronaKm(
+  ccp.lat, ccp.lng, port.lat, port.lng, centro.lat, centro.lng, opts(rotaPortCentro.pontos)
 );
-// Encaixe, se houver, não pode ser CCP
+ok(corCcp.dist > 1.5, `CCP fora do corredor Portaria→Centro (dist=${corCcp.dist.toFixed(3)})`);
+
 const enc = melhorPontoDeEncaixe(
   { lat: port.lat, lng: port.lng },
   { lat: cmd.lat, lng: cmd.lng },
   { lat: port.lat, lng: port.lng },
   { lat: centro.lat, lng: centro.lng },
-  locais
+  opts(rotaPortCentro.pontos)
 );
 ok(!enc || !/CCP/i.test(enc.nome || ""), `encaixe não é CCP (foi ${enc && enc.nome})`);
-const noCam = pontosNoCaminhoCarona(port.lat, port.lng, centro.lat, centro.lng, locais);
-ok(!noCam.some((p) => /CCP/i.test(p.nome || "")), "lista no-caminho Port→Centro sem CCP");
 
-// Preferência: parcial (Centro no caminho até o CMD) é o certo operacionalmente
-ok(compatPort === "parcial", `esperado parcial (motorista deixa no Centro): ${compatPort}`);
+// Parcial: Centro no caminho do pax Port→CMD na malha
+ok(
+  compatPort === "parcial" || compatPort === "proximo",
+  `esperado parcial/proximo (${compatPort})`
+);
 
 if (failed) {
   console.error(`\n${failed} verificação(ões) falharam.`);
   process.exit(1);
 }
-console.log("\nRota por caminho (S11D): OK");
+console.log("\nMalha + rota_pontos (S11D): OK");

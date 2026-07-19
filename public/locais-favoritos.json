@@ -1,6 +1,6 @@
 {
   "versao": 1,
-  "descricao": "Catálogo de locais POR PROJETO (chave = projetos.codigo). O app NÃO é duplicado: um único dashboard.js lê só projetos[codigoDoUsuario]. S11D está calibrado; os demais têm estrutura pronta (grupos vazios) — só preencher locais. ref = lat/lng curados; google:true = confirmado via Places (scripts/verificar-locais.js).",
+  "descricao": "Catalogo POR PROJETO. locais com ref; malha.troncos/arestas/malha_local_km definem a pista. Match usa menor caminho na malha e rota_pontos na carona.",
   "projetos": {
     "S11D": {
       "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
@@ -484,7 +484,99 @@
           ]
         }
       ],
-      "calibrado": true
+      "calibrado": true,
+      "malha": {
+        "descricao": "Troncos de pista S11D (sequencias ordenadas) + malha local automatica entre pontos proximos. Arestas explicitas para trechos longos sem ponto intermediario no catalogo.",
+        "malha_local_km": 1,
+        "troncos": [
+          [
+            "Portaria S11D",
+            "Canteiro Gonçalves Dias",
+            "Central de Operações S11D",
+            "Área do Condomínio da Integridade Estrutural",
+            "SAO — Sistema de Apontamentos de Obras",
+            "Canteiro CBM — Usina",
+            "Canteiro 15 — Vale S11D"
+          ],
+          [
+            "Armazém MRO — Usina",
+            "Retorno Usina",
+            "Oficina Usina",
+            "Pátio do Produto",
+            "Restaurante Arara Azul — Usina",
+            "Rodoviária Arara Azul — Usina",
+            "Britagem Terciária B",
+            "Gaveteiro Central Usina",
+            "Britagem Terciária C",
+            "Canteiro Central 040 — Obras Civis",
+            "Pátio de Regularização",
+            "Tamanduá-Usina",
+            "Ambulatório-Usina",
+            "Laboratório Físico e Químico",
+            "Usina A",
+            "Usina B",
+            "Usina C",
+            "Canteiro 15 — Vale S11D"
+          ],
+          [
+            "Oficina Usina",
+            "Pátio do Produto",
+            "CCP-Usina",
+            "CMD-Usina",
+            "Plantas Móveis de Peneiramento",
+            "Overland",
+            "Canteiro MS Terraplenagem",
+            "Espaço Quatí — Complexo Serra Sul",
+            "Canteiro 07 — Vale S11D"
+          ],
+          [
+            "Canteiro 15 — Vale S11D",
+            "CMD-Usina",
+            "Pilha de Estéril de S11D",
+            "Espaço Quatí — Complexo Serra Sul",
+            "Canteiro 07 — Vale S11D"
+          ],
+          [
+            "Canteiro 07 — Vale S11D",
+            "Espaço Quatí — Complexo Serra Sul",
+            "Canteiro CBM — Mina",
+            "Oficina de Vulcanização (S11D)",
+            "Estação Bombeiros 09 — Mina",
+            "Rodoviária Castanheira — Mina",
+            "Refeitório Castanheira — Mina",
+            "Oficina de Manutenção de Equipamentos",
+            "Posto de Combustível Mina"
+          ],
+          [
+            "Rodoviária Castanheira — Mina",
+            "Fase Zero",
+            "SMD",
+            "Mina de Ferro do Complexo Serra Sul",
+            "Pilha Norte",
+            "Britagem de Compactos",
+            "Mirante do BSM — Mina S11D",
+            "Escritório TECWISE"
+          ],
+          [
+            "Base Geosol",
+            "Lagoa do Violão",
+            "Lagoa do Amendoim"
+          ],
+          [
+            "Pérola Negra-Usina",
+            "Central de Operações S11D"
+          ],
+          [
+            "Armazém MRO — Usina",
+            "Central de Operações S11D"
+          ],
+          [
+            "Armazém MRO — Usina",
+            "Área do Condomínio da Integridade Estrutural"
+          ]
+        ],
+        "arestas": []
+      }
     },
     "SALOBO": {
       "nome": "Salobo",

@@ -464,6 +464,9 @@ async function garantirColunasViagens() {
     // Alcance (km) ajustável da carona com destino: raio em que passageiros veem a
     // rota e o motorista recebe/enxerga os pedidos. Barra 1–25 km no app (default 10).
     await pool.query("ALTER TABLE caronas ADD COLUMN IF NOT EXISTS raio_km NUMERIC(4,1) DEFAULT 10");
+    // Sequência de pontos da pista (malha do projeto) calculada no POST da carona.
+    await pool.query("ALTER TABLE caronas ADD COLUMN IF NOT EXISTS rota_pontos JSONB");
+    await pool.query("ALTER TABLE caronas ADD COLUMN IF NOT EXISTS rota_km NUMERIC(8,3)");
   } catch (e) {
     console.warn("garantirColunasViagens:", e.message);
   }

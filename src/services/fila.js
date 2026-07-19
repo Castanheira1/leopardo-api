@@ -148,7 +148,7 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
             ${distOrigem} AS dist_km,
             ca.id AS carona_id, ca.origem_lat AS ca_olat, ca.origem_lng AS ca_olng,
             ca.destino_lat AS ca_dlat, ca.destino_lng AS ca_dlng,
-            ca.raio_km AS ca_raio, ca.vagas AS ca_vagas,
+            ca.raio_km AS ca_raio, ca.vagas AS ca_vagas, ca.rota_pontos AS ca_rota_pontos,
             (SELECT COUNT(*)::int FROM viagens vv
               WHERE vv.motorista_id = u.id AND vv.status = 'em_andamento') AS viagens_ativas,
             -- Viagens fora de carona (pedido/buzina) não decrementam ca.vagas —
@@ -161,7 +161,7 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
      JOIN habilitacoes_motorista h
        ON h.motorista_id = u.id AND h.status = 'ativa' AND ${sqlSelfieValida("h")}
      LEFT JOIN LATERAL (
-       SELECT id, origem_lat, origem_lng, destino_lat, destino_lng, raio_km, vagas
+       SELECT id, origem_lat, origem_lng, destino_lat, destino_lng, raio_km, vagas, rota_pontos
        FROM caronas WHERE motorista_id = u.id AND status = 'ativa'
        ORDER BY created_at DESC LIMIT 1
      ) ca ON TRUE
@@ -177,7 +177,8 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
      ORDER BY u.id, h.created_at DESC`,
     [orig.lat, orig.lng, ped.passageiro_id, projetoId]
   );
-  const locais = locaisDoProjetoCodigo(await codigoDoProjeto(projetoId));
+  const cod = await codigoDoProjeto(projetoId);
+  const locais = locaisDoProjetoCodigo(cod);
 
   const candidatos = [];
   for (const m of rows) {
@@ -186,13 +187,16 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     const temCarona = m.carona_id && m.ca_olat != null && m.ca_dlat != null;
     const caOrig = temCarona ? { lat: Number(m.ca_olat), lng: Number(m.ca_olng) } : null;
     const caDest = temCarona ? { lat: Number(m.ca_dlat), lng: Number(m.ca_dlng) } : null;
+    const optsRota = temCarona
+      ? { locais, codigo: cod, rota_pontos: m.ca_rota_pontos || null }
+      : { locais, codigo: cod };
 
     // Embarque viável: a ORIGEM do passageiro está na PISTA da carona (polilinha
-    // pelos locais do catálogo, não só a reta), OU o motorista está dentro do
-    // raio de alcance (600 m amarelo / barra da carona), OU o GPS dele já está
-    // na faixa da rota do passageiro.
+    // da malha / rota_pontos), OU o motorista está dentro do raio de alcance
+    // (600 m amarelo / barra da carona), OU o GPS dele já está na faixa da rota
+    // do passageiro.
     const corOrigemCarona = temCarona
-      ? corredorRotaCaronaKm(orig.lat, orig.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, locais)
+      ? corredorRotaCaronaKm(orig.lat, orig.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, optsRota)
       : null;
     const origemNoCorredor = !!corOrigemCarona
       && corOrigemCarona.dist <= RAIO_ROTA_KM && corOrigemCarona.t >= -0.05 && corOrigemCarona.t <= 1.05;
@@ -215,11 +219,11 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     let classe = 5;
     let encaixe = null;
     if (temCarona) {
-      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, locais);
+      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, optsRota);
       if (compat === "total") classe = 0;
       else if (compat === "parcial") classe = 1;
       else {
-        encaixe = melhorPontoDeEncaixe(orig, dest, caOrig, caDest, locais);
+        encaixe = melhorPontoDeEncaixe(orig, dest, caOrig, caDest, optsRota);
         if (encaixe) classe = 2;
         else if (compat === "proximo") classe = 4;
       }
