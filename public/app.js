@@ -532,8 +532,53 @@ function respostaRotaFallback(o, d) {
     };
 }
 
-/** Rota pela pista via servidor (Routes REST) — evita falha do Route.computeRoutes no browser. */
+/* -------- Freio anti-fatura Routes --------
+   Bug clássico: GPS/frota recalculava origem a cada 2–3 s → milhares de
+   computeRoutes com 1 usuário. Default: linha reta local (0 Google).
+   Só chama /api/rotas se /api/config.routesGoogle === true + teto cliente. */
+const _rotasCliCache = new Map(); // chave grossa -> resposta
+const _rotasCliJanela = { t0: 0, n: 0 };
+const ROTAS_CLI_MAX_MIN = 3; // no máximo 3 pedidos ao servidor / minuto
+const ROTAS_CLI_MAX_SESSAO = 40; // por aba aberta
+let _rotasCliSessao = 0;
+
+function _chaveRotaCli(o, d) {
+    // ~110 m — mesmo trecho reaproveita (evita 1 call por metro de GPS)
+    const q = (n) => Number(n).toFixed(3);
+    return `${q(o.lat)},${q(o.lng)}|${q(d.lat)},${q(d.lng)}`;
+}
+
+async function _routesGoogleLigado() {
+    try {
+        const cfg = await obterConfigMaps();
+        return !!cfg?.routesGoogle;
+    } catch (_) {
+        return false;
+    }
+}
+
+/** Rota: preferência local. Servidor/Google só com flag + teto. */
 async function calcularRotaServidor(o, d) {
+    const chave = _chaveRotaCli(o, d);
+    const hit = _rotasCliCache.get(chave);
+    if (hit) return { ...hit, cached: true };
+
+    // Sem opt-in no servidor → nunca bate API paga (linha reta).
+    if (!(await _routesGoogleLigado())) {
+        return respostaRotaFallback(o, d);
+    }
+
+    const agora = Date.now();
+    if (agora - _rotasCliJanela.t0 > 60_000) {
+        _rotasCliJanela.t0 = agora;
+        _rotasCliJanela.n = 0;
+    }
+    if (_rotasCliJanela.n >= ROTAS_CLI_MAX_MIN || _rotasCliSessao >= ROTAS_CLI_MAX_SESSAO) {
+        return respostaRotaFallback(o, d);
+    }
+    _rotasCliJanela.n++;
+    _rotasCliSessao++;
+
     const r = await fetchWithAuth('/api/rotas', {
         method: 'POST',
         body: JSON.stringify({
@@ -543,17 +588,24 @@ async function calcularRotaServidor(o, d) {
     });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j?.path?.length) {
-        throw new Error(j?.error || `rota servidor HTTP ${r.status}`);
+        return respostaRotaFallback(o, d);
     }
+    // fallback:true do servidor = já é reta, sem Google
     const distText = formatarMetros(j.distanceMeters);
     const durText = formatarDuracaoMs(j.durationMillis);
-    return {
+    const resp = {
         routes: [{ legs: [{ distance: { text: distText }, duration: { text: durText }, steps: [] }] }],
         _fallbackLine: j.path,
         _path: j.path,
         _durationMillis: j.durationMillis || 0,
         km: j.km != null ? j.km : Math.round(((j.distanceMeters || 0) / 1000) * 100) / 100,
     };
+    _rotasCliCache.set(chave, resp);
+    if (_rotasCliCache.size > 80) {
+        const first = _rotasCliCache.keys().next().value;
+        _rotasCliCache.delete(first);
+    }
+    return resp;
 }
 
 /* -------- Economia Google Routes: acompanhar a rota SEM recalcular --------
@@ -591,8 +643,9 @@ function progressoNaRota(pos, path) {
     return { distKm: melhor.distKm, kmRestante: Math.round(kmRestante * 100) / 100 };
 }
 
-// Saiu da rota? (afastamento acima do corredor de ~80 m)
-const FORA_DA_ROTA_KM = 0.08;
+// Saiu da rota? Corredor largo (~180 m) — GPS barato oscila 30–80 m e
+// com 80 m o app entrava em loop: recalcular → nova origem → fora de novo → fatura.
+const FORA_DA_ROTA_KM = 0.18;
 function foraDaRota(pos, path) {
     const p = progressoNaRota(pos, path);
     return !p || p.distKm > FORA_DA_ROTA_KM;

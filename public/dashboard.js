@@ -1903,16 +1903,23 @@
             renderRotaInfo(formatarMetros(p.kmRestante * 1000), formatarDuracaoMs(durMs));
         }
 
-        async function tracarRota() {
-            if (!destino) return;
+        let _tracarRotaEm = 0;
+        let _tracarRotaLock = false;
+        async function tracarRota(forcar) {
+            if (!destino || _tracarRotaLock) return;
+            // Throttle: GPS a cada 10s + foraDaRota gerava storm de /api/rotas.
+            if (!forcar && Date.now() - _tracarRotaEm < 12000) return;
+            _tracarRotaLock = true;
+            _tracarRotaEm = Date.now();
             try {
                 const resp = await rotaCtrl.calcular(mkOrigem.getPosition(), { lat: destino.lat, lng: destino.lng });
-                rotaPath = resp._path || null;
+                rotaPath = resp._path || resp._fallbackLine || null;
                 rotaKmTotal = resp.km || 0;
                 rotaDurMsTotal = resp._durationMillis || 0;
-                const leg = resp.routes[0].legs[0];
-                renderRotaInfo(leg.distance.text, leg.duration.text);
-            } catch (_) { /* sem rota disponível: mantém destino em memória */ }
+                const leg = resp.routes?.[0]?.legs?.[0];
+                if (leg) renderRotaInfo(leg.distance.text, leg.duration.text);
+            } catch (_) { /* sem rota: mantém destino em memória */ }
+            finally { _tracarRotaLock = false; }
         }
 
         // Tipo de mapa antes do preview satélite (não grava no localStorage).
@@ -2021,7 +2028,7 @@
             if (sheetEl) sheetEl.classList.add('collapsed');
             // Prévia: satélite + zoom + nome do local (~4 s), depois volta ao mapa leve.
             map.panTo(pos);
-            Promise.resolve(tracarRota()).finally(() => preVisualizarDestino(pos, nomeDestino));
+            Promise.resolve(tracarRota(true)).finally(() => preVisualizarDestino(pos, nomeDestino));
             if (onDestino) onDestino(destino);
             // Sem nome do catálogo/busca: geocodifica reverso (nunca sobrescreve nome já definido).
             if (!nomeDestino) {
@@ -2122,7 +2129,7 @@
                 if (pulseOrigem) pulseOrigem.setPosition(p);
                 map.panTo(p);
                 map.setZoom(ZOOM_FOCO_ORIGEM);
-                if (destino) tracarRota();
+                if (destino) tracarRota(true);
             } catch (_) {
                 if (!estado.gpsOk) msg('Ainda sem sua localização. Libere o GPS nos ajustes do aparelho para continuar.', 'error');
             }
@@ -4991,8 +4998,8 @@
         if (!precisa) {
             return { km: vv.rotaKmTotal, reuso: true };
         }
-        // Throttle só se já tem linha visível (evita spam); pós-embarque forcar ignora.
-        if (!forcar && vv.rotaCtrl.temLinha?.() && Date.now() - (vv.ultimaRota || 0) < 2000) {
+        // Throttle 20s — 2s era curto demais com GPS ruidoso (loop de Routes).
+        if (!forcar && Date.now() - (vv.ultimaRota || 0) < 20000) {
             return null;
         }
         if (vv._rotaCalcLock) return null;
@@ -5666,41 +5673,56 @@
     const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
     const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
 
-    // Rota no mapa da frota: só para o carro do modal aberto (evita N×Routes/min).
-    // Preta: carro → parada do motorista. Dourada: só parada → destino do passageiro
-    // (quando a carona é incompleta) — sem duas linhas sobrepostas no mesmo trecho.
+    // Rota na frota: UMA vez por destino (não a cada tick de GPS).
+    // Antes: a cada 3s, se o carro saía 80 m da polyline, recalculava com NOVA
+    // origem → loop eterno de Routes → fatura. Agora: reta local / reusa path.
     async function atualizarRotaFrota(item, map, pos, destinoMot) {
         if (!destinoMot || !pos) {
             if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
             if (item.rotaExtra) { item.rotaExtra.limpar(); item.rotaExtra = null; }
             item.rotaPath = null;
+            item.rotaDestChave = null;
             item.extraChave = null;
             return;
         }
-        // Flightradar: a linha só existe se o passageiro TOCOU no carro (rotaVisivel).
-        // Sem isso, só o carrinho + a bandeira do destino — evita N linhas no mapa.
+        // Só se o passageiro TOCOU no carro (rotaVisivel).
         if (!item.rotaVisivel) {
             if (item.rotaCtrl) { item.rotaCtrl.limpar(); item.rotaCtrl = null; }
             if (item.rotaExtra) { item.rotaExtra.limpar(); item.rotaExtra = null; }
             item.rotaPath = null;
+            item.rotaDestChave = null;
             item.extraChave = null;
             return;
         }
         const destPax = selPed?.getDestino?.() || null;
         const parcial = destPax && destinoAlemDaParada(destinoMot, destPax);
 
-        const pretaOk = item.rotaCtrl && item.rotaPath && !foraDaRota(pos, item.rotaPath);
-        if (!pretaOk && !item.rotaCalculando) {
-            if (!item.rotaCtrl) item.rotaCtrl = criarRotaControle(map, FLEET_ROTA_OPTS);
+        // Chave só no DESTINO do motorista — movimento do carro NÃO gera nova API.
+        const destChave = `${(+destinoMot.lat).toFixed(4)},${(+destinoMot.lng).toFixed(4)}`;
+        if (!item.rotaCtrl) item.rotaCtrl = criarRotaControle(map, FLEET_ROTA_OPTS);
+        if (item.rotaDestChave !== destChave && !item.rotaCalculando) {
             item.rotaCalculando = true;
             try {
+                // Linha do carro atual → destino (1x por destino; sem Google se desligado).
                 const resp = await item.rotaCtrl.calcular(pos, destinoMot);
                 item.rotaPath = resp._path || resp._fallbackLine || null;
-            } catch (_) { /* sem rota: só o carro */ }
-            finally { item.rotaCalculando = false; }
+                item.rotaDestChave = destChave;
+            } catch (_) {
+                // Fallback visual sem API
+                try {
+                    const fb = [pos, { lat: +destinoMot.lat, lng: +destinoMot.lng }];
+                    item.rotaCtrl.desenhar(fb);
+                    item.rotaPath = fb;
+                    item.rotaDestChave = destChave;
+                } catch (__) { /* ignore */ }
+            } finally {
+                item.rotaCalculando = false;
+            }
+        } else if (item.rotaPath?.length >= 2 && item.rotaCtrl?.desenhar && !item.rotaCtrl.temLinha?.()) {
+            // Path em memória, linha sumiu do mapa: redesenha SEM recalcular.
+            item.rotaCtrl.desenhar(item.rotaPath);
         }
 
-        // Trecho dourado: só parada do motorista → destino do passageiro (sem sobrepor a preta).
         if (parcial) {
             const extraChave = `${destinoMot.lat},${destinoMot.lng}|${destPax.lat},${destPax.lng}`;
             if (item.extraChave !== extraChave && !item.extraCalculando) {
@@ -6147,18 +6169,34 @@
                 }
             }
             if (motorPos) {
-                // Linha dourada: motorista → onde o passageiro está (encontro).
-                if ((!item.embarquePath || foraDaRota(motorPos, item.embarquePath)) && !item.embarqueCalculando) {
-                    item.embarqueCalculando = true;
+                // Linha dourada motorista→pax: SEMPRE reta local (0 Google).
+                // Antes recalculava a cada poll se o GPS “saía” 80 m → spam de Routes.
+                const embChave = `${(+origem.lat).toFixed(4)},${(+origem.lng).toFixed(4)}`;
+                if (item.embarquePaxChave !== embChave || !item.embarquePath) {
+                    const fb = [
+                        { lat: +motorPos.lat, lng: +motorPos.lng },
+                        { lat: +origem.lat, lng: +origem.lng },
+                    ];
                     try {
-                        const resp = await item.rotaEmbarque.calcular(motorPos, origem);
-                        item.embarquePath = resp._path || null;
-                    } catch (_) { /* sem rota até embarque */ }
-                    finally { item.embarqueCalculando = false; }
+                        item.rotaEmbarque.desenhar(fb);
+                        item.embarquePath = fb;
+                        item.embarquePaxChave = embChave;
+                    } catch (_) { /* ignore */ }
+                } else {
+                    // Atualiza só o ponto de origem da reta (posição do carro) sem API
+                    const fb = [
+                        { lat: +motorPos.lat, lng: +motorPos.lng },
+                        { lat: +origem.lat, lng: +origem.lng },
+                    ];
+                    try {
+                        item.rotaEmbarque.desenhar(fb);
+                        item.embarquePath = fb;
+                    } catch (_) { /* ignore */ }
                 }
             } else if (item.rotaEmbarque) {
                 item.rotaEmbarque.limpar();
                 item.embarquePath = null;
+                item.embarquePaxChave = null;
             }
         }
         Object.keys(motoristaPaxRotas.items).forEach((key) => {

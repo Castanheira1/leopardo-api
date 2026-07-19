@@ -8,10 +8,13 @@ const { verificarAuth } = require("../auth");
 
 /* ============================ CONFIG ============================ */
 app.get("/api/config", (req, res) => {
+  // routesGoogle: front NÃO deve spamar /api/rotas quando false (linha reta local).
+  const routesGoogle = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
   res.json({
     mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
     mapsMapId: process.env.GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID",
     pushPublicKey: VAPID_PUBLIC,
+    routesGoogle,
   });
 });
 
@@ -32,8 +35,9 @@ app.get("/api/health", async (req, res) => {
   });
 });
 
-// Rota pela pista (Routes API REST). Cache agressivo + teto de chamadas Google
-// para não estourar fatura (frota fake + mapa do passageiro).
+// Rota pela pista (Routes API REST). DESLIGADA por padrão — cada computeRoutes
+// custa dinheiro (SKU "Routes: Compute Routes Essentials"). Só liga com
+// GOOGLE_ROUTES_ENABLED=1 no Render/.env. Sem isso: linha reta + cache local.
 function decodificarPolylineServer(str) {
   let idx = 0, lat = 0, lng = 0;
   const pts = [];
@@ -55,11 +59,24 @@ function decodificarPolylineServer(str) {
 
 const ROTAS_CACHE_MEM = new Map(); // chave -> { path, distanceMeters, durationMillis, km, em }
 const ROTAS_CACHE_TTL_MS = Number(process.env.ROTAS_CACHE_TTL_MS || 6 * 60 * 60 * 1000); // 6 h
-const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30); // teto / minuto
-const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 1500); // teto / dia (orçamento)
+// Opt-in explícito. Default OFF = zero chamada paga a Routes (evita fatura surpresa).
+const GOOGLE_ROUTES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
+// Com Routes ligado: tetos baixos por padrão (antes era 1500/dia e estourava).
+const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 5);
+const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 50);
 let rotasGoogleJanela = { t0: Date.now(), n: 0 };
 let rotasGoogleDia = { dia: "", n: 0 };
-const rotasGoogleStats = { hit: 0, miss: 0, google: 0, bloqueado: 0 };
+const rotasGoogleStats = {
+  hit: 0, miss: 0, google: 0, bloqueado: 0,
+  enabled: GOOGLE_ROUTES_ENABLED,
+};
+if (GOOGLE_ROUTES_ENABLED) {
+  console.warn(
+    `[rotas] Google Routes LIGADO (max ${ROTAS_GOOGLE_MAX_MIN}/min, ${ROTAS_GOOGLE_MAX_DIA}/dia) — gera cobrança`
+  );
+} else {
+  console.log("[rotas] Google Routes DESLIGADO — /api/rotas usa linha reta (sem fatura Routes)");
+}
 
 function chaveRotaApprox(olat, olng, dlat, dlng) {
   // ~11 m de grade — carros da frota reutilizam a mesma rota
@@ -68,8 +85,11 @@ function chaveRotaApprox(olat, olng, dlat, dlng) {
 }
 
 function rotasGooglePermitida() {
-  // Teto DIÁRIO primeiro: é o freio de fatura de verdade — o teto por minuto
-  // sozinho ainda deixaria passar dezenas de milhares de chamadas num dia.
+  if (!GOOGLE_ROUTES_ENABLED) {
+    rotasGoogleStats.bloqueado++;
+    return false;
+  }
+  // Teto DIÁRIO primeiro: freio de fatura. Minuto sozinho não basta.
   const hoje = new Date().toISOString().slice(0, 10);
   if (rotasGoogleDia.dia !== hoje) rotasGoogleDia = { dia: hoje, n: 0 };
   if (rotasGoogleDia.n >= ROTAS_GOOGLE_MAX_DIA) {
@@ -170,11 +190,20 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
   if (!rotasGooglePermitida()) {
     const payload = payloadFallbackReta();
     ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
+    const motivo = !GOOGLE_ROUTES_ENABLED
+      ? "Routes Google desligado (GOOGLE_ROUTES_ENABLED). Linha reta — sem cobrança."
+      : "Limite de rotas Google; usando linha reta.";
     return res.json({
       ...payload,
       cached: false,
-      aviso: "Limite de rotas Google; usando linha reta temporária.",
-      stats: { ...rotasGoogleStats, teto_min: ROTAS_GOOGLE_MAX_MIN, teto_dia: ROTAS_GOOGLE_MAX_DIA, usadas_hoje: rotasGoogleDia.n },
+      aviso: motivo,
+      stats: {
+        ...rotasGoogleStats,
+        enabled: GOOGLE_ROUTES_ENABLED,
+        teto_min: ROTAS_GOOGLE_MAX_MIN,
+        teto_dia: ROTAS_GOOGLE_MAX_DIA,
+        usadas_hoje: rotasGoogleDia.n,
+      },
     });
   }
 
@@ -247,7 +276,10 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
 app.get("/api/rotas/stats", verificarAuth, (req, res) => {
   res.json({
     ...rotasGoogleStats,
+    enabled: GOOGLE_ROUTES_ENABLED,
     teto_min: ROTAS_GOOGLE_MAX_MIN,
+    teto_dia: ROTAS_GOOGLE_MAX_DIA,
+    usadas_hoje: rotasGoogleDia.n,
     cache_mem: ROTAS_CACHE_MEM.size,
     janela_n: rotasGoogleJanela.n,
   });
