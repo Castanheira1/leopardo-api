@@ -163,8 +163,13 @@
         .kpi-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .kpi-ico {
             width: 36px; height: 36px; border-radius: 12px; background: var(--gold-soft);
-            color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 1rem;
+            color: var(--gold); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
+        .kpi-ico svg, .hc-ico svg, .adm-nav-item .ico svg, .soft-pin svg {
+            width: 18px; height: 18px; display: block;
+        }
+        .hc-ico svg { width: 20px; height: 20px; margin: 0 auto; }
+        .adm-nav-item .ico { display: inline-flex; align-items: center; justify-content: center; }
         .kpi .cap { font-size: .68rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
         .kpi .val-line { font-size: 1.35rem; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -.02em; }
         .kpi .hint { font-size: .7rem; color: var(--muted); margin-top: 4px; }
@@ -223,7 +228,10 @@
             background: var(--card-2); border: 1px solid var(--line); border-radius: 12px;
             padding: 12px 10px; text-align: center;
         }
-        .health-cell .hc-ico { font-size: 1.1rem; margin-bottom: 6px; }
+        .health-cell .hc-ico {
+            margin-bottom: 6px; color: var(--gold);
+            display: flex; align-items: center; justify-content: center;
+        }
         .health-cell .hc-lbl { font-size: .72rem; color: var(--muted); }
         .health-cell .hc-val { font-size: .8rem; font-weight: 800; margin-top: 3px; }
         .health-cell .hc-val.on { color: var(--good); }
@@ -327,17 +335,17 @@
 
         <nav class="adm-nav" aria-label="Painel executivo">
             <button type="button" class="adm-nav-item active" data-sec="sec-visao" onclick="irSecao('sec-visao')">
-                <span class="ico">◈</span> Visão executiva
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Visão executiva
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-acesso" onclick="irSecao('sec-acesso')">
-                <span class="ico">✦</span> Acesso admin
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span> Acesso admin
                 <span id="badgeChamados" style="display:none;">0</span>
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
-                <span class="ico">▦</span> Projetos
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Projetos
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-saude" onclick="irSecao('sec-saude')">
-                <span class="ico">♥</span> Saúde do VAP
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Saúde do VAP
             </button>
         </nav>
 
@@ -530,6 +538,23 @@ const SECOES = {
 let _dashCache = null;
 let _serieAtiva = 'viagens';
 
+/** Ícones stroke (sem emoji) — alinhados ao painel admin */
+const ICO = {
+    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M5 17l-2-5h18l-2 5M7 11l2-5h6l2 5"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>',
+    km: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+    db: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>',
+};
+
 (function iniUser() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -591,7 +616,7 @@ async function carregarChamados() {
         if (!r.ok) throw new Error(d.error || 'Erro ao listar');
         lista.innerHTML = d.map((c) => `
             <div class="soft-item">
-                <div class="soft-pin">✦</div>
+                <div class="soft-pin">${ICO.user}</div>
                 <div class="soft-item-txt">
                     <div class="soft-nome">${esc(c.nome)}</div>
                     <div class="soft-sub">Mat. ${esc(c.matricula)} · ${esc(c.empresa_nome || '—')} · <strong>${esc(c.projeto_codigo || '—')}</strong> ${esc(c.projeto_nome || '')}</div>
@@ -744,12 +769,12 @@ async function carregarDono() {
         const c = d.consolidado;
 
         kpis.innerHTML = [
-            { ico: '👥', t: 'Usuários ativos', v: c.usuarios_ativos, h: `${c.engajados} engajados no período` },
-            { ico: '🚗', t: 'Viagens', v: c.viagens, h: `${d.periodo?.dias || '—'} dias` },
-            { ico: '🛣', t: 'Km rodados', v: c.km, h: 'com GPS válido' },
-            { ico: '💰', t: 'Custo por km', v: fmtMoeda(c.custo_por_km), h: 'contrato rateado' },
-            { ico: '📈', t: 'Aderência global', v: `${c.aderencia_pct}%`, h: 'engajados / ativos', cor: corAderencia(c.aderencia_pct) },
-            { ico: '🛡', t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}`, h: 'ativos / total' },
+            { ico: ICO.users, t: 'Usuários ativos', v: c.usuarios_ativos, h: `${c.engajados} engajados no período` },
+            { ico: ICO.car, t: 'Viagens', v: c.viagens, h: `${d.periodo?.dias || '—'} dias` },
+            { ico: ICO.km, t: 'Km rodados', v: c.km, h: 'com GPS válido' },
+            { ico: ICO.money, t: 'Custo por km', v: fmtMoeda(c.custo_por_km), h: 'contrato rateado' },
+            { ico: ICO.chart, t: 'Aderência global', v: `${c.aderencia_pct}%`, h: 'engajados / ativos', cor: corAderencia(c.aderencia_pct) },
+            { ico: ICO.grid, t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}`, h: 'ativos / total' },
         ].map((k) => `
             <div class="kpi">
                 <div class="kpi-top"><div class="kpi-ico">${k.ico}</div><div class="cap">${esc(k.t)}</div></div>
@@ -806,10 +831,10 @@ async function pintarHealth() {
         const d = await r.json();
         const okDb = !!d.db;
         el.innerHTML = [
-            { ico: '☁', l: 'API', v: r.ok ? 'Online' : 'Offline', on: r.ok },
-            { ico: '🗄', l: 'Banco', v: okDb ? 'Online' : 'Offline', on: okDb },
-            { ico: '⚡', l: 'Latência', v: ms + ' ms', on: ms < 2000 },
-            { ico: '📦', l: 'Versão', v: d.versao || '—', on: true },
+            { ico: ICO.api, l: 'API', v: r.ok ? 'Online' : 'Offline', on: r.ok },
+            { ico: ICO.db, l: 'Banco', v: okDb ? 'Online' : 'Offline', on: okDb },
+            { ico: ICO.bolt, l: 'Latência', v: ms + ' ms', on: ms < 2000 },
+            { ico: ICO.tag, l: 'Versão', v: d.versao || '—', on: true },
         ].map((x) => `
             <div class="health-cell">
                 <div class="hc-ico">${x.ico}</div>
@@ -839,7 +864,7 @@ async function carregarProjetos() {
         el.className = 'soft-list';
         el.innerHTML = d.map((p) => `
             <div class="soft-item">
-                <div class="soft-pin">▦</div>
+                <div class="soft-pin">${ICO.building}</div>
                 <div class="soft-item-txt">
                     <div class="soft-nome">${esc(p.nome)}</div>
                     <div class="soft-sub">${esc(p.codigo)} · ${p.usuarios} usuário(s) ativos</div>
@@ -944,7 +969,7 @@ async function carregarSaude() {
         ).join(' · ');
         el.innerHTML = `<p class="cap" style="margin-bottom:12px;">${porDia}</p><div class="soft-list">` + d.recentes.map((e2) => `
             <div class="soft-item">
-                <div class="soft-pin">!</div>
+                <div class="soft-pin">${ICO.alert}</div>
                 <div class="soft-item-txt">
                     <div class="soft-nome">${esc(e2.origem)}</div>
                     <div class="soft-sub">${new Date(e2.criado_em).toLocaleString('pt-BR')}</div>
