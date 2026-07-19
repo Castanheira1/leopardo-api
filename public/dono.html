@@ -6,291 +6,297 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/icon-192.png" type="image/png">
-    <meta name="theme-color" content="#faf9f5">
+    <meta name="theme-color" content="#0b0b0c">
     <script src="/pwa.js" defer></script>
     <script src="/platform.js"></script>
     <title>VAP — Painel Executivo</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
-        /* CEO: painel executivo claro/quente (preview QA) + listas estilo locais */
+        /* CEO — visão corporativa dark (olho rápido), dados reais da API */
         :root {
-            --bg: #faf9f5; --bg-main: #faf9f5; --sidebar-bg: #f5f3ec;
-            --card: #ffffff; --card-2: #f5f3ec;
-            --ink: #141413; --muted: #78766d; --line: #e8e6dc;
-            --accent: #d97757; --accent-dark: #b85f42; --accent-tint: rgba(217,119,87,.12);
-            --blue: #6a9bcc; --green: #788c5d;
-            --primary: var(--accent);
-            --side-w: 272px;
-            --good: #788c5d; --warn: #c08a2e; --crit: #b3492e;
-            --chart-1: #d97757; --chart-2: #6a9bcc;
-            --shadow: 0 1px 2px rgba(20,20,19,.04), 0 8px 24px rgba(20,20,19,.06);
+            --bg: #0b0b0c;
+            --bg-main: #101012;
+            --sidebar: #0e0e10;
+            --card: #17171a;
+            --card-2: #1e1e22;
+            --ink: #f3f3f4;
+            --muted: #9a9aa3;
+            --line: #2a2a30;
+            --gold: #d4a843;
+            --gold-soft: rgba(212, 168, 67, 0.14);
+            --gold-bright: #ead298;
+            --good: #3ecf8e;
+            --warn: #e8b84a;
+            --crit: #f07178;
+            --blue: #6aa8ff;
+            --side-w: 248px;
             --radius: 16px;
-            --fav-bg: #fff; --fav-ink: #141413; --fav-sub: #78766d; --fav-border: #e8e6dc;
+            --shadow: 0 8px 28px rgba(0,0,0,.35);
         }
         * { box-sizing: border-box; }
         body {
-            background: var(--bg) !important; color: var(--ink); margin: 0;
-            -webkit-font-smoothing: antialiased;
+            margin: 0; background: var(--bg) !important; color: var(--ink);
             font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
         .adm-app { display: flex; min-height: 100vh; background: var(--bg-main); }
 
+        /* —— Sidebar —— */
         .adm-sidebar {
-            width: var(--side-w); flex-shrink: 0; background: var(--sidebar-bg); color: var(--ink);
-            display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
-            overflow-y: auto; z-index: 40; border-right: 1px solid var(--line);
+            width: var(--side-w); flex-shrink: 0; background: var(--sidebar);
+            border-right: 1px solid var(--line); display: flex; flex-direction: column;
+            position: sticky; top: 0; height: 100vh; overflow-y: auto; z-index: 40;
         }
-        .adm-side-brand { display: flex; align-items: center; gap: 10px; padding: 22px 20px 16px; }
-        .adm-side-brand img { height: 30px; }
+        .adm-side-brand { display: flex; align-items: center; gap: 10px; padding: 22px 18px 18px; }
+        .adm-side-brand img { height: 28px; }
         .adm-tag {
-            font-size: .6rem; letter-spacing: .14em; font-weight: 700;
-            background: var(--accent); color: #fff; padding: 3px 8px; border-radius: 6px;
+            font-size: .58rem; letter-spacing: .14em; font-weight: 800;
+            background: var(--gold); color: #111; padding: 3px 8px; border-radius: 6px;
         }
-        .adm-side-block { padding: 14px 20px 16px; }
-        .adm-side-block + .adm-side-block { border-top: 1px solid var(--line); }
+        .adm-side-block { padding: 12px 16px 14px; border-top: 1px solid var(--line); }
         .blk-title {
-            font-size: .64rem; text-transform: uppercase; letter-spacing: .1em;
-            color: var(--muted); margin-bottom: 10px; font-weight: 700;
+            font-size: .62rem; text-transform: uppercase; letter-spacing: .1em;
+            color: var(--muted); margin-bottom: 8px; font-weight: 700;
         }
-        .adm-proj-nome { font-family: Poppins, -apple-system, "Segoe UI", sans-serif; font-size: 1.02rem; font-weight: 700; line-height: 1.3; color: var(--ink); }
-        .adm-proj-meta { font-size: .78rem; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+        .adm-proj-nome { font-size: .98rem; font-weight: 700; color: #fff; }
+        .adm-proj-meta { font-size: .75rem; color: var(--muted); margin-top: 4px; line-height: 1.4; }
         .adm-filtro { display: grid; gap: 8px; }
-        .adm-filtro label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 3px; }
-        .adm-filtro input[type="date"],
-        .adm-filtro input[type="text"],
-        .adm-filtro input[type="number"],
-        .field-row input,
-        select.soft-select {
-            width: 100%; background: #fff !important; border: 1px solid var(--line) !important;
-            color: var(--ink) !important; color-scheme: light; padding: 10px 12px;
-            border-radius: 10px; font-size: .86rem; -webkit-appearance: none; appearance: none;
+        .adm-filtro label { font-size: .65rem; color: var(--muted); display: block; margin-bottom: 3px; }
+        .adm-filtro input, .field-row input, select.soft-select {
+            width: 100%; background: #fff !important; border: 1px solid #d1d5db !important;
+            color: #111 !important; color-scheme: light; padding: 9px 11px;
+            border-radius: 10px; font-size: .84rem;
         }
         .adm-filtro input:focus, .field-row input:focus, select.soft-select:focus {
-            outline: none; border-color: var(--accent) !important;
-            box-shadow: 0 0 0 3px var(--accent-tint);
+            outline: none; border-color: var(--gold) !important;
+            box-shadow: 0 0 0 2px var(--gold-soft);
         }
-        .adm-filtro input::-webkit-calendar-picker-indicator { opacity: .6; cursor: pointer; }
-
         .btn-side, .btn-primary {
-            background: var(--accent); color: #fff; border: none; font-weight: 600;
-            padding: 11px 14px; border-radius: 10px; cursor: pointer; font-size: .86rem;
-            transition: background .15s;
+            background: var(--gold); color: #111; border: none; font-weight: 700;
+            padding: 10px 14px; border-radius: 10px; cursor: pointer; font-size: .84rem;
         }
         .btn-side { width: 100%; }
-        .btn-side:hover, .btn-primary:hover { background: var(--accent-dark); }
+        .btn-side:hover, .btn-primary:hover { filter: brightness(1.08); }
         .btn-primary { width: auto; }
         .btn-ghost {
-            background: var(--card); color: var(--ink); border: 1px solid var(--line);
+            background: var(--card-2); color: var(--ink); border: 1px solid var(--line);
             padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: .8rem; font-weight: 600;
         }
-        .btn-ghost:hover { border-color: var(--accent); color: var(--accent-dark); }
+        .btn-ghost:hover { border-color: var(--gold); color: var(--gold-bright); }
 
-        .adm-nav { display: grid; gap: 3px; padding: 10px 14px 16px; flex: 1; }
+        .adm-nav { display: grid; gap: 4px; padding: 10px 12px 14px; flex: 1; }
         .adm-nav-item {
             display: flex; align-items: center; gap: 10px; width: 100%;
             background: none; border: none; color: var(--muted);
-            padding: 10px 14px; border-radius: 10px; cursor: pointer;
+            padding: 11px 12px; border-radius: 12px; cursor: pointer;
             font-size: .86rem; font-weight: 600; text-align: left;
-            transition: background .15s, color .15s;
         }
-        .adm-nav-item:hover { background: var(--card-2); color: var(--ink); }
-        .adm-nav-item.active {
-            background: var(--accent); color: #fff;
-        }
-        .adm-nav-item.active .ico { color: #fff; }
-        .adm-nav-item .ico { width: 18px; text-align: center; color: var(--accent); font-size: .9rem; }
+        .adm-nav-item:hover { background: var(--card); color: #fff; }
+        .adm-nav-item.active { background: var(--gold-soft); color: var(--gold-bright); }
+        .adm-nav-item .ico { width: 18px; text-align: center; color: var(--gold); }
+        .adm-nav-item.active .ico { color: var(--gold-bright); }
         .adm-nav-item #badgeChamados {
-            margin-left: auto; background: var(--ink); color: #fff;
-            border-radius: 999px; font-size: .7rem; font-weight: 700; padding: 1px 8px;
+            margin-left: auto; background: var(--gold); color: #111;
+            border-radius: 999px; font-size: .68rem; font-weight: 800; padding: 1px 7px;
         }
-        .adm-nav-item.active #badgeChamados { background: #fff; color: var(--accent-dark); }
-
-        .adm-side-foot { padding: 14px 20px 20px; border-top: 1px solid var(--line); }
-        .adm-side-foot .user { font-size: .82rem; color: var(--muted); margin-bottom: 10px; }
+        .adm-side-foot { padding: 14px 16px 18px; border-top: 1px solid var(--line); }
+        .adm-side-foot .user { font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
         .adm-side-sair {
             display: flex; align-items: center; gap: 8px; width: 100%;
-            background: none; border: none; color: var(--muted);
-            font-size: .84rem; cursor: pointer; padding: 6px 0;
+            background: none; border: none; color: var(--muted); font-size: .84rem;
+            cursor: pointer; padding: 6px 0;
         }
-        .adm-side-sair:hover { color: var(--accent-dark); }
+        .adm-side-sair:hover { color: var(--gold-bright); }
+        .adm-side-ver { font-size: .68rem; color: #5c5c66; margin-top: 12px; }
 
-        .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-main); }
+        /* —— Main —— */
+        .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
         .adm-topbar {
-            background: var(--bg-main); border-bottom: 1px solid var(--line);
-            padding: 14px 28px; display: flex; align-items: center;
-            justify-content: space-between; gap: 16px;
+            display: flex; align-items: center; justify-content: space-between; gap: 14px;
+            padding: 14px 22px; border-bottom: 1px solid var(--line);
+            background: rgba(16,16,18,.92); backdrop-filter: blur(10px);
             position: sticky; top: 0; z-index: 30;
         }
-        .adm-topbar h1 { margin: 0; font-family: Poppins, -apple-system, "Segoe UI", sans-serif; font-size: 1.35rem; font-weight: 700; color: var(--ink); }
-        .adm-topbar .sub { color: var(--muted); font-size: .84rem; margin-top: 3px; }
+        .adm-topbar h1 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #fff; }
+        .adm-topbar .sub { color: var(--muted); font-size: .8rem; margin-top: 2px; }
         .adm-menu-btn {
-            display: none; background: var(--card); color: var(--accent);
-            border: 1px solid var(--line); border-radius: 8px;
-            padding: 8px 11px; font-size: 1.1rem; cursor: pointer; margin-right: 10px;
+            display: none; background: var(--card); color: var(--gold);
+            border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; cursor: pointer; margin-right: 8px;
         }
-        .adm-topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .adm-topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .pill {
-            display: inline-flex; align-items: center; gap: 6px; background: var(--card);
-            border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px;
-            font-size: .78rem; font-weight: 600; color: var(--ink); white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+            padding: 7px 12px; font-size: .75rem; font-weight: 600; color: var(--ink); white-space: nowrap;
         }
-        .pill .dotstat { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
+        .pill .dotstat { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
         .pill .dotstat.off { background: var(--crit); }
         .pill .dotstat.pending { background: var(--muted); }
         .adm-user {
-            display: flex; align-items: center; gap: 10px; background: var(--card);
-            border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 6px;
+            display: flex; align-items: center; gap: 8px; background: var(--card);
+            border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 5px;
         }
         .adm-avatar {
-            width: 32px; height: 32px; border-radius: 50%; background: var(--accent-tint);
-            border: 1.5px solid var(--accent); display: flex; align-items: center;
-            justify-content: center; color: var(--accent-dark); font-weight: 700; font-size: .85rem;
+            width: 30px; height: 30px; border-radius: 50%; background: var(--gold-soft);
+            border: 1.5px solid var(--gold); display: flex; align-items: center; justify-content: center;
+            color: var(--gold); font-weight: 800; font-size: .8rem;
         }
-        .adm-user-name { font-size: .84rem; font-weight: 600; color: var(--ink); }
-        .adm-user-role { font-size: .68rem; color: var(--muted); }
+        .adm-user-name { font-size: .82rem; font-weight: 600; }
+        .adm-user-role { font-size: .65rem; color: var(--muted); }
 
-        .adm-content { padding: 20px 28px 0; flex: 1; max-width: 1180px; }
+        .adm-content { padding: 18px 22px 0; flex: 1; max-width: 1280px; }
         .adm-section { display: none; animation: fadeIn .2s ease; }
         .adm-section.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
+        /* KPI cards — olho rápido */
         .kpi-strip {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-            gap: 12px; margin-bottom: 16px;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px; margin-bottom: 14px;
         }
-        .kpi-strip .kpi {
-            background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-            padding: 16px 16px 15px; box-shadow: var(--shadow);
+        .kpi {
+            background: linear-gradient(180deg, #1b1b1f 0%, #151518 100%);
+            border: 1px solid var(--line); border-radius: var(--radius);
+            padding: 14px 14px 12px; box-shadow: var(--shadow);
         }
-        .kpi .cap {
-            font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
-            color: var(--muted); font-weight: 700;
+        .kpi-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .kpi-ico {
+            width: 36px; height: 36px; border-radius: 12px; background: var(--gold-soft);
+            color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 1rem;
         }
-        .kpi .val-line {
-            font-family: Poppins, -apple-system, "Segoe UI", sans-serif;
-            font-size: 1.4rem; font-weight: 700; margin-top: 6px;
-            color: var(--ink); line-height: 1.2;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-
-        .grid-2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+        .kpi .cap { font-size: .68rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+        .kpi .val-line { font-size: 1.35rem; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -.02em; }
+        .kpi .hint { font-size: .7rem; color: var(--muted); margin-top: 4px; }
 
         .panel {
             background: var(--card); border: 1px solid var(--line);
-            border-radius: var(--radius); padding: 18px 18px 16px; margin-bottom: 14px;
-            box-shadow: var(--shadow);
+            border-radius: var(--radius); padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow);
         }
-        .grid-2 .panel { margin-bottom: 0; }
-        .panel-head { margin-bottom: 14px; }
-        .panel-head h3 { margin: 0 0 4px; font-family: Poppins, -apple-system, "Segoe UI", sans-serif; font-size: 1.02rem; font-weight: 700; color: var(--ink); }
-        .cap { font-size: .8rem; color: var(--muted); line-height: 1.45; }
-        .cap strong { color: var(--accent-dark); font-weight: 600; }
-        .cap code {
-            background: var(--card-2); color: var(--accent-dark);
-            padding: 1px 6px; border-radius: 4px; font-size: .78rem;
-        }
-        .empty { color: var(--muted); font-size: .9rem; padding: 20px 8px; text-align: center; }
+        .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+        .panel-head h3 { margin: 0 0 3px; font-size: 1rem; font-weight: 700; color: #fff; }
+        .cap { font-size: .78rem; color: var(--muted); line-height: 1.45; }
+        .cap strong { color: var(--gold-bright); }
+        .cap code { background: var(--card-2); color: var(--gold-bright); padding: 1px 6px; border-radius: 4px; font-size: .75rem; }
+        .empty { color: var(--muted); text-align: center; padding: 22px 8px; font-size: .9rem; }
+        .link-gold { background: none; border: none; color: var(--gold); font-weight: 700; font-size: .8rem; cursor: pointer; }
+        .link-gold:hover { color: var(--gold-bright); }
 
-        /* Listas (fav-item) */
-        .soft-list { display: flex; flex-direction: column; gap: 0; }
-        .soft-item {
-            display: flex; align-items: center; gap: 10px; width: 100%;
-            background: var(--fav-bg); border: 1px solid var(--fav-border);
-            border-radius: 14px; padding: 13px 12px; margin-bottom: 8px;
-            color: var(--fav-ink); font-size: 15px; text-align: left;
-            transition: background .12s, border-color .12s;
+        .grid-main {
+            display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin-bottom: 14px;
         }
-        .soft-item:hover { background: var(--card-2); border-color: var(--accent); }
+        @media (max-width: 980px) { .grid-main { grid-template-columns: 1fr; } }
+
+        /* Spark / line chart simples */
+        .line-chart { position: relative; height: 180px; padding: 8px 4px 0; }
+        .line-chart svg { width: 100%; height: 100%; display: block; }
+        .line-chart .axis { fill: var(--muted); font-size: 10px; }
+        .chart-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+        .chart-tabs button {
+            background: var(--card-2); border: 1px solid var(--line); color: var(--muted);
+            border-radius: 999px; padding: 6px 12px; font-size: .75rem; font-weight: 700; cursor: pointer;
+        }
+        .chart-tabs button.on { background: var(--gold); color: #111; border-color: var(--gold); }
+
+        /* Project cards */
+        .proj-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;
+        }
+        .proj-card {
+            background: var(--card-2); border: 1px solid var(--line); border-radius: 14px;
+            padding: 14px; transition: border-color .15s;
+        }
+        .proj-card:hover { border-color: rgba(212,168,67,.45); }
+        .proj-card .pc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .proj-card .pc-name { font-weight: 700; color: #fff; font-size: .95rem; }
+        .proj-card .pc-ad { font-weight: 800; font-size: .95rem; }
+        .proj-card .pc-bar { height: 6px; background: #2c2c34; border-radius: 999px; overflow: hidden; margin: 8px 0 10px; }
+        .proj-card .pc-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+        .proj-card .pc-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: .72rem; color: var(--muted); }
+        .proj-card .pc-meta strong { color: var(--ink); font-weight: 700; }
+
+        /* Saúde */
+        .health-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px;
+        }
+        .health-cell {
+            background: var(--card-2); border: 1px solid var(--line); border-radius: 12px;
+            padding: 12px 10px; text-align: center;
+        }
+        .health-cell .hc-ico { font-size: 1.1rem; margin-bottom: 6px; }
+        .health-cell .hc-lbl { font-size: .72rem; color: var(--muted); }
+        .health-cell .hc-val { font-size: .8rem; font-weight: 800; margin-top: 3px; }
+        .health-cell .hc-val.on { color: var(--good); }
+        .health-cell .hc-val.off { color: var(--crit); }
+
+        /* Soft lists (chamados / projetos / erros) — cards escuros limpos */
+        .soft-list { display: flex; flex-direction: column; gap: 8px; }
+        .soft-item {
+            display: flex; align-items: center; gap: 12px; width: 100%;
+            background: var(--card-2); border: 1px solid var(--line);
+            border-radius: 14px; padding: 13px 12px; text-align: left;
+        }
+        .soft-item:hover { border-color: rgba(212,168,67,.4); }
         .soft-pin {
             flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px;
-            background: var(--accent-tint); color: var(--accent-dark);
-            display: flex; align-items: center; justify-content: center; font-size: 1rem;
+            background: var(--gold-soft); color: var(--gold);
+            display: flex; align-items: center; justify-content: center;
         }
-        .soft-item-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-        .soft-nome {
-            font-weight: 600; color: var(--ink); font-size: .95rem;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .soft-sub { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
-        .soft-meta {
-            flex-shrink: 0; text-align: right; font-size: 14px; font-weight: 600; color: var(--muted);
-        }
-        .soft-meta .big { display: block; font-size: 1.08rem; color: var(--ink); font-weight: 700; }
-        .soft-meta .lbl { font-size: 11px; color: var(--muted); font-weight: 600; }
-        .soft-chev { flex-shrink: 0; color: var(--muted); font-size: 1.1rem; }
+        .soft-item-txt { flex: 1; min-width: 0; }
+        .soft-nome { font-weight: 700; color: #fff; font-size: .92rem; }
+        .soft-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+        .soft-sub a { color: var(--gold); font-weight: 600; text-decoration: none; }
+        .soft-sub a:hover { text-decoration: underline; }
+        .soft-sub strong { color: var(--gold-bright); }
+        .soft-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .soft-badge {
-            font-size: .65rem; font-weight: 700; letter-spacing: .04em;
-            padding: 3px 8px; border-radius: 999px; text-transform: uppercase;
+            font-size: .65rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+            padding: 3px 8px; border-radius: 999px;
         }
-        .soft-badge.on { background: rgba(120,140,93,.15); color: #4f6a3a; }
-        .soft-badge.off { background: rgba(179,73,46,.12); color: var(--crit); }
-        .soft-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; align-items: center; }
-        .soft-actions .btn-primary {
-            background: var(--accent); color: #fff; padding: 8px 12px; font-size: .78rem; border-radius: 10px;
-        }
-        .soft-actions .btn-primary:hover { background: var(--accent-dark); }
-        .soft-actions .btn-ghost {
-            background: var(--card-2); color: var(--ink); border: 1px solid var(--line);
-            padding: 7px 11px; font-size: .78rem;
-        }
-        .soft-actions .btn-ghost:hover { border-color: var(--accent); color: var(--accent-dark); }
+        .soft-badge.on { background: rgba(62,207,142,.15); color: var(--good); }
+        .soft-badge.off { background: rgba(240,113,120,.15); color: var(--crit); }
         .soft-item input[type="number"] {
-            background: var(--card-2) !important; border: 1px solid var(--line) !important;
-            color: var(--ink) !important; border-radius: 8px; padding: 7px 9px; font-size: .84rem; width: 110px;
+            width: 110px; background: #fff !important; border: 1px solid #d1d5db !important;
+            color: #111 !important; border-radius: 8px; padding: 7px 9px; font-size: .84rem;
         }
-        .soft-item a { color: var(--accent-dark); font-weight: 600; text-decoration: none; }
-        .soft-item a:hover { text-decoration: underline; }
 
-        .spark { display: flex; align-items: flex-end; gap: 3px; height: 110px; padding: 4px 0; }
+        .spark { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
         .spark .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-        .spark .bar {
-            width: 100%; background: linear-gradient(180deg, var(--accent), var(--accent-dark));
-            border-radius: 4px 4px 0 0; min-height: 2px;
-        }
+        .spark .bar { width: 100%; background: linear-gradient(180deg, var(--gold-bright), var(--gold)); border-radius: 4px 4px 0 0; min-height: 2px; }
         .spark .cl { font-size: .55rem; color: var(--muted); margin-top: 4px; }
-        .chart { min-height: 40px; }
         .bar-row {
-            display: grid; grid-template-columns: minmax(80px, 120px) 1fr 52px;
-            gap: 8px; align-items: center; margin-bottom: 10px; font-size: .8rem;
+            display: grid; grid-template-columns: minmax(70px, 110px) 1fr 48px;
+            gap: 8px; align-items: center; margin-bottom: 9px; font-size: .8rem;
         }
         .bar-row .k { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bar-track { background: var(--card-2); border-radius: 8px; height: 10px; overflow: hidden; }
-        .bar-fill { display: block; height: 100%; border-radius: 8px; background: var(--accent); }
+        .bar-track { background: #2c2c34; border-radius: 8px; height: 8px; overflow: hidden; }
+        .bar-fill { display: block; height: 100%; border-radius: 8px; background: var(--gold); }
         .bar-row .v { text-align: right; color: var(--muted); font-weight: 600; }
-        .legend { display: flex; gap: 16px; margin-top: 10px; font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
+        .legend { display: flex; gap: 14px; margin-top: 10px; font-size: .78rem; color: var(--muted); flex-wrap: wrap; }
         .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-        .legend strong { color: var(--ink); }
+        .legend strong { color: #fff; }
 
         .field-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         .field-row input { width: auto; min-width: 120px; }
-
         .adm-foot {
-            padding: 20px 28px 28px; color: var(--muted); font-size: .72rem;
+            padding: 18px 22px 26px; color: var(--muted); font-size: .72rem;
             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
         }
-        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(20,20,19,.4); z-index: 35; }
+        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 35; }
         .adm-overlay.open { display: block; }
 
-        @media (min-width: 860px) {
-            .grid-2 { grid-template-columns: 1fr 1fr; }
-        }
         @media (max-width: 900px) {
             .adm-sidebar {
                 position: fixed; left: 0; top: 0; transform: translateX(-100%);
-                transition: transform .22s ease; box-shadow: 8px 0 32px rgba(20,20,19,.25);
+                transition: transform .22s ease; box-shadow: 8px 0 32px rgba(0,0,0,.5);
             }
             .adm-sidebar.open { transform: translateX(0); }
             .adm-menu-btn { display: inline-flex; }
-            .adm-content { padding: 14px 14px 0; }
+            .adm-content { padding: 14px; }
             .adm-topbar { padding: 12px 14px; }
             .adm-topbar-right .pill:not(.pill-health) { display: none; }
             .soft-item { flex-wrap: wrap; }
-            .soft-meta { text-align: left; width: 100%; padding-left: 46px; }
-            .soft-actions { width: 100%; padding-left: 46px; justify-content: flex-start; }
+            .soft-actions { width: 100%; padding-left: 48px; }
         }
     </style>
 </head>
@@ -307,7 +313,7 @@
         <div class="adm-side-block">
             <div class="blk-title">Escopo</div>
             <div class="adm-proj-nome">Toda a empresa</div>
-            <div class="adm-proj-meta">Todos os projetos atuais e novos do VAP</div>
+            <div class="adm-proj-meta">Visão global de todos os canteiros</div>
         </div>
 
         <div class="adm-side-block">
@@ -324,11 +330,11 @@
                 <span class="ico">◈</span> Visão executiva
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-acesso" onclick="irSecao('sec-acesso')">
-                <span class="ico">✦</span> Acesso admin canteiro
+                <span class="ico">✦</span> Acesso admin
                 <span id="badgeChamados" style="display:none;">0</span>
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
-                <span class="ico">▦</span> Projetos (todos)
+                <span class="ico">▦</span> Projetos
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-saude" onclick="irSecao('sec-saude')">
                 <span class="ico">♥</span> Saúde do VAP
@@ -337,13 +343,15 @@
 
         <div class="adm-side-foot">
             <div class="user" id="userName">Olá!</div>
+            <div class="user" style="margin-bottom:10px;font-size:.72rem;color:var(--muted);">Dono · Visão global do VAP</div>
             <button type="button" class="adm-side-sair" onclick="logout()">↪ Sair</button>
+            <div class="adm-side-ver" id="sideVer">VAP</div>
         </div>
     </aside>
 
     <main class="adm-main">
         <header class="adm-topbar">
-            <div style="display:flex;align-items:center;">
+            <div style="display:flex;align-items:center;min-width:0;">
                 <button type="button" class="adm-menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
                 <div>
                     <h1 id="topTitulo">Visão executiva</h1>
@@ -357,52 +365,76 @@
                     <div class="adm-avatar" id="admAvatar">C</div>
                     <div>
                         <div class="adm-user-name" id="admUserName">CEO</div>
-                        <div class="adm-user-role">CEO · Visão global do VAP</div>
+                        <div class="adm-user-role">CEO · Global</div>
                     </div>
                 </div>
             </div>
         </header>
 
         <div class="adm-content">
-            <!-- Visão multi-projeto -->
+            <!-- Visão olho rápido -->
             <section id="sec-visao" class="adm-section active">
                 <div class="kpi-strip" id="donoKpis"></div>
-                <div class="panel">
-                    <div class="panel-head">
-                        <div>
-                            <h3>Aderência e custo por projeto</h3>
-                            <p class="cap">Ordenado por aderência. Contrato fixo — quanto mais uso, menor o custo unitário.</p>
-                        </div>
-                    </div>
-                    <div class="soft-list" id="listaDonoProjetos"><div class="empty">Carregando…</div></div>
-                </div>
-                <div class="grid-2" style="margin-bottom:14px;">
+
+                <div class="grid-main">
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <h3>Horário de pico (24 h)</h3>
-                                <p class="cap">Viagens iniciadas por hora local no período — todos os projetos.</p>
+                                <h3>Desempenho no período</h3>
+                                <p class="cap">Viagens e km consolidados (todos os projetos).</p>
+                            </div>
+                            <div class="chart-tabs" id="chartTabs">
+                                <button type="button" class="on" data-serie="viagens" onclick="setSerie('viagens')">Viagens</button>
+                                <button type="button" data-serie="km" onclick="setSerie('km')">Km rodados</button>
+                            </div>
+                        </div>
+                        <div class="line-chart" id="donoSerie"><div class="empty">Carregando…</div></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h3>Horário de pico</h3>
+                                <p class="cap">Viagens por hora local.</p>
                             </div>
                         </div>
                         <div class="spark" id="donoPico"></div>
                     </div>
-                    <div class="panel">
-                        <div class="panel-head"><div><h3>Passageiros por sexo (global)</h3></div></div>
-                        <div class="chart" id="donoSexo"></div>
-                    </div>
                 </div>
+
                 <div class="panel">
                     <div class="panel-head">
                         <div>
-                            <h3>Aderência por projeto</h3>
-                            <p class="cap">% dos colaboradores ativos que usaram o app no período.</p>
+                            <h3>Projetos</h3>
+                            <p class="cap">Ordenados por aderência no período.</p>
                         </div>
+                        <button type="button" class="link-gold" onclick="irSecao('sec-projetos')">Ver todos</button>
                     </div>
-                    <div class="chart" id="donoAderencia"></div>
+                    <div class="proj-grid" id="listaDonoProjetos"><div class="empty">Carregando…</div></div>
+                </div>
+
+                <div class="grid-main">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h3>Passageiros por sexo</h3>
+                                <p class="cap">Viagens concluídas no período.</p>
+                            </div>
+                        </div>
+                        <div class="chart" id="donoSexo"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h3>Saúde do sistema</h3>
+                                <p class="cap">Status em tempo real.</p>
+                            </div>
+                            <button type="button" class="link-gold" onclick="irSecao('sec-saude')">Ver histórico</button>
+                        </div>
+                        <div class="health-row" id="donoHealth"></div>
+                    </div>
                 </div>
             </section>
 
-            <!-- Aprovação de admin de canteiro (bloqueado até você aprovar) -->
             <section id="sec-acesso" class="adm-section">
                 <div class="panel">
                     <div class="panel-head">
@@ -410,8 +442,7 @@
                             <h3>Solicitações de admin de canteiro</h3>
                             <p class="cap">
                                 Quem pede em <strong>Cadastro → Solicitar acesso admin</strong> fica
-                                <strong>sem acesso ao painel</strong> até você aprovar aqui.
-                                Valide identidade (WhatsApp/ligação) antes de liberar. Senha inicial após aprovar: <code>123456</code>.
+                                <strong>sem acesso ao painel</strong> até você aprovar. Senha inicial: <code>123456</code>.
                             </p>
                         </div>
                     </div>
@@ -430,13 +461,12 @@
                 </div>
             </section>
 
-            <!-- Gestão de projetos -->
             <section id="sec-projetos" class="adm-section">
                 <div class="panel">
                     <div class="panel-head">
                         <div>
                             <h3>Novo projeto / canteiro</h3>
-                            <p class="cap">Entra na hora no cadastro de usuários. Admin local do canteiro pede acesso pela fila “Acesso admin” no painel de canteiro.</p>
+                            <p class="cap">Entra na hora no cadastro. Admin local pede acesso pela fila “Acesso admin”.</p>
                         </div>
                     </div>
                     <div class="field-row">
@@ -451,20 +481,19 @@
                     <div class="panel-head">
                         <div>
                             <h3>Todos os projetos do VAP</h3>
-                            <p class="cap">Ativar/desativar, ajustar contrato. Desativar some do cadastro; usuários já vinculados não são apagados.</p>
+                            <p class="cap">Ativar/desativar e ajustar contrato mensal.</p>
                         </div>
                     </div>
-                    <div id="listaProjetos"><div class="empty">Carregando…</div></div>
+                    <div id="listaProjetos" class="soft-list"><div class="empty">Carregando…</div></div>
                 </div>
             </section>
 
-            <!-- Saúde -->
             <section id="sec-saude" class="adm-section">
                 <div class="panel">
                     <div class="panel-head">
                         <div>
                             <h3>Status do serviço</h3>
-                            <p class="cap">Banco, versão e uptime — o mesmo de <code>/api/health</code>.</p>
+                            <p class="cap">Mesmo de <code>/api/health</code>.</p>
                         </div>
                     </div>
                     <div id="saudeStatus" class="cap">Carregando…</div>
@@ -473,7 +502,7 @@
                     <div class="panel-head">
                         <div>
                             <h3>Erros em produção (7 dias)</h3>
-                            <p class="cap">Registros globais do VAP (todos os projetos). Retenção ~30 dias.</p>
+                            <p class="cap">Registros globais. Retenção ~30 dias.</p>
                         </div>
                     </div>
                     <div id="saudeErros"><div class="empty">Carregando…</div></div>
@@ -489,15 +518,17 @@
 </div>
 
 <script>
-// Só o CEO (super admin). Admin de canteiro fica em admin.html.
 checkAuth(true, { superOnly: true, redirectAdmin: 'admin.html' });
 
 const SECOES = {
     'sec-visao': { titulo: 'Visão executiva', sub: 'Aderência, custo e operação em todos os canteiros' },
-    'sec-acesso': { titulo: 'Acesso admin canteiro', sub: 'Aprove ou recuse — até aprovar, o painel fica bloqueado para eles' },
+    'sec-acesso': { titulo: 'Acesso admin canteiro', sub: 'Aprove ou recuse pedidos de admin de canteiro' },
     'sec-projetos': { titulo: 'Projetos', sub: 'Criar, ativar e precificar canteiros do VAP' },
     'sec-saude': { titulo: 'Saúde do VAP', sub: 'Infraestrutura e erros globais' },
 };
+
+let _dashCache = null;
+let _serieAtiva = 'viagens';
 
 (function iniUser() {
     try {
@@ -602,7 +633,6 @@ async function acaoChamado(id, acao) {
     const el = document.getElementById('chamadosMsg');
     if (el) el.textContent = msg;
 }
-// Badge de pendências no boot
 (async function badgeChamadosBoot() {
     try {
         const r = await fetchWithAuth('/api/admin/chamados?status=pendente');
@@ -614,7 +644,6 @@ function atualizarSecaoAtiva() {
     const ativa = document.querySelector('.adm-section.active')?.id || 'sec-visao';
     irSecao(ativa);
 }
-
 function periodoQuery() {
     const de = document.getElementById('filtroDe').value;
     const ate = document.getElementById('filtroAte').value;
@@ -626,31 +655,16 @@ function periodoQuery() {
 function fmtMoeda(v) {
     return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
-// esc() já vem de app.js (const esc = escapeHtml) — não redeclarar.
 function iniPeriodo() {
     const hoje = new Date();
     const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     document.getElementById('filtroDe').value = inicio.toISOString().slice(0, 10);
     document.getElementById('filtroAte').value = hoje.toISOString().slice(0, 10);
 }
-
 function corAderencia(pct) {
     if (pct >= 40) return 'var(--good)';
     if (pct >= 15) return 'var(--warn)';
     return 'var(--crit)';
-}
-
-function barrasH(el, rows) {
-    if (!rows.length) { el.innerHTML = '<div class="empty">Sem dados no período.</div>'; return; }
-    const max = Math.max(...rows.map((r) => r.v), 1);
-    el.innerHTML = rows.map((r) => {
-        const pct = Math.round((r.v / max) * 100);
-        return `<div class="bar-row" title="${esc(r.k)}: ${esc(r.disp)}">
-            <span class="k">${esc(r.k)}</span>
-            <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
-            <span class="v">${esc(r.disp)}</span>
-        </div>`;
-    }).join('');
 }
 
 function chartGenero(el, homens, mulheres) {
@@ -659,15 +673,66 @@ function chartGenero(el, homens, mulheres) {
     const ph = Math.round((homens / total) * 100);
     const pm = 100 - ph;
     el.innerHTML = `
-        <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;gap:2px;">
-            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--chart-1);min-width:2px;"></div>
-            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:var(--chart-2);min-width:2px;"></div>
+        <div style="display:flex;height:28px;border-radius:10px;overflow:hidden;gap:3px;">
+            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--gold);min-width:2px;"></div>
+            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:var(--blue);min-width:2px;"></div>
         </div>
         <div class="legend">
-            <span><span class="dot" style="background:var(--chart-1)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
-            <span><span class="dot" style="background:var(--chart-2)"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
+            <span><span class="dot" style="background:var(--gold)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
+            <span><span class="dot" style="background:var(--blue)"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
         </div>`;
 }
+
+function consolidarPorDia(rows) {
+    const map = new Map();
+    for (const r of rows || []) {
+        const key = String(r.dia).slice(0, 10);
+        const cur = map.get(key) || { dia: key, viagens: 0, km: 0 };
+        cur.viagens += Number(r.viagens) || 0;
+        cur.km += Number(r.km) || 0;
+        map.set(key, cur);
+    }
+    return [...map.values()].sort((a, b) => a.dia.localeCompare(b.dia));
+}
+
+function renderSerie(serie) {
+    _serieAtiva = serie || _serieAtiva;
+    document.querySelectorAll('#chartTabs button').forEach((b) => {
+        b.classList.toggle('on', b.dataset.serie === _serieAtiva);
+    });
+    const el = document.getElementById('donoSerie');
+    const dias = consolidarPorDia(_dashCache?.por_dia || []);
+    if (!dias.length) {
+        el.innerHTML = '<div class="empty">Sem viagens no período para montar a série.</div>';
+        return;
+    }
+    const vals = dias.map((d) => _serieAtiva === 'km' ? d.km : d.viagens);
+    const max = Math.max(...vals, 1);
+    const w = 600, h = 160, padL = 28, padR = 8, padT = 12, padB = 24;
+    const innerW = w - padL - padR;
+    const innerH = h - padT - padB;
+    const pts = vals.map((v, i) => {
+        const x = padL + (vals.length === 1 ? innerW / 2 : (i / (vals.length - 1)) * innerW);
+        const y = padT + innerH - (v / max) * innerH;
+        return { x, y, v, label: dias[i].dia.slice(5).replace('-', '/') };
+    });
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const area = `${line} L${pts[pts.length - 1].x.toFixed(1)},${(padT + innerH).toFixed(1)} L${pts[0].x.toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
+    const labels = pts.filter((_, i) => i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 6) === 0);
+    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <defs>
+            <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#d4a843" stop-opacity=".35"/>
+                <stop offset="100%" stop-color="#d4a843" stop-opacity="0"/>
+            </linearGradient>
+        </defs>
+        <path d="${area}" fill="url(#gGold)"/>
+        <path d="${line}" fill="none" stroke="#d4a843" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        ${pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3.2" fill="#ead298" stroke="#101012" stroke-width="1.5"/>`).join('')}
+        ${labels.map((p) => `<text class="axis" x="${p.x}" y="${h - 6}" text-anchor="middle">${esc(p.label)}</text>`).join('')}
+    </svg>`;
+}
+function setSerie(s) { renderSerie(s); }
 
 async function carregarDono() {
     const kpis = document.getElementById('donoKpis');
@@ -675,40 +740,45 @@ async function carregarDono() {
         const r = await fetchWithAuth('/api/admin/dono/dashboard' + periodoQuery());
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Erro');
+        _dashCache = d;
         const c = d.consolidado;
-        kpis.innerHTML = [
-            { t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}` },
-            { t: 'Aderência global', v: `${c.aderencia_pct}%`, cor: corAderencia(c.aderencia_pct) },
-            { t: 'Colab. usando / ativos', v: `${c.engajados} / ${c.usuarios_ativos}` },
-            { t: 'Viagens', v: c.viagens },
-            { t: 'km rodados', v: c.km },
-            { t: 'Custo por km', v: fmtMoeda(c.custo_por_km) },
-            { t: 'Custo por viagem', v: fmtMoeda(c.custo_por_viagem) },
-            { t: 'Recusas', v: c.recusas },
-            { t: 'Contratos/mês', v: fmtMoeda(c.contrato_mensal) },
-        ].map((k) => `<div class="kpi"><div class="cap">${esc(k.t)}</div>
-            <div class="val-line" style="${k.cor ? `color:${k.cor};` : ''}">${esc(String(k.v))}</div></div>`).join('');
 
-        // Quem mais adere no topo — lista estilo fav-item (locais)
+        kpis.innerHTML = [
+            { ico: '👥', t: 'Usuários ativos', v: c.usuarios_ativos, h: `${c.engajados} engajados no período` },
+            { ico: '🚗', t: 'Viagens', v: c.viagens, h: `${d.periodo?.dias || '—'} dias` },
+            { ico: '🛣', t: 'Km rodados', v: c.km, h: 'com GPS válido' },
+            { ico: '💰', t: 'Custo por km', v: fmtMoeda(c.custo_por_km), h: 'contrato rateado' },
+            { ico: '📈', t: 'Aderência global', v: `${c.aderencia_pct}%`, h: 'engajados / ativos', cor: corAderencia(c.aderencia_pct) },
+            { ico: '🛡', t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}`, h: 'ativos / total' },
+        ].map((k) => `
+            <div class="kpi">
+                <div class="kpi-top"><div class="kpi-ico">${k.ico}</div><div class="cap">${esc(k.t)}</div></div>
+                <div class="val-line" style="${k.cor ? `color:${k.cor}` : ''}">${esc(String(k.v))}</div>
+                <div class="hint">${esc(k.h || '')}</div>
+            </div>`).join('');
+
         d.projetos.sort((a, b) => b.usuarios.aderencia_pct - a.usuarios.aderencia_pct);
         const listaEl = document.getElementById('listaDonoProjetos');
         if (!d.projetos.length) {
             listaEl.innerHTML = '<div class="empty">Sem dados no período.</div>';
         } else {
-            listaEl.innerHTML = d.projetos.map((p) => `
-            <div class="soft-item">
-                <div class="soft-pin">▦</div>
-                <div class="soft-item-txt">
-                    <div class="soft-nome">${esc(p.nome)}${!p.ativo ? ' · inativo' : ''}</div>
-                    <div class="soft-sub">${esc(p.codigo)} · ${p.viagens.concluidas} viagens · ${p.viagens.km} km · pedidos ${p.pedidos.atendidos}/${p.pedidos.total}</div>
-                    <div class="soft-sub">${fmtMoeda(p.custo.por_km)}/km · ${fmtMoeda(p.custo.por_viagem)}/viagem</div>
-                </div>
-                <div class="soft-meta">
-                    <span class="big" style="color:${corAderencia(p.usuarios.aderencia_pct)}">${p.usuarios.aderencia_pct}%</span>
-                    <span class="lbl">aderência</span>
-                </div>
-                <span class="soft-chev">›</span>
-            </div>`).join('');
+            listaEl.innerHTML = d.projetos.map((p) => {
+                const ad = p.usuarios.aderencia_pct;
+                const bar = Math.min(100, Math.max(0, ad));
+                return `
+                <div class="proj-card">
+                    <div class="pc-top">
+                        <span class="pc-name">${esc(p.nome)}${p.ativo ? '' : ' · off'}</span>
+                        <span class="pc-ad" style="color:${corAderencia(ad)}">${ad}%</span>
+                    </div>
+                    <div class="pc-bar"><i style="width:${bar}%"></i></div>
+                    <div class="pc-meta">
+                        <span><strong>${p.usuarios.ativos}</strong> usuários</span>
+                        <span><strong>${p.viagens.concluidas}</strong> viagens</span>
+                        <span><strong>${fmtMoeda(p.custo.por_km)}</strong>/km</span>
+                    </div>
+                </div>`;
+            }).join('');
         }
 
         const maxPico = Math.max(...c.pico, 1);
@@ -719,12 +789,43 @@ async function carregarDono() {
             </div>`).join('');
 
         chartGenero(document.getElementById('donoSexo'), c.sexo.m, c.sexo.f);
-        barrasH(document.getElementById('donoAderencia'),
-            d.projetos.filter((p) => p.usuarios.ativos > 0).map((p) => ({
-                k: p.nome, v: p.usuarios.aderencia_pct, disp: `${p.usuarios.aderencia_pct}%`,
-            })));
+        renderSerie(_serieAtiva);
+        await pintarHealth();
     } catch (e) {
         kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+    }
+}
+
+async function pintarHealth() {
+    const el = document.getElementById('donoHealth');
+    if (!el) return;
+    try {
+        const t0 = performance.now();
+        const r = await fetch('/api/health');
+        const ms = Math.round(performance.now() - t0);
+        const d = await r.json();
+        const okDb = !!d.db;
+        el.innerHTML = [
+            { ico: '☁', l: 'API', v: r.ok ? 'Online' : 'Offline', on: r.ok },
+            { ico: '🗄', l: 'Banco', v: okDb ? 'Online' : 'Offline', on: okDb },
+            { ico: '⚡', l: 'Latência', v: ms + ' ms', on: ms < 2000 },
+            { ico: '📦', l: 'Versão', v: d.versao || '—', on: true },
+        ].map((x) => `
+            <div class="health-cell">
+                <div class="hc-ico">${x.ico}</div>
+                <div class="hc-lbl">${esc(x.l)}</div>
+                <div class="hc-val ${x.on ? 'on' : 'off'}">${esc(String(x.v))}</div>
+            </div>`).join('');
+        const top = document.getElementById('topHealth');
+        if (top) {
+            top.innerHTML = okDb
+                ? '<span class="dotstat"></span> Banco · Online'
+                : '<span class="dotstat off"></span> Banco · Offline';
+        }
+        const ver = document.getElementById('sideVer');
+        if (ver && d.versao) ver.textContent = 'VAP ' + d.versao;
+    } catch (_) {
+        el.innerHTML = '<div class="empty">Falha ao consultar saúde.</div>';
     }
 }
 
@@ -745,7 +846,7 @@ async function carregarProjetos() {
                     <div class="soft-sub" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px;">
                         <span>Contrato R$/mês</span>
                         <input type="number" min="0" step="0.01" value="${Number(p.valor_contrato_mensal) || 0}"
-                            id="ctr_${p.id}" title="Contrato mensal" style="width:110px;">
+                            id="ctr_${p.id}" title="Contrato mensal">
                         <button type="button" class="btn-ghost" onclick="salvarContrato(${p.id})">Salvar</button>
                     </div>
                 </div>
@@ -862,17 +963,7 @@ function iniTopoData() {
     el.textContent = txt.charAt(0).toUpperCase() + txt.slice(1);
 }
 async function iniTopoSaude() {
-    const el = document.getElementById('topHealth');
-    if (!el) return;
-    try {
-        const r = await fetch('/api/health');
-        const d = await r.json();
-        el.innerHTML = d.db
-            ? '<span class="dotstat"></span> Banco · Online'
-            : '<span class="dotstat off"></span> Banco · Offline';
-    } catch (_) {
-        el.innerHTML = '<span class="dotstat off"></span> Banco · Offline';
-    }
+    await pintarHealth();
 }
 
 iniPeriodo();
