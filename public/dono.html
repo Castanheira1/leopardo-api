@@ -188,6 +188,39 @@
             border-color: transparent; box-shadow: 0 2px 8px rgba(212,160,23,.25);
         }
 
+        .proj-filter {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+            padding: 10px 12px; background: #fff; border: 1px solid var(--line);
+            border-radius: var(--radius); box-shadow: var(--shadow);
+            align-items: center;
+        }
+        .proj-filter .pf-label {
+            font-size: .68rem; font-weight: 750; text-transform: uppercase;
+            letter-spacing: .08em; color: #9a9aa3; margin-right: 4px;
+        }
+        .proj-filter button {
+            background: #f7f6f2; border: 1px solid var(--line); color: var(--muted);
+            border-radius: 999px; padding: 7px 12px; font-size: .76rem; font-weight: 700;
+            cursor: pointer; transition: background .12s, border-color .12s, color .12s;
+        }
+        .proj-filter button:hover { border-color: var(--gold); color: var(--gold-deep); background: #fffbeb; }
+        .proj-filter button.on {
+            background: linear-gradient(180deg, #e8b84a, #d4a017); color: #1a1a1f;
+            border-color: transparent; box-shadow: 0 2px 8px rgba(212,160,23,.22);
+        }
+        .proj-card { cursor: pointer; }
+        .proj-card.selected {
+            border-color: rgba(212,160,23,.65);
+            box-shadow: 0 0 0 2px rgba(212,160,23,.2), 0 8px 24px rgba(26,26,31,.07);
+        }
+        .escopo-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #fff8e8; border: 1px solid rgba(212,160,23,.3);
+            color: var(--gold-deep); font-size: .72rem; font-weight: 750;
+            padding: 4px 10px; border-radius: 999px; margin-left: 8px;
+            vertical-align: middle;
+        }
+
         .banner-ops {
             display: none; align-items: flex-start; gap: 14px; margin-bottom: 14px;
             background: #fffbeb; border: 1px solid rgba(212,160,23,.35); border-radius: var(--radius);
@@ -516,6 +549,11 @@
                     </div>
                 </div>
 
+                <div class="proj-filter" id="projFilter" aria-label="Filtrar por projeto">
+                    <span class="pf-label">Projeto</span>
+                    <button type="button" class="on" data-pid="todos" onclick="setProjFiltro('todos')">Todos</button>
+                </div>
+
                 <div class="kpi-strip" id="donoKpis"></div>
                 <div class="kpi-strip kpi-secondary" id="donoKpisSec"></div>
 
@@ -523,8 +561,8 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <h3>Desempenho no período</h3>
-                                <p class="cap">Viagens e km consolidados (todos os projetos).</p>
+                                <h3>Desempenho no período <span class="escopo-pill" id="escopoSerie">Todos</span></h3>
+                                <p class="cap" id="capSerie">Viagens e km por canteiro (use o filtro de projeto acima).</p>
                             </div>
                             <div class="chart-tabs" id="chartTabs">
                                 <button type="button" class="on" data-serie="viagens" onclick="setSerie('viagens')">Viagens</button>
@@ -536,8 +574,8 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <h3>Horário de pico</h3>
-                                <p class="cap">Viagens por hora local.</p>
+                                <h3>Horário de pico <span class="escopo-pill" id="escopoPico">Todos</span></h3>
+                                <p class="cap" id="capPico">Viagens por hora local no escopo selecionado.</p>
                             </div>
                         </div>
                         <div class="spark" id="donoPico"></div>
@@ -547,10 +585,10 @@
                 <div class="panel">
                     <div class="panel-head">
                         <div>
-                            <h3>Projetos</h3>
-                            <p class="cap" id="capProjetos">Ordenados por aderência no período.</p>
+                            <h3>Comparativo por projeto</h3>
+                            <p class="cap" id="capProjetos">Clique num canteiro para filtrar KPIs e gráficos. “Todos” volta ao consolidado.</p>
                         </div>
-                        <button type="button" class="link-gold" onclick="irSecao('sec-projetos')">Ver todos</button>
+                        <button type="button" class="link-gold" onclick="irSecao('sec-projetos')">Gerir projetos</button>
                     </div>
                     <div id="listaDonoProjetos"><div class="empty compact">Carregando…</div></div>
                 </div>
@@ -559,8 +597,8 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <h3>Passageiros por sexo</h3>
-                                <p class="cap">Viagens concluídas no período.</p>
+                                <h3>Passageiros por sexo <span class="escopo-pill" id="escopoSexo">Todos</span></h3>
+                                <p class="cap" id="capSexo">Viagens concluídas no escopo selecionado.</p>
                             </div>
                         </div>
                         <div class="chart" id="donoSexo"></div>
@@ -672,6 +710,8 @@ const SECOES = {
 
 let _dashCache = null;
 let _serieAtiva = 'viagens';
+/** 'todos' | id numérico do projeto */
+let _projFiltro = 'todos';
 
 /** Ícones stroke (sem emoji) — alinhados ao painel admin */
 const ICO = {
@@ -880,9 +920,10 @@ function chartGenero(el, homens, mulheres) {
         </div>`;
 }
 
-function consolidarPorDia(rows) {
+function consolidarPorDia(rows, projetoId) {
     const map = new Map();
     for (const r of rows || []) {
+        if (projetoId != null && Number(r.projeto_id) !== Number(projetoId)) continue;
         const key = String(r.dia).slice(0, 10);
         const cur = map.get(key) || { dia: key, viagens: 0, km: 0 };
         cur.viagens += Number(r.viagens) || 0;
@@ -892,18 +933,89 @@ function consolidarPorDia(rows) {
     return [...map.values()].sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
+function projetoSelecionado() {
+    if (_projFiltro === 'todos' || !_dashCache) return null;
+    return (_dashCache.projetos || []).find((p) => String(p.id) === String(_projFiltro)) || null;
+}
+
+function escopoMetricas() {
+    const p = projetoSelecionado();
+    if (!p) {
+        const c = _dashCache.consolidado;
+        return {
+            label: 'Todos os projetos',
+            curto: 'Todos',
+            usuarios_ativos: c.usuarios_ativos,
+            engajados: c.engajados,
+            aderencia_pct: c.aderencia_pct,
+            viagens: c.viagens,
+            km: c.km,
+            custo_por_km: c.custo_por_km,
+            custo_por_viagem: c.custo_por_viagem,
+            projetos_txt: `${c.projetos_ativos}/${c.projetos}`,
+            pico: c.pico,
+            sexo: c.sexo,
+            projeto_id: null,
+        };
+    }
+    return {
+        label: p.nome,
+        curto: p.codigo || p.nome,
+        usuarios_ativos: p.usuarios.ativos,
+        engajados: p.usuarios.engajados,
+        aderencia_pct: p.usuarios.aderencia_pct,
+        viagens: p.viagens.concluidas,
+        km: p.viagens.km,
+        custo_por_km: p.custo.por_km,
+        custo_por_viagem: p.custo.por_viagem,
+        projetos_txt: p.codigo,
+        pico: p.pico,
+        sexo: p.sexo,
+        projeto_id: p.id,
+    };
+}
+
+function setEscopoPills(label) {
+    ['escopoSerie', 'escopoPico', 'escopoSexo'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = label;
+    });
+}
+
+function montarFiltroProjetos() {
+    const wrap = document.getElementById('projFilter');
+    if (!wrap || !_dashCache) return;
+    const projetos = [...(_dashCache.projetos || [])].sort((a, b) =>
+        String(a.nome).localeCompare(String(b.nome))
+    );
+    const chips = [
+        `<span class="pf-label">Projeto</span>`,
+        `<button type="button" data-pid="todos" class="${_projFiltro === 'todos' ? 'on' : ''}" onclick="setProjFiltro('todos')">Todos</button>`,
+        ...projetos.map((p) =>
+            `<button type="button" data-pid="${p.id}" class="${String(_projFiltro) === String(p.id) ? 'on' : ''}" onclick="setProjFiltro('${p.id}')">${esc(p.codigo || p.nome)}</button>`
+        ),
+    ];
+    wrap.innerHTML = chips.join('');
+}
+
+function setProjFiltro(pid) {
+    _projFiltro = pid === 'todos' ? 'todos' : String(pid);
+    aplicarEscopoVisao();
+}
+
 function renderSerie(serie) {
     _serieAtiva = serie || _serieAtiva;
     document.querySelectorAll('#chartTabs button').forEach((b) => {
         b.classList.toggle('on', b.dataset.serie === _serieAtiva);
     });
     const el = document.getElementById('donoSerie');
-    const dias = consolidarPorDia(_dashCache?.por_dia || []);
+    const escopo = escopoMetricas();
+    const dias = consolidarPorDia(_dashCache?.por_dia || [], escopo.projeto_id);
     if (!dias.length) {
-        el.innerHTML = `<div class="empty compact">Sem viagens no período para montar a série.
+        el.innerHTML = `<div class="empty compact">Sem viagens de <strong>${esc(escopo.curto)}</strong> no período.
             <div class="empty-actions">
                 <button type="button" class="btn-ghost" onclick="setPeriodoPreset('30')">Últimos 30 dias</button>
-                <button type="button" class="btn-ghost" onclick="irSecao('sec-projetos')">Ver projetos</button>
+                <button type="button" class="btn-ghost" onclick="setProjFiltro('todos')">Ver todos os projetos</button>
             </div></div>`;
         return;
     }
@@ -945,7 +1057,8 @@ function cardKpi(k) {
 function cardProjeto(p) {
     const ad = p.usuarios.aderencia_pct;
     const bar = Math.min(100, Math.max(0, ad));
-    return `<div class="proj-card">
+    const sel = String(_projFiltro) === String(p.id) ? ' selected' : '';
+    return `<div class="proj-card${sel}" role="button" tabindex="0" onclick="setProjFiltro('${p.id}')" title="Filtrar visão por ${esc(p.nome)}">
         <div class="pc-top">
             <span class="pc-name">${esc(p.nome)}${p.ativo ? '' : ' · off'}</span>
             <span class="pc-ad" style="color:${corAderencia(ad)}">${ad}%</span>
@@ -959,91 +1072,115 @@ function cardProjeto(p) {
     </div>`;
 }
 
-async function carregarDono() {
+function aplicarEscopoVisao() {
+    if (!_dashCache) return;
+    const d = _dashCache;
+    const e = escopoMetricas();
     const kpis = document.getElementById('donoKpis');
     const kpisSec = document.getElementById('donoKpisSec');
     const banner = document.getElementById('bannerOps');
+    const c = d.consolidado;
+
+    // Banner: sem atividade no consolidado (não some só porque filtrou um canteiro vazio)
+    const semAtividade = !c.viagens && !c.engajados && !c.km;
+    if (banner) banner.classList.toggle('show', semAtividade && _projFiltro === 'todos');
+
+    setEscopoPills(e.curto);
+    const capSerie = document.getElementById('capSerie');
+    const capPico = document.getElementById('capPico');
+    const capSexo = document.getElementById('capSexo');
+    if (capSerie) {
+        capSerie.textContent = _projFiltro === 'todos'
+            ? 'Série no consolidado. Selecione um projeto para ver só aquele canteiro.'
+            : `Série somente de ${e.label} (${e.curto}).`;
+    }
+    if (capPico) capPico.textContent = `Viagens por hora — ${e.label}.`;
+    if (capSexo) capSexo.textContent = `Viagens concluídas — ${e.label}.`;
+
+    kpis.innerHTML = [
+        { ico: ICO.users, t: 'Usuários ativos', v: e.usuarios_ativos, h: `${e.engajados} engajados · ${e.curto}` },
+        { ico: ICO.car, t: 'Viagens', v: e.viagens, h: `${d.periodo?.dias || '—'} dias · ${e.curto}` },
+        { ico: ICO.chart, t: 'Aderência', v: `${e.aderencia_pct}%`, h: 'engajados / ativos', cor: corAderencia(e.aderencia_pct) },
+    ].map(cardKpi).join('');
+    if (kpisSec) {
+        kpisSec.innerHTML = [
+            { ico: ICO.km, t: 'Km rodados', v: e.km, h: e.curto },
+            { ico: ICO.money, t: 'Custo por km', v: fmtMoeda(e.custo_por_km), h: e.curto },
+            {
+                ico: ICO.grid,
+                t: _projFiltro === 'todos' ? 'Projetos' : 'Canteiro',
+                v: e.projetos_txt,
+                h: _projFiltro === 'todos' ? 'ativos / total' : 'código do projeto',
+            },
+        ].map(cardKpi).join('');
+    }
+
+    // Filtro chips + cards (sempre todos os projetos para comparar)
+    montarFiltroProjetos();
+    const lista = [...(d.projetos || [])].sort((a, b) =>
+        (b.usuarios.aderencia_pct - a.usuarios.aderencia_pct)
+        || (b.usuarios.ativos - a.usuarios.ativos)
+        || (b.viagens.concluidas - a.viagens.concluidas)
+        || String(a.nome).localeCompare(String(b.nome))
+    );
+    const listaEl = document.getElementById('listaDonoProjetos');
+    const capP = document.getElementById('capProjetos');
+    if (!lista.length) {
+        listaEl.innerHTML = '<div class="empty compact">Nenhum projeto cadastrado.</div>';
+    } else {
+        if (capP) {
+            capP.textContent = _projFiltro === 'todos'
+                ? 'Comparativo de todos os canteiros. Clique para filtrar KPIs e gráficos.'
+                : `Filtro ativo: ${e.label}. Clique em “Todos” ou noutro card para mudar.`;
+        }
+        // Sempre mostra todos — com uso primeiro
+        const comUso = lista.filter((p) => p.usuarios.aderencia_pct > 0 || p.viagens.concluidas > 0 || p.usuarios.engajados > 0);
+        const semUso = lista.filter((p) => !comUso.includes(p));
+        let html = `<div class="proj-grid">${(comUso.length ? comUso : lista).map(cardProjeto).join('')}</div>`;
+        if (comUso.length && semUso.length) {
+            html += `<div class="proj-muted-label">Sem uso no período (${semUso.length})</div>`;
+            html += `<div class="proj-grid">${semUso.map(cardProjeto).join('')}</div>`;
+        }
+        listaEl.innerHTML = html;
+    }
+
+    const pico = e.pico || [];
+    const maxPico = Math.max(...pico, 0);
+    const picoEl = document.getElementById('donoPico');
+    if (!maxPico) {
+        picoEl.innerHTML = `<div class="empty compact" style="width:100%">Sem viagens por hora em <strong>${esc(e.curto)}</strong>.
+            <div class="empty-actions">
+                <button type="button" class="btn-ghost" onclick="setPeriodoPreset('30')">Últimos 30 dias</button>
+                <button type="button" class="btn-ghost" onclick="setProjFiltro('todos')">Todos os projetos</button>
+            </div></div>`;
+    } else {
+        picoEl.innerHTML = pico.map((v, h) => `
+            <div class="col" title="${h}h: ${v} viagem(ns)">
+                <span class="bar" style="height:${Math.max(3, Math.round((v / maxPico) * 100))}%"></span>
+                <span class="cl">${h % 3 === 0 ? h + 'h' : ''}</span>
+            </div>`).join('');
+    }
+
+    chartGenero(document.getElementById('donoSexo'), e.sexo?.m || 0, e.sexo?.f || 0);
+    renderSerie(_serieAtiva);
+}
+
+async function carregarDono() {
+    const kpis = document.getElementById('donoKpis');
+    const kpisSec = document.getElementById('donoKpisSec');
     try {
         const r = await fetchWithAuth('/api/admin/dono/dashboard' + periodoQuery());
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Erro');
         _dashCache = d;
-        const c = d.consolidado;
-        const semAtividade = !c.viagens && !c.engajados && !c.km;
-
-        if (banner) banner.classList.toggle('show', semAtividade);
-
-        // Hierarquia: 3 principais + 3 secundários
-        kpis.innerHTML = [
-            { ico: ICO.users, t: 'Usuários ativos', v: c.usuarios_ativos, h: `${c.engajados} engajados no período` },
-            { ico: ICO.car, t: 'Viagens', v: c.viagens, h: `${d.periodo?.dias || '—'} dias no filtro` },
-            { ico: ICO.chart, t: 'Aderência global', v: `${c.aderencia_pct}%`, h: 'engajados / ativos', cor: corAderencia(c.aderencia_pct) },
-        ].map(cardKpi).join('');
-        if (kpisSec) {
-            kpisSec.innerHTML = [
-                { ico: ICO.km, t: 'Km rodados', v: c.km, h: 'com GPS válido' },
-                { ico: ICO.money, t: 'Custo por km', v: fmtMoeda(c.custo_por_km), h: 'contrato rateado' },
-                { ico: ICO.grid, t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}`, h: 'ativos / total' },
-            ].map(cardKpi).join('');
+        // Se o projeto filtrado sumiu (apagado), volta para todos
+        if (_projFiltro !== 'todos' && !(d.projetos || []).some((p) => String(p.id) === String(_projFiltro))) {
+            _projFiltro = 'todos';
         }
-
-        d.projetos.sort((a, b) =>
-            (b.usuarios.aderencia_pct - a.usuarios.aderencia_pct)
-            || (b.usuarios.ativos - a.usuarios.ativos)
-            || (b.viagens.concluidas - a.viagens.concluidas)
-            || String(a.nome).localeCompare(String(b.nome))
-        );
-        const listaEl = document.getElementById('listaDonoProjetos');
-        const capP = document.getElementById('capProjetos');
-        if (!d.projetos.length) {
-            listaEl.innerHTML = '<div class="empty compact">Nenhum projeto cadastrado.</div>';
-            if (capP) capP.textContent = 'Cadastre o primeiro canteiro em Projetos.';
-        } else {
-            const comUso = d.projetos.filter((p) => p.usuarios.aderencia_pct > 0 || p.viagens.concluidas > 0 || p.usuarios.engajados > 0);
-            const comBase = d.projetos.filter((p) => !comUso.includes(p) && p.usuarios.ativos > 0);
-            const vazios = d.projetos.filter((p) => !comUso.includes(p) && !comBase.includes(p));
-            const destaque = comUso.length ? comUso : comBase;
-            const resto = comUso.length ? [...comBase, ...vazios] : vazios;
-
-            if (capP) {
-                capP.textContent = comUso.length
-                    ? 'Com uso no período primeiro; demais canteiros abaixo.'
-                    : comBase.length
-                        ? 'Há usuários, mas ainda sem viagens no período.'
-                        : 'Canteiros sem usuários ativos no período.';
-            }
-
-            let html = '';
-            if (destaque.length) {
-                html += `<div class="proj-grid">${destaque.map(cardProjeto).join('')}</div>`;
-            }
-            if (resto.length) {
-                html += `<div class="proj-muted-label">Outros canteiros (${resto.length})</div>`;
-                html += `<div class="proj-grid">${resto.map(cardProjeto).join('')}</div>`;
-            }
-            if (!html) html = '<div class="empty compact">Sem projetos para exibir.</div>';
-            listaEl.innerHTML = html;
-        }
-
-        const maxPico = Math.max(...(c.pico || [0]), 0);
-        const picoEl = document.getElementById('donoPico');
-        if (!maxPico) {
-            picoEl.innerHTML = `<div class="empty compact" style="width:100%">Sem viagens por hora neste período.
-                <div class="empty-actions">
-                    <button type="button" class="btn-ghost" onclick="setPeriodoPreset('30')">Últimos 30 dias</button>
-                </div></div>`;
-        } else {
-            picoEl.innerHTML = c.pico.map((v, h) => `
-                <div class="col" title="${h}h: ${v} viagem(ns)">
-                    <span class="bar" style="height:${Math.max(3, Math.round((v / maxPico) * 100))}%"></span>
-                    <span class="cl">${h % 3 === 0 ? h + 'h' : ''}</span>
-                </div>`).join('');
-        }
-
-        chartGenero(document.getElementById('donoSexo'), c.sexo.m, c.sexo.f);
-        renderSerie(_serieAtiva);
+        aplicarEscopoVisao();
         await pintarHealth();
     } catch (e) {
+        const banner = document.getElementById('bannerOps');
         if (banner) banner.classList.remove('show');
         kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
         if (kpisSec) kpisSec.innerHTML = '';
