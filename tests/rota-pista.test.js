@@ -108,6 +108,18 @@ ok(
   `esperado parcial/proximo (${compatPort})`
 );
 
+// Ilha Geosol/Lagoas ligada ao tronco da mina (não cai em reta)
+const geosol = by("Base Geosol");
+const lagoaA = by("Lagoa do Amendoim");
+const rotaGeo = calcularRotaCarona(geosol, c07, codigo);
+ok(rotaGeo.fonte === "malha", `Geosol→C07 na malha (${rotaGeo.fonte})`);
+ok(
+  (rotaGeo.nomes || []).includes("Pilha Norte") || rotaGeo.pontos.some((p) => /Pilha Norte/i.test(p.nome || "")),
+  "caminho Geosol passa por Pilha Norte (liga a ilha)"
+);
+const rotaLagoaMina = calcularRotaCarona(lagoaA, by("Rodoviária Castanheira"), codigo);
+ok(rotaLagoaMina.fonte === "malha", `Lagoa Amendoim→Castanheira na malha (${rotaLagoaMina.fonte})`);
+
 if (failed) {
   console.error(`\n${failed} verificação(ões) falharam.`);
   process.exit(1);

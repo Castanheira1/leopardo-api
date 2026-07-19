@@ -671,9 +671,6 @@ function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locaisOrOpts, 
   return melhor;
 }
 
-// Alias legado
-const _catalogoLocais = _catalogo;
-
 module.exports = {
   haversine,
   sqlSegmentoBase,
@@ -696,7 +693,6 @@ module.exports = {
   corredorRotaCaronaKm,
   compatRotaPassageiro,
   ENCAIXE_AVANCO_MIN_KM,
-  _catalogoLocais,
   locaisDoProjetoCodigo,
   catalogoDoProjeto,
   calcularRotaCarona,

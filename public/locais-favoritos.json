@@ -575,7 +575,12 @@
             "Área do Condomínio da Integridade Estrutural"
           ]
         ],
-        "arestas": []
+        "arestas": [
+          {
+            "a": "Base Geosol",
+            "b": "Pilha Norte"
+          }
+        ]
       }
     },
     "SALOBO": {
