@@ -171,17 +171,55 @@
         .adm-user-name { font-size: .82rem; font-weight: 650; color: var(--ink); }
         .adm-user-role { font-size: .65rem; color: var(--muted); }
 
-        .adm-content { padding: 22px 28px 8px; flex: 1; max-width: 1320px; width: 100%; margin: 0 auto; }
+        .adm-content { padding: 22px 28px 8px; flex: 1; width: 100%; max-width: none; }
         .adm-section { display: none; animation: fadeIn .22s ease; }
         .adm-section.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-        .kpi-strip {
-            display: grid; grid-template-columns: repeat(6, 1fr);
-            gap: 12px; margin-bottom: 16px;
+        .period-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .period-presets button {
+            flex: 1 1 auto; min-width: 0; background: #fff; border: 1px solid var(--line);
+            color: var(--muted); border-radius: 999px; padding: 7px 8px; font-size: .72rem;
+            font-weight: 700; cursor: pointer;
         }
-        @media (max-width: 1200px) { .kpi-strip { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 700px) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+        .period-presets button:hover { border-color: var(--gold); color: var(--gold-deep); }
+        .period-presets button.on {
+            background: linear-gradient(180deg, #e8b84a, #d4a017); color: #1a1a1f;
+            border-color: transparent; box-shadow: 0 2px 8px rgba(212,160,23,.25);
+        }
+
+        .banner-ops {
+            display: none; align-items: flex-start; gap: 14px; margin-bottom: 14px;
+            background: #fffbeb; border: 1px solid rgba(212,160,23,.35); border-radius: var(--radius);
+            padding: 14px 16px; box-shadow: var(--shadow);
+        }
+        .banner-ops.show { display: flex; }
+        .banner-ops .bo-ico {
+            width: 40px; height: 40px; border-radius: 12px; background: #fff;
+            border: 1px solid rgba(212,160,23,.25); color: var(--gold-deep);
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .banner-ops .bo-title { font-weight: 750; color: var(--ink); font-size: .95rem; margin-bottom: 4px; }
+        .banner-ops .bo-txt { font-size: .8rem; color: var(--muted); line-height: 1.45; }
+        .banner-ops .bo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+        .kpi-strip {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 12px; margin-bottom: 12px;
+        }
+        .kpi-strip.kpi-secondary {
+            grid-template-columns: repeat(3, 1fr); margin-bottom: 16px;
+        }
+        .kpi-strip.kpi-secondary .kpi { padding: 12px 14px; }
+        .kpi-strip.kpi-secondary .kpi .val-line { font-size: 1.15rem; }
+        .kpi-strip.kpi-secondary .kpi-ico { width: 34px; height: 34px; border-radius: 10px; }
+        .kpi-strip.kpi-secondary .kpi-ico svg { width: 15px; height: 15px; }
+        @media (max-width: 900px) {
+            .kpi-strip, .kpi-strip.kpi-secondary { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 520px) {
+            .kpi-strip, .kpi-strip.kpi-secondary { grid-template-columns: 1fr; }
+        }
         .kpi {
             background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
             padding: 16px 16px 14px; box-shadow: var(--shadow);
@@ -223,9 +261,17 @@
             padding: 2px 7px; border-radius: 5px; font-size: .74rem; border: 1px solid var(--line);
         }
         .empty {
-            color: #9a9aa3; text-align: center; padding: 36px 16px; font-size: .88rem;
+            color: #9a9aa3; text-align: center; padding: 28px 16px; font-size: .88rem;
             border: 1px dashed var(--line); border-radius: 14px; background: #fafaf8;
         }
+        .empty.compact { padding: 20px 14px; font-size: .84rem; }
+        .empty .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
+        .proj-muted-label {
+            font-size: .72rem; font-weight: 700; color: #9a9aa3; text-transform: uppercase;
+            letter-spacing: .06em; margin: 14px 2px 8px;
+        }
+        .line-chart { min-height: 0; }
+        .line-chart .empty.compact { margin: 0; }
         .link-gold {
             background: none; border: none; color: var(--gold); font-weight: 700;
             font-size: .8rem; cursor: pointer; padding: 4px 0;
@@ -391,9 +437,14 @@
 
         <div class="adm-side-block">
             <div class="blk-title">Período</div>
+            <div class="period-presets" id="periodPresets">
+                <button type="button" data-preset="7" onclick="setPeriodoPreset('7')">7 dias</button>
+                <button type="button" data-preset="30" onclick="setPeriodoPreset('30')">30 dias</button>
+                <button type="button" data-preset="mes" class="on" onclick="setPeriodoPreset('mes')">Mês atual</button>
+            </div>
             <div class="adm-filtro">
-                <div><label>De</label><input type="date" id="filtroDe"></div>
-                <div><label>Até</label><input type="date" id="filtroAte"></div>
+                <div><label>De</label><input type="date" id="filtroDe" onchange="marcarPresetCustom()"></div>
+                <div><label>Até</label><input type="date" id="filtroAte" onchange="marcarPresetCustom()"></div>
                 <button type="button" class="btn-side" onclick="atualizarSecaoAtiva()">Atualizar dados</button>
             </div>
         </div>
@@ -452,7 +503,21 @@
         <div class="adm-content">
             <!-- Visão olho rápido -->
             <section id="sec-visao" class="adm-section active">
+                <div class="banner-ops" id="bannerOps">
+                    <div class="bo-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                    <div>
+                        <div class="bo-title">Sem atividade operacional no período</div>
+                        <div class="bo-txt">Não há viagens, engajamento ou uso registrado nestas datas. Cadastre usuários, libere admins de canteiro ou amplie o período.</div>
+                        <div class="bo-actions">
+                            <button type="button" class="btn-primary" onclick="setPeriodoPreset('30')">Ver últimos 30 dias</button>
+                            <button type="button" class="btn-ghost" onclick="irSecao('sec-projetos')">Ir a Projetos</button>
+                            <button type="button" class="btn-ghost" onclick="irSecao('sec-acesso')">Acesso admin</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="kpi-strip" id="donoKpis"></div>
+                <div class="kpi-strip kpi-secondary" id="donoKpisSec"></div>
 
                 <div class="grid-main">
                     <div class="panel">
@@ -466,7 +531,7 @@
                                 <button type="button" data-serie="km" onclick="setSerie('km')">Km rodados</button>
                             </div>
                         </div>
-                        <div class="line-chart" id="donoSerie"><div class="empty">Carregando…</div></div>
+                        <div class="line-chart" id="donoSerie"><div class="empty compact">Carregando…</div></div>
                     </div>
                     <div class="panel">
                         <div class="panel-head">
@@ -483,11 +548,11 @@
                     <div class="panel-head">
                         <div>
                             <h3>Projetos</h3>
-                            <p class="cap">Ordenados por aderência no período.</p>
+                            <p class="cap" id="capProjetos">Ordenados por aderência no período.</p>
                         </div>
                         <button type="button" class="link-gold" onclick="irSecao('sec-projetos')">Ver todos</button>
                     </div>
-                    <div class="proj-grid" id="listaDonoProjetos"><div class="empty">Carregando…</div></div>
+                    <div id="listaDonoProjetos"><div class="empty compact">Carregando…</div></div>
                 </div>
 
                 <div class="grid-main">
@@ -755,11 +820,37 @@ function periodoQuery() {
 function fmtMoeda(v) {
     return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
-function iniPeriodo() {
+function ymdLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+function setPeriodoPreset(preset, { reload = true } = {}) {
     const hoje = new Date();
-    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    document.getElementById('filtroDe').value = inicio.toISOString().slice(0, 10);
-    document.getElementById('filtroAte').value = hoje.toISOString().slice(0, 10);
+    const ate = ymdLocal(hoje);
+    let de;
+    if (preset === '7') {
+        const d = new Date(hoje); d.setDate(d.getDate() - 6); de = ymdLocal(d);
+    } else if (preset === '30') {
+        const d = new Date(hoje); d.setDate(d.getDate() - 29); de = ymdLocal(d);
+    } else {
+        // mês atual
+        de = ymdLocal(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+        preset = 'mes';
+    }
+    document.getElementById('filtroDe').value = de;
+    document.getElementById('filtroAte').value = ate;
+    document.querySelectorAll('#periodPresets button').forEach((b) => {
+        b.classList.toggle('on', b.dataset.preset === preset);
+    });
+    if (reload) atualizarSecaoAtiva();
+}
+function marcarPresetCustom() {
+    document.querySelectorAll('#periodPresets button').forEach((b) => b.classList.remove('on'));
+}
+function iniPeriodo() {
+    setPeriodoPreset('mes', { reload: false });
 }
 function corAderencia(pct) {
     if (pct >= 40) return 'var(--good)';
@@ -769,7 +860,13 @@ function corAderencia(pct) {
 
 function chartGenero(el, homens, mulheres) {
     const total = homens + mulheres;
-    if (!total) { el.innerHTML = '<div class="empty">Nenhum passageiro no período.</div>'; return; }
+    if (!total) {
+        el.innerHTML = `<div class="empty compact">Nenhum passageiro no período.
+            <div class="empty-actions">
+                <button type="button" class="btn-ghost" onclick="setPeriodoPreset('30')">Ampliar para 30 dias</button>
+            </div></div>`;
+        return;
+    }
     const ph = Math.round((homens / total) * 100);
     const pm = 100 - ph;
     el.innerHTML = `
@@ -803,7 +900,11 @@ function renderSerie(serie) {
     const el = document.getElementById('donoSerie');
     const dias = consolidarPorDia(_dashCache?.por_dia || []);
     if (!dias.length) {
-        el.innerHTML = '<div class="empty">Sem viagens no período selecionado.<br><span style="opacity:.7;font-size:.8rem">Quando houver atividade, o gráfico aparece aqui.</span></div>';
+        el.innerHTML = `<div class="empty compact">Sem viagens no período para montar a série.
+            <div class="empty-actions">
+                <button type="button" class="btn-ghost" onclick="setPeriodoPreset('30')">Últimos 30 dias</button>
+                <button type="button" class="btn-ghost" onclick="irSecao('sec-projetos')">Ver projetos</button>
+            </div></div>`;
         return;
     }
     const vals = dias.map((d) => _serieAtiva === 'km' ? d.km : d.viagens);
@@ -834,65 +935,118 @@ function renderSerie(serie) {
 }
 function setSerie(s) { renderSerie(s); }
 
+function cardKpi(k) {
+    return `<div class="kpi">
+        <div class="kpi-top"><div class="kpi-ico">${k.ico}</div><div class="cap">${esc(k.t)}</div></div>
+        <div class="val-line" style="${k.cor ? `color:${k.cor}` : ''}">${esc(String(k.v))}</div>
+        <div class="hint">${esc(k.h || '')}</div>
+    </div>`;
+}
+function cardProjeto(p) {
+    const ad = p.usuarios.aderencia_pct;
+    const bar = Math.min(100, Math.max(0, ad));
+    return `<div class="proj-card">
+        <div class="pc-top">
+            <span class="pc-name">${esc(p.nome)}${p.ativo ? '' : ' · off'}</span>
+            <span class="pc-ad" style="color:${corAderencia(ad)}">${ad}%</span>
+        </div>
+        <div class="pc-bar"><i style="width:${bar}%"></i></div>
+        <div class="pc-meta">
+            <span><strong>${p.usuarios.ativos}</strong> usuários</span>
+            <span><strong>${p.viagens.concluidas}</strong> viagens</span>
+            <span><strong>${fmtMoeda(p.custo.por_km)}</strong>/km</span>
+        </div>
+    </div>`;
+}
+
 async function carregarDono() {
     const kpis = document.getElementById('donoKpis');
+    const kpisSec = document.getElementById('donoKpisSec');
+    const banner = document.getElementById('bannerOps');
     try {
         const r = await fetchWithAuth('/api/admin/dono/dashboard' + periodoQuery());
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Erro');
         _dashCache = d;
         const c = d.consolidado;
+        const semAtividade = !c.viagens && !c.engajados && !c.km;
 
+        if (banner) banner.classList.toggle('show', semAtividade);
+
+        // Hierarquia: 3 principais + 3 secundários
         kpis.innerHTML = [
             { ico: ICO.users, t: 'Usuários ativos', v: c.usuarios_ativos, h: `${c.engajados} engajados no período` },
-            { ico: ICO.car, t: 'Viagens', v: c.viagens, h: `${d.periodo?.dias || '—'} dias` },
-            { ico: ICO.km, t: 'Km rodados', v: c.km, h: 'com GPS válido' },
-            { ico: ICO.money, t: 'Custo por km', v: fmtMoeda(c.custo_por_km), h: 'contrato rateado' },
+            { ico: ICO.car, t: 'Viagens', v: c.viagens, h: `${d.periodo?.dias || '—'} dias no filtro` },
             { ico: ICO.chart, t: 'Aderência global', v: `${c.aderencia_pct}%`, h: 'engajados / ativos', cor: corAderencia(c.aderencia_pct) },
-            { ico: ICO.grid, t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}`, h: 'ativos / total' },
-        ].map((k) => `
-            <div class="kpi">
-                <div class="kpi-top"><div class="kpi-ico">${k.ico}</div><div class="cap">${esc(k.t)}</div></div>
-                <div class="val-line" style="${k.cor ? `color:${k.cor}` : ''}">${esc(String(k.v))}</div>
-                <div class="hint">${esc(k.h || '')}</div>
-            </div>`).join('');
-
-        d.projetos.sort((a, b) => b.usuarios.aderencia_pct - a.usuarios.aderencia_pct);
-        const listaEl = document.getElementById('listaDonoProjetos');
-        if (!d.projetos.length) {
-            listaEl.innerHTML = '<div class="empty">Sem dados no período.</div>';
-        } else {
-            listaEl.innerHTML = d.projetos.map((p) => {
-                const ad = p.usuarios.aderencia_pct;
-                const bar = Math.min(100, Math.max(0, ad));
-                return `
-                <div class="proj-card">
-                    <div class="pc-top">
-                        <span class="pc-name">${esc(p.nome)}${p.ativo ? '' : ' · off'}</span>
-                        <span class="pc-ad" style="color:${corAderencia(ad)}">${ad}%</span>
-                    </div>
-                    <div class="pc-bar"><i style="width:${bar}%"></i></div>
-                    <div class="pc-meta">
-                        <span><strong>${p.usuarios.ativos}</strong> usuários</span>
-                        <span><strong>${p.viagens.concluidas}</strong> viagens</span>
-                        <span><strong>${fmtMoeda(p.custo.por_km)}</strong>/km</span>
-                    </div>
-                </div>`;
-            }).join('');
+        ].map(cardKpi).join('');
+        if (kpisSec) {
+            kpisSec.innerHTML = [
+                { ico: ICO.km, t: 'Km rodados', v: c.km, h: 'com GPS válido' },
+                { ico: ICO.money, t: 'Custo por km', v: fmtMoeda(c.custo_por_km), h: 'contrato rateado' },
+                { ico: ICO.grid, t: 'Projetos', v: `${c.projetos_ativos}/${c.projetos}`, h: 'ativos / total' },
+            ].map(cardKpi).join('');
         }
 
-        const maxPico = Math.max(...c.pico, 1);
-        document.getElementById('donoPico').innerHTML = c.pico.map((v, h) => `
-            <div class="col" title="${h}h: ${v} viagem(ns)">
-                <span class="bar" style="height:${Math.max(3, Math.round((v / maxPico) * 100))}%"></span>
-                <span class="cl">${h % 3 === 0 ? h + 'h' : ''}</span>
-            </div>`).join('');
+        d.projetos.sort((a, b) =>
+            (b.usuarios.aderencia_pct - a.usuarios.aderencia_pct)
+            || (b.usuarios.ativos - a.usuarios.ativos)
+            || (b.viagens.concluidas - a.viagens.concluidas)
+            || String(a.nome).localeCompare(String(b.nome))
+        );
+        const listaEl = document.getElementById('listaDonoProjetos');
+        const capP = document.getElementById('capProjetos');
+        if (!d.projetos.length) {
+            listaEl.innerHTML = '<div class="empty compact">Nenhum projeto cadastrado.</div>';
+            if (capP) capP.textContent = 'Cadastre o primeiro canteiro em Projetos.';
+        } else {
+            const comUso = d.projetos.filter((p) => p.usuarios.aderencia_pct > 0 || p.viagens.concluidas > 0 || p.usuarios.engajados > 0);
+            const comBase = d.projetos.filter((p) => !comUso.includes(p) && p.usuarios.ativos > 0);
+            const vazios = d.projetos.filter((p) => !comUso.includes(p) && !comBase.includes(p));
+            const destaque = comUso.length ? comUso : comBase;
+            const resto = comUso.length ? [...comBase, ...vazios] : vazios;
+
+            if (capP) {
+                capP.textContent = comUso.length
+                    ? 'Com uso no período primeiro; demais canteiros abaixo.'
+                    : comBase.length
+                        ? 'Há usuários, mas ainda sem viagens no período.'
+                        : 'Canteiros sem usuários ativos no período.';
+            }
+
+            let html = '';
+            if (destaque.length) {
+                html += `<div class="proj-grid">${destaque.map(cardProjeto).join('')}</div>`;
+            }
+            if (resto.length) {
+                html += `<div class="proj-muted-label">Outros canteiros (${resto.length})</div>`;
+                html += `<div class="proj-grid">${resto.map(cardProjeto).join('')}</div>`;
+            }
+            if (!html) html = '<div class="empty compact">Sem projetos para exibir.</div>';
+            listaEl.innerHTML = html;
+        }
+
+        const maxPico = Math.max(...(c.pico || [0]), 0);
+        const picoEl = document.getElementById('donoPico');
+        if (!maxPico) {
+            picoEl.innerHTML = `<div class="empty compact" style="width:100%">Sem viagens por hora neste período.
+                <div class="empty-actions">
+                    <button type="button" class="btn-ghost" onclick="setPeriodoPreset('30')">Últimos 30 dias</button>
+                </div></div>`;
+        } else {
+            picoEl.innerHTML = c.pico.map((v, h) => `
+                <div class="col" title="${h}h: ${v} viagem(ns)">
+                    <span class="bar" style="height:${Math.max(3, Math.round((v / maxPico) * 100))}%"></span>
+                    <span class="cl">${h % 3 === 0 ? h + 'h' : ''}</span>
+                </div>`).join('');
+        }
 
         chartGenero(document.getElementById('donoSexo'), c.sexo.m, c.sexo.f);
         renderSerie(_serieAtiva);
         await pintarHealth();
     } catch (e) {
+        if (banner) banner.classList.remove('show');
         kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+        if (kpisSec) kpisSec.innerHTML = '';
     }
 }
 
