@@ -64,6 +64,9 @@ const GOOGLE_ROUTES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.GOOGL
 // Com Routes ligado: tetos baixos por padrão (antes era 1500/dia e estourava).
 const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 5);
 const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 50);
+// Teto MENSAL alinhado à cota grátis (Routes Essentials: 10.000/mês desde mar/2025).
+// 1.000 = margem 10x; persiste no Postgres — restart/deploy não zera o contador.
+const ROTAS_GOOGLE_MAX_MES = Number(process.env.ROTAS_GOOGLE_MAX_MES || 1000);
 let rotasGoogleJanela = { t0: Date.now(), n: 0 };
 let rotasGoogleDia = { dia: "", n: 0 };
 const rotasGoogleStats = {
@@ -84,18 +87,24 @@ function chaveRotaApprox(olat, olng, dlat, dlng) {
   return `${q(olat)},${q(olng)}|${q(dlat)},${q(dlng)}`;
 }
 
-function rotasGooglePermitida() {
+// Contador de uso persistido: restart/deploy do Render NÃO zera o teto
+// (contador só em memória deixava crash-loop furar o limite diário).
+async function garantirTabelaRotasUso() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rotas_uso (
+      dia TEXT PRIMARY KEY,
+      n INTEGER NOT NULL DEFAULT 0
+    )`).catch(() => {});
+}
+
+async function rotasGooglePermitida() {
   if (!GOOGLE_ROUTES_ENABLED) {
     rotasGoogleStats.bloqueado++;
     return false;
   }
-  // Teto DIÁRIO primeiro: freio de fatura. Minuto sozinho não basta.
   const hoje = new Date().toISOString().slice(0, 10);
   if (rotasGoogleDia.dia !== hoje) rotasGoogleDia = { dia: hoje, n: 0 };
-  if (rotasGoogleDia.n >= ROTAS_GOOGLE_MAX_DIA) {
-    rotasGoogleStats.bloqueado++;
-    return false;
-  }
+  // Burst por minuto (memória basta: janela curta demais para restart importar).
   const agora = Date.now();
   if (agora - rotasGoogleJanela.t0 > 60_000) {
     rotasGoogleJanela = { t0: agora, n: 0 };
@@ -104,7 +113,37 @@ function rotasGooglePermitida() {
     rotasGoogleStats.bloqueado++;
     return false;
   }
-  rotasGoogleDia.n++;
+  // Tetos diário e MENSAL no Postgres (conta tentativas — conservador).
+  try {
+    await garantirTabelaRotasUso();
+    const inc = await pool.query(
+      `INSERT INTO rotas_uso (dia, n) VALUES ($1, 1)
+       ON CONFLICT (dia) DO UPDATE SET n = rotas_uso.n + 1
+       RETURNING n`,
+      [hoje]
+    );
+    const nDia = Number(inc.rows[0]?.n || 0);
+    rotasGoogleDia.n = nDia;
+    if (nDia > ROTAS_GOOGLE_MAX_DIA) {
+      rotasGoogleStats.bloqueado++;
+      return false;
+    }
+    const mesQ = await pool.query(
+      "SELECT COALESCE(SUM(n), 0) AS total FROM rotas_uso WHERE dia LIKE $1",
+      [hoje.slice(0, 7) + "%"]
+    );
+    if (Number(mesQ.rows[0]?.total || 0) > ROTAS_GOOGLE_MAX_MES) {
+      rotasGoogleStats.bloqueado++;
+      return false;
+    }
+  } catch (_) {
+    // DB fora: memória segura o teto diário (pior caso volta ao comportamento antigo).
+    if (rotasGoogleDia.n >= ROTAS_GOOGLE_MAX_DIA) {
+      rotasGoogleStats.bloqueado++;
+      return false;
+    }
+    rotasGoogleDia.n++;
+  }
   rotasGoogleJanela.n++;
   return true;
 }
@@ -187,7 +226,7 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     };
   }
 
-  if (!rotasGooglePermitida()) {
+  if (!(await rotasGooglePermitida())) {
     const payload = payloadFallbackReta();
     ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
     const motivo = !GOOGLE_ROUTES_ENABLED
@@ -273,13 +312,28 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
 });
 
 // Diagnóstico de cota (admin / local)
-app.get("/api/rotas/stats", verificarAuth, (req, res) => {
+app.get("/api/rotas/stats", verificarAuth, async (req, res) => {
+  let usadas_hoje = rotasGoogleDia.n;
+  let usadas_mes = null;
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const q = await pool.query(
+      `SELECT COALESCE(SUM(n) FILTER (WHERE dia = $1), 0) AS dia_n,
+              COALESCE(SUM(n), 0) AS mes_n
+         FROM rotas_uso WHERE dia LIKE $2`,
+      [hoje, hoje.slice(0, 7) + "%"]
+    );
+    usadas_hoje = Number(q.rows[0]?.dia_n || 0);
+    usadas_mes = Number(q.rows[0]?.mes_n || 0);
+  } catch (_) { /* sem DB: fica o contador em memória */ }
   res.json({
     ...rotasGoogleStats,
     enabled: GOOGLE_ROUTES_ENABLED,
     teto_min: ROTAS_GOOGLE_MAX_MIN,
     teto_dia: ROTAS_GOOGLE_MAX_DIA,
-    usadas_hoje: rotasGoogleDia.n,
+    teto_mes: ROTAS_GOOGLE_MAX_MES,
+    usadas_hoje,
+    usadas_mes,
     cache_mem: ROTAS_CACHE_MEM.size,
     janela_n: rotasGoogleJanela.n,
   });
@@ -292,6 +346,7 @@ module.exports = {
   ROTAS_CACHE_TTL_MS,
   ROTAS_GOOGLE_MAX_MIN,
   ROTAS_GOOGLE_MAX_DIA,
+  ROTAS_GOOGLE_MAX_MES,
   rotasGoogleJanela,
   rotasGoogleDia,
   rotasGoogleStats,
