@@ -6,7 +6,7 @@ const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { exigirProjeto, projetoDoUsuario } = require("../usuarios");
 const { horarioValido } = require("../datas");
-const { codigoDoProjeto, compatRotaPassageiro, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe } = require("../geo");
+const { codigoDoProjeto, compatRotaPassageiro, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado } = require("../geo");
 const { iniciarFilaPedido } = require("../services/fila");
 
 /* ============================ PEDIDOS ============================ */
@@ -173,11 +173,34 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
       const locaisEnc = caronaMot?.destino_lat != null
         ? locaisDoProjetoCodigo(codPed)
         : [];
+      const caOrigMot = caronaMot
+        ? { lat: +caronaMot.origem_lat, lng: +caronaMot.origem_lng }
+        : null;
+      const caDestMot = caronaMot
+        ? { lat: +caronaMot.destino_lat, lng: +caronaMot.destino_lng }
+        : null;
       const optsRota = {
         locais: locaisEnc,
         codigo: codPed,
         rota_pontos: caronaMot?.rota_pontos || null,
       };
+      // Paradas já a bordo deste motorista (desvio acumulado local).
+      let desvioJaMot = 0;
+      if (caronaMot && caOrigMot && caDestMot) {
+        try {
+          const { rows: paradas } = await pool.query(
+            `SELECT destino_motorista_lat AS lat, destino_motorista_lng AS lng,
+                    destino_motorista_texto AS nome
+             FROM viagens
+             WHERE motorista_id = $1 AND status = 'em_andamento'
+               AND destino_motorista_lat IS NOT NULL`,
+            [req.user.id]
+          );
+          desvioJaMot = somarDesvioAcumulado(caOrigMot, caDestMot, paradas.map((x) => ({
+            lat: Number(x.lat), lng: Number(x.lng), nome: x.nome || null,
+          })), optsRota);
+        } catch (_) { /* coluna ausente em ambientes antigos */ }
+      }
       const enriquecido = rows.map((p) => {
         if (!caronaMot?.destino_lat || p.destino_lat == null) return p;
         const compat = compatRotaPassageiro(
@@ -192,9 +215,8 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
           const enc = melhorPontoDeEncaixe(
             { lat: +p.origem_lat, lng: +p.origem_lng },
             { lat: +p.destino_lat, lng: +p.destino_lng },
-            { lat: +caronaMot.origem_lat, lng: +caronaMot.origem_lng },
-            { lat: +caronaMot.destino_lat, lng: +caronaMot.destino_lng },
-            optsRota
+            caOrigMot, caDestMot,
+            { ...optsRota, desvio_acumulado_km: desvioJaMot }
           );
           if (enc) {
             return {

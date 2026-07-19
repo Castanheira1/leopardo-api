@@ -2,7 +2,7 @@
 require("dotenv").config();
 const { pool } = require("../db");
 const { habilitacaoAtiva, motoristaGpsVivo, projetoDoUsuario } = require("../usuarios");
-const { codigoDoProjeto, compatRotaPassageiro, locaisDoProjetoCodigo, melhorPontoDeEncaixe } = require("../geo");
+const { codigoDoProjeto, compatRotaPassageiro, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado } = require("../geo");
 
 // Cria a viagem a partir de uma proposta aceita (idempotente). Liga motorista
 // e passageiro, copia a rota e marca a carona/pedido como atendido.
@@ -72,17 +72,32 @@ async function criarViagemDaProposta(propostaId) {
         const pid = await projetoDoUsuario(passageiro_id);
         const cod = await codigoDoProjeto(pid);
         const locais = locaisDoProjetoCodigo(cod);
+        const caOrig = { lat: +car.origem_lat, lng: +car.origem_lng };
+        const caDest = { lat: +car.destino_lat, lng: +car.destino_lng };
         const optsRota = {
           locais,
           codigo: cod,
           rota_pontos: car.rota_pontos || null,
         };
+        let desvioJa = 0;
+        try {
+          const { rows: paradas } = await pool.query(
+            `SELECT destino_motorista_lat AS lat, destino_motorista_lng AS lng,
+                    destino_motorista_texto AS nome
+             FROM viagens
+             WHERE motorista_id = $1 AND status = 'em_andamento'
+               AND destino_motorista_lat IS NOT NULL`,
+            [motorista_id]
+          );
+          desvioJa = somarDesvioAcumulado(caOrig, caDest, paradas.map((x) => ({
+            lat: Number(x.lat), lng: Number(x.lng), nome: x.nome || null,
+          })), optsRota);
+        } catch (_) { /* ok */ }
         const enc = melhorPontoDeEncaixe(
           { lat: ped.origem_lat, lng: ped.origem_lng },
           { lat: ped.destino_lat, lng: ped.destino_lng },
-          { lat: car.origem_lat, lng: car.origem_lng },
-          { lat: car.destino_lat, lng: car.destino_lng },
-          optsRota
+          caOrig, caDest,
+          { ...optsRota, desvio_acumulado_km: desvioJa }
         );
         // Só vale como parada se o motorista NÃO cobre a viagem toda (senão a
         // viagem é normal — destino do passageiro).

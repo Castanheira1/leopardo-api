@@ -6,8 +6,11 @@ const {
   catalogoDoProjeto,
   compatRotaPassageiro,
   corredorRotaCaronaKm,
+  desvioInsercaoKm,
+  limitesDoProjeto,
   melhorPontoDeEncaixe,
   locaisDoProjetoCodigo,
+  somarDesvioAcumulado,
 } = require("../src/geo");
 
 const codigo = "S11D";
@@ -119,6 +122,28 @@ ok(
 );
 const rotaLagoaMina = calcularRotaCarona(lagoaA, by("Rodoviária Castanheira"), codigo);
 ok(rotaLagoaMina.fonte === "malha", `Lagoa Amendoim→Castanheira na malha (${rotaLagoaMina.fonte})`);
+
+// Limites por projeto (malha JSON > env)
+const lim = limitesDoProjeto(codigo);
+ok(lim.desvio_max_km === 1.8, `desvio_max_km por projeto (${lim.desvio_max_km})`);
+ok(lim.snap_km === 0.8, `snap_km por projeto (${lim.snap_km})`);
+
+// Desvio acumulado: parada já no caminho (CMD em MRO→C07) soma 0
+const dCmd = desvioInsercaoKm(mro, c07, cmd.lat, cmd.lng, cmd.nome, opts(rotaMroC07.pontos));
+ok(dCmd === 0, `CMD na polilinha MRO→C07 tem desvio 0 (${dCmd})`);
+const acum = somarDesvioAcumulado(mro, c07, [
+  { lat: cmd.lat, lng: cmd.lng, nome: cmd.nome },
+], opts(rotaMroC07.pontos));
+ok(acum === 0, `desvio acumulado de parada no caminho = 0 (${acum})`);
+// Com desvio_acumulado no teto, encaixe some se limite for 0
+const encBloq = melhorPontoDeEncaixe(
+  { lat: port.lat, lng: port.lng },
+  { lat: cmd.lat, lng: cmd.lng },
+  { lat: port.lat, lng: port.lng },
+  { lat: centro.lat, lng: centro.lng },
+  { ...opts(rotaPortCentro.pontos), desvio_acumulado_km: 99 }
+);
+ok(encBloq == null, "encaixe bloqueado se desvio acumulado estoura o limite");
 
 if (failed) {
   console.error(`\n${failed} verificação(ões) falharam.`);

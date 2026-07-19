@@ -1,6 +1,6 @@
 {
   "versao": 1,
-  "descricao": "Catalogo POR PROJETO. locais com ref; malha.troncos/arestas/malha_local_km definem a pista. Match usa menor caminho na malha e rota_pontos na carona.",
+  "descricao": "Catalogo POR PROJETO. malha: troncos/arestas/malha_local_km + desvio_max_km/snap_km por canteiro. Match 100% local (haversine+Dijkstra), sem Google Directions.",
   "projetos": {
     "S11D": {
       "nome": "S11D — Serra Sul (Canaã dos Carajás/PA)",
@@ -580,7 +580,9 @@
             "a": "Base Geosol",
             "b": "Pilha Norte"
           }
-        ]
+        ],
+        "desvio_max_km": 1.8,
+        "snap_km": 0.8
       }
     },
     "SALOBO": {

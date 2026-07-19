@@ -6,7 +6,7 @@ const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { exigirProjeto, habilitacaoAtiva, projetoDoUsuario, registrarEventoUso } = require("../usuarios");
 const { horarioValido } = require("../datas");
-const { calcularRotaCarona, codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
+const { calcularRotaCarona, codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
 
 /* ============================ CARONAS ============================ */
 app.post("/api/caronas", verificarAuth, async (req, res) => {
@@ -180,12 +180,40 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     const destPax = { lat: +dest_lat, lng: +dest_lng };
     const cod = await codigoDoProjeto(pid);
     const locais = locaisDoProjetoCodigo(cod);
+
+    // Desvio já comprometido por pax a bordo (paradas parciais/encaixe).
+    const idsMot = [...new Set(rows.map((c) => c.motorista_id).filter(Boolean))];
+    const paradasPorMot = new Map();
+    if (idsMot.length) {
+      try {
+        const { rows: paradas } = await pool.query(
+          `SELECT motorista_id, destino_motorista_lat AS lat, destino_motorista_lng AS lng,
+                  destino_motorista_texto AS nome
+           FROM viagens
+           WHERE status = 'em_andamento'
+             AND destino_motorista_lat IS NOT NULL
+             AND motorista_id = ANY($1::int[])`,
+          [idsMot]
+        );
+        for (const p of paradas) {
+          if (!paradasPorMot.has(p.motorista_id)) paradasPorMot.set(p.motorista_id, []);
+          paradasPorMot.get(p.motorista_id).push({
+            lat: Number(p.lat), lng: Number(p.lng), nome: p.nome || null,
+          });
+        }
+      } catch (e) {
+        console.warn("listar caronas desvio acumulado:", e.message);
+      }
+    }
+
     const comEncaixe = [];
     for (const c of rows) {
       if (c.origem_lat == null || c.destino_lat == null) {
         if (c.compat_rota !== "none") comEncaixe.push(c);
         continue;
       }
+      const caOrig = { lat: +c.origem_lat, lng: +c.origem_lng };
+      const caDest = { lat: +c.destino_lat, lng: +c.destino_lng };
       const optsRota = {
         locais,
         codigo: cod,
@@ -194,7 +222,7 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       // Compat pela polilinha da pista (malha gravada ou calculada).
       const compatJs = compatRotaPassageiro(
         destPax.lat, destPax.lng,
-        +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng,
+        caOrig.lat, caOrig.lng, caDest.lat, caDest.lng,
         optsRota
       );
       if (compatJs !== "none") {
@@ -205,17 +233,20 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
       // Embarque viável: passageiro na pista da carona ou dentro do alcance dela.
       const cor = corredorRotaCaronaKm(
         origPax.lat, origPax.lng,
-        +c.origem_lat, +c.origem_lng, +c.destino_lat, +c.destino_lng,
+        caOrig.lat, caOrig.lng, caDest.lat, caDest.lng,
         optsRota
       );
       const noCorredor = cor.dist <= RAIO_ROTA_KM && cor.t >= -0.05 && cor.t <= 1.05;
-      const distOrigemCarona = haversineKmCoord(origPax.lat, origPax.lng, +c.origem_lat, +c.origem_lng);
+      const distOrigemCarona = haversineKmCoord(origPax.lat, origPax.lng, caOrig.lat, caOrig.lng);
       if (!noCorredor && distOrigemCarona > (Number(c.raio_km) || RAIO_VISIVEL_KM)) continue;
-      const enc = melhorPontoDeEncaixe(
-        origPax, destPax,
-        { lat: +c.origem_lat, lng: +c.origem_lng },
-        { lat: +c.destino_lat, lng: +c.destino_lng },
+      const desvioJa = somarDesvioAcumulado(
+        caOrig, caDest,
+        paradasPorMot.get(c.motorista_id) || [],
         optsRota
+      );
+      const enc = melhorPontoDeEncaixe(
+        origPax, destPax, caOrig, caDest,
+        { ...optsRota, desvio_acumulado_km: desvioJa }
       );
       if (!enc) continue;
       comEncaixe.push({

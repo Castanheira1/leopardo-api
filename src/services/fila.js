@@ -5,7 +5,7 @@ const { FILA_OFERTA_TIMEOUT_S, RAIO_ONLINE_KM, RAIO_ROTA_KM, RAIO_VISIVEL_KM, sq
 const { pool } = require("../db");
 const { enviarPush } = require("../push");
 const { projetoDoUsuario, sqlSelfieValida } = require("../usuarios");
-const { codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, corredorSegmentoKm, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe } = require("../geo");
+const { codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, corredorSegmentoKm, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado } = require("../geo");
 
 // Notifica motoristas ONLINE (disponivel) dentro de RAIO_ONLINE_KM (600 m).
 // Marca o pedido como notificado. Usado no POST (pedido "para agora") e pelo
@@ -180,6 +180,35 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
   const cod = await codigoDoProjeto(projetoId);
   const locais = locaisDoProjetoCodigo(cod);
 
+  // Paradas de encaixe/parcial já aceitas (outros pax a bordo) — 1 query,
+  // desvio acumulado local na malha (sem Google).
+  const idsMot = rows.map((m) => m.motorista_id).filter(Boolean);
+  const paradasPorMot = new Map();
+  if (idsMot.length) {
+    try {
+      const { rows: paradas } = await pool.query(
+        `SELECT motorista_id,
+                destino_motorista_lat AS lat,
+                destino_motorista_lng AS lng,
+                destino_motorista_texto AS nome
+         FROM viagens
+         WHERE status = 'em_andamento'
+           AND destino_motorista_lat IS NOT NULL
+           AND destino_motorista_lng IS NOT NULL
+           AND motorista_id = ANY($1::int[])`,
+        [idsMot]
+      );
+      for (const p of paradas) {
+        if (!paradasPorMot.has(p.motorista_id)) paradasPorMot.set(p.motorista_id, []);
+        paradasPorMot.get(p.motorista_id).push({
+          lat: Number(p.lat), lng: Number(p.lng), nome: p.nome || null,
+        });
+      }
+    } catch (e) {
+      console.warn("rankear desvio acumulado:", e.message);
+    }
+  }
+
   const candidatos = [];
   for (const m of rows) {
     const gps = { lat: Number(m.lat), lng: Number(m.lng) };
@@ -223,7 +252,15 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
       if (compat === "total") classe = 0;
       else if (compat === "parcial") classe = 1;
       else {
-        encaixe = melhorPontoDeEncaixe(orig, dest, caOrig, caDest, optsRota);
+        const desvioJa = somarDesvioAcumulado(
+          caOrig, caDest,
+          paradasPorMot.get(m.motorista_id) || [],
+          optsRota
+        );
+        encaixe = melhorPontoDeEncaixe(orig, dest, caOrig, caDest, {
+          ...optsRota,
+          desvio_acumulado_km: desvioJa,
+        });
         if (encaixe) classe = 2;
         else if (compat === "proximo") classe = 4;
       }

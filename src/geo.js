@@ -169,6 +169,21 @@ function locaisDoProjetoCodigo(codigo) {
   return catalogoDoProjeto(codigo).locais;
 }
 
+/**
+ * Limites de rota por projeto (malha JSON) com fallback env global.
+ * Não usa Google — só haversine/malha local.
+ */
+function limitesDoProjeto(codigo) {
+  const m = catalogoDoProjeto(codigo).malha || {};
+  const desvioEnv = Number.isFinite(ROTA_DESVIO_MAX_KM) ? ROTA_DESVIO_MAX_KM : 1.8;
+  const snapEnv = Number.isFinite(SNAP_NO_KM) ? SNAP_NO_KM : 0.8;
+  return {
+    desvio_max_km: Number.isFinite(+m.desvio_max_km) ? +m.desvio_max_km : desvioEnv,
+    snap_km: Number.isFinite(+m.snap_km) ? +m.snap_km : snapEnv,
+    malha_local_km: Number.isFinite(+m.malha_local_km) ? +m.malha_local_km : 1.0,
+  };
+}
+
 function construirGrafo(locais, malha) {
   const byNome = new Map(locais.map((l) => [l.nome, l]));
   const adj = new Map(); // nome -> [{ nome, km }]
@@ -293,6 +308,7 @@ function calcularRotaCarona(orig, dest, codigoProjeto) {
   }
 
   const cat = catalogoDoProjeto(codigoProjeto);
+  const lim = limitesDoProjeto(codigoProjeto);
   const reta = () => ({
     pontos: [
       { nome: oNome, lat: oLat, lng: oLng },
@@ -304,13 +320,13 @@ function calcularRotaCarona(orig, dest, codigoProjeto) {
 
   if (!cat.grafo || cat.locais.length === 0) return reta();
 
-  // Snap: nome exato no catálogo ou nó mais próximo.
+  // Snap: nome exato no catálogo ou nó mais próximo (snap_km do projeto).
   const snapO = (oNome && cat.grafo.byNome.get(oNome))
     ? cat.grafo.byNome.get(oNome)
-    : noMaisProximo(oLat, oLng, cat.locais);
+    : noMaisProximo(oLat, oLng, cat.locais, lim.snap_km);
   const snapD = (dNome && cat.grafo.byNome.get(dNome))
     ? cat.grafo.byNome.get(dNome)
-    : noMaisProximo(dLat, dLng, cat.locais);
+    : noMaisProximo(dLat, dLng, cat.locais, lim.snap_km);
   if (!snapO || !snapD) return reta();
 
   const path = dijkstra(cat.grafo, snapO.nome, snapD.nome);
@@ -417,13 +433,13 @@ function desvioCaminhoKm(oLat, oLng, pLat, pLng, dLat, dLng) {
   return d1 + d2 - base;
 }
 
-function pontoNoCaminho(oLat, oLng, pLat, pLng, dLat, dLng, desvioMax) {
+function pontoNoCaminho(oLat, oLng, pLat, pLng, dLat, dLng, desvioMax, codigo) {
   const oLa = Number(oLat), oLn = Number(oLng);
   const pLa = Number(pLat), pLn = Number(pLng);
   const dLa = Number(dLat), dLn = Number(dLng);
   if (![oLa, oLn, pLa, pLn, dLa, dLn].every(Number.isFinite)) return false;
   const max = Number.isFinite(desvioMax) ? desvioMax
-    : (Number.isFinite(ROTA_DESVIO_MAX_KM) ? ROTA_DESVIO_MAX_KM : 1.8);
+    : limitesDoProjeto(codigo).desvio_max_km;
   const base = haversineKmCoord(oLa, oLn, dLa, dLn);
   const d1 = haversineKmCoord(oLa, oLn, pLa, pLn);
   const d2 = haversineKmCoord(pLa, pLn, dLa, dLn);
@@ -595,8 +611,60 @@ async function codigoDoProjeto(projetoId) {
 }
 
 /**
+ * Km extras de inserir o ponto P na rota O→D (malha: O→P→D − O→D; senão triângulo).
+ * 100% local — sem Google Directions.
+ */
+function desvioInsercaoKm(carOrig, carDest, pLat, pLng, pNome, opts = {}) {
+  const cOLat = Number(carOrig?.lat), cOLng = Number(carOrig?.lng);
+  const cDLat = Number(carDest?.lat), cDLng = Number(carDest?.lng);
+  const lat = Number(pLat), lng = Number(pLng);
+  if (![cOLat, cOLng, cDLat, cDLng, lat, lng].every(Number.isFinite)) return 0;
+
+  const poly = polilinhaDaCarona(cOLat, cOLng, cDLat, cDLng, opts);
+  const kmBase = comprimentoPolilinhaKm(poly);
+  // Já no corredor da polilinha original → desvio ~0 (parada no caminho).
+  const cor = corredorPolilinhaKm(lat, lng, poly);
+  if (cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1.05) {
+    return 0;
+  }
+
+  if (opts.codigo && catalogoDoProjeto(opts.codigo).grafo) {
+    const viaP = calcularRotaCarona(
+      { lat: cOLat, lng: cOLng },
+      { lat, lng, nome: pNome || null },
+      opts.codigo
+    );
+    const pToD = calcularRotaCarona(
+      { lat, lng, nome: pNome || null },
+      { lat: cDLat, lng: cDLng },
+      opts.codigo
+    );
+    if (viaP.fonte === "malha" && pToD.fonte === "malha") {
+      const extra = (viaP.km + pToD.km) - kmBase;
+      return extra > 0 ? extra : 0;
+    }
+  }
+  const tri = desvioCaminhoKm(cOLat, cOLng, lat, lng, cDLat, cDLng);
+  return tri > 0 ? tri : 0;
+}
+
+/**
+ * Soma desvios de paradas já aceitas (outros passageiros na mesma carona/viagem).
+ * @param {{lat,lng,nome?}[]} paradas
+ */
+function somarDesvioAcumulado(carOrig, carDest, paradas, opts = {}) {
+  if (!Array.isArray(paradas) || !paradas.length) return 0;
+  let sum = 0;
+  for (const p of paradas) {
+    sum += desvioInsercaoKm(carOrig, carDest, p.lat, p.lng, p.nome, opts);
+  }
+  return sum;
+}
+
+/**
  * Encaixe: local no caminho da carona (polilinha) que adianta o pax.
  * Com malha, desvio_km = km(caminho com parada em P) − km(caminho original).
+ * opts.desvio_acumulado_km (ou 6º arg) = desvio já comprometido com outros pax.
  */
 function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locaisOrOpts, desvioAcumuladoKm = 0) {
   const opts = parseOpts(locaisOrOpts);
@@ -610,9 +678,9 @@ function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locaisOrOpts, 
   if (!(totalPax > 0)) return null;
 
   const poly = polilinhaDaCarona(cOLat, cOLng, cDLat, cDLng, opts);
-  const kmBase = comprimentoPolilinhaKm(poly);
-  const desvioMax = Number.isFinite(ROTA_DESVIO_MAX_KM) ? ROTA_DESVIO_MAX_KM : 1.8;
-  const desvioJa = Number(desvioAcumuladoKm) || 0;
+  const lim = limitesDoProjeto(opts.codigo);
+  const desvioMax = lim.desvio_max_km;
+  const desvioJa = Number(opts.desvio_acumulado_km ?? desvioAcumuladoKm) || 0;
 
   const corEmb = corredorPolilinhaKm(oLat, oLng, poly);
   const tEmb = Math.min(1, Math.max(0, Number.isFinite(corEmb.t) ? corEmb.t : 0));
@@ -632,28 +700,11 @@ function melhorPontoDeEncaixe(origPax, destPax, carOrig, carDest, locaisOrOpts, 
     if (avanco < ENCAIXE_AVANCO_MIN_KM) continue;
     if (restante <= RAIO_MESMO_DEST_KM) continue;
 
-    // Custo de desvio: na malha, recalcula O→P→D; senão triângulo.
-    let desvioExtra = 0;
-    if (opts.codigo && catalogoDoProjeto(opts.codigo).grafo) {
-      const viaP = calcularRotaCarona(
-        { lat: cOLat, lng: cOLng },
-        { lat, lng, nome: p.nome },
-        opts.codigo
-      );
-      const pToD = calcularRotaCarona(
-        { lat, lng, nome: p.nome },
-        { lat: cDLat, lng: cDLng },
-        opts.codigo
-      );
-      if (viaP.fonte === "malha" && pToD.fonte === "malha") {
-        desvioExtra = (viaP.km + pToD.km) - kmBase;
-      } else {
-        desvioExtra = desvioCaminhoKm(cOLat, cOLng, lat, lng, cDLat, cDLng);
-      }
-    } else {
-      desvioExtra = desvioCaminhoKm(cOLat, cOLng, lat, lng, cDLat, cDLng);
-    }
-    if (desvioExtra < 0) desvioExtra = 0;
+    const desvioExtra = desvioInsercaoKm(
+      { lat: cOLat, lng: cOLng },
+      { lat: cDLat, lng: cDLng },
+      lat, lng, p.nome, opts
+    );
     if (desvioJa + desvioExtra > desvioMax + 0.01) continue;
 
     if (!melhor || restante < melhor.restante_km) {
@@ -695,10 +746,13 @@ module.exports = {
   ENCAIXE_AVANCO_MIN_KM,
   locaisDoProjetoCodigo,
   catalogoDoProjeto,
+  limitesDoProjeto,
   calcularRotaCarona,
   normalizarRotaPontos,
   polilinhaDaCarona,
   comprimentoPolilinhaKm,
+  desvioInsercaoKm,
+  somarDesvioAcumulado,
   _codigoProjetoCache,
   codigoDoProjeto,
   melhorPontoDeEncaixe,
