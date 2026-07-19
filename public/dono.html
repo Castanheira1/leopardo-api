@@ -6,30 +6,31 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/icon-192.png" type="image/png">
-    <meta name="theme-color" content="#f5f3ee">
+    <meta name="theme-color" content="#f6f7f9">
     <script src="/pwa.js" defer></script>
     <script src="/platform.js"></script>
-    <title>VAP — Dashboard do dono</title>
+    <title>VAP — Painel Executivo</title>
     <link rel="stylesheet" href="style.css">
     <script src="app.js"></script>
     <style>
-        /* Padrão “lista de locais” / painel-claro: fundo creme, cartões brancos, dourado suave */
+        /* Painel executivo: neutro corporativo, azul para ação e dados */
         :root {
-            --bg: #f5f3ee;
-            --bg-main: #f0ebe3;
+            --bg: #f6f7f9;
+            --bg-main: #eef0f4;
             --card: #ffffff;
-            --card-2: #faf7ef;
-            --ink: #23211c;
-            --muted: #6b675f;
-            --line: #ece8df;
-            --gold: #C4971A;
-            --gold-deep: #9a7412;
-            --gold-soft: #faf3df;
+            --ink: #1c2430;
+            --muted: #5f6774;
+            --line: #e4e7ec;
+            --primary: #1c5cab;
+            --primary-deep: #14417c;
+            --primary-soft: #eef4fb;
+            --chart-1: #2a78d6;
+            --chart-2: #1baf7a;
             --side-w: 288px;
             --good: #1a7f37;
-            --warn: #b8860b;
+            --warn: #b45309;
             --crit: #b30000;
-            --shadow: 0 1px 3px rgba(20, 18, 12, 0.06);
+            --shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
             --radius: 14px;
         }
         * { box-sizing: border-box; }
@@ -57,12 +58,12 @@
         .adm-side-brand img { height: 30px; }
         .adm-tag {
             font-size: .58rem; letter-spacing: .14em; font-weight: 800;
-            background: var(--gold); color: #fff; padding: 4px 9px; border-radius: 999px;
+            background: var(--primary); color: #fff; padding: 4px 9px; border-radius: 999px;
         }
         .adm-side-block { padding: 12px 18px 14px; border-top: 1px solid var(--line); }
         .blk-title {
             font-size: .62rem; text-transform: uppercase; letter-spacing: .1em;
-            color: var(--gold-deep); margin-bottom: 8px; font-weight: 800;
+            color: var(--muted); margin-bottom: 8px; font-weight: 800;
         }
         .adm-proj-nome { font-size: 1.05rem; font-weight: 700; line-height: 1.25; color: var(--ink); }
         .adm-proj-meta { font-size: .78rem; color: var(--muted); margin-top: 4px; line-height: 1.45; }
@@ -83,37 +84,31 @@
             color-scheme: light;
         }
         .adm-filtro input:focus, .field-row input:focus, select.soft-select:focus {
-            border-color: rgba(196,151,26,.55) !important;
+            border-color: rgba(28,92,171,.45) !important;
             outline: none;
             background: #fff !important;
         }
 
-        .btn-side, .btn-side-outline, .btn-gold, .btn-ghost {
+        .btn-side, .btn-primary, .btn-ghost {
             padding: 11px 14px; border-radius: 12px; font-weight: 700;
             font-size: .84rem; cursor: pointer; border: none;
             transition: background .15s, border-color .15s, transform .1s;
         }
         .btn-side {
-            width: 100%; background: var(--gold); color: #fff;
-            box-shadow: 0 1px 2px rgba(154,116,18,.25);
+            width: 100%; background: var(--primary); color: #fff;
+            box-shadow: 0 1px 2px rgba(20,65,124,.25);
         }
-        .btn-side:hover { background: var(--gold-deep); }
-        .btn-side-outline {
-            width: 100%; margin-top: 6px;
-            background: #fff; color: var(--gold-deep);
-            border: 1px solid #e6d9b4;
+        .btn-side:hover { background: var(--primary-deep); }
+        .btn-primary {
+            background: var(--primary); color: #fff; width: auto;
+            box-shadow: 0 1px 2px rgba(20,65,124,.2);
         }
-        .btn-side-outline:hover { background: var(--gold-soft); }
-        .btn-gold {
-            background: var(--gold); color: #fff; width: auto;
-            box-shadow: 0 1px 2px rgba(154,116,18,.2);
-        }
-        .btn-gold:hover { background: var(--gold-deep); }
+        .btn-primary:hover { background: var(--primary-deep); }
         .btn-ghost {
             width: auto; background: #fff; border: 1px solid var(--line);
             color: var(--muted); padding: 7px 12px; font-size: .78rem;
         }
-        .btn-ghost:hover { border-color: #e6d9b4; color: var(--gold-deep); background: var(--gold-soft); }
+        .btn-ghost:hover { border-color: #c9d9ee; color: var(--primary-deep); background: var(--primary-soft); }
 
         .adm-nav { padding: 10px 12px 16px; display: grid; gap: 6px; flex: 1; }
         .adm-nav-item {
@@ -123,28 +118,28 @@
             cursor: pointer; font-size: .9rem; font-weight: 600;
             box-shadow: var(--shadow);
         }
-        .adm-nav-item:hover { background: #faf7ef; border-color: #e6d9b4; }
+        .adm-nav-item:hover { background: #f3f6fb; border-color: #c9d9ee; }
         .adm-nav-item.active {
-            background: var(--gold-soft);
-            border-color: rgba(196,151,26,.45);
+            background: var(--primary-soft);
+            border-color: rgba(28,92,171,.35);
             color: var(--ink);
         }
-        .adm-nav-item .ico { color: var(--gold); width: 1.15em; text-align: center; }
+        .adm-nav-item .ico { color: var(--primary); width: 1.15em; text-align: center; }
         .adm-nav-item #badgeChamados {
-            background: var(--gold) !important; color: #fff !important;
+            background: var(--primary) !important; color: #fff !important;
         }
 
         .adm-side-foot {
             padding: 14px 18px 18px; border-top: 1px solid var(--line);
-            display: flex; flex-direction: column; gap: 8px; background: #faf9f6;
+            display: flex; flex-direction: column; gap: 8px; background: #f8f9fb;
         }
         .adm-side-foot .user { font-size: .85rem; color: var(--muted); }
-        .adm-side-foot .user small { display: block; color: var(--gold-deep); font-weight: 600; }
+        .adm-side-foot .user small { display: block; color: var(--primary-deep); font-weight: 600; }
         .adm-side-sair {
             background: #fff; border: 1px solid var(--line); color: var(--ink);
             padding: 9px 12px; border-radius: 10px; cursor: pointer; font-size: .82rem; font-weight: 600;
         }
-        .adm-side-sair:hover { border-color: #e6d9b4; background: var(--gold-soft); }
+        .adm-side-sair:hover { border-color: #c9d9ee; background: var(--primary-soft); }
 
         .adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
         .adm-topbar {
@@ -162,8 +157,8 @@
         .adm-user { display: flex; align-items: center; gap: 10px; }
         .adm-avatar {
             width: 38px; height: 38px; border-radius: 50%;
-            background: linear-gradient(145deg, #EAD298, var(--gold));
-            color: #3a2e0a; display: flex; align-items: center; justify-content: center;
+            background: var(--primary);
+            color: #fff; display: flex; align-items: center; justify-content: center;
             font-weight: 800; box-shadow: var(--shadow);
         }
         .adm-user-name { font-weight: 700; font-size: .9rem; color: var(--ink); }
@@ -216,10 +211,10 @@
             box-shadow: var(--shadow); text-align: left;
             transition: background .12s, border-color .12s;
         }
-        .soft-item:hover { background: #faf7ef; border-color: #e6d9b4; }
+        .soft-item:hover { background: #f3f6fb; border-color: #c9d9ee; }
         .soft-pin {
             flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px;
-            background: var(--gold-soft); color: var(--gold);
+            background: var(--primary-soft); color: var(--primary);
             display: flex; align-items: center; justify-content: center; font-size: 1rem;
         }
         .soft-item-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -247,17 +242,17 @@
         }
         table.adm th {
             color: var(--muted); font-weight: 700; font-size: .68rem;
-            text-transform: uppercase; letter-spacing: .04em; background: #faf9f6;
+            text-transform: uppercase; letter-spacing: .04em; background: #f8f9fb;
         }
-        table.adm tbody tr:hover { background: #faf7ef; }
-        table.adm .num { text-align: right; font-variant-numeric: tabular-nums; color: #3a382f; }
-        table.adm a { color: var(--gold-deep); font-weight: 600; text-decoration: none; }
+        table.adm tbody tr:hover { background: #f3f6fb; }
+        table.adm .num { text-align: right; font-variant-numeric: tabular-nums; color: #2a3240; }
+        table.adm a { color: var(--primary-deep); font-weight: 600; text-decoration: none; }
         table.adm a:hover { text-decoration: underline; }
 
         .spark { display: flex; align-items: flex-end; gap: 3px; height: 110px; padding: 4px 0; }
         .spark .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
         .spark .bar {
-            width: 100%; background: linear-gradient(180deg, #EAD298, var(--gold));
+            width: 100%; background: var(--chart-1);
             border-radius: 4px 4px 0 0; min-height: 2px;
         }
         .spark .cl { font-size: .55rem; color: var(--muted); margin-top: 4px; }
@@ -267,8 +262,8 @@
             gap: 8px; align-items: center; margin-bottom: 10px; font-size: .8rem;
         }
         .bar-row .k { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bar-track { background: #f0ebe3; border-radius: 8px; height: 10px; overflow: hidden; }
-        .bar-fill { display: block; height: 100%; border-radius: 8px; background: var(--gold); }
+        .bar-track { background: #edf0f4; border-radius: 8px; height: 10px; overflow: hidden; }
+        .bar-fill { display: block; height: 100%; border-radius: 8px; background: var(--chart-1); }
         .bar-row .v { text-align: right; color: var(--muted); font-weight: 600; }
         .legend { display: flex; gap: 16px; margin-top: 10px; font-size: .8rem; color: var(--muted); flex-wrap: wrap; }
         .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
@@ -280,7 +275,7 @@
             padding: 18px 22px 28px; color: var(--muted); font-size: .75rem;
             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
         }
-        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(35,33,28,.35); z-index: 35; }
+        .adm-overlay { display: none; position: fixed; inset: 0; background: rgba(16,24,40,.35); z-index: 35; }
         .adm-overlay.open { display: block; }
 
         @media (max-width: 900px) {
@@ -298,14 +293,14 @@
         }
     </style>
 </head>
-<body class="dono-suave">
+<body>
 <div class="adm-overlay" id="admOverlay" onclick="fecharSidebar()"></div>
 
 <div class="adm-app">
     <aside class="adm-sidebar" id="admSidebar">
         <div class="adm-side-brand">
             <img src="/logo-vap.png" alt="VAP">
-            <span class="adm-tag">DONO</span>
+            <span class="adm-tag">CEO</span>
         </div>
 
         <div class="adm-side-block">
@@ -320,17 +315,16 @@
                 <div><label>De</label><input type="date" id="filtroDe"></div>
                 <div><label>Até</label><input type="date" id="filtroAte"></div>
                 <button type="button" class="btn-side" onclick="atualizarSecaoAtiva()">Atualizar dados</button>
-                <button type="button" class="btn-side-outline" onclick="location.href='admin.html'">Painel de canteiro →</button>
             </div>
         </div>
 
-        <nav class="adm-nav" aria-label="Dashboard do dono">
+        <nav class="adm-nav" aria-label="Painel executivo">
             <button type="button" class="adm-nav-item active" data-sec="sec-visao" onclick="irSecao('sec-visao')">
                 <span class="ico">◈</span> Visão executiva
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-acesso" onclick="irSecao('sec-acesso')">
                 <span class="ico">✦</span> Acesso admin canteiro
-                <span id="badgeChamados" style="display:none;margin-left:auto;background:var(--gold);color:#0a0a0a;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 8px;">0</span>
+                <span id="badgeChamados" style="display:none;margin-left:auto;background:var(--primary);color:#fff;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 8px;">0</span>
             </button>
             <button type="button" class="adm-nav-item" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
                 <span class="ico">▦</span> Projetos (todos)
@@ -356,10 +350,10 @@
                 </div>
             </div>
             <div class="adm-user">
-                <div class="adm-avatar" id="admAvatar">D</div>
+                <div class="adm-avatar" id="admAvatar">C</div>
                 <div>
-                    <div class="adm-user-name" id="admUserName">Dono</div>
-                    <div class="adm-user-role">Dono da empresa · VAP global</div>
+                    <div class="adm-user-name" id="admUserName">CEO</div>
+                    <div class="adm-user-role">CEO · Visão global do VAP</div>
                 </div>
             </div>
         </header>
@@ -372,11 +366,10 @@
                     <div class="panel-head">
                         <div>
                             <h3>Aderência e custo por projeto</h3>
-                            <p class="cap">Mesmo padrão da lista de locais: cartões suaves. Contrato fixo — quanto mais uso, menor o custo unitário.</p>
+                            <p class="cap">Ordenado por aderência. Contrato fixo — quanto mais uso, menor o custo unitário.</p>
                         </div>
                     </div>
-                    <div class="soft-list" id="listaProjetosVisao"></div>
-                    <div style="overflow-x:auto;margin-top:14px;">
+                    <div style="overflow-x:auto;">
                         <table class="adm" id="tabDono" style="min-width:720px;">
                             <thead>
                                 <tr>
@@ -458,7 +451,7 @@
                         <input type="text" id="projNome" placeholder="Nome (ex.: Onça Puma)" maxlength="100" style="flex:2;min-width:160px;">
                         <input type="text" id="projCodigo" placeholder="CÓDIGO" maxlength="30" style="flex:1;min-width:120px;text-transform:uppercase;">
                         <input type="number" id="projContrato" placeholder="Contrato R$/mês" min="0" step="0.01" style="width:140px;">
-                        <button type="button" class="btn-gold" onclick="criarProjeto()">Criar projeto</button>
+                        <button type="button" class="btn-primary" onclick="criarProjeto()">Criar projeto</button>
                     </div>
                     <div id="projMsg" class="cap" style="margin-top:10px;"></div>
                 </div>
@@ -497,14 +490,14 @@
         </div>
 
         <footer class="adm-foot">
-            <span>© 2026 VAP — Dashboard do dono</span>
-            <span>Gerencia todos os projetos em paralelo ao painel de canteiro</span>
+            <span>© 2026 VAP — Painel Executivo</span>
+            <span>Visão global de todos os canteiros</span>
         </footer>
     </main>
 </div>
 
 <script>
-// Só super admin (dono). Admin de canteiro fica em admin.html.
+// Só o CEO (super admin). Admin de canteiro fica em admin.html.
 checkAuth(true, { superOnly: true, redirectAdmin: 'admin.html' });
 
 const SECOES = {
@@ -518,9 +511,9 @@ const SECOES = {
     try {
         const user = JSON.parse(localStorage.getItem('user') || 'null');
         if (!user) return;
-        const nome = user.nome || 'Dono';
+        const nome = user.nome || 'CEO';
         document.getElementById('admUserName').textContent = nome.split(' ')[0];
-        document.getElementById('admAvatar').textContent = (nome[0] || 'D').toUpperCase();
+        document.getElementById('admAvatar').textContent = (nome[0] || 'C').toUpperCase();
         aplicarSaudacaoUsuario(document.getElementById('userName'), nome);
     } catch (_) {}
 })();
@@ -584,7 +577,7 @@ async function carregarChamados() {
                 </div>
                 <div class="soft-actions">
                     ${status === 'pendente'
-                        ? `<button type="button" class="btn-gold" onclick="aprovarChamado(${c.id},'${esc(c.matricula)}')">Aprovar</button>
+                        ? `<button type="button" class="btn-primary" onclick="aprovarChamado(${c.id},'${esc(c.matricula)}')">Aprovar</button>
                            <button type="button" class="btn-ghost" onclick="recusarChamado(${c.id})">Recusar</button>`
                         : `<span class="soft-badge ${status === 'aprovado' ? 'on' : 'off'}">${esc(status)}</span>`}
                 </div>
@@ -650,9 +643,9 @@ function iniPeriodo() {
 }
 
 function corAderencia(pct) {
-    if (pct >= 40) return '#1a7f37';
-    if (pct >= 15) return '#b8860b';
-    return '#b30000';
+    if (pct >= 40) return 'var(--good)';
+    if (pct >= 15) return 'var(--warn)';
+    return 'var(--crit)';
 }
 
 function barrasH(el, rows) {
@@ -675,12 +668,12 @@ function chartGenero(el, homens, mulheres) {
     const pm = 100 - ph;
     el.innerHTML = `
         <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;gap:2px;">
-            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--gold);min-width:2px;"></div>
-            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:#8b6914;min-width:2px;"></div>
+            <div title="Homens: ${homens}" style="width:${ph}%;background:var(--chart-1);min-width:2px;"></div>
+            <div title="Mulheres: ${mulheres}" style="width:${pm}%;background:var(--chart-2);min-width:2px;"></div>
         </div>
         <div class="legend">
-            <span><span class="dot" style="background:var(--gold)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
-            <span><span class="dot" style="background:#8b6914"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
+            <span><span class="dot" style="background:var(--chart-1)"></span>Homens — <strong>${homens}</strong> (${ph}%)</span>
+            <span><span class="dot" style="background:var(--chart-2)"></span>Mulheres — <strong>${mulheres}</strong> (${pm}%)</span>
         </div>`;
 }
 
@@ -704,25 +697,8 @@ async function carregarDono() {
         ].map((k) => `<div class="kpi"><div class="cap">${esc(k.t)}</div>
             <div class="val-line" style="${k.cor ? `color:${k.cor};` : ''}">${esc(String(k.v))}</div></div>`).join('');
 
-        const listaVisao = document.getElementById('listaProjetosVisao');
-        if (listaVisao) {
-            listaVisao.innerHTML = d.projetos.length
-                ? d.projetos.map((p) => `
-                <div class="soft-item">
-                    <div class="soft-pin">◎</div>
-                    <div class="soft-item-txt">
-                        <div class="soft-nome">${esc(p.nome)} <span class="cap">· ${esc(p.codigo)}</span></div>
-                        <div class="soft-sub">${p.usuarios.engajados}/${p.usuarios.ativos} usaram · ${p.viagens.concluidas} viagens · ${p.viagens.km} km</div>
-                        <div class="soft-sub">${fmtMoeda(p.custo.por_km)}/km · ${fmtMoeda(p.custo.por_viagem)}/viagem · ${p.pedidos.atendidos}/${p.pedidos.total} pedidos</div>
-                    </div>
-                    <div class="soft-meta">
-                        <span class="big" style="color:${corAderencia(p.usuarios.aderencia_pct)}">${p.usuarios.aderencia_pct}%</span>
-                        <span class="soft-badge ${p.ativo ? 'on' : 'off'}">${p.ativo ? 'Ativo' : 'Inativo'}</span>
-                    </div>
-                </div>`).join('')
-                : '<div class="empty">Sem dados no período.</div>';
-        }
-
+        // Quem mais adere no topo — decisão primeiro.
+        d.projetos.sort((a, b) => b.usuarios.aderencia_pct - a.usuarios.aderencia_pct);
         document.querySelector('#tabDono tbody').innerHTML = d.projetos.map((p) => `
             <tr>
                 <td><strong>${esc(p.nome)}</strong> <span class="cap">${esc(p.codigo)}${p.ativo ? '' : ' · INATIVO'}</span></td>
