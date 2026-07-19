@@ -45,6 +45,11 @@ services:
         sync: false
       - key: GOOGLE_MAPS_API_KEY
         sync: false
+      # Routes API (linha pela pista) LIGADA — protegida por: recálculo só por
+      # mudança de destino, tetos 30/min-300/dia-9.000/mês no código (persistidos
+      # no Postgres) e cota 300/dia no console Google. Ver .env.example.
+      - key: GOOGLE_ROUTES_ENABLED
+        value: "1"
       # Notificações push — gere o par com:
       #   node -e "console.log(require('web-push').generateVAPIDKeys())"
       - key: VAPID_PUBLIC_KEY
