@@ -61,12 +61,15 @@ const ROTAS_CACHE_MEM = new Map(); // chave -> { path, distanceMeters, durationM
 const ROTAS_CACHE_TTL_MS = Number(process.env.ROTAS_CACHE_TTL_MS || 6 * 60 * 60 * 1000); // 6 h
 // Opt-in explícito. Default OFF = zero chamada paga a Routes (evita fatura surpresa).
 const GOOGLE_ROUTES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
-// Com Routes ligado: tetos baixos por padrão (antes era 1500/dia e estourava).
-const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 5);
-const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 50);
-// Teto MENSAL alinhado à cota grátis (Routes Essentials: 10.000/mês desde mar/2025).
-// 1.000 = margem 10x; persiste no Postgres — restart/deploy não zera o contador.
-const ROTAS_GOOGLE_MAX_MES = Number(process.env.ROTAS_GOOGLE_MAX_MES || 1000);
+// Tetos espelham a cota do console Google (300/dia definida em 2026-07) — o
+// código não deve ser MAIS restritivo que a cota paga que o dono aceitou.
+// Contra loop/alucinação quem protege é: recálculo só por mudança de destino
+// + throttle no cliente + teto por minuto. Para escalar: subir env + console.
+const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30);
+const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 300);
+// Teto MENSAL sob a cota grátis (Routes Essentials: 10.000/mês desde mar/2025).
+// Persiste no Postgres — restart/deploy não zera o contador.
+const ROTAS_GOOGLE_MAX_MES = Number(process.env.ROTAS_GOOGLE_MAX_MES || 9000);
 let rotasGoogleJanela = { t0: Date.now(), n: 0 };
 let rotasGoogleDia = { dia: "", n: 0 };
 const rotasGoogleStats = {
