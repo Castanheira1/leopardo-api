@@ -173,3 +173,129 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
     res.status(500).json({ error: "Erro ao montar o dashboard" });
   }
 });
+
+/**
+ * Analisador de uso Google Routes (CEO) — dados do contador rotas_uso + tetos env.
+ * Ajuda a decidir se sobe cota, mantém 300/dia ou desliga GOOGLE_ROUTES_ENABLED.
+ */
+app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
+  const enabled = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
+  const teto_min = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30);
+  const teto_dia = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 300);
+  const teto_mes = Number(process.env.ROTAS_GOOGLE_MAX_MES || 9000);
+  // Referência de estouro histórico (métricas GCP jul/2026) — contexto de decisão.
+  const referencia_estouro = {
+    mes: "2026-07",
+    calls_approx: 37253,
+    custo_brl_approx: 802,
+    nota: "Pico com frota fake + loop GPS (antes dos freios). Não é uso atual.",
+  };
+
+  let usadas_hoje = 0;
+  let usadas_mes = 0;
+  let por_dia = [];
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rotas_uso (
+        dia TEXT PRIMARY KEY,
+        n INTEGER NOT NULL DEFAULT 0
+      )`).catch(() => {});
+    const hoje = new Date().toISOString().slice(0, 10);
+    const mesPref = hoje.slice(0, 7) + "%";
+    const [tot, serie] = await Promise.all([
+      pool.query(
+        `SELECT COALESCE(SUM(n) FILTER (WHERE dia = $1), 0)::int AS dia_n,
+                COALESCE(SUM(n) FILTER (WHERE dia LIKE $2), 0)::int AS mes_n
+           FROM rotas_uso`,
+        [hoje, mesPref]
+      ),
+      pool.query(
+        `SELECT dia, n::int AS n FROM rotas_uso
+          WHERE dia >= (CURRENT_DATE - INTERVAL '14 days')::text
+          ORDER BY dia`
+      ),
+    ]);
+    usadas_hoje = Number(tot.rows[0]?.dia_n || 0);
+    usadas_mes = Number(tot.rows[0]?.mes_n || 0);
+    por_dia = serie.rows.map((r) => ({ dia: r.dia, n: r.n }));
+  } catch (e) {
+    console.warn("api-maps rotas_uso:", e.message);
+  }
+
+  const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+  const pct_dia = pct(usadas_hoje, teto_dia);
+  const pct_mes = pct(usadas_mes, teto_mes);
+
+  let nivel = "ok";
+  if (!enabled) nivel = "desligado";
+  else if (pct_dia >= 90 || pct_mes >= 90) nivel = "critico";
+  else if (pct_dia >= 60 || pct_mes >= 60) nivel = "atencao";
+
+  const decisoes = [];
+  if (!enabled) {
+    decisoes.push({
+      tipo: "info",
+      titulo: "Routes desligada",
+      texto: "GOOGLE_ROUTES_ENABLED≠1 — zero custo de Compute Routes. Mapa usa linha reta. Ligue no Render só se precisar polyline pela pista.",
+    });
+  } else {
+    decisoes.push({
+      tipo: "ok",
+      titulo: "Routes ligada com teto",
+      texto: `Ativa com freios no código (${teto_dia}/dia · ${teto_mes}/mês). Confirme cota no GCP: ComputeRoutes ${teto_dia}/dia.`,
+    });
+  }
+  if (enabled && pct_dia >= 80) {
+    decisoes.push({
+      tipo: "warn",
+      titulo: "Dia perto do teto",
+      texto: `${usadas_hoje}/${teto_dia} hoje (${pct_dia}%). Evite testes de carga e frota simulada. Após o teto o app usa reta (sem cobrar mais no código).`,
+    });
+  }
+  if (enabled && pct_mes >= 70) {
+    decisoes.push({
+      tipo: "warn",
+      titulo: "Mês elevado",
+      texto: `${usadas_mes}/${teto_mes} no mês (${pct_mes}%). Não suba cota no Google sem orçamento. Prefira locais do catálogo e cache.`,
+    });
+  }
+  if (enabled && pct_dia < 40 && pct_mes < 40) {
+    decisoes.push({
+      tipo: "ok",
+      titulo: "Uso sob controle",
+      texto: "Pode manter 300/dia no console. Só aumente cota se usuários reais estiverem caindo em reta com frequência.",
+    });
+  }
+  if (usadas_mes === 0 && enabled) {
+    decisoes.push({
+      tipo: "info",
+      titulo: "Sem uso registrado no contador",
+      texto: "Tabela rotas_uso zerada neste mês (ou deploy recente). Métricas do GCP ainda podem mostrar histórico antigo.",
+    });
+  }
+  decisoes.push({
+    tipo: "hist",
+    titulo: "Lembrete do estouro (jul/2026)",
+    texto: `~${referencia_estouro.calls_approx.toLocaleString("pt-BR")} calls / ~R$ ${referencia_estouro.custo_brl_approx} em Routes — frota fake + loop. Freios atuais existem para não repetir.`,
+  });
+
+  res.json({
+    enabled,
+    teto_min,
+    teto_dia,
+    teto_mes,
+    usadas_hoje,
+    usadas_mes,
+    pct_dia,
+    pct_mes,
+    nivel,
+    por_dia,
+    decisoes,
+    referencia_estouro,
+    cota_console: {
+      compute_routes_dia: teto_dia,
+      compute_routes_min_sugerido: Math.min(50, teto_min),
+    },
+    atualizado_em: new Date().toISOString(),
+  });
+});

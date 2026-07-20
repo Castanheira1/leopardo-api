@@ -119,6 +119,40 @@
             border-radius: 999px; font-size: .68rem; font-weight: 800; padding: 2px 8px;
         }
         .adm-nav-item.active #badgeChamados { background: rgba(0,0,0,.18); color: #1a1a1f; }
+        .api-badge {
+            margin-left: auto; border-radius: 999px; font-size: .62rem; font-weight: 800;
+            padding: 2px 7px; text-transform: uppercase; letter-spacing: .04em;
+        }
+        .api-badge.on { background: rgba(47,158,95,.15); color: var(--good); }
+        .api-badge.off { background: #eeebe3; color: var(--muted); }
+        .api-badge.warn { background: rgba(192,138,20,.15); color: var(--warn); }
+        .api-badge.crit { background: rgba(201,68,78,.12); color: var(--crit); }
+        .adm-nav-item.active .api-badge { background: rgba(0,0,0,.14); color: #1a1a1f; }
+        .api-bar-row {
+            display: grid; grid-template-columns: 88px 1fr 72px; gap: 10px;
+            align-items: center; margin-bottom: 12px; font-size: .8rem;
+        }
+        .api-bar-row .k { font-weight: 650; color: var(--ink); }
+        .api-bar-track { height: 8px; background: #eeebe3; border-radius: 999px; overflow: hidden; }
+        .api-bar-fill {
+            display: block; height: 100%; border-radius: 999px;
+            background: linear-gradient(90deg, #d4a017, #e8b84a); min-width: 0;
+        }
+        .api-bar-fill.warn { background: linear-gradient(90deg, #c08a14, #e0a82a); }
+        .api-bar-fill.crit { background: linear-gradient(90deg, #c9444e, #e07078); }
+        .api-bar-row .v { text-align: right; color: #9a9aa3; font-weight: 650; font-variant-numeric: tabular-nums; }
+        .api-checklist {
+            margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: .8rem; line-height: 1.55;
+        }
+        .api-checklist li { margin-bottom: 6px; }
+        .api-checklist code {
+            background: #f3f2ee; color: var(--gold-deep); padding: 1px 5px;
+            border-radius: 4px; font-size: .74rem; border: 1px solid var(--line);
+        }
+        .api-spark-wrap { margin-top: 14px; }
+        .decisao-ok .soft-pin { background: rgba(47,158,95,.12); color: var(--good); border-color: rgba(47,158,95,.25); }
+        .decisao-warn .soft-pin { background: rgba(192,138,20,.12); color: var(--warn); border-color: rgba(192,138,20,.3); }
+        .decisao-hist .soft-pin { background: #f3f2ee; color: var(--muted); }
 
         .adm-side-foot { padding: 12px 12px 14px; border-top: 1px solid var(--line); margin-top: auto; }
         .dono-chip {
@@ -557,6 +591,10 @@
             <button type="button" class="adm-nav-item" data-sec="sec-projetos" onclick="irSecao('sec-projetos')">
                 <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Projetos
             </button>
+            <button type="button" class="adm-nav-item" data-sec="sec-api" onclick="irSecao('sec-api')">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg></span> API Maps
+                <span id="badgeApi" class="api-badge" style="display:none;"></span>
+            </button>
             <button type="button" class="adm-nav-item" data-sec="sec-saude" onclick="irSecao('sec-saude')">
                 <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Saúde do VAP
             </button>
@@ -733,6 +771,58 @@
                 </div>
             </section>
 
+            <section id="sec-api" class="adm-section">
+                <div class="banner-ops show" id="apiBanner" style="display:flex;">
+                    <div class="bo-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+                    <div>
+                        <div class="bo-title">Analisador de gasto — Google Routes</div>
+                        <div class="bo-txt">Uso real contado no servidor (tabela <code>rotas_uso</code>) + tetos do Render. Use para decidir se mantém, sobe ou desliga a API após o estouro de jul/2026 (~37 mil calls / ~R$ 802).</div>
+                    </div>
+                </div>
+                <div class="kpi-strip" id="apiKpis"><div class="empty compact">Carregando…</div></div>
+                <div class="grid-main">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h3>Consumo vs teto</h3>
+                                <p class="cap">Espelha cota do console GCP (ComputeRoutes). Após o teto o app usa linha reta.</p>
+                            </div>
+                            <button type="button" class="link-gold" onclick="carregarApiMaps()">Atualizar</button>
+                        </div>
+                        <div id="apiBarras"></div>
+                        <div class="api-spark-wrap">
+                            <div class="proj-muted-label">Chamadas por dia (14 dias, contador app)</div>
+                            <div class="spark" id="apiSpark"></div>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h3>Decisões recomendadas</h3>
+                                <p class="cap">Com base no uso atual e nos freios.</p>
+                            </div>
+                        </div>
+                        <div class="soft-list" id="apiDecisoes"><div class="empty compact">Carregando…</div></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Como atualizar a cota com segurança</h3>
+                            <p class="cap">Checklist operacional (Google Cloud + Render).</p>
+                        </div>
+                    </div>
+                    <ol class="api-checklist" id="apiChecklist">
+                        <li>GCP → Routes API → Cotas: <strong>ComputeRoutes / dia</strong> = teto que você aceita pagar (hoje 300).</li>
+                        <li>GCP → <strong>por minuto</strong> bem abaixo do diário (ex. 30–50), senão 1 minuto queima o dia.</li>
+                        <li>Render → <code>GOOGLE_ROUTES_ENABLED</code>: <strong>1</strong> = pista Google · <strong>0</strong> = só reta (R$ 0 Routes).</li>
+                        <li>Só suba o teto se usuários reais caírem em reta com frequência e o mês estiver &lt; 60% do limite.</li>
+                        <li>Nunca teste frota simulada / loop com Routes ligada.</li>
+                    </ol>
+                    <p class="cap" id="apiAtualizado" style="margin-top:10px;"></p>
+                </div>
+            </section>
+
             <section id="sec-saude" class="adm-section">
                 <div class="panel">
                     <div class="panel-head">
@@ -769,6 +859,7 @@ const SECOES = {
     'sec-visao': { titulo: 'Visão executiva', sub: 'Aderência, custo e operação' },
     'sec-acesso': { titulo: 'Acesso admin', sub: 'Pedidos de admin de canteiro' },
     'sec-projetos': { titulo: 'Projetos', sub: 'Canteiros e contratos' },
+    'sec-api': { titulo: 'API Maps', sub: 'Uso Routes, tetos e decisão de cota' },
     'sec-saude': { titulo: 'Saúde do VAP', sub: 'Infra e erros' },
 };
 
@@ -785,7 +876,7 @@ const ICO = {
     money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
     chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
-    api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+    api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>',
     db: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
     bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
     tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
@@ -832,6 +923,7 @@ function irSecao(id) {
     if (id === 'sec-visao') carregarDono();
     if (id === 'sec-acesso') carregarChamados();
     if (id === 'sec-projetos') carregarProjetos();
+    if (id === 'sec-api') carregarApiMaps();
     if (id === 'sec-saude') carregarSaude();
     fecharSidebar();
 }
@@ -1368,6 +1460,102 @@ async function salvarContrato(id) {
         mostrarToast('Contrato atualizado', 'success');
     } catch (e) {
         mostrarToast(e.message, 'error');
+    }
+}
+
+function _apiNivelBadge(nivel) {
+    const b = document.getElementById('badgeApi');
+    if (!b) return;
+    const map = {
+        desligado: { t: 'OFF', c: 'off' },
+        ok: { t: 'OK', c: 'on' },
+        atencao: { t: 'Atenção', c: 'warn' },
+        critico: { t: 'Limite', c: 'crit' },
+    };
+    const m = map[nivel] || map.ok;
+    b.textContent = m.t;
+    b.className = 'api-badge ' + m.c;
+    b.style.display = 'inline-block';
+}
+
+function _apiBarHtml(label, usadas, teto, pct) {
+    const cls = pct >= 90 ? 'crit' : pct >= 60 ? 'warn' : '';
+    const w = Math.min(100, pct);
+    return `<div class="api-bar-row">
+        <span class="k">${esc(label)}</span>
+        <div class="api-bar-track"><i class="api-bar-fill ${cls}" style="width:${w}%"></i></div>
+        <span class="v">${usadas}/${teto}</span>
+    </div>`;
+}
+
+async function carregarApiMaps() {
+    const kpis = document.getElementById('apiKpis');
+    const barras = document.getElementById('apiBarras');
+    const decisoes = document.getElementById('apiDecisoes');
+    const spark = document.getElementById('apiSpark');
+    const atualizado = document.getElementById('apiAtualizado');
+    try {
+        const r = await fetchWithAuth('/api/admin/dono/api-maps');
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Erro ao carregar uso da API');
+
+        _apiNivelBadge(d.nivel);
+
+        const statusTxt = d.enabled ? 'LIGADA' : 'DESLIGADA';
+        const statusCor = d.enabled ? 'var(--good)' : 'var(--muted)';
+        kpis.innerHTML = [
+            { t: 'Routes Google', v: statusTxt, h: d.enabled ? 'GOOGLE_ROUTES_ENABLED=1' : 'Só linha reta (R$ 0 Routes)', cor: statusCor },
+            { t: 'Hoje', v: String(d.usadas_hoje), h: `de ${d.teto_dia}/dia · ${d.pct_dia}%`, cor: d.pct_dia >= 90 ? 'var(--crit)' : d.pct_dia >= 60 ? 'var(--warn)' : 'var(--ink)' },
+            { t: 'Mês', v: String(d.usadas_mes), h: `de ${d.teto_mes}/mês · ${d.pct_mes}%`, cor: d.pct_mes >= 90 ? 'var(--crit)' : d.pct_mes >= 60 ? 'var(--warn)' : 'var(--ink)' },
+        ].map((k) => `
+            <div class="kpi">
+                <div class="kpi-top">
+                    <div class="kpi-ico">${ICO.chart}</div>
+                    <div class="cap">${esc(k.t)}</div>
+                </div>
+                <div class="val-line" style="color:${k.cor}">${esc(k.v)}</div>
+                <div class="hint">${esc(k.h)}</div>
+            </div>`).join('');
+
+        barras.innerHTML =
+            _apiBarHtml('Dia', d.usadas_hoje, d.teto_dia, d.pct_dia)
+            + _apiBarHtml('Mês', d.usadas_mes, d.teto_mes, d.pct_mes)
+            + `<p class="cap" style="margin-top:4px;">Teto/min no código: <strong>${d.teto_min}</strong>
+                · GCP sugerido: <strong>${d.cota_console?.compute_routes_dia || d.teto_dia}/dia</strong>
+                · min sugerido: <strong>${d.cota_console?.compute_routes_min_sugerido || 50}</strong></p>`;
+
+        const maxN = Math.max(1, ...(d.por_dia || []).map((x) => x.n));
+        if (!d.por_dia?.length) {
+            spark.innerHTML = '<div class="empty compact" style="width:100%">Sem registros em rotas_uso nos últimos 14 dias.</div>';
+        } else {
+            spark.innerHTML = d.por_dia.map((x) => {
+                const h = Math.max(4, Math.round((x.n / maxN) * 100));
+                const lab = String(x.dia).slice(8, 10);
+                return `<div class="col" title="${esc(x.dia)}: ${x.n}"><div class="bar" style="height:${h}%"></div><span class="cl">${lab}</span></div>`;
+            }).join('');
+        }
+
+        const tipoCls = { ok: 'decisao-ok', warn: 'decisao-warn', info: '', hist: 'decisao-hist' };
+        const tipoIco = { ok: ICO.chart, warn: ICO.alert, info: ICO.api || ICO.chart, hist: ICO.alert };
+        decisoes.innerHTML = (d.decisoes || []).map((x) => `
+            <div class="soft-item ${tipoCls[x.tipo] || ''}">
+                <div class="soft-pin">${tipoIco[x.tipo] || ICO.chart}</div>
+                <div class="soft-item-txt">
+                    <div class="soft-nome">${esc(x.titulo)}</div>
+                    <div class="soft-sub">${esc(x.texto)}</div>
+                </div>
+            </div>`).join('') || '<div class="empty compact">Sem recomendações.</div>';
+
+        if (atualizado && d.atualizado_em) {
+            atualizado.textContent = 'Atualizado em ' + new Date(d.atualizado_em).toLocaleString('pt-BR')
+                + (d.referencia_estouro
+                    ? ` · Ref. estouro ${d.referencia_estouro.mes}: ~${Number(d.referencia_estouro.calls_approx).toLocaleString('pt-BR')} calls / ~R$ ${d.referencia_estouro.custo_brl_approx}`
+                    : '');
+        }
+    } catch (e) {
+        if (kpis) kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+        if (decisoes) decisoes.innerHTML = '';
+        if (barras) barras.innerHTML = '';
     }
 }
 
