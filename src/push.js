@@ -85,8 +85,30 @@ initFcm();
  * @param {object} payload { title, body, url?, action?, ... }
  * @param {string} [platform] android|ios
  */
+// Token APNs cru (iOS): 64 hex, sem os separadores dos tokens FCM. O FCM não
+// aceita esse formato — quem chega aqui assim é aparelho iOS registrado pelo
+// @capacitor/push-notifications SEM a ponte do Firebase (GoogleService-Info.plist
+// + SDK iOS). Avisa uma vez em vez de falhar calado a cada notificação.
+const _APNS_CRU = /^[0-9a-f]{64}$/i;
+let _avisouApnsCru = false;
+
 async function enviarFcm(token, payload, platform) {
   if (!initFcm() || !_messaging || !token) return;
+
+  if (_APNS_CRU.test(token)) {
+    if (!_avisouApnsCru) {
+      _avisouApnsCru = true;
+      console.warn(
+        "AVISO push iOS: recebido token APNs cru, que o FCM não entrega. " +
+        "Falta integrar o Firebase no app iOS (GoogleService-Info.plist + SDK) " +
+        "para o aparelho registrar um token FCM. Ver docs/PUBLICAR-LOJAS.md."
+      );
+    }
+    const e = new Error("token APNs cru: iOS sem ponte Firebase");
+    e.statusCode = 400;
+    e.code = "apns-token-sem-fcm";
+    throw e;
+  }
 
   const title = payload.title || "VAP";
   const body = payload.body || "";

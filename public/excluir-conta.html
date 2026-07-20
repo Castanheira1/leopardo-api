@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excluir conta — VAP</title>
+    <meta name="theme-color" content="#faf9f5">
+    <meta name="description" content="Peça a exclusão da sua conta VAP e dos dados pessoais associados, mesmo sem o aplicativo instalado.">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/icon-192.png" type="image/png">
+    <style>
+        :root {
+            --bg: #faf9f5;
+            --card: #ffffff;
+            --ink: #23211c;
+            --muted: #6b675f;
+            --line: #ece8df;
+            --gold: #9a7412;
+            --link: #b0562f;
+            --danger: #a8321f;
+        }
+        * { box-sizing: border-box; }
+        html, body { background: var(--bg); }
+        body {
+            margin: 0; color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 16px; line-height: 1.65;
+            padding: 28px 18px 72px;
+            -webkit-font-smoothing: antialiased;
+        }
+        .doc { max-width: 720px; margin: 0 auto; }
+        .head { margin-bottom: 20px; }
+        h1 {
+            font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            font-weight: 600; font-size: 1.7rem; line-height: 1.2;
+            letter-spacing: -0.01em; margin: 0 0 6px; color: var(--ink);
+        }
+        h2 {
+            font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            font-weight: 600; font-size: 1.15rem; letter-spacing: -0.005em;
+            margin: 26px 0 8px; color: var(--ink);
+        }
+        .meta { color: var(--muted); font-size: .9rem; margin: 2px 0; }
+        .card {
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: 16px; padding: 8px 24px 22px;
+            box-shadow: 0 1px 2px rgba(20,18,12,.03);
+        }
+        p { margin: 10px 0; }
+        a { color: var(--link); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; margin: 10px 0; }
+        li { margin: 5px 0; }
+        strong { font-weight: 600; }
+        .aviso {
+            background: #fdf3f1; border: 1px solid #f0d5cf;
+            border-radius: 12px; padding: 14px 16px; margin: 14px 0;
+            font-size: .95rem;
+        }
+        .aviso strong { color: var(--danger); }
+        label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: .95rem; }
+        input {
+            width: 100%; padding: 11px 13px; font-size: 1rem;
+            border: 1px solid var(--line); border-radius: 10px;
+            background: #fff; color: var(--ink);
+            font-family: inherit;
+        }
+        input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+        .btn {
+            margin-top: 18px; width: 100%; padding: 13px 18px;
+            font-size: 1rem; font-weight: 600; font-family: inherit;
+            border: 0; border-radius: 10px; cursor: pointer;
+            background: var(--danger); color: #fff;
+        }
+        .btn:disabled { opacity: .6; cursor: progress; }
+        .msg { margin-top: 14px; font-size: .95rem; min-height: 1.2em; }
+        .msg.erro { color: var(--danger); }
+        .msg.ok { color: #2c6b4f; font-weight: 600; }
+        .voltar {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 24px; color: var(--gold); text-decoration: none; font-weight: 600;
+        }
+        .voltar:hover { text-decoration: underline; }
+        .sep { color: var(--line); margin: 0 8px; }
+    </style>
+</head>
+<body>
+    <div class="doc">
+        <div class="head">
+            <h1>Excluir conta</h1>
+            <p class="meta">Aplicativo VAP — caronas entre colaboradores</p>
+            <p class="meta">Você pode pedir a exclusão por aqui, mesmo sem o app instalado.</p>
+        </div>
+
+        <div class="card">
+            <h2>O que é apagado</h2>
+            <p>A exclusão é <strong>permanente</strong> e remove seus dados pessoais:</p>
+            <ul>
+                <li>Cadastro: nome, matrícula, função, empresa, telefone e email.</li>
+                <li>Fotos de segurança: selfies e foto do veículo, com data/hora e local.</li>
+                <li>Localização: posições e traçados de rota associados a você.</li>
+                <li>Favoritos, habilitação de motorista e histórico ligado à sua conta.</li>
+            </ul>
+            <p>Ofertas de carona e pedidos em aberto são cancelados no momento da exclusão.
+            Depois disso você pode se cadastrar de novo com a mesma matrícula, se quiser.</p>
+
+            <div class="aviso">
+                <p style="margin:0;"><strong>Antes de continuar:</strong> se você tiver uma viagem
+                em andamento, finalize ou cancele primeiro — a exclusão fica bloqueada até lá,
+                para não deixar a outra pessoa sem carona no meio do caminho.</p>
+            </div>
+
+            <h2>Excluir agora</h2>
+            <p>Confirme com a matrícula e a senha da sua conta. Pedimos a senha para garantir
+            que ninguém apague a conta de outra pessoa.</p>
+
+            <form id="formExcluir" autocomplete="off">
+                <label for="matricula">Matrícula</label>
+                <input id="matricula" name="matricula" inputmode="numeric" maxlength="6"
+                       placeholder="000000" required>
+
+                <label for="senha">Senha (6 dígitos)</label>
+                <input id="senha" name="senha" type="password" inputmode="numeric" maxlength="6"
+                       placeholder="••••••" autocomplete="current-password" required>
+
+                <button class="btn" type="submit" id="btnExcluir">Excluir minha conta</button>
+            </form>
+            <div class="msg" id="msg" role="status" aria-live="polite"></div>
+
+            <h2>Prefere pedir por email?</h2>
+            <p>Se não conseguir entrar (esqueceu a senha, por exemplo), escreva para o
+            Encarregado pelo Tratamento de Dados Pessoais:
+            <a href="mailto:castanheira.wrc@gmail.com">castanheira.wrc@gmail.com</a>.
+            Informe seu nome e matrícula. Respondemos em até 15 dias, conforme a LGPD.</p>
+
+            <h2>Dados que permanecem</h2>
+            <p>Registros de viagens já concluídas podem ser mantidos de forma
+            <strong>anonimizada</strong> (sem ligação com você) para relatórios de rateio de
+            custos e obrigações legais da empresa. Detalhes na
+            <a href="politica-privacidade.html">Política de Privacidade</a>.</p>
+        </div>
+
+        <a class="voltar" href="index.html">← Ir para o login</a>
+        <span class="sep">·</span>
+        <a class="voltar" href="politica-privacidade.html">Política de Privacidade</a>
+        <span class="sep">·</span>
+        <a class="voltar" href="termos-de-uso.html">Termos de Uso</a>
+    </div>
+
+    <script>
+        // Fluxo web da exclusão: autentica e chama o MESMO endpoint do app
+        // (DELETE /api/perfil), que confere a senha e bloqueia viagem em andamento.
+        const form = document.getElementById('formExcluir');
+        const btn = document.getElementById('btnExcluir');
+        const msg = document.getElementById('msg');
+
+        function mostrar(texto, tipo) {
+            msg.textContent = texto;
+            msg.className = 'msg' + (tipo ? ' ' + tipo : '');
+        }
+
+        form.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const matricula = document.getElementById('matricula').value.trim();
+            const senha = document.getElementById('senha').value;
+            if (!matricula || !senha) {
+                mostrar('Preencha matrícula e senha.', 'erro');
+                return;
+            }
+            if (!confirm('Esta ação é permanente e apaga seus dados pessoais. Confirmar a exclusão?')) return;
+
+            btn.disabled = true;
+            mostrar('Verificando...');
+            try {
+                const rLogin = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ matricula, senha }),
+                });
+                const jLogin = await rLogin.json().catch(() => null);
+                if (!rLogin.ok || !jLogin?.token) {
+                    mostrar(jLogin?.error || 'Matrícula ou senha incorreta.', 'erro');
+                    btn.disabled = false;
+                    return;
+                }
+
+                const rDel = await fetch('/api/perfil', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + jLogin.token,
+                    },
+                    body: JSON.stringify({ senha }),
+                });
+                const jDel = await rDel.json().catch(() => null);
+                if (!rDel.ok) {
+                    mostrar(jDel?.error || 'Não foi possível excluir a conta agora.', 'erro');
+                    btn.disabled = false;
+                    return;
+                }
+                form.style.display = 'none';
+                mostrar(jDel?.message || 'Conta excluída. Seus dados pessoais foram removidos.', 'ok');
+            } catch (_) {
+                mostrar('Falha de conexão. Tente de novo em instantes.', 'erro');
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

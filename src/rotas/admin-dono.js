@@ -208,6 +208,13 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
     nota: "Pico com frota fake + loop GPS (antes dos freios). Não é uso atual.",
   };
 
+  // require tardio: evita depender da ordem de carga das rotas no server.js.
+  let rotasEstado = { pausado: false, pausado_ate: null, motivo: null, erros: 0, pausas: 0 };
+  try {
+    const { estadoRotasGoogle } = require("./config");
+    if (typeof estadoRotasGoogle === "function") rotasEstado = estadoRotasGoogle();
+  } catch (_) { /* sem estado: painel segue com os contadores do banco */ }
+
   let usadas_hoje = 0;
   let usadas_mes = 0;
   let por_dia = [];
@@ -290,6 +297,23 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
       texto: "Tabela rotas_uso zerada neste mês (ou deploy recente). Métricas do GCP ainda podem mostrar histórico antigo.",
     });
   }
+  // Google recusando (billing desligado, API não habilitada, chave restrita):
+  // o app cai em linha reta. Sem este aviso, parece "uso baixo" quando é falha.
+  if (rotasEstado.pausado) {
+    decisoes.push({
+      tipo: "warn",
+      titulo: "Routes pausada: Google recusou as chamadas",
+      texto:
+        `O app está servindo LINHA RETA sem chamar a API até ${new Date(rotasEstado.pausado_ate).toLocaleTimeString("pt-BR")}. ` +
+        `Motivo: ${rotasEstado.motivo}. Verifique no Google Cloud se o faturamento está ativo e se Routes/Places/Maps JS estão habilitadas para a chave.`,
+    });
+  } else if (rotasEstado.erros > 0) {
+    decisoes.push({
+      tipo: "warn",
+      titulo: "Chamadas com erro desde o último deploy",
+      texto: `${rotasEstado.erros} tentativa(s) falharam e viraram linha reta. A cota foi devolvida ao contador. Se repetir, cheque faturamento e restrições da chave no Google Cloud.`,
+    });
+  }
   decisoes.push({
     tipo: "hist",
     titulo: "Lembrete do estouro (jul/2026)",
@@ -309,6 +333,7 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
     por_dia,
     decisoes,
     referencia_estouro,
+    estado: rotasEstado,
     cota_console: {
       compute_routes_dia: teto_dia,
       compute_routes_min_sugerido: Math.min(50, teto_min),

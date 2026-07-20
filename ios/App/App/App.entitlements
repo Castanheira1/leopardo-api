@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Capability "Push Notifications" (APNs). Sem esta entitlement o
+  registro de push falha no device e a App Store rejeita o build que
+  declara UIBackgroundModes remote-notification.
+
+  "development" funciona para debug e TestFlight; o Xcode troca para
+  "production" ao arquivar para a App Store. Se preferir, marque a
+  capability pelo Xcode (Signing & Capabilities → + Capability →
+  Push Notifications) — o arquivo já está ligado ao target.
+-->
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
