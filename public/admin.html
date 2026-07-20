@@ -193,7 +193,7 @@
             background: #fff; color: var(--ink); border: 1px solid var(--line);
             padding: 9px 14px; border-radius: 10px; cursor: pointer; font-size: .85rem;
         }
-        .btn-ghost:hover { border-color: var(--gold); color: var(--gold-bright); background: #fffef5; }
+        .btn-ghost:hover { border-color: var(--gold); color: var(--ink); background: #fffef5; }
         .btn-sm-link { padding: 7px 12px; font-size: .8rem; }
 
         /* KPIs — faixa compacta */
@@ -218,12 +218,12 @@
         .kpi .lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
         .kpi .val {
             font-size: .98rem; font-weight: 800; margin-top: 2px;
-            color: var(--gold-bright); line-height: 1.15;
+            color: var(--ink); line-height: 1.15;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .kpi .hint { font-size: .66rem; color: var(--muted); margin-top: 2px; }
         .kpi.destaque { background: rgba(201,162,39,.08); }
-        .kpi.destaque .val { color: var(--gold); }
+        .kpi.destaque .val { color: var(--ink); }
         @media (max-width: 640px) {
             .kpi-strip .kpi { border-right: none; border-bottom: 1px solid var(--line); flex: 1 1 100%; }
             .kpi-strip .kpi:last-child { border-bottom: none; }
@@ -259,7 +259,7 @@
         .bar-row .k { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .bar-track { background: #efe6c8; border-radius: 6px; height: 12px; overflow: hidden; }
         .bar-fill { height: 100%; border-radius: 6px; background: var(--gold); min-width: 3px; }
-        .bar-row .v { font-size: .8rem; font-weight: 700; white-space: nowrap; color: var(--gold-bright); }
+        .bar-row .v { font-size: .8rem; font-weight: 700; white-space: nowrap; color: var(--ink); }
         .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: .8rem; color: var(--muted); }
         .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
         .legend strong { color: var(--ink); }
@@ -274,7 +274,7 @@
         table.adm { width: 100%; border-collapse: collapse; font-size: .84rem; }
         table.adm th, table.adm td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
         table.adm th {
-            color: var(--gold-bright); font-weight: 700; font-size: .68rem;
+            color: var(--ink); font-weight: 700; font-size: .68rem;
             text-transform: uppercase; letter-spacing: .04em; background: #f8efd0;
         }
         table.adm td { color: var(--ink); }
@@ -758,7 +758,7 @@ function chartViagensPorDia(el, viagens, diasLimite) {
         const h = 10 + Math.round((dias[k] / max) * 86);
         const dd = k.slice(8, 10) + '/' + k.slice(5, 7);
         return `<div class="col" title="${dd}: ${dias[k]} viagem(ns)">
-            <span class="cl" style="color:var(--gold-bright);font-weight:700;">${dias[k]}</span>
+            <span class="cl" style="color:var(--ink);font-weight:700;">${dias[k]}</span>
             <div class="bar" style="height:${h}px"></div>
             <span class="cl">${dd}</span>
         </div>`;
@@ -840,7 +840,7 @@ async function carregarRateio() {
     if (!r.ok) return;
     const t = d.totais || {};
     document.getElementById('derivadosContrato').innerHTML =
-        `Custo por km <strong style="color:var(--gold)">${fmtMoeda(t.custo_por_km)}</strong> · por usuário <strong style="color:var(--gold)">${fmtMoeda(t.custo_por_usuario)}</strong> · por viagem <strong style="color:var(--gold)">${fmtMoeda(t.custo_por_viagem)}</strong>`;
+        `Custo por km <strong style="color:var(--ink)">${fmtMoeda(t.custo_por_km)}</strong> · por usuário <strong style="color:var(--ink)">${fmtMoeda(t.custo_por_usuario)}</strong> · por viagem <strong style="color:var(--ink)">${fmtMoeda(t.custo_por_viagem)}</strong>`;
 
     document.querySelector('#tabEmpresas tbody').innerHTML = (d.por_empresa || []).map(e => `
         <tr><td>${esc(e.empresa_nome)}</td><td class="num">${e.viagens}</td><td class="num">${e.km}</td>
