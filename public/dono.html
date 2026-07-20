@@ -255,7 +255,7 @@
             background: none; border: none; color: var(--muted); font-size: .8rem;
             cursor: pointer; padding: 6px 4px; font-weight: 600;
         }
-        .adm-side-sair:hover { color: var(--gold-deep); }
+        .adm-side-sair:hover { color: var(--orange-deep); }
         .adm-side-ver { font-size: .62rem; color: #a8a8b0; margin-top: 6px; padding-left: 4px; }
 
         /* .adm-main definido junto de .adm-content */
@@ -471,11 +471,11 @@
             letter-spacing: .08em; margin: 10px 2px 8px;
         }
         .link-gold {
-            background: var(--card-2); border: 1px solid var(--line); color: var(--gold-deep);
+            background: var(--orange-soft); border: 1px solid rgba(218,119,86,.25); color: var(--orange-deep);
             font-weight: 650; font-size: .76rem; cursor: pointer; padding: 6px 10px;
             border-radius: 8px; white-space: nowrap; text-decoration: none;
         }
-        .link-gold:hover { background: #fff; border-color: var(--gold); color: var(--gold-deep); text-decoration: none; }
+        .link-gold:hover { background: #fff; border-color: var(--orange); color: var(--orange-deep); text-decoration: none; }
 
         .grid-main {
             display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--gap); margin-bottom: var(--gap);
@@ -628,28 +628,44 @@
         .adm-overlay.open { display: block; }
 
         /* —— Responsivo —— */
+        @media (min-width: 1400px) {
+            :root { --pad-x: 36px; --gap: 16px; }
+            .kpi-strip, .kpi-strip.kpi-secondary { grid-template-columns: repeat(3, 1fr); }
+        }
         @media (max-width: 1100px) {
             .grid-main { grid-template-columns: 1fr; }
             .kpi-strip, .kpi-strip.kpi-secondary { grid-template-columns: repeat(3, 1fr); }
         }
         @media (max-width: 900px) {
-            :root { --pad-x: 12px; --pad-y: 10px; --gap: 8px; --side-w: min(280px, 86vw); }
+            :root { --pad-x: 14px; --pad-y: 12px; --gap: 10px; --side-w: min(300px, 88vw); }
             .adm-sidebar {
                 position: fixed; left: 0; top: 0; transform: translateX(-100%);
                 transition: transform .22s ease; box-shadow: 8px 0 32px rgba(0,0,0,.12);
-                width: var(--side-w);
+                width: var(--side-w); max-width: 100%;
             }
             .adm-sidebar.open { transform: translateX(0); }
             .adm-menu-btn { display: inline-flex; }
-            .adm-content { max-width: none; }
+            .adm-content { max-width: none; width: 100%; }
             .adm-topbar-right .pill:not(.pill-health) { display: none; }
             .adm-user-role { display: none; }
             .kpi-strip, .kpi-strip.kpi-secondary { grid-template-columns: 1fr 1fr; }
             .soft-item { flex-wrap: wrap; }
-            .soft-actions { width: 100%; padding-left: 44px; }
-            .field-row input, .field-row .btn-primary, .field-row .soft-select {
-                flex: 1 1 140px; min-width: 0 !important; width: auto;
+            .soft-actions { width: 100%; padding-left: 0; }
+            .soft-actions .btn-primary, .soft-actions .btn-ghost {
+                flex: 1 1 auto; min-width: 0; text-align: center;
             }
+            .field-row { width: 100%; }
+            .field-row input, .field-row .btn-primary, .field-row .soft-select {
+                flex: 1 1 100%; min-width: 0 !important; width: 100% !important; max-width: 100%;
+            }
+            .banner-ops .bo-actions .btn-primary,
+            .banner-ops .bo-actions .btn-ghost {
+                flex: 1 1 calc(50% - 6px); min-width: 120px; text-align: center;
+            }
+            .proj-filter { gap: 6px; }
+            .proj-filter button { flex: 0 1 auto; max-width: 100%; }
+            .period-presets button { font-size: .65rem; padding: 8px 2px; }
+            .btn-side { font-size: .78rem; padding: 11px 12px; }
         }
         @media (max-width: 640px) {
             .adm-topbar { flex-wrap: wrap; gap: 8px; }
@@ -662,6 +678,8 @@
             .kpi .val-line { font-size: 1.1rem; }
             .banner-ops { flex-direction: column; gap: 8px; }
             .banner-ops .bo-actions { width: 100%; }
+            .banner-ops .bo-actions .btn-primary,
+            .banner-ops .bo-actions .btn-ghost { flex: 1 1 100%; }
             .banner-ops .bo-actions .btn-primary,
             .banner-ops .bo-actions .btn-ghost { flex: 1 1 auto; text-align: center; }
             .panel-head { flex-direction: column; align-items: stretch; }

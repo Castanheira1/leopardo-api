@@ -7,7 +7,7 @@ const { pool } = require("../db");
 const { pushConfigurado } = require("../push");
 const {
   carregarAdminEscopo,
-  ehSuperAdmin,
+  exigirSuperAdmin,
   verificarAdmin,
   verificarAuth,
 } = require("../auth");
@@ -261,39 +261,19 @@ app.post("/api/admin/chamados", async (req, res) => {
   }
 });
 
-// Lista chamados: dono vê TODOS os projetos; admin de canteiro só o próprio.
-app.get("/api/admin/chamados", verificarAuth, verificarAdmin, async (req, res) => {
+// Lista chamados: só o dono (CEO / super admin) em dono.html — pedido nasce no cadastro.
+app.get("/api/admin/chamados", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   const status = String(req.query.status || "pendente");
   try {
-    if (ehSuperAdmin(req.user)) {
-      const { rows } = await pool.query(
-        `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
-         FROM admin_chamados c
-         LEFT JOIN projetos p ON p.id = c.projeto_id
-         WHERE c.status = $1
-         ORDER BY c.created_at DESC`,
-        [status]
-      );
-      return res.json(rows);
-    }
-    // Admin de canteiro: precisa de escopo de projeto.
-    return carregarAdminEscopo(req, res, async () => {
-      const pid = req.adminEscopo.admin_projeto_id;
-      if (!pid) return res.status(403).json({ error: "Admin sem projeto vinculado" });
-      try {
-        const { rows } = await pool.query(
-          `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
-           FROM admin_chamados c
-           LEFT JOIN projetos p ON p.id = c.projeto_id
-           WHERE c.projeto_id = $1 AND c.status = $2
-           ORDER BY c.created_at DESC`,
-          [pid, status]
-        );
-        res.json(rows);
-      } catch (e) {
-        res.status(500).json({ error: e.message });
-      }
-    });
+    const { rows } = await pool.query(
+      `SELECT c.*, p.nome AS projeto_nome, p.codigo AS projeto_codigo
+       FROM admin_chamados c
+       LEFT JOIN projetos p ON p.id = c.projeto_id
+       WHERE c.status = $1
+       ORDER BY c.created_at DESC`,
+      [status]
+    );
+    res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -331,9 +311,8 @@ async function promoverAdminCanteiro(c) {
   }
 }
 
-// Aprova: dono (qualquer projeto) ou admin do canteiro do chamado.
-// Até aprovar, o solicitante NÃO tem is_admin — só o chamado pendente.
-app.post("/api/admin/chamados/:id/aprovar", verificarAuth, verificarAdmin, async (req, res) => {
+// Aprova: só o dono (CEO) em dono.html. Até aprovar, o solicitante NÃO tem is_admin.
+app.post("/api/admin/chamados/:id/aprovar", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   const chamadoId = parseInt(req.params.id, 10);
   if (!chamadoId) return res.status(400).json({ error: "ID inválido" });
 
@@ -344,25 +323,6 @@ app.post("/api/admin/chamados/:id/aprovar", verificarAuth, verificarAdmin, async
     );
     const c = chamados[0];
     if (!c) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
-
-    if (!ehSuperAdmin(req.user)) {
-      // Admin de canteiro só aprova do próprio projeto.
-      return carregarAdminEscopo(req, res, async () => {
-        try {
-          if (req.adminEscopo.admin_projeto_id !== c.projeto_id) {
-            return res.status(403).json({ error: "Só o dono ou o admin deste canteiro pode aprovar" });
-          }
-          await promoverAdminCanteiro(c);
-          await pool.query("UPDATE admin_chamados SET status = 'aprovado' WHERE id = $1", [chamadoId]);
-          res.json({
-            message: `Admin aprovado! Matrícula ${c.matricula} — senha inicial: 123456 (peça para trocar no primeiro login).`,
-          });
-        } catch (e) {
-          console.error(e);
-          res.status(e.status || 500).json({ error: e.message || "Erro ao aprovar solicitação" });
-        }
-      });
-    }
 
     await promoverAdminCanteiro(c);
     await pool.query("UPDATE admin_chamados SET status = 'aprovado' WHERE id = $1", [chamadoId]);
@@ -375,7 +335,7 @@ app.post("/api/admin/chamados/:id/aprovar", verificarAuth, verificarAdmin, async
   }
 });
 
-app.post("/api/admin/chamados/:id/recusar", verificarAuth, verificarAdmin, async (req, res) => {
+app.post("/api/admin/chamados/:id/recusar", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   const chamadoId = parseInt(req.params.id, 10);
   if (!chamadoId) return res.status(400).json({ error: "ID inválido" });
 
@@ -386,20 +346,6 @@ app.post("/api/admin/chamados/:id/recusar", verificarAuth, verificarAdmin, async
     );
     const c = rows[0];
     if (!c) return res.status(404).json({ error: "Solicitação não encontrada ou já processada" });
-
-    if (!ehSuperAdmin(req.user)) {
-      return carregarAdminEscopo(req, res, async () => {
-        try {
-          if (req.adminEscopo.admin_projeto_id !== c.projeto_id) {
-            return res.status(403).json({ error: "Só o dono ou o admin deste canteiro pode recusar" });
-          }
-          await pool.query("UPDATE admin_chamados SET status = 'recusado' WHERE id = $1", [chamadoId]);
-          res.json({ message: "Solicitação recusada." });
-        } catch (e) {
-          res.status(500).json({ error: e.message });
-        }
-      });
-    }
 
     await pool.query("UPDATE admin_chamados SET status = 'recusado' WHERE id = $1", [chamadoId]);
     res.json({ message: "Solicitação recusada." });
