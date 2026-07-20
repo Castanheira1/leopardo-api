@@ -65,9 +65,10 @@ const verificarAuth = async (req, res, next) => {
   }
 };
 
-// Super admin / dono da empresa: visão multi-projeto, saúde e onboarding.
-// Matrículas em SUPER_ADMIN_MATRICULAS (padrão: 000000 = ops, 900000 = dono).
-const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "000000,900000")
+// Super admin / dono da empresa: visão multi-projeto (dono.html).
+// Matrículas em SUPER_ADMIN_MATRICULAS (padrão: só 900000).
+// 000000 = admin de CANTEIRO (admin.html), NÃO dono — não incluir no padrão.
+const SUPER_ADMIN_MATRICULAS = String(process.env.SUPER_ADMIN_MATRICULAS || "900000")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 function ehSuperAdmin(user) {

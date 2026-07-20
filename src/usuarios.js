@@ -124,13 +124,16 @@ const SQL_USUARIO_FRONT = `
   LEFT JOIN projetos p ON p.id = u.projeto_id`;
 
 // Espelha SUPER_ADMIN_MATRICULAS do auth (sem import circular).
-const SUPER_ADMIN_MATRICULAS_FRONT = String(process.env.SUPER_ADMIN_MATRICULAS || "000000,900000")
+// Padrão: só 900000 (dono). 000000 = admin de canteiro, NÃO super.
+const SUPER_ADMIN_MATRICULAS_FRONT = String(process.env.SUPER_ADMIN_MATRICULAS || "900000")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 function usuarioParaFront(row) {
   if (!row) return null;
   const isAdmin = !!row.is_admin;
-  const superAdmin = isAdmin && SUPER_ADMIN_MATRICULAS_FRONT.includes(String(row.matricula));
+  const mat = String(row.matricula || "");
+  // Dono: lista SUPER_ADMIN. Admin canteiro: is_admin + admin_projeto_id (ex. 000000/S11D).
+  const superAdmin = isAdmin && SUPER_ADMIN_MATRICULAS_FRONT.includes(mat);
   return {
     id: row.id,
     nome: row.nome,

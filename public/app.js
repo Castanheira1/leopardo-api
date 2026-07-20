@@ -17,9 +17,8 @@ function aplicarSaudacaoUsuario(el, nome) {
 }
 
 // adminOnly: exige is_admin.
-// opts.superOnly: só dono/super admin (matrículas SUPER_ADMIN no servidor; no
-//   client usamos flag user.super_admin se existir, senão heurística 000000/900000
-//   e redireciona admin de canteiro para opts.redirectAdmin || admin.html).
+// opts.superOnly: só dono (user.super_admin do servidor; fallback matrícula 900000).
+//   Admin de canteiro (000000) NÃO é dono → redirectAdmin || admin.html.
 // opts.redirectAdmin: destino se superOnly falhar.
 function checkAuth(adminOnly = false, opts = {}) {
     const token = localStorage.getItem('token');
@@ -31,9 +30,7 @@ function checkAuth(adminOnly = false, opts = {}) {
         return;
     }
     if (opts.superOnly) {
-        const ehDono = user.super_admin === true
-            || ['000000', '900000'].includes(String(user.matricula || ''));
-        if (!ehDono) {
+        if (!ehDonoEmpresa(user)) {
             avisoProximaPagina('Acesso restrito ao dono da empresa.');
             location.href = opts.redirectAdmin || 'admin.html';
             return;
@@ -50,11 +47,12 @@ function checkAuth(adminOnly = false, opts = {}) {
     verificarConsentimentoLGPD();
 }
 
-/** True se a matrícula está na lista de dono (espelha SUPER_ADMIN_MATRICULAS padrão). */
+/** True se é dono/CEO (super_admin do login). 000000 = canteiro, não dono. */
 function ehDonoEmpresa(user) {
     if (!user || !user.is_admin) return false;
     if (user.super_admin === true) return true;
-    return ['000000', '900000'].includes(String(user.matricula || ''));
+    // Fallback só se o user vier de cache antigo sem a flag
+    return String(user.matricula || '') === '900000';
 }
 
 // O evento 'storage' dispara SÓ nas OUTRAS abas do mesmo navegador — exatamente a

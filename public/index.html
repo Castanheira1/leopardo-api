@@ -22,7 +22,12 @@
             try {
                 const t = localStorage.getItem('token');
                 const u = JSON.parse(localStorage.getItem('user') || 'null');
-                if (t && u) location.replace(u.is_admin ? 'admin.html' : 'dashboard.html');
+                if (t && u) {
+                    // Dono → CEO; admin canteiro → admin; colab → dashboard
+                    const dest = u.super_admin ? 'dono.html'
+                        : (u.is_admin ? 'admin.html' : 'dashboard.html');
+                    location.replace(dest);
+                }
             } catch (_) {}
         })();
     </script>
