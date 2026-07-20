@@ -18,6 +18,8 @@
             --bg: #f7f0dc; --bg-main: #fbf6e8; --card: #fffefb; --card-2: #f5edd4;
             --ink: #1c1917; --muted: #6b655c; --line: #e8dfc4;
             --gold: #c9a227; --gold-bright: #a8841a; --gold-dim: rgba(201,162,39,.14);
+            /* Ícones estilo Claude */
+            --orange: #da7756; --orange-soft: rgba(218,119,86,.14); --orange-deep: #c45c2a;
             --side-w: 272px;
             --good: #16a34a; --warn: #ca8a04; --crit: #dc2626;
             --shadow: 0 2px 14px rgba(90,70,20,.07);
@@ -100,7 +102,7 @@
             padding: 7px 2px; font-size: .8rem; color: var(--side-muted);
         }
         .adm-stat .lbl { display: flex; align-items: center; gap: 8px; }
-        .adm-stat .ico { color: var(--gold); font-size: .75rem; width: 14px; text-align: center; }
+        .adm-stat .ico { color: var(--orange); font-size: .75rem; width: 14px; text-align: center; }
         .adm-stat .val { font-weight: 800; color: #fff; font-size: .88rem; }
 
         .adm-nav { display: grid; gap: 4px; padding: 10px 14px; flex: 1; }
@@ -117,7 +119,7 @@
             box-shadow: 0 2px 12px rgba(201,162,39,.4);
         }
         .adm-nav-item.active .ico { color: #1a1408; }
-        .adm-nav-item .ico { width: 18px; text-align: center; color: var(--gold); font-size: .9rem; }
+        .adm-nav-item .ico { width: 18px; text-align: center; color: var(--orange); font-size: .9rem; }
 
         .adm-side-foot {
             padding: 14px 18px 20px; border-top: 1px solid var(--side-line);
@@ -158,7 +160,7 @@
         .adm-topbar .sub { color: var(--muted); font-size: .84rem; margin-top: 3px; }
         .adm-topbar-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
         .adm-menu-btn {
-            display: none; background: var(--card); color: var(--gold);
+            display: none; background: var(--card); color: var(--orange);
             border: 1px solid var(--line); border-radius: 8px;
             padding: 8px 11px; font-size: 1.1rem; cursor: pointer; margin-top: 2px;
         }
@@ -168,9 +170,9 @@
             cursor: default; box-shadow: var(--shadow);
         }
         .adm-avatar {
-            width: 32px; height: 32px; border-radius: 50%; background: var(--gold-dim);
-            border: 2px solid var(--gold); display: flex; align-items: center;
-            justify-content: center; color: var(--gold); font-weight: 800; font-size: .85rem;
+            width: 32px; height: 32px; border-radius: 50%; background: var(--orange-soft);
+            border: 2px solid var(--orange); display: flex; align-items: center;
+            justify-content: center; color: var(--orange-deep); font-weight: 800; font-size: .85rem;
         }
         .adm-user-name { font-size: .84rem; font-weight: 600; color: var(--ink); }
         .adm-user-role { font-size: .68rem; color: var(--muted); }
@@ -209,9 +211,9 @@
         }
         .kpi-strip .kpi:last-child { border-right: none; }
         .kpi-ico {
-            width: 30px; height: 30px; border-radius: 8px; background: var(--gold-dim);
+            width: 30px; height: 30px; border-radius: 8px; background: var(--orange-soft);
             display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-            color: var(--gold);
+            color: var(--orange);
         }
         .kpi-ico svg { width: 15px; height: 15px; }
         .kpi-body { min-width: 0; flex: 1; }
@@ -241,8 +243,8 @@
         .panel-compact .panel-head { margin-bottom: 10px; }
         .panel-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
         .panel-ico {
-            width: 28px; height: 28px; border-radius: 8px; background: var(--gold-dim);
-            display: flex; align-items: center; justify-content: center; color: var(--gold); flex-shrink: 0;
+            width: 28px; height: 28px; border-radius: 8px; background: var(--orange-soft);
+            display: flex; align-items: center; justify-content: center; color: var(--orange); flex-shrink: 0;
         }
         .panel-ico svg { width: 15px; height: 15px; stroke: currentColor; }
         .panel h3 { margin: 0; font-size: .88rem; font-weight: 700; color: var(--ink); }
