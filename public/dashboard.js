@@ -1721,31 +1721,9 @@
             el.setAttribute('aria-label', alvo);
         });
     }
-    // Pré-aquece tiles de satélite da região (mapa oculto 256px) — quando o
-    // usuário escolhe o local, o hybrid já costuma estar no cache do browser.
-    function preaquecerSatelite(gmaps, center) {
-        if (window.__vapSatWarm || !gmaps?.maps || !center) return;
-        window.__vapSatWarm = true;
-        try {
-            const el = document.createElement('div');
-            el.setAttribute('aria-hidden', 'true');
-            el.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:320px;opacity:0;pointer-events:none;';
-            document.body.appendChild(el);
-            const warm = new gmaps.maps.Map(el, opcoesMapa({
-                center: { lat: Number(center.lat), lng: Number(center.lng) },
-                zoom: 17,
-                mapTypeId: 'hybrid',
-                disableDefaultUI: true,
-                gestureHandling: 'none',
-                keyboardShortcuts: false,
-                clickableIcons: false,
-            }));
-            forcarMapaRaster(warm);
-            const limpar = () => { try { el.remove(); } catch (_) {} };
-            gmaps.maps.event.addListenerOnce(warm, 'tilesloaded', () => setTimeout(limpar, 1500));
-            setTimeout(limpar, 8000); // segurança se tilesloaded nunca vier
-        } catch (_) { /* sem warm: preview ainda funciona, só carrega na hora */ }
-    }
+    // NÃO recriar um "pré-aquecimento" de satélite com um mapa oculto: cada
+    // google.maps.Map instanciado é cobrado no SKU Dynamic Maps, então um mapa
+    // escondido dobraria o custo de abrir o app só para adiantar tiles.
     function novoMapa(elId, opts) {
         const el = document.getElementById(elId);
         if (!el) throw new Error('mapa: elemento #' + elId + ' não encontrado');
