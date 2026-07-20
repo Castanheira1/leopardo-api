@@ -96,14 +96,41 @@
             filter: none; opacity: .75; cursor: pointer;
         }
 
-        .adm-side-stats { display: grid; gap: 4px; }
-        .adm-stat {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 7px 2px; font-size: .8rem; color: var(--side-muted);
+        /* Operação ao vivo — no Resumo comercial (não na lateral) */
+        .live-ops {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
         }
-        .adm-stat .lbl { display: flex; align-items: center; gap: 8px; }
-        .adm-stat .ico { color: var(--orange); font-size: .75rem; width: 14px; text-align: center; }
-        .adm-stat .val { font-weight: 800; color: #fff; font-size: .88rem; }
+        .live-ops .live-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            box-shadow: var(--shadow);
+            min-width: 0;
+        }
+        .live-ops .live-lbl {
+            display: flex; align-items: center; gap: 6px;
+            font-size: .62rem; text-transform: uppercase; letter-spacing: .04em;
+            color: var(--muted); font-weight: 700;
+        }
+        .live-ops .live-lbl .ico { color: var(--orange); font-size: .75rem; width: 14px; text-align: center; }
+        .live-ops .live-val {
+            font-size: 1.05rem; font-weight: 800; color: var(--ink);
+            margin-top: 4px; line-height: 1.1;
+        }
+        .live-ops-head {
+            font-size: .62rem; text-transform: uppercase; letter-spacing: .08em;
+            color: var(--muted); font-weight: 800; margin: 0 0 6px 2px;
+        }
+        @media (max-width: 900px) {
+            .live-ops { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 480px) {
+            .live-ops { grid-template-columns: 1fr 1fr; }
+        }
 
         .adm-nav { display: grid; gap: 4px; padding: 10px 14px; flex: 1; }
         .adm-nav-item {
@@ -386,17 +413,6 @@
             </div>
         </div>
 
-        <div class="adm-side-block">
-            <div class="blk-title">Operação ao vivo</div>
-            <div class="adm-side-stats" id="sideStats">
-                <div class="adm-stat"><span class="lbl"><span class="ico">◎</span>Usuários</span><span class="val" id="stUsuarios">—</span></div>
-                <div class="adm-stat"><span class="lbl"><span class="ico">➤</span>Caronas ativas</span><span class="val" id="stCaronas">—</span></div>
-                <div class="adm-stat"><span class="lbl"><span class="ico">☰</span>Pedidos abertos</span><span class="val" id="stPedidos">—</span></div>
-                <div class="adm-stat"><span class="lbl"><span class="ico">◷</span>Em andamento</span><span class="val" id="stAndamento">—</span></div>
-                <div class="adm-stat"><span class="lbl"><span class="ico">✓</span>Concluídas (GPS)</span><span class="val" id="stConcluidas">—</span></div>
-            </div>
-        </div>
-
         <nav class="adm-nav" aria-label="Seções do painel">
             <div class="adm-nav-label" id="navLabelCanteiro">Canteiro / projeto</div>
             <button class="adm-nav-item active" data-sec="sec-resumo" onclick="irSecao('sec-resumo')">
@@ -447,6 +463,29 @@
 
         <div class="adm-content">
             <section id="sec-resumo" class="adm-section active">
+                <div class="live-ops-head">Operação ao vivo</div>
+                <div class="live-ops" id="sideStats" aria-label="Operação ao vivo">
+                    <div class="live-card">
+                        <div class="live-lbl"><span class="ico">◎</span> Usuários</div>
+                        <div class="live-val" id="stUsuarios">—</div>
+                    </div>
+                    <div class="live-card">
+                        <div class="live-lbl"><span class="ico">➤</span> Caronas ativas</div>
+                        <div class="live-val" id="stCaronas">—</div>
+                    </div>
+                    <div class="live-card">
+                        <div class="live-lbl"><span class="ico">☰</span> Pedidos abertos</div>
+                        <div class="live-val" id="stPedidos">—</div>
+                    </div>
+                    <div class="live-card">
+                        <div class="live-lbl"><span class="ico">◷</span> Em andamento</div>
+                        <div class="live-val" id="stAndamento">—</div>
+                    </div>
+                    <div class="live-card">
+                        <div class="live-lbl"><span class="ico">✓</span> Concluídas (GPS)</div>
+                        <div class="live-val" id="stConcluidas">—</div>
+                    </div>
+                </div>
                 <div class="kpi-strip" id="kpis"></div>
                 <div class="grid cols-3">
                     <div class="panel panel-compact">
@@ -792,11 +831,12 @@ function atualizarChartViagens() {
 
 function atualizarSideStats(ov) {
     if (!ov) return;
-    document.getElementById('stUsuarios').textContent = fmtNum(ov.totalUsuarios);
-    document.getElementById('stCaronas').textContent = fmtNum(ov.caronasAtivas);
-    document.getElementById('stPedidos').textContent = fmtNum(ov.pedidosAbertos);
-    document.getElementById('stAndamento').textContent = fmtNum(ov.viagensEmAndamento);
-    document.getElementById('stConcluidas').textContent = fmtNum(ov.viagensConcluidas);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = fmtNum(v); };
+    set('stUsuarios', ov.totalUsuarios);
+    set('stCaronas', ov.caronasAtivas);
+    set('stPedidos', ov.pedidosAbertos);
+    set('stAndamento', ov.viagensEmAndamento);
+    set('stConcluidas', ov.viagensConcluidas);
 }
 
 async function carregarContexto() {
