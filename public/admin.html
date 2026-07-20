@@ -18,6 +18,8 @@
             --bg: #f7f0dc; --bg-main: #fbf6e8; --card: #fffefb; --card-2: #f5edd4;
             --ink: #1c1917; --muted: #6b655c; --line: #e8dfc4;
             --gold: #c9a227; --gold-bright: #a8841a; --gold-dim: rgba(201,162,39,.14);
+            /* Botões accent: ouro mais saturado + texto grafite (contraste legível) */
+            --btn-accent: #c4a035; --btn-accent-hover: #d4b24a; --btn-accent-text: #14120b;
             /* Ícones estilo Claude */
             --orange: #da7756; --orange-soft: rgba(218,119,86,.14); --orange-deep: #c45c2a;
             --side-w: 272px;
@@ -44,7 +46,7 @@
         .adm-side-brand img { height: 32px; }
         .adm-tag {
             font-size: .6rem; letter-spacing: .16em; font-weight: 800;
-            background: var(--gold); color: #0a0a0a; padding: 3px 8px; border-radius: 4px;
+            background: var(--btn-accent); color: var(--btn-accent-text); padding: 3px 8px; border-radius: 4px;
         }
         .adm-nav-label {
             font-size: .62rem; text-transform: uppercase; letter-spacing: .12em;
@@ -136,10 +138,10 @@
         }
         .adm-nav-item:hover { background: #1e1b14; color: #fff; }
         .adm-nav-item.active {
-            background: var(--gold); color: #1a1408;
-            box-shadow: 0 2px 12px rgba(201,162,39,.4);
+            background: var(--btn-accent); color: var(--btn-accent-text);
+            box-shadow: 0 2px 12px rgba(196,160,53,.4);
         }
-        .adm-nav-item.active .ico { color: #1a1408; }
+        .adm-nav-item.active .ico { color: var(--btn-accent-text); }
         .adm-nav-item .ico { width: 18px; text-align: center; color: var(--orange); font-size: .9rem; }
 
         .adm-side-foot {
@@ -154,17 +156,23 @@
         .adm-side-sair:hover { color: #ead298; }
 
         .btn-side {
-            background: var(--gold); color: #1a1408; border: none;
+            background: var(--btn-accent); color: var(--btn-accent-text) !important; border: none;
             padding: 10px 14px; border-radius: 10px; cursor: pointer;
             font-size: .86rem; font-weight: 700; width: 100%;
         }
-        .btn-side:hover { background: #dbb84a; }
+        .btn-side:hover { background: var(--btn-accent-hover); color: var(--btn-accent-text) !important; }
+        .btn-side:focus-visible {
+            outline: 2px solid var(--orange); outline-offset: 2px;
+        }
         .btn-side-outline {
             background: transparent; color: #ead298; border: 1px solid rgba(201,162,39,.35);
             padding: 10px 14px; border-radius: 10px; cursor: pointer;
             font-size: .84rem; font-weight: 600; width: 100%; margin-top: 8px;
         }
-        .btn-side-outline:hover { border-color: var(--gold); color: #fff; }
+        .btn-side-outline:hover { border-color: var(--btn-accent); color: #fff; }
+        .btn-side-outline:focus-visible {
+            outline: 2px solid var(--orange); outline-offset: 2px;
+        }
         .btn-side-outline:disabled { opacity: .55; cursor: wait; }
 
         /* ---- Main (dados claros, largura cheia) ---- */
@@ -220,11 +228,14 @@
         }
 
         .btn-gold {
-            background: var(--gold); color: #1a1408; border: none; font-weight: 700;
+            background: var(--btn-accent); color: var(--btn-accent-text) !important; border: none; font-weight: 700;
             padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: .8rem;
-            box-shadow: 0 2px 8px rgba(201,162,39,.25);
+            box-shadow: 0 2px 8px rgba(196,160,53,.28);
         }
-        .btn-gold:hover { background: #dbb84a; }
+        .btn-gold:hover { background: var(--btn-accent-hover); color: var(--btn-accent-text) !important; }
+        .btn-gold:focus-visible {
+            outline: 2px solid var(--orange-deep); outline-offset: 2px;
+        }
         .btn-ghost {
             background: #fff; color: var(--ink); border: 1px solid var(--line);
             padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: .78rem;
