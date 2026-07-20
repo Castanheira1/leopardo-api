@@ -73,7 +73,7 @@ const ROTAS_GOOGLE_MAX_MES = Number(process.env.ROTAS_GOOGLE_MAX_MES || 9000);
 let rotasGoogleJanela = { t0: Date.now(), n: 0 };
 let rotasGoogleDia = { dia: "", n: 0 };
 const rotasGoogleStats = {
-  hit: 0, miss: 0, google: 0, bloqueado: 0,
+  hit: 0, miss: 0, google: 0, bloqueado: 0, erro: 0, pausas: 0,
   enabled: GOOGLE_ROUTES_ENABLED,
 };
 if (GOOGLE_ROUTES_ENABLED) {
@@ -100,8 +100,54 @@ async function garantirTabelaRotasUso() {
     )`).catch(() => {});
 }
 
+// Devolve a cota quando a chamada não produziu rota (erro do Google, timeout).
+// Sem isso, com a API negando (billing desligado, chave restrita) o contador
+// subia a cada tentativa e o teto do dia se esgotava sem nenhuma rota real.
+async function devolverCotaRota() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (rotasGoogleDia.dia === hoje && rotasGoogleDia.n > 0) rotasGoogleDia.n--;
+  if (rotasGoogleJanela.n > 0) rotasGoogleJanela.n--;
+  await pool.query(
+    "UPDATE rotas_uso SET n = GREATEST(n - 1, 0) WHERE dia = $1",
+    [hoje]
+  ).catch(() => {});
+}
+
+/* Disjuntor: erro PERMANENTE (billing desligado, API não habilitada, chave sem
+   permissão) não melhora se repetir. Em vez de chamar o Google a cada rota e
+   sempre cair na reta, para de tentar por um tempo e serve reta direto —
+   zero chamada e zero risco de cobrança enquanto o problema não é resolvido. */
+const ROTAS_PAUSA_MS = Number(process.env.ROTAS_PAUSA_ERRO_MS || 30 * 60 * 1000); // 30 min
+let rotasPausadoAte = 0;
+let rotasPausaMotivo = "";
+
+// Mensagens reais do Google que NÃO melhoram se repetir:
+//   400 "API key not valid. Please pass a valid API key."     (chave errada)
+//   403 "...Routes API has not been used in project..."       (API não habilitada)
+//   403 PERMISSION_DENIED / billing                           (faturamento off)
+//   403 "requests from this ... are blocked"                  (restrição da chave)
+function ehErroPermanenteRotas(status, msg) {
+  const t = String(msg || "");
+  return status === 401 || status === 403
+    || /billing|PERMISSION_DENIED|API[ _-]?key|not authorized|has not been used|is disabled|are blocked|REQUEST_DENIED/i.test(t);
+}
+
+function pausarRotas(motivo) {
+  rotasPausadoAte = Date.now() + ROTAS_PAUSA_MS;
+  rotasPausaMotivo = String(motivo || "erro permanente").slice(0, 200);
+  rotasGoogleStats.pausas++;
+  console.warn(
+    `[rotas] Google Routes PAUSADO por ${Math.round(ROTAS_PAUSA_MS / 60000)} min — ${rotasPausaMotivo}. ` +
+    "Servindo linha reta sem chamar a API."
+  );
+}
+
 async function rotasGooglePermitida() {
   if (!GOOGLE_ROUTES_ENABLED) {
+    rotasGoogleStats.bloqueado++;
+    return false;
+  }
+  if (Date.now() < rotasPausadoAte) {
     rotasGoogleStats.bloqueado++;
     return false;
   }
@@ -232,9 +278,15 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
   if (!(await rotasGooglePermitida())) {
     const payload = payloadFallbackReta();
     ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
-    const motivo = !GOOGLE_ROUTES_ENABLED
-      ? "Routes Google desligado (GOOGLE_ROUTES_ENABLED). Linha reta — sem cobrança."
-      : "Limite de rotas Google; usando linha reta.";
+    let motivo;
+    if (!GOOGLE_ROUTES_ENABLED) {
+      motivo = "Routes Google desligado (GOOGLE_ROUTES_ENABLED). Linha reta — sem cobrança.";
+    } else if (Date.now() < rotasPausadoAte) {
+      // Diagnóstico honesto: não é teto de cota, é o Google recusando.
+      motivo = `Routes pausada após erro do Google (${rotasPausaMotivo}). Linha reta, sem novas chamadas.`;
+    } else {
+      motivo = "Limite de rotas Google; usando linha reta.";
+    }
     return res.json({
       ...payload,
       cached: false,
@@ -269,6 +321,11 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     if (!r.ok) {
       const msg = j?.error?.message || `Routes HTTP ${r.status}`;
       console.warn("POST /api/rotas:", msg);
+      rotasGoogleStats.erro++;
+      // Não gastou cota de verdade: devolve o crédito e, se o erro for
+      // permanente, para de tentar até alguém arrumar no Google Cloud.
+      await devolverCotaRota();
+      if (ehErroPermanenteRotas(r.status, msg)) pausarRotas(msg);
       const payload = payloadFallbackReta();
       ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
       return res.json({ ...payload, cached: false, aviso: msg });
@@ -276,6 +333,8 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     const route = j?.routes?.[0];
     const enc = route?.polyline?.encodedPolyline;
     if (!enc) {
+      rotasGoogleStats.erro++;
+      await devolverCotaRota();
       const payload = payloadFallbackReta();
       ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
       return res.json({ ...payload, cached: false, aviso: "sem polyline na resposta" });
@@ -308,6 +367,8 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     res.json({ ...payload, cached: false });
   } catch (e) {
     console.warn("POST /api/rotas:", e.message);
+    rotasGoogleStats.erro++;
+    await devolverCotaRota();
     const payload = payloadFallbackReta();
     ROTAS_CACHE_MEM.set(chave, { ...payload, em: Date.now() });
     res.json({ ...payload, cached: false, aviso: e.message || "falha ao calcular rota" });
@@ -339,6 +400,10 @@ app.get("/api/rotas/stats", verificarAuth, async (req, res) => {
     usadas_mes,
     cache_mem: ROTAS_CACHE_MEM.size,
     janela_n: rotasGoogleJanela.n,
+    // Disjuntor: quando ligado, o app serve reta SEM chamar o Google.
+    pausado: Date.now() < rotasPausadoAte,
+    pausado_ate: rotasPausadoAte ? new Date(rotasPausadoAte).toISOString() : null,
+    pausa_motivo: rotasPausaMotivo || null,
   });
 });
 
@@ -356,4 +421,12 @@ module.exports = {
   chaveRotaApprox,
   rotasGooglePermitida,
   garantirTabelaRotasCache,
+  // Estado do disjuntor para o painel do dono (API Maps).
+  estadoRotasGoogle: () => ({
+    pausado: Date.now() < rotasPausadoAte,
+    pausado_ate: rotasPausadoAte ? new Date(rotasPausadoAte).toISOString() : null,
+    motivo: rotasPausaMotivo || null,
+    erros: rotasGoogleStats.erro,
+    pausas: rotasGoogleStats.pausas,
+  }),
 };
