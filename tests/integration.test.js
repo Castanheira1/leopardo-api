@@ -995,7 +995,10 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
        corredor em linha reta não bate). Mas a rota do motorista passa por pontos
        conhecidos do catálogo (locais-favoritos.json) que ADIANTAM o passageiro —
        ele desce num ponto em comum e segue de lá. */
-    grupo("Ponto em comum (encaixe): destino diferente, mesmo caminho");
+    // Com a malha de pista, o destino do motorista (Usina) cai NO caminho do
+    // passageiro até a Mina: isso é carona PARCIAL (classe 1 no ranking, melhor
+    // que encaixe). O ponto de desembarque vem no destino_texto da carona.
+    grupo("Ponto em comum (parcial): destino diferente, mesmo caminho");
     const PORTARIA_ENC = { lat: -6.454156, lng: -50.208344 };   // Portaria S11D
     const USINA_ENC = { lat: -6.448992, lng: -50.243534 };      // Rodoviária Arara Azul — Usina
     const MINA_ENC = { lat: -6.415464, lng: -50.320819 };       // Estação Bombeiros 09 — Mina
@@ -1042,15 +1045,17 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(rOn.status, 200, "E online");
     });
 
-    await test("carona para a Usina aparece como ENCAIXE para quem vai à Mina", async () => {
+    await test("carona para a Usina aparece como PARCIAL para quem vai à Mina", async () => {
       const q = `?lat=${PORTARIA_ENC.lat}&lng=${PORTARIA_ENC.lng}&dest_lat=${MINA_ENC.lat}&dest_lng=${MINA_ENC.lng}`;
       const { status, json } = await api("GET", "/api/caronas" + q, { token: tokEncPax });
       eq(status, 200, "status");
       const c = json.find((x) => x.id === caronaEncId);
       assert(c, "carona da Usina deveria aparecer para quem vai à Mina (ponto em comum)");
-      eq(c.compat_rota, "encaixe", "compat_rota");
-      assert(c.encaixe_texto, "deveria dizer QUAL é o ponto em comum (nome do local)");
-      assert(c.encaixe_lat != null && c.encaixe_lng != null, "ponto em comum precisa de coordenadas");
+      eq(c.compat_rota, "parcial", "compat_rota");
+      // No parcial o desembarque é o próprio destino da carona — o passageiro
+      // precisa saber até onde vai (aqui, a Usina).
+      eq(c.destino_texto, "Usina", "deveria dizer até onde a carona leva");
+      assert(c.destino_lat != null && c.destino_lng != null, "desembarque precisa de coordenadas");
     });
 
     await test("pedido broadcast: quem tem ponto em comum é chamado ANTES do amarelo igualmente perto", async () => {
@@ -1068,7 +1073,6 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const rD = await api("GET", "/api/motorista/oferta-atual", { token: tokEncD });
       assert(rD.json && rD.json.pedido_id === pedidoEncId,
         "D (rota com ponto em comum) deveria ser o primeiro chamado");
-      assert(rD.json.encaixe_texto, "a oferta de D deveria trazer o ponto em comum");
       ofertaEncId = rD.json.id;
       const rE = await api("GET", "/api/motorista/oferta-atual", { token: tokEncE });
       eq(rE.json, null, "E (amarelo) não deveria ser chamado enquanto D não responde");
@@ -1343,16 +1347,16 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     /* ============= ENCAIXE À FRENTE DO EMBARQUE (carro não volta) ============= */
     // O ponto em comum precisa estar À FRENTE de onde o passageiro embarca na rota
     // do motorista. Antes, um ponto ATRÁS do embarque (que o carro já passou) podia
-    // ser ofertado como encaixe — e o carro não volta. Geometria calculada sobre o
-    // catálogo real S11D (Portaria -> Bombeiros/Mina): o cluster "Usina" fica em
-    // t≈0.3 do corredor; com o passageiro embarcando em t≈0.5, esse cluster está
-    // ATRÁS e não pode virar encaixe. (O caso positivo — encaixe à frente — já é
-    // coberto pelo grupo "Ponto em comum".)
+    // ser ofertado como encaixe — e o carro não volta. Geometria medida sobre a
+    // MALHA real S11D (Portaria -> Bombeiros/Mina): todo o cluster "Usina" fica até
+    // t≈0.45 do corredor; com o passageiro embarcando em t≈0.70, esses pontos estão
+    // ATRÁS e nenhum pode virar encaixe. (O caso positivo — desembarque à frente —
+    // é coberto pelo grupo "Ponto em comum (parcial)".)
     grupo("Encaixe à frente do embarque: ponto atrás não é ofertado");
     const EMB_CAR_ORIG = { lat: -6.454156, lng: -50.208344 };  // Portaria S11D (início da rota do motorista)
     const EMB_CAR_DEST = { lat: -6.415464, lng: -50.320819 };  // Bombeiros 09 — Mina (fim da rota)
-    const EMB_PAX_ORIG = { lat: -6.434810, lng: -50.264581 };  // embarque em t≈0.5 do corredor (à frente do cluster Usina)
-    const EMB_PAX_DEST = { lat: -6.479156, lng: -50.233344 };  // destino "atrás", puxa o cluster Usina como encaixe (proibido)
+    const EMB_PAX_ORIG = { lat: -6.453882, lng: -50.312507 };  // embarque em t≈0.70 da malha (à frente de todo o cluster Usina)
+    const EMB_PAX_DEST = { lat: -6.479156, lng: -50.233344 };  // destino "atrás", puxaria o cluster Usina como encaixe (proibido)
     const uEmbMot = novoUsuario(47, "S11D");
     const uEmbPax = novoUsuario(48, "S11D");
     let tokEmbMot, tokEmbPax;
@@ -1535,6 +1539,33 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
     });
 
+    /* ---- Dono/CEO (900000): só ele tem a visão multi-projeto ---- */
+    // 000000 é admin de CANTEIRO (admin.html); 900000 é o dono (dono.html).
+    // A conta do dono é criada no boot por bootstrap-db (senha padrão 654321).
+    grupo("Dono da empresa (900000 / 654321)");
+    let tokDono;
+    await test("login do dono 900000", async () => {
+      const { status, json } = await api("POST", "/api/login", {
+        body: { matricula: "900000", senha: "654321" },
+      });
+      eq(status, 200, "status");
+      assert(json.user.is_admin, "dono deveria ser admin");
+      assert(json.user.super_admin, "dono deveria ser super_admin");
+      tokDono = json.token;
+    });
+    await test("admin de canteiro (000000) NÃO é super admin", async () => {
+      const { json } = await api("POST", "/api/login", {
+        body: { matricula: "000000", senha: "admin123" },
+      });
+      assert(!json.user.super_admin, "000000 não pode ser super_admin (é admin de canteiro)");
+      // Re-login invalidou o token anterior (sessão única): adota o novo.
+      tokAdmin = json.token;
+    });
+    await test("admin de canteiro é barrado na visão do dono → 403", async () => {
+      const { status } = await api("GET", "/api/admin/dono/dashboard", { token: tokAdmin });
+      eq(status, 403, "status");
+    });
+
     /* ---- Observabilidade ---- */
     grupo("Saúde e registro de erros");
     await test("GET /api/health → 200 com db:true", async () => {
@@ -1543,11 +1574,11 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(json.db, true, "db");
       assert(json.versao, "sem versão");
     });
-    await test("GET /api/admin/erros exige admin (driver → 403; admin → 200)", async () => {
+    await test("GET /api/admin/erros exige super admin (driver → 403; dono → 200)", async () => {
       const r1 = await api("GET", "/api/admin/erros", { token: tokDriver });
       eq(r1.status, 403, "driver deveria ser barrado");
-      const r2 = await api("GET", "/api/admin/erros", { token: tokAdmin });
-      eq(r2.status, 200, "admin");
+      const r2 = await api("GET", "/api/admin/erros", { token: tokDono });
+      eq(r2.status, 200, "dono");
       assert(Array.isArray(r2.json.recentes), "recentes não é lista");
     });
 
@@ -1558,7 +1589,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 403, "status");
     });
     await test("super admin recebe consolidado + projetos com métricas", async () => {
-      const { status, json } = await api("GET", "/api/admin/dono/dashboard", { token: tokAdmin });
+      const { status, json } = await api("GET", "/api/admin/dono/dashboard", { token: tokDono });
       eq(status, 200, "status");
       assert(json.consolidado && typeof json.consolidado.aderencia_pct === "number", "sem consolidado");
       assert(Array.isArray(json.projetos) && json.projetos.length >= 4, "sem lista de projetos");
@@ -1571,7 +1602,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     });
 
     /* ---- Projetos dinâmicos (onboarding, super admin) ---- */
-    grupo("Projetos dinâmicos (super admin 000000)");
+    grupo("Projetos dinâmicos (super admin 900000)");
     const codigoNovo = `TST${String(uniq).slice(-5)}`;
     let idProjetoNovo;
     await test("driver comum não gerencia projetos → 403", async () => {
@@ -1580,7 +1611,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     });
     await test("super admin cria projeto novo", async () => {
       const { status, json } = await api("POST", "/api/admin/projetos", {
-        token: tokAdmin, body: { nome: "Projeto Teste Integração", codigo: codigoNovo },
+        token: tokDono, body: { nome: "Projeto Teste Integração", codigo: codigoNovo },
       });
       eq(status, 201, "status");
       eq(json.codigo, codigoNovo, "codigo");
@@ -1588,7 +1619,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     });
     await test("código duplicado → 409", async () => {
       const { status } = await api("POST", "/api/admin/projetos", {
-        token: tokAdmin, body: { nome: "Duplicado", codigo: codigoNovo },
+        token: tokDono, body: { nome: "Duplicado", codigo: codigoNovo },
       });
       eq(status, 409, "status");
     });
@@ -1601,7 +1632,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     });
     await test("projeto desativado some do cadastro", async () => {
       const r1 = await api("PATCH", `/api/admin/projetos/${idProjetoNovo}`, {
-        token: tokAdmin, body: { ativo: false },
+        token: tokDono, body: { ativo: false },
       });
       eq(r1.status, 200, "patch");
       const r2 = await api("POST", "/api/register", { body: novoUsuario(98, codigoNovo) });
@@ -1658,14 +1689,14 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 403, "status");
     });
     await test("GET /api/admin/chamados lista o pendente do projeto", async () => {
-      const { status, json } = await api("GET", "/api/admin/chamados?status=pendente", { token: tokAdmin });
+      const { status, json } = await api("GET", "/api/admin/chamados?status=pendente", { token: tokDono });
       eq(status, 200, "status");
       const c = json.find((x) => x.matricula === uChamado.matricula);
       assert(c, "chamado não apareceu na fila do admin");
       chamadoId = c.id;
     });
     await test("aprovar chamado cria o admin (senha inicial 123456)", async () => {
-      const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokAdmin });
+      const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokDono });
       eq(status, 200, "status aprovar");
       const r = await api("POST", "/api/login", {
         body: { matricula: uChamado.matricula, senha: "123456" },
@@ -1674,7 +1705,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(r.json.user.is_admin, "aprovado deveria ser admin");
     });
     await test("chamado já processado não pode ser reaprovado (404)", async () => {
-      const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokAdmin });
+      const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokDono });
       eq(status, 404, "status");
     });
     await test("recusar chamado move para a lista de recusados", async () => {
@@ -1685,12 +1716,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
         },
       });
       eq(r.status, 200, "status criar");
-      r = await api("GET", "/api/admin/chamados?status=pendente", { token: tokAdmin });
+      r = await api("GET", "/api/admin/chamados?status=pendente", { token: tokDono });
       const c = r.json.find((x) => x.matricula === uChamado2.matricula);
       assert(c, "segundo chamado na fila");
-      r = await api("POST", `/api/admin/chamados/${c.id}/recusar`, { token: tokAdmin });
+      r = await api("POST", `/api/admin/chamados/${c.id}/recusar`, { token: tokDono });
       eq(r.status, 200, "status recusar");
-      r = await api("GET", "/api/admin/chamados?status=recusado", { token: tokAdmin });
+      r = await api("GET", "/api/admin/chamados?status=recusado", { token: tokDono });
       assert(r.json.some((x) => x.matricula === uChamado2.matricula), "deveria estar em recusados");
     });
 
