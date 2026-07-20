@@ -137,6 +137,22 @@ fotos de segurança apagadas em 30 dias.
   Configure no Render `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON da service account do
   Firebase) e coloque `android/app/google-services.json` no projeto nativo.
   Web Push (VAPID) no PWA continua independente.
+- **Push no iOS exige uma ponte a mais.** O backend envia tudo pelo FCM, mas no
+  iOS o `@capacitor/push-notifications` devolve um **token APNs cru** (64 hex),
+  que o FCM não entrega. Sintoma: Android recebe, iPhone nunca recebe. O servidor
+  detecta esse caso e loga `AVISO push iOS: recebido token APNs cru` em vez de
+  falhar calado. Para resolver, no projeto iOS:
+  1. Baixe `GoogleService-Info.plist` (Firebase → app iOS, bundle `com.vap.carona`)
+     e arraste para o target `App` no Xcode.
+  2. Suba a **APNs Auth Key** (`.p8`, criada no Apple Developer → Keys) no Firebase
+     Console → Cloud Messaging → Apple app configuration. É isso que autoriza o
+     FCM a entregar via APNs.
+  3. Faça o app registrar o **token FCM** (e não o APNs): use o
+     `@capacitor-firebase/messaging` ou adicione o SDK do Firebase no
+     `AppDelegate.swift` e envie `Messaging.messaging().token` para
+     `POST /api/push/device-token`.
+  A capability *Push Notifications* já está ligada no projeto
+  (`ios/App/App/App.entitlements`, referenciado no `project.pbxproj`).
 - **iOS Privacy Manifest:** `ios/App/App/PrivacyInfo.xcprivacy` (UserDefaults etc.)
   — obrigatório no upload ao App Store Connect desde 2024.
 - **App tipo "webview" / 4.2:** o VAP usa bundle local + API HTTPS + recursos nativos
@@ -158,7 +174,12 @@ fotos de segurança apagadas em 30 dias.
 - [ ] Android: `google-services.json` + `FIREBASE_SERVICE_ACCOUNT_JSON` no backend
 - [ ] Android: `assetlinks.json` com SHA-256 real do keystore
 - [ ] Android Play: formulário de *Background location* preenchido
+- [ ] Android/iOS: URL de exclusão de conta no questionário de dados
+      (`https://leopardo-api.onrender.com/excluir-conta.html`)
 - [ ] iOS: `PrivacyInfo.xcprivacy` no target (já no repo)
+- [ ] iOS: `App.entitlements` com a capability Push (já no repo)
+- [ ] iOS: `GoogleService-Info.plist` no target + APNs Auth Key no Firebase
+- [ ] iOS: app registrando token **FCM** (não o APNs cru) — ver seção 7
 - [ ] iOS: `apple-app-site-association` com Team ID real
 - [ ] iOS: Version/Build atualizados, archive enviado
 - [ ] Backend de produção acordado e respondendo antes da revisão
