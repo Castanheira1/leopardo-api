@@ -289,8 +289,19 @@
         }
         .period-presets button:hover { border-color: var(--gold); color: var(--gold-deep); }
         .period-presets button.on {
-            background: #fff; color: var(--ink); border-color: var(--gold);
-            box-shadow: var(--shadow-soft); font-weight: 700;
+            background: #fff; color: var(--ink);
+            border-color: var(--gold); box-shadow: var(--shadow-soft);
+            font-weight: 700;
+        }
+        /* Botão Atualizar da sidebar — sólido mas sem “tijolo metálico” */
+        .btn-side {
+            background: #fff !important; color: var(--ink) !important;
+            border: 1px solid var(--line) !important;
+            box-shadow: var(--shadow-soft) !important; font-weight: 650;
+        }
+        .btn-side:hover {
+            border-color: var(--gold) !important; color: var(--gold-deep) !important;
+            filter: none; background: #fffefb !important;
         }
 
         .proj-filter {
@@ -356,6 +367,7 @@
         .kpi-strip.kpi-secondary .kpi-ico { width: 32px; height: 32px; border-radius: 9px; }
         .kpi-strip.kpi-secondary .kpi-ico svg { width: 14px; height: 14px; }
         .kpi-strip:empty, .kpi-strip.kpi-secondary:empty { display: none; }
+        .kpi-strip > .empty { grid-column: 1 / -1; }
         .kpi {
             background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
             padding: 16px 16px 14px; box-shadow: none;
@@ -1404,8 +1416,8 @@ async function carregarDono() {
     const kpisSec = document.getElementById('donoKpisSec');
     try {
         const r = await fetchWithAuth('/api/admin/dono/dashboard' + periodoQuery());
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Erro');
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.detalhe || d.error || ('HTTP ' + r.status));
         _dashCache = d;
         // Se o projeto filtrado sumiu (apagado), volta para todos
         if (_projFiltro !== 'todos' && !(d.projetos || []).some((p) => String(p.id) === String(_projFiltro))) {
@@ -1416,8 +1428,12 @@ async function carregarDono() {
     } catch (e) {
         const banner = document.getElementById('bannerOps');
         if (banner) banner.classList.remove('show');
-        kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+        _dashCache = null;
+        kpis.innerHTML = '<div class="empty">' + esc(e.message)
+            + '<div class="empty-actions"><button type="button" class="btn-ghost" onclick="carregarDono()">Tentar de novo</button></div></div>';
         if (kpisSec) kpisSec.innerHTML = '';
+        const lista = document.getElementById('listaDonoProjetos');
+        if (lista) lista.innerHTML = '';
     }
 }
 

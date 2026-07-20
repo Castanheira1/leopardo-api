@@ -18,17 +18,26 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
   // Janela da viagem: mesma regra do rateio (finalização; antigas caem no início).
   const noPeriodo = "COALESCE(v.finalizada_em, v.iniciada_em) >= $1::timestamptz AND COALESCE(v.finalizada_em, v.iniciada_em) < $2::timestamptz";
   try {
+    // qSegura: cold start / coluna opcional não derruba o dashboard inteiro.
+    const qSegura = async (sql, params) => {
+      try {
+        return await pool.query(sql, params);
+      } catch (err) {
+        console.warn("dashboard dono query:", err.message);
+        return { rows: [] };
+      }
+    };
     const [projetos, usuarios, engajados, viagens, pico, sexo, pedidos, fila, porDia] = await Promise.all([
-      pool.query(`
+      qSegura(`
         SELECT id, nome, codigo, COALESCE(ativo, TRUE) AS ativo,
                COALESCE(valor_contrato_mensal, 0)::float8 AS contrato
         FROM projetos ORDER BY nome`),
-      pool.query(`
+      qSegura(`
         SELECT projeto_id, COUNT(*)::int AS cadastrados,
                COUNT(*) FILTER (WHERE COALESCE(ativo, TRUE))::int AS ativos
         FROM usuarios WHERE projeto_id IS NOT NULL GROUP BY projeto_id`),
       // Aderência: quem PARTICIPOU no período (viajou, pediu ou ofertou carona).
-      pool.query(`
+      qSegura(`
         SELECT u.projeto_id, COUNT(DISTINCT u.id)::int AS engajados
         FROM usuarios u
         WHERE u.id IN (
@@ -38,51 +47,56 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
           UNION SELECT c.motorista_id FROM caronas c WHERE c.created_at >= $1::timestamptz AND c.created_at < $2::timestamptz
         )
         GROUP BY u.projeto_id`, par),
-      pool.query(`
+      qSegura(`
         SELECT m.projeto_id,
                COUNT(*) FILTER (WHERE v.status = 'concluida')::int AS concluidas,
                COUNT(*) FILTER (WHERE v.status = 'concluida' AND v.destino_motorista_lat IS NOT NULL)::int AS parciais,
                COUNT(*) FILTER (WHERE v.status = 'cancelada')::int AS canceladas,
-               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND v.deslocamento_valido), 0)::float8 AS km
+               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND COALESCE(v.deslocamento_valido, TRUE)), 0)::float8 AS km
         FROM viagens v JOIN usuarios m ON m.id = v.motorista_id
         WHERE ${noPeriodo}
         GROUP BY m.projeto_id`, par),
       // Pico por hora local (a sessão do pool já roda no fuso do canteiro).
-      pool.query(`
+      qSegura(`
         SELECT m.projeto_id, EXTRACT(HOUR FROM v.iniciada_em)::int AS hora, COUNT(*)::int AS viagens
         FROM viagens v JOIN usuarios m ON m.id = v.motorista_id
         WHERE ${noPeriodo}
         GROUP BY 1, 2`, par),
       // Passageiros transportados por sexo (viagens concluídas).
-      pool.query(`
+      qSegura(`
         SELECT m.projeto_id, COALESCE(pa.sexo, '?') AS sexo, COUNT(*)::int AS n
         FROM viagens v
         JOIN usuarios m ON m.id = v.motorista_id
         JOIN usuarios pa ON pa.id = v.passageiro_id
         WHERE v.status = 'concluida' AND ${noPeriodo}
         GROUP BY 1, 2`, par),
-      pool.query(`
+      qSegura(`
         SELECT u.projeto_id, COUNT(*)::int AS total,
                COUNT(*) FILTER (WHERE p.status = 'atendido')::int AS atendidos,
                COUNT(*) FILTER (WHERE p.status = 'cancelado')::int AS frustrados
         FROM pedidos p JOIN usuarios u ON u.id = p.passageiro_id
         WHERE p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz
         GROUP BY u.projeto_id`, par),
-      pool.query(`
+      qSegura(`
         SELECT u.projeto_id,
                COUNT(*) FILTER (WHERE f.status = 'recusada')::int AS recusas,
                COUNT(*) FILTER (WHERE f.status = 'expirada')::int AS expiradas
         FROM pedido_fila f JOIN usuarios u ON u.id = f.motorista_id
         WHERE f.created_at >= $1::timestamptz AND f.created_at < $2::timestamptz
         GROUP BY u.projeto_id`, par),
-      pool.query(`
+      qSegura(`
         SELECT m.projeto_id, date_trunc('day', COALESCE(v.finalizada_em, v.iniciada_em)) AS dia,
                COUNT(*) FILTER (WHERE v.status = 'concluida')::int AS viagens,
-               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND v.deslocamento_valido), 0)::float8 AS km
+               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND COALESCE(v.deslocamento_valido, TRUE)), 0)::float8 AS km
         FROM viagens v JOIN usuarios m ON m.id = v.motorista_id
         WHERE ${noPeriodo}
         GROUP BY 1, 2 ORDER BY 2`, par),
     ]);
+
+    if (!projetos.rows.length) {
+      // Projetos é o mínimo; se falhou de vez, avisa de forma clara.
+      return res.status(500).json({ error: "Não foi possível listar os projetos" });
+    }
 
     const porProjeto = (rows) => {
       const m = new Map();
@@ -169,8 +183,11 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
       por_dia: porDia.rows,
     });
   } catch (e) {
-    console.error("dashboard dono:", e.message);
-    res.status(500).json({ error: "Erro ao montar o dashboard" });
+    console.error("dashboard dono:", e.message, e.stack);
+    res.status(500).json({
+      error: "Erro ao montar o dashboard",
+      detalhe: String(e.message || e).slice(0, 200),
+    });
   }
 });
 
