@@ -229,6 +229,25 @@
         }
         .soft-item.decisao-ok { border-left-color: var(--good); }
         .soft-item.decisao-warn { border-left-color: var(--warn); }
+        .soft-item.decisao-crit { border-left-color: var(--crit); background: rgba(220,38,38,.04); }
+        .decisao-crit .soft-pin { color: var(--crit); }
+        .api-gcp-form {
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+            margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+        }
+        .api-gcp-form .field { flex: 1 1 140px; min-width: 120px; max-width: 200px; }
+        .api-gcp-form label { display: block; font-size: .68rem; color: var(--muted); font-weight: 650; margin-bottom: 4px; }
+        .api-gcp-form input {
+            width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
+            border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: .86rem;
+        }
+        .api-gcp-form input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-soft); }
+        .api-alerta-gcp {
+            margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+            border: 1px solid rgba(220,38,38,.35); background: rgba(220,38,38,.08);
+            color: var(--crit); font-size: .8rem; font-weight: 600; display: none;
+        }
+        .api-alerta-gcp.show { display: block; }
         .soft-item.decisao-hist { border-left-color: #a8a29e; }
         .decisao-ok .soft-pin { color: var(--good); }
         .decisao-warn .soft-pin { color: var(--warn); }
@@ -1001,6 +1020,33 @@
                 <div class="panel">
                     <div class="panel-head">
                         <div>
+                            <h3>Cota do console Google (referência manual)</h3>
+                            <p class="cap">
+                                O painel <strong>não lê nem altera</strong> o GCP. Informe o valor que você
+                                configurou em Cotas → ComputeRoutes. Vale o <strong>menor</strong> entre app e console.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="api-gcp-form" id="apiGcpForm">
+                        <div class="field">
+                            <label for="gcpCotaDia">GCP · ComputeRoutes / dia</label>
+                            <input type="number" id="gcpCotaDia" min="1" step="1" placeholder="ex.: 300" inputmode="numeric">
+                        </div>
+                        <div class="field">
+                            <label for="gcpCotaMin">GCP · por minuto (opcional)</label>
+                            <input type="number" id="gcpCotaMin" min="1" step="1" placeholder="ex.: 30" inputmode="numeric">
+                        </div>
+                        <button type="button" class="btn-primary" onclick="salvarGcpCota()">Salvar referência</button>
+                    </div>
+                    <div class="api-alerta-gcp" id="apiAlertaGcp" role="alert"></div>
+                    <p class="cap" style="margin-top:10px;">
+                        <strong>Aumentar:</strong> console primeiro, teto do app depois.
+                        <strong>Diminuir:</strong> teto do app primeiro, console depois.
+                    </p>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
                             <h3>Atualizar a cota com segurança</h3>
                             <p class="cap">Passos no Google Cloud e no Render.</p>
                         </div>
@@ -1008,8 +1054,8 @@
                     <ol class="api-checklist" id="apiChecklist">
                         <li><span class="api-step-n">1</span><span>GCP → Routes API → Cotas: <strong>ComputeRoutes / dia</strong> = o que você aceita pagar (hoje 300).</span></li>
                         <li><span class="api-step-n">2</span><span>GCP → <strong>por minuto</strong> bem abaixo do diário (30–50). Se for igual ao dia, 1 minuto queima tudo.</span></li>
-                        <li><span class="api-step-n">3</span><span>Render → <code>GOOGLE_ROUTES_ENABLED</code>: <strong>1</strong> pista Google · <strong>0</strong> só reta (R$ 0 Routes).</span></li>
-                        <li><span class="api-step-n">4</span><span>Só suba o teto se usuários reais caírem em reta com frequência e o mês estiver abaixo de ~60%.</span></li>
+                        <li><span class="api-step-n">3</span><span>Render → env: <code>ROTAS_GOOGLE_MAX_DIA</code> ≤ cota do console · <code>GOOGLE_ROUTES_ENABLED</code> 1 ou 0.</span></li>
+                        <li><span class="api-step-n">4</span><span>Registre a cota do console no campo acima (só referência — o app não toca no Google).</span></li>
                         <li><span class="api-step-n">5</span><span>Nunca rode frota simulada ou loop de mapa com Routes ligada.</span></li>
                     </ol>
                     <p class="cap" id="apiAtualizado" style="margin-top:14px;"></p>
@@ -1691,6 +1737,7 @@ async function carregarApiMaps() {
     const decisoes = document.getElementById('apiDecisoes');
     const spark = document.getElementById('apiSpark');
     const atualizado = document.getElementById('apiAtualizado');
+    const alerta = document.getElementById('apiAlertaGcp');
     try {
         const r = await fetchWithAuth('/api/admin/dono/api-maps');
         const d = await r.json();
@@ -1698,12 +1745,40 @@ async function carregarApiMaps() {
 
         _apiNivelBadge(d.nivel);
 
+        const gcpDia = d.cota_console?.compute_routes_dia;
+        const gcpMin = d.cota_console?.compute_routes_min;
+        const inpDia = document.getElementById('gcpCotaDia');
+        const inpMin = document.getElementById('gcpCotaMin');
+        if (inpDia && gcpDia != null) inpDia.value = gcpDia;
+        if (inpMin && gcpMin != null) inpMin.value = gcpMin;
+
+        if (alerta) {
+            if (d.cota_console?.teto_app_acima_gcp) {
+                alerta.textContent =
+                    `O teto do app (${d.teto_dia}/dia) está acima da cota GCP informada (${gcpDia}/dia). ` +
+                    'O Google vai recusar antes do freio do servidor. Ajuste: console ≥ app, ou baixe o env.';
+                alerta.classList.add('show');
+            } else {
+                alerta.classList.remove('show');
+                alerta.textContent = '';
+            }
+        }
+
         const statusTxt = d.enabled ? 'LIGADA' : 'DESLIGADA';
         const statusCor = d.enabled ? 'var(--good)' : 'var(--muted)';
+        const gcpHint = d.cota_console?.informada
+            ? `GCP informado: ${gcpDia}/dia`
+            : 'GCP: informe a cota do console';
         kpis.innerHTML = [
             { t: 'Routes Google', v: statusTxt, h: d.enabled ? 'GOOGLE_ROUTES_ENABLED=1' : 'Só linha reta (R$ 0 Routes)', cor: statusCor },
-            { t: 'Hoje', v: String(d.usadas_hoje), h: `de ${d.teto_dia}/dia · ${d.pct_dia}%`, cor: d.pct_dia >= 90 ? 'var(--crit)' : d.pct_dia >= 60 ? 'var(--warn)' : 'var(--ink)' },
-            { t: 'Mês', v: String(d.usadas_mes), h: `de ${d.teto_mes}/mês · ${d.pct_mes}%`, cor: d.pct_mes >= 90 ? 'var(--crit)' : d.pct_mes >= 60 ? 'var(--warn)' : 'var(--ink)' },
+            { t: 'Hoje (app)', v: String(d.usadas_hoje), h: `de ${d.teto_dia}/dia · ${d.pct_dia}%`, cor: d.pct_dia >= 90 ? 'var(--crit)' : d.pct_dia >= 60 ? 'var(--warn)' : 'var(--ink)' },
+            { t: 'Mês (app)', v: String(d.usadas_mes), h: `de ${d.teto_mes}/mês · ${d.pct_mes}%`, cor: d.pct_mes >= 90 ? 'var(--crit)' : d.pct_mes >= 60 ? 'var(--warn)' : 'var(--ink)' },
+            {
+                t: 'Cota GCP',
+                v: d.cota_console?.informada ? String(gcpDia) : '—',
+                h: d.cota_console?.teto_app_acima_gcp ? '⚠ app > console' : gcpHint,
+                cor: d.cota_console?.teto_app_acima_gcp ? 'var(--crit)' : 'var(--ink)',
+            },
         ].map((k) => `
             <div class="kpi">
                 <div class="kpi-top">
@@ -1714,12 +1789,17 @@ async function carregarApiMaps() {
                 <div class="hint">${esc(k.h)}</div>
             </div>`).join('');
 
+        const fp = d.franquia_previa;
+        const franquiaTxt = fp
+            ? `Prévia franquia: ${fp.teto_app_dia}/dia × 30 ≈ ${Number(fp.projecao_mes_se_encher).toLocaleString('pt-BR')}/mês ` +
+              `(~${Number(fp.franquia_mes).toLocaleString('pt-BR')} grátis) — ${fp.caberia ? 'caberia se encher o teto' : 'estoura se encher o teto'}. Não é o GCP.`
+            : '';
         barras.innerHTML =
-            _apiBarHtml('Dia', d.usadas_hoje, d.teto_dia, d.pct_dia)
-            + _apiBarHtml('Mês', d.usadas_mes, d.teto_mes, d.pct_mes)
-            + `<p class="cap" style="margin-top:4px;">Teto/min no código: <strong>${d.teto_min}</strong>
-                · GCP sugerido: <strong>${d.cota_console?.compute_routes_dia || d.teto_dia}/dia</strong>
-                · min sugerido: <strong>${d.cota_console?.compute_routes_min_sugerido || 50}</strong></p>`;
+            _apiBarHtml('Dia (teto app)', d.usadas_hoje, d.teto_dia, d.pct_dia)
+            + _apiBarHtml('Mês (teto app)', d.usadas_mes, d.teto_mes, d.pct_mes)
+            + `<p class="cap" style="margin-top:4px;">Teto app: <strong>${d.teto_min}/min · ${d.teto_dia}/dia · ${d.teto_mes}/mês</strong> (env Render)
+                · GCP informado: <strong>${d.cota_console?.informada ? (gcpDia + '/dia') : '—'}</strong></p>`
+            + (franquiaTxt ? `<p class="cap">${esc(franquiaTxt)}</p>` : '');
 
         const maxN = Math.max(1, ...(d.por_dia || []).map((x) => x.n));
         if (!d.por_dia?.length) {
@@ -1732,8 +1812,8 @@ async function carregarApiMaps() {
             }).join('');
         }
 
-        const tipoCls = { ok: 'decisao-ok', warn: 'decisao-warn', info: '', hist: 'decisao-hist' };
-        const tipoIco = { ok: ICO.chart, warn: ICO.alert, info: ICO.api || ICO.chart, hist: ICO.alert };
+        const tipoCls = { ok: 'decisao-ok', warn: 'decisao-warn', crit: 'decisao-crit', info: '', hist: 'decisao-hist' };
+        const tipoIco = { ok: ICO.chart, warn: ICO.alert, crit: ICO.alert, info: ICO.api || ICO.chart, hist: ICO.alert };
         decisoes.innerHTML = (d.decisoes || []).map((x) => `
             <div class="soft-item ${tipoCls[x.tipo] || ''}">
                 <div class="soft-pin">${tipoIco[x.tipo] || ICO.chart}</div>
@@ -1852,6 +1932,43 @@ async function salvarLimitesApi() {
         msg.textContent = e.message;
     } finally {
         btn.disabled = false;
+    }
+}
+
+async function salvarGcpCota() {
+    const dia = document.getElementById('gcpCotaDia')?.value?.trim();
+    const min = document.getElementById('gcpCotaMin')?.value?.trim();
+    if (!dia && !min) {
+        const msg = document.getElementById('limMsg');
+        if (msg) { msg.className = 'cap erro'; msg.textContent = 'Informe a cota diária do GCP.'; }
+        else if (typeof mostrarToast === 'function') mostrarToast('Informe a cota diária do GCP', 'error');
+        else alert('Informe a cota diária do GCP');
+        return;
+    }
+    try {
+        const r = await fetchWithAuth('/api/admin/dono/api-maps/gcp-cota', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                compute_routes_dia: dia || undefined,
+                compute_routes_min: min || undefined,
+            }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Falha ao salvar');
+        if (typeof mostrarToast === 'function') {
+            mostrarToast(d.alerta || d.message || 'Salvo', d.alerta ? 'error' : 'success');
+        } else {
+            const msg = document.getElementById('limMsg');
+            if (msg) {
+                msg.className = d.alerta ? 'cap erro' : 'cap ok';
+                msg.textContent = d.alerta || d.message || 'Salvo';
+            } else alert(d.alerta || d.message || 'Salvo');
+        }
+        await carregarApiMaps();
+    } catch (e) {
+        if (typeof mostrarToast === 'function') mostrarToast(e.message, 'error');
+        else alert(e.message);
     }
 }
 

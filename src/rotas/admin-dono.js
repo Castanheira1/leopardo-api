@@ -191,9 +191,35 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
   }
 });
 
+/** Franquia grátis Routes Essentials (referência pública; não lida do console). */
+const ROUTES_FRANQUIA_MES = 10000;
+
+/** Lê cota GCP informada pelo CEO em config_app (manual — painel não toca no Google). */
+async function lerGcpCotaInformada() {
+  try {
+    const cfg = require("./config");
+    if (typeof cfg.garantirTabelaConfig === "function") await cfg.garantirTabelaConfig();
+    const { rows } = await pool.query(
+      "SELECT chave, valor FROM config_app WHERE chave IN ('gcp_routes_cota_dia', 'gcp_routes_cota_min')"
+    );
+    let dia = null;
+    let min = null;
+    for (const r of rows) {
+      const n = Number(r.valor);
+      if (!Number.isFinite(n) || n < 1) continue;
+      if (r.chave === "gcp_routes_cota_dia") dia = Math.floor(n);
+      if (r.chave === "gcp_routes_cota_min") min = Math.floor(n);
+    }
+    return { dia, min };
+  } catch (_) {
+    return { dia: null, min: null };
+  }
+}
+
 /**
- * Analisador de uso Google Routes (CEO) — dados do contador rotas_uso + tetos env.
- * Ajuda a decidir se sobe cota, mantém 300/dia ou desliga GOOGLE_ROUTES_ENABLED.
+ * Analisador de uso Google Routes (CEO) — contador rotas_uso + tetos env.
+ * O painel NÃO altera o console Google (separação proposital de gasto).
+ * Tetos do app = env (Render). Cota GCP = número informado pelo CEO (opcional).
  */
 app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   const enabled = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
@@ -230,6 +256,8 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
   let usadas_hoje = 0;
   let usadas_mes = 0;
   let por_dia = [];
+  let gcp_cota_dia = null;
+  let gcp_cota_min = null;
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS rotas_uso (
@@ -238,7 +266,7 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
       )`).catch(() => {});
     const hoje = new Date().toISOString().slice(0, 10);
     const mesPref = hoje.slice(0, 7) + "%";
-    const [tot, serie] = await Promise.all([
+    const [tot, serie, gcp] = await Promise.all([
       pool.query(
         `SELECT COALESCE(SUM(n) FILTER (WHERE dia = $1), 0)::int AS dia_n,
                 COALESCE(SUM(n) FILTER (WHERE dia LIKE $2), 0)::int AS mes_n
@@ -250,10 +278,13 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
           WHERE dia >= (CURRENT_DATE - INTERVAL '14 days')::text
           ORDER BY dia`
       ),
+      lerGcpCotaInformada(),
     ]);
     usadas_hoje = Number(tot.rows[0]?.dia_n || 0);
     usadas_mes = Number(tot.rows[0]?.mes_n || 0);
     por_dia = serie.rows.map((r) => ({ dia: r.dia, n: r.n }));
+    gcp_cota_dia = gcp.dia;
+    gcp_cota_min = gcp.min;
   } catch (e) {
     console.warn("api-maps rotas_uso:", e.message);
   }
@@ -262,12 +293,47 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
   const pct_dia = pct(usadas_hoje, teto_dia);
   const pct_mes = pct(usadas_mes, teto_mes);
 
+  // Prévia da franquia grátis: projeção se o teto do APP rodasse no máximo todo dia.
+  // Calculada a partir dos números do env — NÃO é a cota real do console Google.
+  const projecao_mes_se_encher_teto_dia = teto_dia * 30;
+  const caberia_na_franquia = projecao_mes_se_encher_teto_dia <= ROUTES_FRANQUIA_MES;
+  const franquia_previa = {
+    franquia_mes: ROUTES_FRANQUIA_MES,
+    teto_app_dia: teto_dia,
+    projecao_mes_se_encher: projecao_mes_se_encher_teto_dia,
+    caberia: caberia_na_franquia,
+    nota: "Projeção se o app usasse o teto diário TODOS os dias. Não lê o GCP.",
+  };
+
   let nivel = "ok";
   if (!enabled) nivel = "desligado";
   else if (pct_dia >= 90 || pct_mes >= 90) nivel = "critico";
   else if (pct_dia >= 60 || pct_mes >= 60) nivel = "atencao";
 
+  const teto_app_acima_gcp =
+    gcp_cota_dia != null && Number.isFinite(gcp_cota_dia) && teto_dia > gcp_cota_dia;
+  if (teto_app_acima_gcp && nivel === "ok") nivel = "atencao";
+
   const decisoes = [];
+  if (teto_app_acima_gcp) {
+    decisoes.push({
+      tipo: "crit",
+      titulo: "Teto do app acima da cota do GCP",
+      texto:
+        `O teto do app (${teto_dia}/dia no Render) está acima da cota que você informou no console GCP (${gcp_cota_dia}/dia). ` +
+        "O Google recusa antes do disjuntor do app. O app tenta chamar, toma erro de cota e pode degradar mal. " +
+        "Regra: painel/app ≤ console. Aumente: console primeiro, depois Render. Diminua: Render primeiro, depois console.",
+    });
+  }
+  if (gcp_cota_dia == null) {
+    decisoes.push({
+      tipo: "info",
+      titulo: "Cota do console ainda não registrada",
+      texto:
+        "Informe abaixo o valor de ComputeRoutes/dia que você configurou no GCP. " +
+        "O painel não lê o Google (proposital) — só compara o número que você digitar com o teto do app.",
+    });
+  }
   if (!enabled) {
     decisoes.push({
       tipo: "info",
@@ -275,17 +341,19 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
       texto: "GOOGLE_ROUTES_ENABLED≠1 — zero custo de Compute Routes. Mapa usa linha reta. Ligue no Render só se precisar polyline pela pista.",
     });
   } else {
+    const refGcp = gcp_cota_dia != null ? gcp_cota_dia : "— (informe no painel)";
     decisoes.push({
       tipo: "ok",
-      titulo: "Routes ligada com teto",
-      texto: `Ativa com freios no código (${teto_dia}/dia · ${teto_mes}/mês). Confirme cota no GCP: ComputeRoutes ${teto_dia}/dia.`,
+      titulo: "Routes ligada com teto no app",
+      texto: `Freios no app: ${teto_dia}/dia · ${teto_min}/min · ${teto_mes}/mês (origem: ${teto_origem}). Cota GCP informada: ${refGcp}/dia. O painel não altera o console Google.`,
     });
   }
+  // Prévia de franquia fica no formulário de tetos (recalcularMensal no front); aqui só se não houver painel.
   if (enabled && pct_dia >= 80) {
     decisoes.push({
       tipo: "warn",
-      titulo: "Dia perto do teto",
-      texto: `${usadas_hoje}/${teto_dia} hoje (${pct_dia}%). Evite testes de carga e frota simulada. Após o teto o app usa reta (sem cobrar mais no código).`,
+      titulo: "Dia perto do teto do app",
+      texto: `${usadas_hoje}/${teto_dia} hoje (${pct_dia}%). Após o teto do app, cai em linha reta (sem nova chamada Google).`,
     });
   }
   if (enabled && pct_mes >= 70) {
@@ -295,11 +363,11 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
       texto: `${usadas_mes}/${teto_mes} no mês (${pct_mes}%). Não suba cota no Google sem orçamento. Prefira locais do catálogo e cache.`,
     });
   }
-  if (enabled && pct_dia < 40 && pct_mes < 40) {
+  if (enabled && pct_dia < 40 && pct_mes < 40 && !teto_app_acima_gcp) {
     decisoes.push({
       tipo: "ok",
       titulo: "Uso sob controle",
-      texto: "Pode manter 300/dia no console. Só aumente cota se usuários reais estiverem caindo em reta com frequência.",
+      texto: "Uso bem abaixo do teto do app. Só aumente cota se usuários reais caírem em reta com frequência — e suba o console GCP antes do env.",
     });
   }
   if (usadas_mes === 0 && enabled) {
@@ -348,9 +416,13 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
     estado: rotasEstado,
     teto_origem,
     teto_seguranca,
+    franquia_previa,
+    // cota_console = o que o CEO informou (manual). Nunca = teto do app automaticamente.
     cota_console: {
-      compute_routes_dia: teto_dia,
-      compute_routes_min_sugerido: Math.min(50, teto_min),
+      compute_routes_dia: gcp_cota_dia,
+      compute_routes_min: gcp_cota_min,
+      informada: gcp_cota_dia != null,
+      teto_app_acima_gcp,
     },
     atualizado_em: new Date().toISOString(),
   });
@@ -410,5 +482,64 @@ app.put("/api/admin/dono/api-maps/limites", verificarAuth, verificarAdmin, exigi
   } catch (e) {
     console.error("PUT api-maps/limites:", e.message);
     res.status(500).json({ error: "Não foi possível salvar os limites." });
+  }
+});
+
+/**
+ * CEO grava a cota que configurou no console Google (referência manual).
+ * Não chama GCP — só salva o número para o painel comparar com o teto do app.
+ */
+app.post("/api/admin/dono/api-maps/gcp-cota", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
+  const diaRaw = req.body?.compute_routes_dia;
+  const minRaw = req.body?.compute_routes_min;
+  const dia = diaRaw === "" || diaRaw == null ? null : Number(diaRaw);
+  const min = minRaw === "" || minRaw == null ? null : Number(minRaw);
+  if (dia != null && (!Number.isFinite(dia) || dia < 1 || dia > 10_000_000)) {
+    return res.status(400).json({ error: "Cota diária GCP inválida" });
+  }
+  if (min != null && (!Number.isFinite(min) || min < 1 || min > 1_000_000)) {
+    return res.status(400).json({ error: "Cota por minuto GCP inválida" });
+  }
+  try {
+    const cfg = require("./config");
+    await cfg.garantirTabelaConfig();
+    const quem = `${req.user?.matricula || "?"} (${req.user?.nome || "dono"})`;
+    const pares = [];
+    if (dia != null) pares.push(["gcp_routes_cota_dia", String(Math.floor(dia))]);
+    if (min != null) pares.push(["gcp_routes_cota_min", String(Math.floor(min))]);
+    if (!pares.length) {
+      return res.status(400).json({ error: "Informe ao menos cota diária ou por minuto" });
+    }
+    for (const [chave, valor] of pares) {
+      await pool.query(
+        `INSERT INTO config_app (chave, valor, atualizado_em, atualizado_por)
+         VALUES ($1, $2, NOW(), $3)
+         ON CONFLICT (chave) DO UPDATE
+           SET valor = EXCLUDED.valor, atualizado_em = NOW(), atualizado_por = EXCLUDED.atualizado_por`,
+        [chave, valor, quem]
+      );
+    }
+    let teto_dia = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 300);
+    try {
+      const L = await cfg.limitesRotas();
+      teto_dia = L.dia;
+    } catch (_) { /* env */ }
+    const gcpDia = dia != null ? Math.floor(dia) : null;
+    const alerta =
+      gcpDia != null && teto_dia > gcpDia
+        ? `Atenção: teto do app (${teto_dia}/dia) > cota GCP informada (${gcpDia}/dia).`
+        : null;
+    res.json({
+      ok: true,
+      message: "Cota do console registrada. O painel não altera o Google Cloud.",
+      cota_console: {
+        compute_routes_dia: gcpDia,
+        compute_routes_min: min != null ? Math.floor(min) : null,
+      },
+      alerta,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "Erro ao salvar cota GCP" });
   }
 });
