@@ -632,8 +632,8 @@
             background: #fff; color: var(--ink); font-variant-numeric: tabular-nums;
         }
         .api-limites input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
-        #limMsg.ok { color: var(--good); font-weight: 650; }
-        #limMsg.erro { color: var(--crit); font-weight: 650; }
+        #limMsg.ok, #limPrevia.ok { color: var(--good); font-weight: 650; }
+        #limMsg.erro, #limPrevia.erro { color: var(--crit); font-weight: 650; }
         .adm-foot {
             padding: 12px var(--pad-x) 16px; color: #a8a8b0; font-size: .68rem;
             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
@@ -983,17 +983,19 @@
                     </div>
                     <div class="api-limites">
                         <label>Por minuto
-                            <input id="limMin" type="number" min="1" inputmode="numeric" placeholder="30">
+                            <input id="limMin" type="number" min="1" inputmode="numeric" placeholder="30" oninput="recalcularMensal()">
                         </label>
                         <label>Por dia
-                            <input id="limDia" type="number" min="1" inputmode="numeric" placeholder="300">
+                            <input id="limDia" type="number" min="1" inputmode="numeric" placeholder="300" oninput="recalcularMensal()">
                         </label>
                         <label>Por mês
-                            <input id="limMes" type="number" min="1" inputmode="numeric" placeholder="9000">
+                            <input id="limMes" type="number" min="1" inputmode="numeric" placeholder="9000"
+                                   oninput="_limMesManual = true; recalcularMensal(true)">
                         </label>
                         <button type="button" class="btn-primary" id="btnSalvarLimites" onclick="salvarLimitesApi()">Salvar tetos</button>
                     </div>
-                    <p class="cap" id="limMsg" style="margin-top:10px;"></p>
+                    <p class="cap" id="limPrevia" style="margin-top:10px;"></p>
+                    <p class="cap" id="limMsg" style="margin-top:6px;"></p>
                     <p class="cap" id="limInfo" style="margin-top:4px;"></p>
                 </div>
                 <div class="panel">
@@ -1747,6 +1749,10 @@ async function carregarApiMaps() {
             const el = document.getElementById(id);
             if (el && document.activeElement !== el) el.value = v ?? '';
         });
+        // Valores vindos do servidor: o mensal é o que está salvo, não recalcula
+        // por cima. A prévia mostra se dia e mês estão coerentes entre si.
+        _limMesManual = Number(d.teto_mes) !== Number(d.teto_dia) * DIAS_MES_COTA;
+        recalcularMensal(true);
         const info = document.getElementById('limInfo');
         if (info) {
             const t = d.teto_seguranca;
@@ -1765,6 +1771,47 @@ async function carregarApiMaps() {
         if (decisoes) decisoes.innerHTML = '';
         if (barras) barras.innerHTML = '';
     }
+}
+
+/* Mensal derivado do diário (dia × 31), para os dois nunca ficarem incoerentes:
+   com 333/dia e 9.000/mês, o mês travava no dia 28 e ninguém entendia por quê.
+   Se o dono digitar o mensal à mão, respeitamos e paramos de recalcular.
+   FRANQUIA_ROUTES: chamadas grátis por mês; acima disso, ~R$ 0,03 cada. */
+const DIAS_MES_COTA = 31;
+const FRANQUIA_ROUTES = 10000;
+const PRECO_ROTA_BRL = 0.03;
+let _limMesManual = false;
+
+function recalcularMensal(soPrevia) {
+    const dia = Number(document.getElementById('limDia')?.value || 0);
+    const mesEl = document.getElementById('limMes');
+    const previa = document.getElementById('limPrevia');
+    if (!mesEl || !previa) return;
+
+    if (!soPrevia && !_limMesManual && dia > 0) {
+        mesEl.value = dia * DIAS_MES_COTA;
+    }
+    const mes = Number(mesEl.value || 0);
+    if (!dia || !mes) { previa.textContent = ''; previa.className = 'cap'; return; }
+
+    const implicito = dia * DIAS_MES_COTA;
+    const excedente = Math.max(0, mes - FRANQUIA_ROUTES);
+    const custo = excedente * PRECO_ROTA_BRL;
+    const partes = [`${dia}/dia × ${DIAS_MES_COTA} = ${implicito.toLocaleString('pt-BR')}/mês`];
+
+    if (implicito > mes) {
+        // O mensal trava antes do fim do mês — o dono precisa saber o dia exato.
+        partes.push(`o teto mensal (${mes.toLocaleString('pt-BR')}) trava por volta do dia ${Math.floor(mes / dia)}`);
+        previa.className = 'cap erro';
+    } else if (excedente > 0) {
+        const custoBr = custo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        partes.push(`acima da franquia grátis (${FRANQUIA_ROUTES.toLocaleString('pt-BR')}/mês) → até ~R$ ${custoBr}/mês`);
+        previa.className = 'cap';
+    } else {
+        partes.push('dentro da franquia grátis — R$ 0');
+        previa.className = 'cap ok';
+    }
+    previa.textContent = partes.join(' · ');
 }
 
 // Grava os tetos da Routes. O servidor valida contra o teto de segurança —
