@@ -98,6 +98,19 @@ async function garantirTabelaRotasUso() {
       dia TEXT PRIMARY KEY,
       n INTEGER NOT NULL DEFAULT 0
     )`).catch(() => {});
+  // Janela por MINUTO também no banco: com mais de uma instância (autoscaling
+  // do Render), um contador em memória por processo faria o teto virar
+  // N × ROTAS_GOOGLE_MAX_MIN — justo quando há mais tráfego para descontrolar.
+  // Chave = 'AAAA-MM-DDTHH:MM' (UTC).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rotas_uso_min (
+      minuto TEXT PRIMARY KEY,
+      n INTEGER NOT NULL DEFAULT 0
+    )`).catch(() => {});
+}
+
+function chaveMinutoUtc(d = new Date()) {
+  return d.toISOString().slice(0, 16); // AAAA-MM-DDTHH:MM
 }
 
 // Devolve a cota quando a chamada não produziu rota (erro do Google, timeout).
@@ -111,6 +124,21 @@ async function devolverCotaRota() {
     "UPDATE rotas_uso SET n = GREATEST(n - 1, 0) WHERE dia = $1",
     [hoje]
   ).catch(() => {});
+  await pool.query(
+    "UPDATE rotas_uso_min SET n = GREATEST(n - 1, 0) WHERE minuto = $1",
+    [chaveMinutoUtc()]
+  ).catch(() => {});
+}
+
+// rotas_uso_min cresce 1 linha por minuto ativo. Limpa o que já passou —
+// a janela só olha o minuto corrente, então histórico ali não serve para nada.
+let _limpezaMinUltima = 0;
+async function limparJanelasAntigas() {
+  const agora = Date.now();
+  if (agora - _limpezaMinUltima < 60 * 60 * 1000) return; // no máximo 1x/hora
+  _limpezaMinUltima = agora;
+  const corte = new Date(agora - 10 * 60 * 1000).toISOString().slice(0, 16);
+  await pool.query("DELETE FROM rotas_uso_min WHERE minuto < $1", [corte]).catch(() => {});
 }
 
 /* Disjuntor: erro PERMANENTE (billing desligado, API não habilitada, chave sem
@@ -153,12 +181,31 @@ async function rotasGooglePermitida() {
   }
   const hoje = new Date().toISOString().slice(0, 10);
   if (rotasGoogleDia.dia !== hoje) rotasGoogleDia = { dia: hoje, n: 0 };
-  // Burst por minuto (memória basta: janela curta demais para restart importar).
   const agora = Date.now();
   if (agora - rotasGoogleJanela.t0 > 60_000) {
     rotasGoogleJanela = { t0: agora, n: 0 };
   }
-  if (rotasGoogleJanela.n >= ROTAS_GOOGLE_MAX_MIN) {
+  // Burst por minuto: contado no Postgres para valer entre TODAS as instâncias.
+  // O contador em memória segue como espelho (diagnóstico e fallback sem DB).
+  let minutoOk = null;
+  try {
+    await garantirTabelaRotasUso();
+    const q = await pool.query(
+      `INSERT INTO rotas_uso_min (minuto, n) VALUES ($1, 1)
+       ON CONFLICT (minuto) DO UPDATE SET n = rotas_uso_min.n + 1
+       RETURNING n`,
+      [chaveMinutoUtc()]
+    );
+    const nMin = Number(q.rows[0]?.n || 0);
+    rotasGoogleJanela.n = nMin;
+    minutoOk = nMin <= ROTAS_GOOGLE_MAX_MIN;
+    limparJanelasAntigas().catch(() => {});
+  } catch (_) {
+    // DB indisponível: cai para a janela em memória (comportamento anterior).
+    minutoOk = rotasGoogleJanela.n < ROTAS_GOOGLE_MAX_MIN;
+    if (minutoOk) rotasGoogleJanela.n++;
+  }
+  if (!minutoOk) {
     rotasGoogleStats.bloqueado++;
     return false;
   }
