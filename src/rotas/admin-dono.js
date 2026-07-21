@@ -197,9 +197,21 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
  */
 app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
   const enabled = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
-  const teto_min = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30);
-  const teto_dia = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 300);
-  const teto_mes = Number(process.env.ROTAS_GOOGLE_MAX_MES || 9000);
+  // Tetos VIGENTES (painel do dono se houver, senão env) — não reler do env aqui,
+  // senão o painel mostraria um número e o servidor aplicaria outro.
+  let teto_min = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30);
+  let teto_dia = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 300);
+  let teto_mes = Number(process.env.ROTAS_GOOGLE_MAX_MES || 9000);
+  let teto_origem = "env";
+  let teto_seguranca = null;
+  try {
+    const cfg = require("./config");
+    if (typeof cfg.limitesRotas === "function") {
+      const L = await cfg.limitesRotas();
+      teto_min = L.min; teto_dia = L.dia; teto_mes = L.mes; teto_origem = L.origem;
+      teto_seguranca = cfg.TETO_SEGURANCA || null;
+    }
+  } catch (_) { /* sem config: fica o env */ }
   // Referência de estouro histórico (métricas GCP jul/2026) — contexto de decisão.
   const referencia_estouro = {
     mes: "2026-07",
@@ -334,10 +346,69 @@ app.get("/api/admin/dono/api-maps", verificarAuth, verificarAdmin, exigirSuperAd
     decisoes,
     referencia_estouro,
     estado: rotasEstado,
+    teto_origem,
+    teto_seguranca,
     cota_console: {
       compute_routes_dia: teto_dia,
       compute_routes_min_sugerido: Math.min(50, teto_min),
     },
     atualizado_em: new Date().toISOString(),
   });
+});
+
+/**
+ * Ajuste dos tetos de Routes pelo painel do dono, sem deploy nem restart.
+ *
+ * Vale só para a Routes (única API que passa pelo servidor). Mapa, Places e
+ * Geocoding são chamados direto do navegador pelo SDK do Google — para esses,
+ * a trava é a cota do console, deliberadamente FORA do alcance da aplicação.
+ *
+ * Os valores são limitados por TETO_SEGURANCA no config.js: um zero a mais
+ * digitado por engano não vira fatura.
+ */
+app.put("/api/admin/dono/api-maps/limites", verificarAuth, verificarAdmin, exigirSuperAdmin, async (req, res) => {
+  const cfg = require("./config");
+  const teto = cfg.TETO_SEGURANCA || { min: 500, dia: 20000, mes: 300000 };
+  const campos = [
+    ["rotas_max_min", req.body?.teto_min, teto.min],
+    ["rotas_max_dia", req.body?.teto_dia, teto.dia],
+    ["rotas_max_mes", req.body?.teto_mes, teto.mes],
+  ];
+
+  const gravar = [];
+  for (const [chave, bruto, limite] of campos) {
+    if (bruto === undefined || bruto === null || bruto === "") continue;
+    const n = Number(bruto);
+    if (!Number.isFinite(n) || n < 1) {
+      return res.status(400).json({ error: `${chave}: informe um número inteiro maior que zero.` });
+    }
+    if (n > limite) {
+      return res.status(400).json({
+        error: `${chave}: máximo permitido é ${limite}. Para ir além, altere a variável de ambiente no Render — é uma decisão de orçamento, não de painel.`,
+      });
+    }
+    gravar.push([chave, String(Math.round(n))]);
+  }
+  if (!gravar.length) return res.status(400).json({ error: "Nada para alterar." });
+
+  try {
+    await cfg.garantirTabelaConfig();
+    const quem = `${req.user?.matricula || "?"} (${req.user?.nome || "dono"})`;
+    for (const [chave, valor] of gravar) {
+      await pool.query(
+        `INSERT INTO config_app (chave, valor, atualizado_em, atualizado_por)
+         VALUES ($1, $2, NOW(), $3)
+         ON CONFLICT (chave) DO UPDATE
+           SET valor = EXCLUDED.valor, atualizado_em = NOW(), atualizado_por = EXCLUDED.atualizado_por`,
+        [chave, valor, quem]
+      );
+    }
+    cfg.invalidarCacheLimites();
+    const L = await cfg.limitesRotas();
+    console.warn(`[rotas] tetos alterados por ${quem}: ${L.min}/min, ${L.dia}/dia, ${L.mes}/mês`);
+    res.json({ success: true, teto_min: L.min, teto_dia: L.dia, teto_mes: L.mes, origem: L.origem });
+  } catch (e) {
+    console.error("PUT api-maps/limites:", e.message);
+    res.status(500).json({ error: "Não foi possível salvar os limites." });
+  }
 });

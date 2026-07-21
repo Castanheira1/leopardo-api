@@ -11,7 +11,11 @@ services:
   - type: web
     name: vagao
     runtime: node
-    plan: free
+    # starter (US$7/mês): NÃO hiberna. O plano free dorme por inatividade e o
+    # primeiro acesso do dia esperava ~40 s — inaceitável em operação real.
+    # Ao crescer, standard (2 GB / 1 CPU) é o próximo degrau: o app faz polling
+    # a cada 2–3 s por usuário, então CPU e conexões do Postgres é que apertam.
+    plan: starter
     region: ohio # ajuste para a região mais próxima do seu Supabase
     branch: main
     buildCommand: npm install

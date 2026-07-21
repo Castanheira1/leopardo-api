@@ -619,6 +619,21 @@
 
         .field-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .field-row input { width: auto; min-width: 110px; }
+
+        /* Tetos da Routes ajustáveis pelo dono (aba API Maps) */
+        .api-limites { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+        .api-limites label {
+            display: flex; flex-direction: column; gap: 4px;
+            font-size: .74rem; color: var(--muted); font-weight: 600;
+        }
+        .api-limites input {
+            width: 120px; padding: 8px 10px; font-size: .9rem;
+            border: 1px solid var(--line); border-radius: 8px;
+            background: #fff; color: var(--ink); font-variant-numeric: tabular-nums;
+        }
+        .api-limites input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+        #limMsg.ok { color: var(--good); font-weight: 650; }
+        #limMsg.erro { color: var(--crit); font-weight: 650; }
         .adm-foot {
             padding: 12px var(--pad-x) 16px; color: #a8a8b0; font-size: .68rem;
             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
@@ -957,6 +972,29 @@
                         </div>
                         <div class="soft-list" id="apiDecisoes"><div class="empty compact">Carregando…</div></div>
                     </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h3>Tetos do app (Routes)</h3>
+                            <p class="cap">Valem na hora, sem deploy. Só para a Routes — mapa, Places e Geocoding são chamados pelo navegador e só a cota do GCP limita.</p>
+                        </div>
+                        <button type="button" class="link-gold" onclick="carregarApiMaps()">Recarregar</button>
+                    </div>
+                    <div class="api-limites">
+                        <label>Por minuto
+                            <input id="limMin" type="number" min="1" inputmode="numeric" placeholder="30">
+                        </label>
+                        <label>Por dia
+                            <input id="limDia" type="number" min="1" inputmode="numeric" placeholder="300">
+                        </label>
+                        <label>Por mês
+                            <input id="limMes" type="number" min="1" inputmode="numeric" placeholder="9000">
+                        </label>
+                        <button type="button" class="btn-primary" id="btnSalvarLimites" onclick="salvarLimitesApi()">Salvar tetos</button>
+                    </div>
+                    <p class="cap" id="limMsg" style="margin-top:10px;"></p>
+                    <p class="cap" id="limInfo" style="margin-top:4px;"></p>
                 </div>
                 <div class="panel">
                     <div class="panel-head">
@@ -1703,6 +1741,19 @@ async function carregarApiMaps() {
                 </div>
             </div>`).join('') || '<div class="empty compact">Sem recomendações.</div>';
 
+        // Campos de teto: mostram o valor VIGENTE (painel ou env).
+        const campos = [['limMin', d.teto_min], ['limDia', d.teto_dia], ['limMes', d.teto_mes]];
+        campos.forEach(([id, v]) => {
+            const el = document.getElementById(id);
+            if (el && document.activeElement !== el) el.value = v ?? '';
+        });
+        const info = document.getElementById('limInfo');
+        if (info) {
+            const t = d.teto_seguranca;
+            info.textContent = 'Origem: ' + (d.teto_origem === 'painel' ? 'painel do dono' : 'variável de ambiente (Render)')
+                + (t ? ` · máximos permitidos: ${t.min}/min, ${t.dia}/dia, ${t.mes}/mês` : '');
+        }
+
         if (atualizado && d.atualizado_em) {
             atualizado.textContent = 'Atualizado em ' + new Date(d.atualizado_em).toLocaleString('pt-BR')
                 + (d.referencia_estouro
@@ -1713,6 +1764,47 @@ async function carregarApiMaps() {
         if (kpis) kpis.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
         if (decisoes) decisoes.innerHTML = '';
         if (barras) barras.innerHTML = '';
+    }
+}
+
+// Grava os tetos da Routes. O servidor valida contra o teto de segurança —
+// aqui só evitamos enviar lixo e damos retorno visível ao dono.
+async function salvarLimitesApi() {
+    const btn = document.getElementById('btnSalvarLimites');
+    const msg = document.getElementById('limMsg');
+    const num = (id) => {
+        const v = (document.getElementById(id)?.value || '').trim();
+        return v === '' ? null : Number(v);
+    };
+    const corpo = { teto_min: num('limMin'), teto_dia: num('limDia'), teto_mes: num('limMes') };
+    const vals = Object.values(corpo).filter((v) => v !== null);
+    if (!vals.length) { msg.className = 'cap erro'; msg.textContent = 'Preencha ao menos um campo.'; return; }
+    if (vals.some((v) => !Number.isFinite(v) || v < 1)) {
+        msg.className = 'cap erro'; msg.textContent = 'Use números inteiros maiores que zero.'; return;
+    }
+    if (corpo.teto_min && corpo.teto_dia && corpo.teto_min > corpo.teto_dia) {
+        msg.className = 'cap erro';
+        msg.textContent = 'O teto por minuto não pode ser maior que o do dia — um minuto queimaria a cota inteira.';
+        return;
+    }
+    btn.disabled = true;
+    msg.className = 'cap';
+    msg.textContent = 'Salvando…';
+    try {
+        const r = await fetchWithAuth('/api/admin/dono/api-maps/limites', {
+            method: 'PUT',
+            body: JSON.stringify(corpo),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Falha ao salvar');
+        msg.className = 'cap ok';
+        msg.textContent = `Tetos salvos: ${d.teto_min}/min · ${d.teto_dia}/dia · ${d.teto_mes}/mês. Valem imediatamente.`;
+        carregarApiMaps();
+    } catch (e) {
+        msg.className = 'cap erro';
+        msg.textContent = e.message;
+    } finally {
+        btn.disabled = false;
     }
 }
 

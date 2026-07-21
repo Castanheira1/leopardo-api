@@ -65,11 +65,66 @@ const GOOGLE_ROUTES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.GOOGL
 // código não deve ser MAIS restritivo que a cota paga que o dono aceitou.
 // Contra loop/alucinação quem protege é: recálculo só por mudança de destino
 // + throttle no cliente + teto por minuto. Para escalar: subir env + console.
+// Valores PADRÃO (env). O dono pode sobrescrever pelo painel — ver limitesRotas().
 const ROTAS_GOOGLE_MAX_MIN = Number(process.env.ROTAS_GOOGLE_MAX_MIN || 30);
 const ROTAS_GOOGLE_MAX_DIA = Number(process.env.ROTAS_GOOGLE_MAX_DIA || 300);
 // Teto MENSAL sob a cota grátis (Routes Essentials: 10.000/mês desde mar/2025).
 // Persiste no Postgres — restart/deploy não zera o contador.
 const ROTAS_GOOGLE_MAX_MES = Number(process.env.ROTAS_GOOGLE_MAX_MES || 9000);
+
+/* Limites ajustáveis pelo painel do dono (tabela config_app), com o env como
+   padrão. Lidos com cache curto para não fazer query a cada rota.
+   TETO_SEGURANCA existe para que um zero a mais digitado por engano não vire
+   fatura: nem o painel nem o env conseguem passar disso. */
+const TETO_SEGURANCA = { min: 500, dia: 20000, mes: 300000 };
+const LIMITES_CACHE_MS = 30_000;
+let _limitesCache = null;
+let _limitesEm = 0;
+
+function clampLimite(v, padrao, teto) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return padrao;
+  return Math.min(Math.round(n), teto);
+}
+
+async function garantirTabelaConfig() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS config_app (
+      chave TEXT PRIMARY KEY,
+      valor TEXT NOT NULL,
+      atualizado_em TIMESTAMP DEFAULT NOW(),
+      atualizado_por TEXT
+    )`).catch(() => {});
+}
+
+async function limitesRotas() {
+  const agora = Date.now();
+  if (_limitesCache && agora - _limitesEm < LIMITES_CACHE_MS) return _limitesCache;
+  const base = {
+    min: clampLimite(ROTAS_GOOGLE_MAX_MIN, 30, TETO_SEGURANCA.min),
+    dia: clampLimite(ROTAS_GOOGLE_MAX_DIA, 300, TETO_SEGURANCA.dia),
+    mes: clampLimite(ROTAS_GOOGLE_MAX_MES, 9000, TETO_SEGURANCA.mes),
+    origem: "env",
+  };
+  try {
+    await garantirTabelaConfig();
+    const { rows } = await pool.query(
+      "SELECT chave, valor FROM config_app WHERE chave LIKE 'rotas_max_%'"
+    );
+    for (const r of rows) {
+      if (r.chave === "rotas_max_min") base.min = clampLimite(r.valor, base.min, TETO_SEGURANCA.min);
+      if (r.chave === "rotas_max_dia") base.dia = clampLimite(r.valor, base.dia, TETO_SEGURANCA.dia);
+      if (r.chave === "rotas_max_mes") base.mes = clampLimite(r.valor, base.mes, TETO_SEGURANCA.mes);
+    }
+    if (rows.length) base.origem = "painel";
+  } catch (_) { /* sem DB: fica no env */ }
+  _limitesCache = base;
+  _limitesEm = agora;
+  return base;
+}
+
+// Chamado pelo endpoint de gravação para o novo valor valer na hora.
+function invalidarCacheLimites() { _limitesEm = 0; }
 let rotasGoogleJanela = { t0: Date.now(), n: 0 };
 let rotasGoogleDia = { dia: "", n: 0 };
 const rotasGoogleStats = {
@@ -98,6 +153,19 @@ async function garantirTabelaRotasUso() {
       dia TEXT PRIMARY KEY,
       n INTEGER NOT NULL DEFAULT 0
     )`).catch(() => {});
+  // Janela por MINUTO também no banco: com mais de uma instância (autoscaling
+  // do Render), um contador em memória por processo faria o teto virar
+  // N × ROTAS_GOOGLE_MAX_MIN — justo quando há mais tráfego para descontrolar.
+  // Chave = 'AAAA-MM-DDTHH:MM' (UTC).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rotas_uso_min (
+      minuto TEXT PRIMARY KEY,
+      n INTEGER NOT NULL DEFAULT 0
+    )`).catch(() => {});
+}
+
+function chaveMinutoUtc(d = new Date()) {
+  return d.toISOString().slice(0, 16); // AAAA-MM-DDTHH:MM
 }
 
 // Devolve a cota quando a chamada não produziu rota (erro do Google, timeout).
@@ -111,6 +179,21 @@ async function devolverCotaRota() {
     "UPDATE rotas_uso SET n = GREATEST(n - 1, 0) WHERE dia = $1",
     [hoje]
   ).catch(() => {});
+  await pool.query(
+    "UPDATE rotas_uso_min SET n = GREATEST(n - 1, 0) WHERE minuto = $1",
+    [chaveMinutoUtc()]
+  ).catch(() => {});
+}
+
+// rotas_uso_min cresce 1 linha por minuto ativo. Limpa o que já passou —
+// a janela só olha o minuto corrente, então histórico ali não serve para nada.
+let _limpezaMinUltima = 0;
+async function limparJanelasAntigas() {
+  const agora = Date.now();
+  if (agora - _limpezaMinUltima < 60 * 60 * 1000) return; // no máximo 1x/hora
+  _limpezaMinUltima = agora;
+  const corte = new Date(agora - 10 * 60 * 1000).toISOString().slice(0, 16);
+  await pool.query("DELETE FROM rotas_uso_min WHERE minuto < $1", [corte]).catch(() => {});
 }
 
 /* Disjuntor: erro PERMANENTE (billing desligado, API não habilitada, chave sem
@@ -151,14 +234,35 @@ async function rotasGooglePermitida() {
     rotasGoogleStats.bloqueado++;
     return false;
   }
+  // Limites vigentes: painel do dono (config_app) ou env como padrão.
+  const LIM = await limitesRotas();
   const hoje = new Date().toISOString().slice(0, 10);
   if (rotasGoogleDia.dia !== hoje) rotasGoogleDia = { dia: hoje, n: 0 };
-  // Burst por minuto (memória basta: janela curta demais para restart importar).
   const agora = Date.now();
   if (agora - rotasGoogleJanela.t0 > 60_000) {
     rotasGoogleJanela = { t0: agora, n: 0 };
   }
-  if (rotasGoogleJanela.n >= ROTAS_GOOGLE_MAX_MIN) {
+  // Burst por minuto: contado no Postgres para valer entre TODAS as instâncias.
+  // O contador em memória segue como espelho (diagnóstico e fallback sem DB).
+  let minutoOk = null;
+  try {
+    await garantirTabelaRotasUso();
+    const q = await pool.query(
+      `INSERT INTO rotas_uso_min (minuto, n) VALUES ($1, 1)
+       ON CONFLICT (minuto) DO UPDATE SET n = rotas_uso_min.n + 1
+       RETURNING n`,
+      [chaveMinutoUtc()]
+    );
+    const nMin = Number(q.rows[0]?.n || 0);
+    rotasGoogleJanela.n = nMin;
+    minutoOk = nMin <= LIM.min;
+    limparJanelasAntigas().catch(() => {});
+  } catch (_) {
+    // DB indisponível: cai para a janela em memória (comportamento anterior).
+    minutoOk = rotasGoogleJanela.n < LIM.min;
+    if (minutoOk) rotasGoogleJanela.n++;
+  }
+  if (!minutoOk) {
     rotasGoogleStats.bloqueado++;
     return false;
   }
@@ -173,7 +277,7 @@ async function rotasGooglePermitida() {
     );
     const nDia = Number(inc.rows[0]?.n || 0);
     rotasGoogleDia.n = nDia;
-    if (nDia > ROTAS_GOOGLE_MAX_DIA) {
+    if (nDia > LIM.dia) {
       rotasGoogleStats.bloqueado++;
       return false;
     }
@@ -181,13 +285,13 @@ async function rotasGooglePermitida() {
       "SELECT COALESCE(SUM(n), 0) AS total FROM rotas_uso WHERE dia LIKE $1",
       [hoje.slice(0, 7) + "%"]
     );
-    if (Number(mesQ.rows[0]?.total || 0) > ROTAS_GOOGLE_MAX_MES) {
+    if (Number(mesQ.rows[0]?.total || 0) > LIM.mes) {
       rotasGoogleStats.bloqueado++;
       return false;
     }
   } catch (_) {
     // DB fora: memória segura o teto diário (pior caso volta ao comportamento antigo).
-    if (rotasGoogleDia.n >= ROTAS_GOOGLE_MAX_DIA) {
+    if (rotasGoogleDia.n >= LIM.dia) {
       rotasGoogleStats.bloqueado++;
       return false;
     }
@@ -287,6 +391,7 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
     } else {
       motivo = "Limite de rotas Google; usando linha reta.";
     }
+    const LIM = await limitesRotas();
     return res.json({
       ...payload,
       cached: false,
@@ -294,8 +399,8 @@ app.post("/api/rotas", verificarAuth, async (req, res) => {
       stats: {
         ...rotasGoogleStats,
         enabled: GOOGLE_ROUTES_ENABLED,
-        teto_min: ROTAS_GOOGLE_MAX_MIN,
-        teto_dia: ROTAS_GOOGLE_MAX_DIA,
+        teto_min: LIM.min,
+        teto_dia: LIM.dia,
         usadas_hoje: rotasGoogleDia.n,
       },
     });
@@ -390,12 +495,14 @@ app.get("/api/rotas/stats", verificarAuth, async (req, res) => {
     usadas_hoje = Number(q.rows[0]?.dia_n || 0);
     usadas_mes = Number(q.rows[0]?.mes_n || 0);
   } catch (_) { /* sem DB: fica o contador em memória */ }
+  const LIM = await limitesRotas();
   res.json({
     ...rotasGoogleStats,
     enabled: GOOGLE_ROUTES_ENABLED,
-    teto_min: ROTAS_GOOGLE_MAX_MIN,
-    teto_dia: ROTAS_GOOGLE_MAX_DIA,
-    teto_mes: ROTAS_GOOGLE_MAX_MES,
+    teto_min: LIM.min,
+    teto_dia: LIM.dia,
+    teto_mes: LIM.mes,
+    limites_origem: LIM.origem,
     usadas_hoje,
     usadas_mes,
     cache_mem: ROTAS_CACHE_MEM.size,
@@ -421,6 +528,11 @@ module.exports = {
   chaveRotaApprox,
   rotasGooglePermitida,
   garantirTabelaRotasCache,
+  // Tetos ajustáveis pelo painel do dono (config_app).
+  limitesRotas,
+  invalidarCacheLimites,
+  garantirTabelaConfig,
+  TETO_SEGURANCA,
   // Estado do disjuntor para o painel do dono (API Maps).
   estadoRotasGoogle: () => ({
     pausado: Date.now() < rotasPausadoAte,
