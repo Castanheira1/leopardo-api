@@ -1348,10 +1348,10 @@
     }
     // Navega entre o hub do Perfil e as sub-telas (dados / favoritos / excluir).
     function perfilIrPara(view) {
+        // Perfil unificado: dados/favoritos não são mais telas separadas —
+        // dados ficam no próprio perfil e favoritos vivem no menu ☰.
         const views = {
             menu: 'perfilMenu',
-            dados: 'perfilViewDados',
-            favoritos: 'perfilViewFavoritos',
             excluir: 'perfilViewExcluir',
         };
         Object.values(views).forEach((id) => {
@@ -1360,11 +1360,8 @@
         });
         const alvo = document.getElementById(views[view] || 'perfilMenu');
         if (alvo) alvo.style.display = 'block';
-        if (view === 'favoritos') {
-            renderPerfilFavoritos();
-            const box = document.querySelector('#modalPerfil .cam-box');
-            if (box) box.scrollTop = 0;
-        }
+        const box = document.querySelector('#modalPerfil .cam-box');
+        if (box) box.scrollTop = 0;
         if (view === 'excluir') {
             const senhaEl = document.getElementById('perfilExcluirSenha');
             const msgEl = document.getElementById('perfilExcluirMsg');
@@ -1384,6 +1381,14 @@
         emailEl.style.opacity = user.email ? '0.85' : '1';
         document.getElementById('perfilTelefone').value = user.telefone || '';
         document.getElementById('perfilSexo').value = user.sexo || '';
+        // Cabeçalho estilo app: avatar com inicial + nome + empresa/projeto.
+        const nomeCurto = (user.nome || '').trim();
+        const heroNome = document.getElementById('perfilHeroNome');
+        if (heroNome) heroNome.textContent = nomeCurto || 'Meu perfil';
+        const heroSub = document.getElementById('perfilHeroSub');
+        if (heroSub) heroSub.textContent = [user.empresa_nome, user.projeto_codigo].filter(Boolean).join(' · ');
+        const avatarEl = document.getElementById('perfilAvatar');
+        if (avatarEl) avatarEl.textContent = (nomeCurto[0] || '?').toUpperCase();
         document.getElementById('modalPerfil').style.display = 'flex';
         perfilIrPara(typeof view === 'string' ? view : 'menu');
         // Atualiza status da habilitação ao abrir (evita “ativar de novo” à toa).
@@ -1391,10 +1396,6 @@
         try {
             await carregarFavoritosPessoais();
         } catch (_) { favPessoais = []; }
-        // Se o usuário já está na tela de favoritos, atualiza as estrelas.
-        if (document.getElementById('perfilViewFavoritos').style.display !== 'none') {
-            renderPerfilFavoritos();
-        }
     }
     function fecharPerfil() {
         document.getElementById('modalPerfil').style.display = 'none';
@@ -6916,9 +6917,10 @@
         fecharMenu();
         const perfil = document.getElementById('modalPerfil');
         if (perfil && perfil.style.display === 'flex') {
-            const dados = document.getElementById('perfilViewDados');
-            const fav = document.getElementById('perfilViewFavoritos');
-            if ((dados && dados.style.display === 'block') || (fav && fav.style.display === 'block')) {
+            // Perfil unificado: a única sub-tela restante é Excluir conta —
+            // botão voltar (Android) leva dela ao perfil; do perfil, fecha.
+            const excluir = document.getElementById('perfilViewExcluir');
+            if (excluir && excluir.style.display === 'block') {
                 perfilIrPara('menu');
                 return true;
             }

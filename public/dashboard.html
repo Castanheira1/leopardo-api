@@ -257,41 +257,20 @@
     <div id="modalPerfil" class="cam-overlay cam-overlay-alto" style="display:none;">
         <div class="cam-box perfil-box painel-claro">
 
-            <!-- Hub: escolhe o que editar -->
+            <!-- Perfil estilo app: cabeçalho com avatar + nome, dados editáveis
+                 direto na tela, seção Motorista e "Excluir conta" como único
+                 link de navegação (favoritos ficam no menu ☰ → Meus locais). -->
             <div id="perfilMenu" class="perfil-view">
-                <h3>Perfil</h3>
-                <button type="button" class="perfil-nav-btn" onclick="perfilIrPara('dados')">
-                    <span class="perfil-nav-tit">Dados pessoais</span>
-                    <small class="perfil-nav-sub">Projeto, empresa, WhatsApp, sexo</small>
-                </button>
-                <button type="button" class="perfil-nav-btn" onclick="perfilIrPara('favoritos')">
-                    <span class="perfil-nav-tit">Meus locais favoritos</span>
-                    <small class="perfil-nav-sub">Locais que aparecem só para você</small>
-                </button>
-                <button type="button" class="perfil-nav-btn perfil-nav-danger" onclick="perfilIrPara('excluir')">
-                    <span class="perfil-nav-tit">Excluir conta</span>
-                    <small class="perfil-nav-sub">Apaga seus dados pessoais (LGPD)</small>
-                </button>
-                <div class="perfil-secao">
-                    <p id="habStatusPerfil" class="hab-status" style="display:none;" role="status"></p>
-                    <div class="hab-actions" id="habActionsPerfil">
-                        <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm" style="display:none;">Ativar para oferecer carona</button>
-                        <button onclick="ativarMotorista(true)" id="btnTrocarVeic" class="btn btn-secondary btn-sm" style="display:none;">Trocar veículo</button>
+                <div class="perfil-hero">
+                    <div class="perfil-avatar" id="perfilAvatar" aria-hidden="true">?</div>
+                    <div class="perfil-hero-txt">
+                        <div class="perfil-hero-nome" id="perfilHeroNome">Meu perfil</div>
+                        <div class="perfil-hero-sub" id="perfilHeroSub"></div>
                     </div>
                 </div>
-                <div class="cam-actions">
-                    <button type="button" class="btn btn-secondary" onclick="fecharPerfil()">Fechar</button>
-                </div>
-            </div>
 
-            <!-- Dados pessoais -->
-            <div id="perfilViewDados" class="perfil-view" style="display:none;">
-                <div class="perfil-header">
-                    <button type="button" class="perfil-voltar" onclick="perfilIrPara('menu')" aria-label="Voltar">‹</button>
-                    <h3>Dados pessoais</h3>
-                </div>
                 <div class="perfil-secao">
-                    <p style="font-size:0.8rem;color:#9aa0a6;margin-bottom:8px;">Dados do cadastro (usados no painel comercial)</p>
+                    <div class="perfil-secao-titulo">Dados pessoais</div>
                     <label for="perfilProjeto">Projeto</label>
                     <select id="perfilProjeto" class="map-search" style="margin-bottom:8px;">
                         <option value="">Selecione o projeto</option>
@@ -303,9 +282,7 @@
                     <label for="perfilEmail" style="margin-top:8px;display:block;">Email</label>
                     <input id="perfilEmail" class="map-search" readonly style="opacity:0.85;">
                     <small style="display:block;margin-top:6px;color:#9aa0a6;">O email é usado para recuperar senha no login.</small>
-                </div>
-                <div class="perfil-secao">
-                    <label for="perfilTelefone">WhatsApp (com DDD)</label>
+                    <label for="perfilTelefone" style="margin-top:8px;display:block;">WhatsApp (com DDD)</label>
                     <input id="perfilTelefone" class="map-search" placeholder="(00) 90000-0000">
                     <label for="perfilSexo" style="margin-top:10px;display:block;">Sexo (bonequinho no mapa)</label>
                     <select id="perfilSexo" class="map-search">
@@ -313,28 +290,23 @@
                         <option value="M">Homem (azul)</option>
                         <option value="F">Mulher (rosa)</option>
                     </select>
-                    <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar contato</button>
+                    <button class="btn btn-primary btn-sm" onclick="salvarPerfil()">Salvar alterações</button>
                     <div id="perfilMsg" class="cam-status"></div>
                 </div>
-                <div class="cam-actions">
-                    <button type="button" class="btn btn-secondary" onclick="perfilIrPara('menu')">Voltar</button>
-                </div>
-            </div>
 
-            <!-- Meus favoritos -->
-            <div id="perfilViewFavoritos" class="perfil-view" style="display:none;">
-                <div class="perfil-header">
-                    <button type="button" class="perfil-voltar" onclick="perfilIrPara('menu')" aria-label="Voltar">‹</button>
-                    <h3>Meus locais favoritos</h3>
+                <div class="perfil-secao">
+                    <div class="perfil-secao-titulo">Motorista</div>
+                    <p id="habStatusPerfil" class="hab-status" style="display:none;" role="status"></p>
+                    <div class="hab-actions" id="habActionsPerfil">
+                        <button onclick="ativarMotorista(false)" id="btnAtivarMot" class="btn btn-primary btn-sm" style="display:none;">Ativar para oferecer carona</button>
+                        <button onclick="ativarMotorista(true)" id="btnTrocarVeic" class="btn btn-secondary btn-sm" style="display:none;">Trocar veículo</button>
+                    </div>
                 </div>
-                <input id="perfilFavFiltro" class="fav-filtro fav-filtro-topo" placeholder="Filtrar catálogo do projeto…" oninput="renderPerfilFavoritos()">
-                <div class="perfil-secao perfil-fav-corpo">
-                    <p class="perfil-fav-dica">Marque os locais que você usa com frequência. No menu <strong style="color:#EAD298;">Locais</strong> está o catálogo completo; aqui você escolhe os seus.</p>
-                    <div id="perfilFavCatalogo" class="fav-perfil-lista"><div class="fav-vazio">Abra o catálogo do seu projeto…</div></div>
-                    <div id="perfilFavMsg" class="cam-status"></div>
-                </div>
+
+                <button type="button" class="perfil-excluir-link" onclick="perfilIrPara('excluir')">Excluir conta</button>
+
                 <div class="cam-actions">
-                    <button type="button" class="btn btn-secondary" onclick="perfilIrPara('menu')">Voltar</button>
+                    <button type="button" class="btn btn-secondary" onclick="fecharPerfil()">Fechar</button>
                 </div>
             </div>
 

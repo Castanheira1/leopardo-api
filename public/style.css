@@ -2722,6 +2722,39 @@ body.aguardando-papel .navbar {
 .perfil-secao { padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .perfil-secao:first-of-type { border-top: none; padding-top: 4px; }
 
+/* Perfil estilo app: cabeçalho com avatar + nome (cara de app de verdade) */
+.perfil-hero { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
+.perfil-avatar {
+    width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; font-weight: 800; color: #3a2f10;
+    background: linear-gradient(135deg, #EAD298, #c9a84f);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.perfil-hero-txt { min-width: 0; }
+.perfil-hero-nome {
+    font-weight: 800; font-size: 1.05rem; line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.perfil-hero-sub { font-size: 0.78rem; color: #9aa0a6; margin-top: 2px; }
+.perfil-secao-titulo {
+    font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #9aa0a6; margin-bottom: 10px;
+}
+/* Botões de ação do perfil em largura total (padrão de app mobile) */
+.perfil-view .perfil-secao > .btn { width: 100%; margin-top: 12px; }
+/* Único item de navegação restante: link discreto, padrão dos apps grandes */
+.perfil-excluir-link {
+    display: block; width: 100%; background: none; border: none; cursor: pointer;
+    text-align: center; padding: 12px 0 4px; font-size: 0.85rem; font-weight: 700;
+    color: #c0392b; font-family: inherit;
+}
+.perfil-excluir-link:hover, .perfil-excluir-link:active { text-decoration: underline; }
+.painel-claro .perfil-hero-nome { color: #26231b; }
+.painel-claro .perfil-hero-sub { color: #8a857a; }
+.painel-claro .perfil-secao-titulo { color: #8a857a; }
+.painel-claro .perfil-excluir-link { color: #b03a2e; }
+
 /* Hub do perfil: navegação para sub-telas */
 .perfil-nav-btn {
     width: 100%;
