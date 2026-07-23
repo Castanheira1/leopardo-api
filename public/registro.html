@@ -506,7 +506,7 @@
                         <input type="checkbox" id="aceitePolitica" required style="width:auto;margin-top:5px;flex:0 0 auto;">
                         <label for="aceitePolitica" style="font-weight:400;font-size:.92rem;line-height:1.45;">
                             Li e concordo com a
-                            <a href="politica-privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>
+                            <a href="politica-privacidade.html" target="_blank" rel="noopener" id="linkPolitica">Política de Privacidade</a>
                             e autorizo o uso da minha selfie, foto do veículo e localização (GPS)
                             para a segurança das caronas, conforme a LGPD.
                         </label>
@@ -579,6 +579,18 @@
                 <button type="submit" class="btn-gold" style="width:100%;margin-top:4px;">Enviar solicitação</button>
                 <div id="adminMessage" class="message" style="margin-top:12px;"></div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Política de Privacidade: abre SOBRE o cadastro (não navega para fora),
+         para não perder o que já foi preenchido no formulário. Funciona igual em
+         PWA e no app nativo (o target="_blank" no WebView recarregava a tela). -->
+    <div class="modal-overlay" id="politicaModal">
+        <div class="modal-box" style="max-width:640px;width:92vw;height:82vh;display:flex;flex-direction:column;">
+            <button type="button" class="modal-close" id="fecharPolitica" aria-label="Fechar">&times;</button>
+            <h2 class="modal-title">Política de Privacidade</h2>
+            <iframe id="politicaFrame" title="Política de Privacidade"
+                    style="flex:1;width:100%;border:0;border-radius:8px;background:#fff;margin-top:8px;"></iframe>
         </div>
     </div>
 
@@ -798,6 +810,26 @@
         });
         adminModal.addEventListener('click', (e) => {
             if (e.target === adminModal) adminModal.classList.remove('open');
+        });
+
+        // Política de Privacidade: abre num modal por cima do cadastro em vez de
+        // navegar (target="_blank"), que no WebView nativo recarregava a tela e
+        // apagava o que já estava preenchido. Fallback: se o JS falhar, o href
+        // original ainda abre a página.
+        const politicaModal = document.getElementById('politicaModal');
+        const politicaFrame = document.getElementById('politicaFrame');
+        function abrirPolitica() {
+            if (!politicaFrame.src) politicaFrame.src = 'politica-privacidade.html';
+            politicaModal.classList.add('open');
+        }
+        function fecharPolitica() { politicaModal.classList.remove('open'); }
+        document.getElementById('linkPolitica').addEventListener('click', (e) => {
+            e.preventDefault();
+            abrirPolitica();
+        });
+        document.getElementById('fecharPolitica').addEventListener('click', fecharPolitica);
+        politicaModal.addEventListener('click', (e) => {
+            if (e.target === politicaModal) fecharPolitica();
         });
 
         document.getElementById('adminForm').addEventListener('submit', async (e) => {
