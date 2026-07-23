@@ -17,6 +17,7 @@ app.get("/api/motorista/oferta-atual", verificarAuth, async (req, res) => {
               f.encaixe_texto, f.encaixe_lat, f.encaixe_lng, f.exclusiva,
               p.id AS pedido_id, p.origem_texto, p.origem_lat, p.origem_lng,
               p.destino_texto, p.destino_lat, p.destino_lng, p.pessoas, p.observacao,
+              p.selfie_url,
               u.nome AS passageiro_nome
        FROM pedido_fila f
        JOIN pedidos p ON p.id = f.pedido_id
@@ -48,9 +49,14 @@ app.post("/api/pedido-fila/:id/aceitar", verificarAuth, async (req, res) => {
     if (!ped) return res.status(404).json({ error: "Pedido não está mais disponível" });
 
     const proposta = (await pool.query(
-      `INSERT INTO propostas (de_usuario_id, para_usuario_id, pedido_id, status)
-       VALUES ($1, $2, $3, 'aceito') RETURNING *`,
-      [req.user.id, ped.passageiro_id, ped.id]
+      `INSERT INTO propostas (de_usuario_id, para_usuario_id, pedido_id, status,
+          selfie_url, selfie_lat, selfie_lng, selfie_em, pessoas)
+       VALUES ($1, $2, $3, 'aceito', $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        req.user.id, ped.passageiro_id, ped.id,
+        ped.selfie_url || null, ped.selfie_lat || null, ped.selfie_lng || null,
+        ped.selfie_em || null, ped.pessoas || 1,
+      ]
     )).rows[0];
     const viagem = await criarViagemDaProposta(proposta.id);
     if (!viagem) {

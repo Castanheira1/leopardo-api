@@ -238,12 +238,18 @@
                             <p id="viagemEta" class="sheet-eta" style="display:none;"></p>
                         </div>
                         <div class="sheet-driver">
-                            <img id="viagemSelfie" class="sheet-selfie" alt="" style="display:none;">
+                            <div class="sheet-avatar-wrap">
+                                <img id="viagemSelfie" class="sheet-selfie" alt="" style="display:none;">
+                                <span id="viagemIniciais" class="sheet-selfie sheet-selfie--ph" style="display:none;" aria-hidden="true">?</span>
+                            </div>
                             <div class="sheet-driver-info">
                                 <strong id="viagemNome">—</strong>
                                 <small id="viagemCarro"></small>
                             </div>
-                            <span id="viagemPlaca" class="sheet-placa"></span>
+                            <div class="sheet-driver-aside">
+                                <img id="viagemCarroFoto" class="sheet-carro-thumb" alt="" style="display:none;">
+                                <span id="viagemPlaca" class="sheet-placa"></span>
+                            </div>
                         </div>
                         <div id="viagemControles" class="sheet-acoes sheet-acoes-col"></div>
                     </div>
@@ -359,13 +365,17 @@
     </div>
 
     <!-- Solicitação recebida (estilo Uber): aparece sozinha quando chega um pedido -->
-    <div id="modalSolicitacao" class="cam-overlay" style="display:none;">
-        <div class="cam-box sol-box">
+    <div id="modalSolicitacao" class="cam-overlay sol-overlay" style="display:none;">
+        <div class="cam-box sol-box sol-box--match">
+            <div class="sol-glow" aria-hidden="true"></div>
             <div class="sol-badge">Embarque Aprovado</div>
-            <img id="solSelfie" class="sol-selfie" alt="" style="display:none;">
+            <div class="sol-avatar-wrap sol-avatar-wrap--hero">
+                <img id="solSelfie" class="sol-selfie sol-selfie--round" alt="" style="display:none;">
+                <div id="solSelfiePh" class="sol-selfie-ph sol-selfie-ph--round" style="display:none;" aria-hidden="true">?</div>
+            </div>
             <h3 id="solNome">—</h3>
-            <p id="solTipo" class="cam-hint"></p>
-            <div id="solRota" class="sol-rota"></div>
+            <p id="solTipo" class="cam-hint sol-tipo"></p>
+            <div id="solRota" class="sol-rota sol-rota--card"></div>
             <p id="solMsg" class="sol-msg"></p>
             <div class="sol-actions">
                 <button class="btn btn-danger" onclick="responderSolicitacao(false)">Recusar</button>
@@ -375,13 +385,20 @@
     </div>
 
     <!-- Fila de motoristas na rota: sua vez de responder (mais perto primeiro) -->
-    <div id="modalOfertaFila" class="cam-overlay" style="display:none;">
-        <div class="cam-box sol-box">
+    <div id="modalOfertaFila" class="cam-overlay sol-overlay" style="display:none;">
+        <div class="cam-box sol-box sol-box--match">
+            <div class="sol-glow" aria-hidden="true"></div>
             <div class="sol-badge">Você é o mais perto!</div>
+            <div class="sol-avatar-wrap sol-avatar-wrap--hero">
+                <img id="filaOfSelfie" class="sol-selfie sol-selfie--round" alt="" style="display:none;">
+                <div id="filaOfSelfiePh" class="sol-selfie-ph sol-selfie-ph--round" style="display:none;" aria-hidden="true">?</div>
+            </div>
             <h3 id="filaOfNome">Passageiro pedindo carona</h3>
-            <div id="filaOfRota" class="sol-rota"></div>
-            <p class="cam-hint">Responda rápido — se não der tempo, a vaga passa pro próximo motorista da rota.</p>
-            <div id="filaOfCronometro" class="fila-cronometro">25s</div>
+            <div id="filaOfRota" class="sol-rota sol-rota--card"></div>
+            <p class="cam-hint sol-tipo">Responda rápido — se não der tempo, a vaga passa pro próximo.</p>
+            <div class="fila-crono-wrap">
+                <div id="filaOfCronometro" class="fila-cronometro">25s</div>
+            </div>
             <div class="sol-actions">
                 <button class="btn btn-danger" onclick="responderOfertaFila(false)">Recusar</button>
                 <button class="btn btn-primary" onclick="responderOfertaFila(true)">Aceitar</button>
@@ -441,17 +458,18 @@
     </div>
 
     <!-- Passageiro chamando carona (visto pelo motorista no mapa) -->
-    <div id="modalPedido" class="cam-overlay" style="display:none;" onclick="if(event.target===this) fecharPedido()">
-        <div class="cam-box sol-box">
+    <div id="modalPedido" class="cam-overlay sol-overlay" style="display:none;" onclick="if(event.target===this) fecharPedido()">
+        <div class="cam-box sol-box sol-box--match">
+            <div class="sol-glow" aria-hidden="true"></div>
             <div class="sol-badge">Pedindo carona</div>
             <!-- Selfie de validação: referência visual de quem está pedindo -->
-            <div class="sol-avatar-wrap">
+            <div class="sol-avatar-wrap sol-avatar-wrap--hero">
                 <img id="pedidoSelfie" class="sol-selfie" alt="Foto do passageiro" style="display:none;">
                 <div id="pedidoSelfiePh" class="sol-selfie-ph" style="display:none;" aria-hidden="true">?</div>
             </div>
             <h3 id="pedidoNome">Passageiro</h3>
             <p id="pedidoSelfieHint" class="sol-selfie-hint" style="display:none;">Foto de validação</p>
-            <div id="pedidoRota" class="sol-rota"></div>
+            <div id="pedidoRota" class="sol-rota sol-rota--card"></div>
             <div id="pedidoMapa" class="mini-mapa" style="display:none;"></div>
             <div id="pedidoDistancia" class="mini-mapa-metric" style="display:none;"></div>
             <div class="sol-actions">

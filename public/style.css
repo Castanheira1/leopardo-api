@@ -1244,51 +1244,140 @@ body.theme-dark {
 /* todos os botões na cor da marca (dourado) */
 /* (botões já são dourados por padrão — sem override de tema) */
 
-/* ===== Solicitação recebida estilo Uber (bottom sheet) ===== */
-.sol-box { text-align: center; }
-.sol-badge { display: inline-block; background: #EAD298; color: #0F3D3E; font-weight: 700; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 10px; }
-/* Foto real do passageiro (sem zoom/crop pesado — object-fit: contain) */
+/* ===== Solicitação / match — cards agradáveis estilo Uber ===== */
+.sol-overlay {
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+.sol-box {
+    position: relative;
+    text-align: center;
+    overflow: hidden;
+}
+.sol-box--match {
+    padding-top: 22px;
+    border-top: 1px solid rgba(234, 210, 152, 0.18);
+    box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
+}
+.sol-glow {
+    pointer-events: none;
+    position: absolute;
+    top: -40%;
+    left: 50%;
+    width: 140%;
+    height: 55%;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, rgba(234, 210, 152, 0.16) 0%, rgba(234, 210, 152, 0.04) 42%, transparent 70%);
+}
+.sol-badge {
+    position: relative;
+    display: inline-block;
+    background: linear-gradient(135deg, #EAD298, #d4b76a);
+    color: #1a160c;
+    font-weight: 800;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 14px rgba(234, 210, 152, 0.22);
+}
+/* Foto real do passageiro — portrait para validação; round nos matches rápidos */
 .sol-avatar-wrap {
+    position: relative;
     display: flex;
     justify-content: center;
-    margin: 8px auto 6px;
+    margin: 4px auto 10px;
+    z-index: 1;
+}
+.sol-avatar-wrap--hero {
+    margin-bottom: 12px;
 }
 .sol-selfie {
-    width: 160px;
-    height: 200px;
-    max-width: 72vw;
-    border-radius: 14px;
-    object-fit: contain; /* foto inteira, sem “zoom” do cover */
-    object-position: center center;
-    border: 2px solid rgba(234, 210, 152, 0.55);
+    width: 148px;
+    height: 186px;
+    max-width: 68vw;
+    border-radius: 18px;
+    object-fit: cover;
+    object-position: center 20%;
+    border: 2.5px solid rgba(234, 210, 152, 0.65);
     background: #0e0f12;
-    /* sem filter, blur, scale — imagem natural */
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(234, 210, 152, 0.08);
     filter: none;
     transform: none;
     image-orientation: from-image;
+    animation: solAvatarIn 0.32s ease-out;
+}
+.sol-selfie--round {
+    width: 104px;
+    height: 104px;
+    max-width: none;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center center;
 }
 .sol-selfie-ph {
-    width: 160px;
-    height: 200px;
-    max-width: 72vw;
-    border-radius: 14px;
+    width: 148px;
+    height: 186px;
+    max-width: 68vw;
+    border-radius: 18px;
     border: 2px solid rgba(234, 210, 152, 0.35);
-    background: #1a1b1e;
+    background: linear-gradient(160deg, #1f2024 0%, #15161a 100%);
     color: #EAD298;
-    font-size: 2rem;
+    font-size: 2.1rem;
     font-weight: 800;
     align-items: center;
     justify-content: center;
     letter-spacing: 0.04em;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+.sol-selfie-ph--round {
+    width: 104px;
+    height: 104px;
+    max-width: none;
+    border-radius: 50%;
+}
+@keyframes solAvatarIn {
+    from { opacity: 0; transform: scale(0.92); }
+    to { opacity: 1; transform: scale(1); }
 }
 .sol-selfie-hint {
-    margin: 0 0 8px;
-    font-size: 0.75rem;
+    margin: 0 0 10px;
+    font-size: 0.74rem;
     color: #9aa0a6;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
 }
-.sol-box h3 { color: #fff; margin: 0 0 2px; }
-.sol-rota { color: #e8eaed; font-size: 0.95rem; margin: 10px 0; text-align: left; }
+.sol-box h3 {
+    position: relative;
+    color: #fff;
+    margin: 0 0 4px;
+    font-size: 1.22rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+}
+.sol-tipo {
+    position: relative;
+    margin: 0 0 8px !important;
+    color: #a8adb4 !important;
+}
+.sol-rota {
+    position: relative;
+    color: #e8eaed;
+    font-size: 0.95rem;
+    margin: 10px 0;
+    text-align: left;
+}
+.sol-rota--card {
+    margin: 12px 0 8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    line-height: 1.45;
+}
 .sol-meta {
     margin-top: 6px;
     font-size: 0.88rem;
@@ -1299,9 +1388,9 @@ body.theme-dark {
 .sol-destino-destaque {
     margin: 10px 0 12px;
     padding: 12px 14px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    background: rgba(234, 210, 152, 0.08);
+    border: 1px solid rgba(234, 210, 152, 0.22);
     text-align: center;
 }
 .sol-destino-label {
@@ -1324,22 +1413,51 @@ body.theme-dark {
     letter-spacing: -0.01em;
     word-break: break-word;
 }
-.sol-msg { color: #9aa0a6; font-style: italic; margin: 0; min-height: 0; }
-.sol-actions { display: flex; gap: 12px; margin-top: 18px; }
-.sol-actions .btn { flex: 1; padding: 15px; font-size: 1rem; }
+.sol-msg {
+    position: relative;
+    color: #9aa0a6;
+    font-style: italic;
+    margin: 0;
+    min-height: 0;
+    font-size: 0.9rem;
+}
+.sol-actions {
+    position: relative;
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+}
+.sol-actions .btn {
+    flex: 1;
+    padding: 15px;
+    font-size: 1rem;
+    border-radius: 14px;
+    font-weight: 700;
+}
 /* Mini-mapa do modal: foco no encontro (mais alto, legível) */
 .sol-box .mini-mapa {
     height: 180px;
     margin-top: 12px;
     border: 1px solid rgba(234, 210, 152, 0.25);
+    border-radius: 14px;
+}
+.fila-crono-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0 2px;
 }
 .fila-cronometro {
-    font-size: 2rem;
+    min-width: 88px;
+    font-size: 1.55rem;
     font-weight: 800;
-    color: #EAD298;
+    color: #1a160c;
     text-align: center;
-    margin-top: 6px;
     font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, #EAD298, #d4b76a);
+    padding: 8px 18px;
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(234, 210, 152, 0.28);
+    letter-spacing: 0.02em;
 }
 
 /* Confirmar veículo (foto do carro) e carro do motorista no card de proposta */
@@ -1364,13 +1482,15 @@ body.theme-dark {
     max-height: min(78vh, calc(var(--appvh, 1vh) * 78));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    background: #16171a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
+    background:
+        radial-gradient(ellipse 90% 50% at 50% -10%, rgba(234, 210, 152, 0.12), transparent 55%),
+        #16171a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 22px;
     padding: 6px 16px 14px;
     text-align: left;
     animation: sheetUp 0.22s ease-out;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
 }
 .drv-grip {
     display: flex;
@@ -1432,28 +1552,29 @@ body.theme-dark {
 }
 .drv-avatar-wrap { position: relative; flex-shrink: 0; }
 .drv-avatar {
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(255, 255, 255, 0.14);
+    border: 2.5px solid rgba(234, 210, 152, 0.55);
     display: block;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 .drv-avatar--ph {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #25262a;
-    color: #cfd2d6;
+    background: linear-gradient(160deg, #2a2b30, #1a1b1e);
+    color: #EAD298;
     font-weight: 800;
-    font-size: 1.05rem;
+    font-size: 1.1rem;
 }
 .drv-verified {
     position: absolute;
     right: -2px;
     bottom: -2px;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: #22c55e;
     color: #fff;
@@ -1461,14 +1582,16 @@ body.theme-dark {
     align-items: center;
     justify-content: center;
     border: 2px solid #16171a;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 .drv-meta { flex: 1; min-width: 0; }
 .drv-nome {
     margin: 0 0 2px;
-    font-size: 1.05rem;
-    font-weight: 700;
+    font-size: 1.12rem;
+    font-weight: 800;
     color: #fff;
     line-height: 1.25;
+    letter-spacing: -0.02em;
     word-break: break-word;
 }
 .drv-role { margin: 0 0 2px; font-size: 0.78rem; color: #9aa0a6; }
@@ -1480,9 +1603,9 @@ body.theme-dark {
     align-items: center;
     margin-bottom: 12px;
     padding: 12px;
-    background: #1c1d21;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: linear-gradient(165deg, #1e1f24 0%, #18191d 100%);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
 }
 .drv-vehicle--sem-foto { grid-template-columns: 1fr; }
 .drv-vehicle-title {
@@ -1519,14 +1642,16 @@ body.theme-dark {
 }
 .drv-rota { font-size: 0.8rem; color: #9aa0a6; line-height: 1.4; }
 .drv-rota b { color: #e8eaed; font-weight: 600; }
-.drv-vehicle-visual { width: 96px; flex-shrink: 0; }
+.drv-vehicle-visual { width: 100px; flex-shrink: 0; }
 .drv-vehicle-img {
-    width: 96px;
-    height: 72px;
+    width: 100px;
+    height: 76px;
     object-fit: cover;
-    border-radius: 10px;
+    border-radius: 12px;
     display: block;
     background: #121316;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 .drv-vehicle-ph {
     width: 96px;
@@ -2071,12 +2196,74 @@ body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
     line-height: 1.35;
 }
 
-.sheet-driver { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
-.sheet-selfie { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(234, 210, 152, 0.55); flex-shrink: 0; }
-.sheet-driver-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-.sheet-driver-info strong { color: #fff; display: block; font-size: 1.08rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sheet-driver-info small { color: #9aa0a6; font-size: 0.82rem; line-height: 1.2; }
-.sheet-placa { background: #fff; color: #111; font-weight: 800; letter-spacing: 1px; padding: 7px 10px; border-radius: 8px; font-size: 0.88rem; flex-shrink: 0; align-self: center; }
+.sheet-driver {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.sheet-avatar-wrap { position: relative; flex-shrink: 0; }
+.sheet-selfie {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2.5px solid rgba(234, 210, 152, 0.6);
+    flex-shrink: 0;
+    display: block;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+}
+.sheet-selfie--ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #2a2b30, #1a1b1e);
+    color: #EAD298;
+    font-weight: 800;
+    font-size: 1.05rem;
+    border-color: rgba(234, 210, 152, 0.35);
+}
+.sheet-driver-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.sheet-driver-info strong {
+    color: #fff;
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sheet-driver-info small { color: #9aa0a6; font-size: 0.82rem; line-height: 1.25; }
+.sheet-driver-aside {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.sheet-carro-thumb {
+    width: 64px;
+    height: 44px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #0e0f12;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.sheet-placa {
+    background: #fff;
+    color: #111;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    flex-shrink: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 .sheet-acoes-col { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding-bottom: 4px; }
 .viagem-btn {
