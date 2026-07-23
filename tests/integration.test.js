@@ -181,6 +181,20 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       assert(Array.isArray(json) && json.length >= 4, "esperava >= 4 projetos");
     });
+    await test("CORS permite origem Capacitor (app nativo)", async () => {
+      const r = await fetch(`${BASE}/api/config`, {
+        headers: { Origin: "capacitor://localhost" },
+      });
+      eq(r.status, 200, "status");
+      const allow = r.headers.get("access-control-allow-origin");
+      assert(allow === "capacitor://localhost", `ACAO esperada (${allow})`);
+    });
+    await test("GET /.well-known/assetlinks.json com Content-Type JSON", async () => {
+      const r = await fetch(`${BASE}/.well-known/assetlinks.json`);
+      eq(r.status, 200, "status");
+      const ct = r.headers.get("content-type") || "";
+      assert(ct.includes("application/json"), `content-type (${ct})`);
+    });
 
     /* =================== CADASTRO / LOGIN =================== */
     grupo("Cadastro e login");

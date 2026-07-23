@@ -94,7 +94,7 @@ Sem Mac não dá para enviar o `.ipa` à App Store.
 | 24 | Tirar **screenshots** (login, mapa, pedido, viagem, perfil) |
 | 25 | Copiar textos de `store/listagem-lojas.md` |
 | 26 | URL da política de privacidade nas duas lojas |
-| 27 | Garantir backend **acordado** durante a revisão (Render free “dorme” — considere plano pago temporário) |
+| 27 | Backend no **starter Render (US$ 7)** já fica acordado — opcional: monitor em `/api/health` |
 
 ---
 

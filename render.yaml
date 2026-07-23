@@ -60,6 +60,12 @@ services:
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
+      # Push nativo (Capacitor): JSON da service account Firebase (uma linha).
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      # Só no plano FREE do Render (hiberna). Starter US$7 não precisa.
+      # - key: RENDER_KEEPALIVE
+      #   value: "true"
       # Recuperação de senha por email (Resend — resend.com). SEM esta chave a
       # recuperação responde 503 em produção. Crie a API key no painel do Resend.
       - key: RESEND_API_KEY
