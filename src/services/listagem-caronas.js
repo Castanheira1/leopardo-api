@@ -128,7 +128,13 @@ async function listarCaronasParaPassageiro({ pid, excludeUserId, lat, lng, dest_
     const compatJs = compatRotaPassageiro(
       destPax.lat, destPax.lng,
       caOrig.lat, caOrig.lng, caDest.lat, caDest.lng,
-      { ...optsRota, origPax: origPax || undefined }
+      {
+        ...optsRota,
+        origPax: origPax ? { lat: origPax.lat, lng: origPax.lng, nome: origPax.nome || null } : undefined,
+        destPax: { lat: destPax.lat, lng: destPax.lng, nome: destPax.nome || null },
+        motOrigem_texto: c.origem_texto || null,
+        motDestino_texto: c.destino_texto || null,
+      }
     );
     if (compatJs !== "none") {
       comEncaixe.push({ ...c, compat_rota: compatJs });

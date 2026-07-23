@@ -54,6 +54,13 @@ async function criarViagemDaProposta(propostaId) {
       const optsRota = {
         locais, codigo: cod, rota_pontos: car.rota_pontos || null,
         origPax: { lat: pr.selfie_lat, lng: pr.selfie_lng, nome: null },
+        destPax: {
+          lat: destino.lat,
+          lng: destino.lng,
+          nome: pr.dest_passageiro_texto || destino.texto || null,
+        },
+        motOrigem_texto: car.origem_texto || null,
+        motDestino_texto: car.destino_texto || null,
       };
       const compat = compatRotaPassageiro(
         destino.lat, destino.lng,
@@ -70,7 +77,7 @@ async function criarViagemDaProposta(propostaId) {
     embarque = { texto: ped?.origem_texto, lat: ped?.origem_lat, lng: ped?.origem_lng };
     destino = { texto: ped?.destino_texto, lat: ped?.destino_lat, lng: ped?.destino_lng };
     const car = (await pool.query(
-      `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto, rota_pontos
+      `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto, origem_texto, rota_pontos
        FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
        ORDER BY created_at DESC LIMIT 1`,
       [motorista_id]
@@ -86,6 +93,11 @@ async function criarViagemDaProposta(propostaId) {
         origPax: ped?.origem_lat != null
           ? { lat: ped.origem_lat, lng: ped.origem_lng, nome: ped.origem_texto || null }
           : undefined,
+        destPax: ped
+          ? { lat: ped.destino_lat, lng: ped.destino_lng, nome: ped.destino_texto || null }
+          : undefined,
+        motOrigem_texto: car.origem_texto || null,
+        motDestino_texto: car.destino_texto || null,
       };
       const compat = compatRotaPassageiro(
         ped.destino_lat, ped.destino_lng,
@@ -142,6 +154,9 @@ async function criarViagemDaProposta(propostaId) {
           {
             ...optsRota,
             origPax: { lat: ped.origem_lat, lng: ped.origem_lng, nome: ped.origem_texto || null },
+            destPax: { lat: ped.destino_lat, lng: ped.destino_lng, nome: ped.destino_texto || null },
+            motOrigem_texto: car.origem_texto || null,
+            motDestino_texto: car.destino_texto || null,
           }
         );
         if (enc && compat !== "total") {

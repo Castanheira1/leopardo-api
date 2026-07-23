@@ -131,6 +131,8 @@ function corredorSegmentoKm(lat, lng, aLat, aLng, bLat, bLng) {
 
 const ENCAIXE_AVANCO_MIN_KM = Number(process.env.ENCAIXE_AVANCO_MIN_KM || 1);
 const SNAP_NO_KM = Number(process.env.ROTA_SNAP_KM || 0.8);
+/** Coordenadas do catálogo (lista de locais): match exato ao POI marcado no JSON. */
+const SNAP_EXATO_KM = Number(process.env.ROTA_SNAP_EXATO_KM || 0.08);
 
 let _catalogo = { mtimeMs: 0, porCodigo: {} };
 
@@ -144,7 +146,12 @@ function carregarCatalogo() {
     const locais = [];
     (proj.grupos || []).forEach((g) => (g.locais || []).forEach((l) => {
       if (l.ref && Number.isFinite(+l.ref.lat) && Number.isFinite(+l.ref.lng)) {
-        locais.push({ nome: l.nome, lat: +l.ref.lat, lng: +l.ref.lng });
+        locais.push({
+          nome: l.nome,
+          busca: l.busca || l.nome,
+          lat: +l.ref.lat,
+          lng: +l.ref.lng,
+        });
       }
     }));
     const malha = proj.malha || null;
@@ -320,13 +327,9 @@ function calcularRotaCarona(orig, dest, codigoProjeto) {
 
   if (!cat.grafo || cat.locais.length === 0) return reta();
 
-  // Snap: nome exato no catálogo ou nó mais próximo (snap_km do projeto).
-  const snapO = (oNome && cat.grafo.byNome.get(oNome))
-    ? cat.grafo.byNome.get(oNome)
-    : noMaisProximo(oLat, oLng, cat.locais, lim.snap_km);
-  const snapD = (dNome && cat.grafo.byNome.get(dNome))
-    ? cat.grafo.byNome.get(dNome)
-    : noMaisProximo(dLat, dLng, cat.locais, lim.snap_km);
+  // Snap: catálogo (coordenada exata → nome → texto → vizinho).
+  const snapO = resolverNoCatalogo(oLat, oLng, oNome, codigoProjeto);
+  const snapD = resolverNoCatalogo(dLat, dLng, dNome, codigoProjeto);
   if (!snapO || !snapD) return reta();
 
   const path = dijkstra(cat.grafo, snapO.nome, snapD.nome);
@@ -336,18 +339,14 @@ function calcularRotaCarona(orig, dest, codigoProjeto) {
     const n = cat.grafo.byNome.get(nome);
     return { nome, lat: n.lat, lng: n.lng };
   });
-  // Garante pontas reais da carona (GPS/pin) se diferirem do nó.
-  if (haversineKmCoord(oLat, oLng, pontos[0].lat, pontos[0].lng) > 0.05) {
-    pontos.unshift({ nome: oNome, lat: oLat, lng: oLng });
-  } else {
-    pontos[0] = { ...pontos[0], nome: oNome || pontos[0].nome };
-  }
-  const last = pontos[pontos.length - 1];
-  if (haversineKmCoord(dLat, dLng, last.lat, last.lng) > 0.05) {
-    pontos.push({ nome: dNome, lat: dLat, lng: dLng });
-  } else {
-    pontos[pontos.length - 1] = { ...last, nome: dNome || last.nome };
-  }
+  // Pontas: coordenadas canônicas do catálogo (lista de locais).
+  pontos[0] = { ...pontos[0], nome: snapO.nome, lat: snapO.lat, lng: snapO.lng };
+  pontos[pontos.length - 1] = {
+    ...pontos[pontos.length - 1],
+    nome: snapD.nome,
+    lat: snapD.lat,
+    lng: snapD.lng,
+  };
 
   let km = 0;
   for (let i = 0; i < pontos.length - 1; i++) {
@@ -542,24 +541,85 @@ function corredorRotaCaronaKm(lat, lng, carOrigLat, carOrigLng, carDestLat, carD
 function pontoGeo(p) {
   if (!p) return { lat: NaN, lng: NaN, nome: null };
   return {
-    lat: Number(p.lat ?? p.origem_lat),
-    lng: Number(p.lng ?? p.origem_lng),
-    nome: p.nome || p.origem_texto || p.destino_texto || null,
+    lat: Number(p.lat),
+    lng: Number(p.lng),
+    nome: p.nome != null && String(p.nome).trim() ? String(p.nome).trim() : null,
   };
 }
 
-/** Snap no catálogo (nome exato ou nó mais próximo dentro de snap_km). */
-function snapNoCatalogo(lat, lng, nomeOpc, codigo) {
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+function normTextoCatalogo(s) {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Resolve um ponto ao POI do catálogo (locais-favoritos.json).
+ * Ordem: coordenada exata do catálogo → nome exato → texto (nome/busca) → vizinho mais próximo.
+ * Usina/Mina e demais locais usam as ref.lat/lng marcadas — não inventa posição.
+ */
+function resolverNoCatalogo(lat, lng, textoOpc, codigo) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !codigo) return null;
   const cat = catalogoDoProjeto(codigo);
-  if (!cat.grafo) return null;
+  if (!cat.locais?.length) return null;
   const lim = limitesDoProjeto(codigo);
-  if (nomeOpc && cat.grafo.byNome.get(nomeOpc)) {
-    const n = cat.grafo.byNome.get(nomeOpc);
-    return { nome: nomeOpc, lat: n.lat, lng: n.lng };
+  const texto = textoOpc ? String(textoOpc).trim() : "";
+
+  // 1) Coordenada bate com um POI do catálogo (usuário escolheu na lista).
+  let melhorCoord = null;
+  let melhorCoordD = Infinity;
+  for (const p of cat.locais) {
+    const d = haversineKmCoord(lat, lng, p.lat, p.lng);
+    if (d <= SNAP_EXATO_KM && d < melhorCoordD) {
+      melhorCoordD = d;
+      melhorCoord = p;
+    }
   }
+  if (melhorCoord) {
+    return { nome: melhorCoord.nome, lat: melhorCoord.lat, lng: melhorCoord.lng, fonte: "coord" };
+  }
+
+  // 2) Nome exato do catálogo (ex.: "Rodoviária Arara Azul — Usina").
+  if (texto && cat.grafo?.byNome?.get(texto)) {
+    const n = cat.grafo.byNome.get(texto);
+    return { nome: texto, lat: n.lat, lng: n.lng, fonte: "nome" };
+  }
+
+  // 3) Texto digitado/buscado ("Usina", "Mina", "Portaria"…): nome ou campo busca.
+  if (texto) {
+    const q = normTextoCatalogo(texto);
+    const candidatos = cat.locais.filter((p) => {
+      const n = normTextoCatalogo(p.nome);
+      const b = normTextoCatalogo(p.busca);
+      return n === q || b === q || n.includes(q) || b.includes(q);
+    });
+    if (candidatos.length === 1) {
+      const p = candidatos[0];
+      return { nome: p.nome, lat: p.lat, lng: p.lng, fonte: "texto" };
+    }
+    if (candidatos.length > 1) {
+      let best = null;
+      let bestD = Infinity;
+      for (const p of candidatos) {
+        const d = haversineKmCoord(lat, lng, p.lat, p.lng);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      if (best && bestD <= lim.snap_km) {
+        return { nome: best.nome, lat: best.lat, lng: best.lng, fonte: "texto+coord" };
+      }
+    }
+  }
+
+  // 4) Vizinho mais próximo dentro do snap_km (GPS solto sem texto).
   const snap = noMaisProximo(lat, lng, cat.locais, lim.snap_km);
-  return snap ? { nome: snap.nome, lat: snap.lat, lng: snap.lng } : null;
+  return snap ? { nome: snap.nome, lat: snap.lat, lng: snap.lng, fonte: "proximo" } : null;
+}
+
+/** @deprecated use resolverNoCatalogo */
+function snapNoCatalogo(lat, lng, nomeOpc, codigo) {
+  return resolverNoCatalogo(lat, lng, nomeOpc, codigo);
 }
 
 /**
@@ -567,18 +627,22 @@ function snapNoCatalogo(lat, lng, nomeOpc, codigo) {
  * idx = índice do nó snapado em nomes[] (malha), quando existir; senão usa t.
  */
 function posicaoNoPercurso(lat, lng, nomeOpc, poly, nomes, codigo) {
-  const cor = corredorPolilinhaKm(lat, lng, poly);
-  const snap = codigo ? snapNoCatalogo(lat, lng, nomeOpc, codigo) : null;
+  const snap = codigo ? resolverNoCatalogo(lat, lng, nomeOpc, codigo) : null;
+  const useLat = snap?.lat ?? lat;
+  const useLng = snap?.lng ?? lng;
+  const cor = corredorPolilinhaKm(useLat, useLng, poly);
   let idx = -1;
   if (snap?.nome && Array.isArray(nomes) && nomes.length) {
     idx = nomes.indexOf(snap.nome);
   }
+  // Nó do catálogo na sequência da malha = na pista com certeza; senão corredor.
+  const naPista = idx >= 0 || cor.dist <= RAIO_ROTA_KM;
   return {
     t: cor.t,
     dist: cor.dist,
     idx,
     snapNome: snap?.nome || null,
-    naPista: cor.dist <= RAIO_ROTA_KM,
+    naPista,
   };
 }
 
@@ -618,7 +682,37 @@ function classificarMatchRota(origPax, destPax, origMot, destMot, locaisOrOpts) 
   const emb = posicaoNoPercurso(oP.lat, oP.lng, oP.nome, poly, nomes, opts.codigo);
   const des = posicaoNoPercurso(dP.lat, dP.lng, dP.nome, poly, nomes, opts.codigo);
 
-  if (!emb.naPista || !des.naPista) {
+  // Sanduíche pelo catálogo: ambos são nós da malha na ordem da rota do motorista.
+  if (emb.idx >= 0 && des.idx >= 0) {
+    if (emb.idx >= des.idx) {
+      return { compat: "none", embarque: emb, desembarque: des, nomes };
+    }
+    return { compat: "total", embarque: emb, desembarque: des, nomes };
+  }
+
+  // Parcial: embarque na rota do motorista; destino do pax na malha passa pelo
+  // destino do motorista (ex.: motorista Portaria→Usina, pax Portaria→Mina).
+  if (emb.idx >= 0 && des.idx < 0 && opts.codigo) {
+    const embSnap = resolverNoCatalogo(oP.lat, oP.lng, oP.nome, opts.codigo);
+    const desSnap = resolverNoCatalogo(dP.lat, dP.lng, dP.nome, opts.codigo);
+    const motSnap = resolverNoCatalogo(dM.lat, dM.lng, dM.nome, opts.codigo);
+    if (embSnap && desSnap && motSnap) {
+      const rotaPax = calcularRotaCarona(embSnap, desSnap, opts.codigo);
+      if (rotaPax.fonte === "malha") {
+        const iMot = rotaPax.nomes.indexOf(motSnap.nome);
+        const iDes = rotaPax.nomes.indexOf(desSnap.nome);
+        if (iMot >= 0 && iDes > iMot) {
+          return { compat: "parcial", embarque: emb, desembarque: des, nomes };
+        }
+      }
+    }
+  }
+
+  if (!emb.naPista) {
+    return { compat: "none", embarque: emb, desembarque: des, nomes };
+  }
+
+  if (!des.naPista) {
     return { compat: "none", embarque: emb, desembarque: des, nomes };
   }
 
@@ -640,7 +734,7 @@ function classificarDestinoSemOrigem(dl, dg, oM, dM, poly, opts) {
   if (opts.codigo) {
     const rotaPax = calcularRotaCarona(oM, { lat: dl, lng: dg }, opts.codigo);
     if (rotaPax.fonte === "malha" && rotaPax.nomes?.length) {
-      const snapD = snapNoCatalogo(dM.lat, dM.lng, dM.nome, opts.codigo);
+      const snapD = resolverNoCatalogo(dM.lat, dM.lng, dM.nome, opts.codigo);
       if (snapD && rotaPax.nomes.includes(snapD.nome)
         && haversineKmCoord(dM.lat, dM.lng, dl, dg) > RAIO_MESMO_DEST_KM) {
         const idx = rotaPax.nomes.indexOf(snapD.nome);
@@ -670,11 +764,24 @@ function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDes
   if (![dl, dg, oLat, oLng, dLat, dLng].every(Number.isFinite)) return "none";
 
   if (opts.origPax) {
+    const destPax = opts.destPax || {
+      lat: dl,
+      lng: dg,
+      nome: opts.destino_texto || null,
+    };
     const r = classificarMatchRota(
       opts.origPax,
-      { lat: dl, lng: dg },
-      { lat: oLat, lng: oLng },
-      { lat: dLat, lng: dLng },
+      { lat: dl, lng: dg, nome: destPax.nome || opts.destino_texto || null },
+      {
+        lat: oLat,
+        lng: oLng,
+        nome: opts.motOrigem_texto || opts.origem_texto || null,
+      },
+      {
+        lat: dLat,
+        lng: dLng,
+        nome: opts.motDestino_texto || null,
+      },
       opts
     );
     return r.compat;
@@ -849,7 +956,10 @@ module.exports = {
   compatRotaPassageiro,
   classificarMatchRota,
   posicaoNoPercurso,
+  resolverNoCatalogo,
   snapNoCatalogo,
+  normTextoCatalogo,
+  SNAP_EXATO_KM,
   ENCAIXE_AVANCO_MIN_KM,
   locaisDoProjetoCodigo,
   catalogoDoProjeto,

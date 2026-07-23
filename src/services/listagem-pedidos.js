@@ -12,7 +12,8 @@ const {
  */
 async function listarPedidosMapaMotorista({ pid, motoristaId, lat, lng }) {
   const temCarona = (await pool.query(
-    `SELECT raio_km, origem_lat, origem_lng, destino_lat, destino_lng, destino_texto, rota_pontos
+    `SELECT raio_km, origem_lat, origem_lng, destino_lat, destino_lng, destino_texto,
+            origem_texto, rota_pontos
      FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
      ORDER BY created_at DESC LIMIT 1`,
     [motoristaId]
@@ -91,6 +92,9 @@ async function listarPedidosMapaMotorista({ pid, motoristaId, lat, lng }) {
         origPax: p.origem_lat != null
           ? { lat: +p.origem_lat, lng: +p.origem_lng, nome: p.origem_texto || null }
           : undefined,
+        destPax: { lat: +p.destino_lat, lng: +p.destino_lng, nome: p.destino_texto || null },
+        motOrigem_texto: caronaMot.origem_texto || null,
+        motDestino_texto: caronaMot.destino_texto || null,
       }
     );
     if (compat === "none" && p.origem_lat != null) {

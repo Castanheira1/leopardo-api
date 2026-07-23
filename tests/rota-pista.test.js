@@ -6,6 +6,7 @@ const {
   catalogoDoProjeto,
   compatRotaPassageiro,
   classificarMatchRota,
+  resolverNoCatalogo,
   corredorRotaCaronaKm,
   desvioInsercaoKm,
   limitesDoProjeto,
@@ -186,6 +187,36 @@ ok(
     { ...sandOpts(rotaMroPort), origPax: port }
   ) === "none",
   "compat com origPax: Portaria→Centro em MRO→Portaria = none"
+);
+
+// Usina vs Mina: coordenadas fixas do catálogo (lista de locais).
+const bombeiros = by("Estação Bombeiros 09");
+ok(
+  resolverNoCatalogo(arara.lat, arara.lng, "Usina", codigo)?.nome?.includes("Arara Azul"),
+  "texto 'Usina' resolve ao POI do catálogo pelas coordenadas"
+);
+ok(
+  resolverNoCatalogo(bombeiros.lat, bombeiros.lng, "Mina", codigo)?.nome?.includes("Bombeiros"),
+  "texto 'Mina' resolve ao POI do catálogo pelas coordenadas"
+);
+
+const rotaPortUsina = calcularRotaCarona(port, arara, codigo);
+ok(rotaPortUsina.fonte === "malha", "Portaria→Usina (Arara) na malha");
+
+ok(
+  classificarMatchRota(
+    port, bombeiros, port, arara,
+    { locais, codigo, rota_pontos: rotaPortUsina.pontos }
+  ).compat === "parcial",
+  "pax Portaria→Mina com motorista Portaria→Usina = parcial (Mina além da Usina)"
+);
+
+ok(
+  classificarMatchRota(
+    port, arara, port, arara,
+    { locais, codigo, rota_pontos: rotaPortUsina.pontos }
+  ).compat === "total",
+  "pax Portaria→Usina com motorista Portaria→Usina = total"
 );
 
 if (failed) {
