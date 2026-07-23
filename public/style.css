@@ -2243,6 +2243,7 @@ body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
     font-weight: 800;
     box-shadow: 0 2px 8px rgba(234, 210, 152, 0.35);
 }
+.sheet-hint { color: #9aa0a6; font-size: 0.92rem; text-align: center; padding: 8px 0; margin: 0; }
 .sheet-hint--chegada {
     color: #EAD298;
     background: rgba(234, 210, 152, 0.1);
