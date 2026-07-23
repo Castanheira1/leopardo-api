@@ -86,7 +86,12 @@ async function listarPedidosMapaMotorista({ pid, motoristaId, lat, lng }) {
       p.destino_lat, p.destino_lng,
       caronaMot.origem_lat, caronaMot.origem_lng,
       caronaMot.destino_lat, caronaMot.destino_lng,
-      optsRota
+      {
+        ...optsRota,
+        origPax: p.origem_lat != null
+          ? { lat: +p.origem_lat, lng: +p.origem_lng, nome: p.origem_texto || null }
+          : undefined,
+      }
     );
     if (compat === "none" && p.origem_lat != null) {
       const enc = melhorPontoDeEncaixe(

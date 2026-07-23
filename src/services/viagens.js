@@ -51,7 +51,10 @@ async function criarViagemDaProposta(propostaId) {
       const pid = await projetoDoUsuario(passageiro_id);
       const cod = await codigoDoProjeto(pid);
       const locais = locaisDoProjetoCodigo(cod);
-      const optsRota = { locais, codigo: cod, rota_pontos: car.rota_pontos || null };
+      const optsRota = {
+        locais, codigo: cod, rota_pontos: car.rota_pontos || null,
+        origPax: { lat: pr.selfie_lat, lng: pr.selfie_lng, nome: null },
+      };
       const compat = compatRotaPassageiro(
         destino.lat, destino.lng,
         car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng,
@@ -80,6 +83,9 @@ async function criarViagemDaProposta(propostaId) {
         locais: locaisEarly,
         codigo: codEarly,
         rota_pontos: car.rota_pontos || null,
+        origPax: ped?.origem_lat != null
+          ? { lat: ped.origem_lat, lng: ped.origem_lng, nome: ped.origem_texto || null }
+          : undefined,
       };
       const compat = compatRotaPassageiro(
         ped.destino_lat, ped.destino_lng,
@@ -133,7 +139,10 @@ async function criarViagemDaProposta(propostaId) {
         const compat = compatRotaPassageiro(
           ped.destino_lat, ped.destino_lng,
           car.origem_lat, car.origem_lng, car.destino_lat, car.destino_lng,
-          optsRota
+          {
+            ...optsRota,
+            origPax: { lat: ped.origem_lat, lng: ped.origem_lng, nome: ped.origem_texto || null },
+          }
         );
         if (enc && compat !== "total") {
           paradaMotorista = { texto: enc.nome || "Ponto combinado no caminho", lat: enc.lat, lng: enc.lng };

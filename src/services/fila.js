@@ -248,7 +248,10 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     let classe = 5;
     let encaixe = null;
     if (temCarona) {
-      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, optsRota);
+      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, {
+        ...optsRota,
+        origPax: { lat: orig.lat, lng: orig.lng, nome: null },
+      });
       if (compat === "total") classe = 0;
       else if (compat === "parcial") classe = 1;
       else {

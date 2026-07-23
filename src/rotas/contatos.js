@@ -77,6 +77,9 @@ app.post("/api/motoristas-online/:id/contato", verificarAuth, async (req, res) =
           locais: locaisCont,
           codigo: codCont,
           rota_pontos: caronaContato.rota_pontos || null,
+          origPax: origem_lat != null && origem_lng != null
+            ? { lat: +origem_lat, lng: +origem_lng, nome: null }
+            : undefined,
         }
       );
       if (compatContato === "total") {

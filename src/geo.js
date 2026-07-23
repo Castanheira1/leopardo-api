@@ -539,9 +539,125 @@ function corredorRotaCaronaKm(lat, lng, carOrigLat, carOrigLng, carDestLat, carD
   return corredorSegmentoKm(la, ln, oLat, oLng, dLat, dLng);
 }
 
+function pontoGeo(p) {
+  if (!p) return { lat: NaN, lng: NaN, nome: null };
+  return {
+    lat: Number(p.lat ?? p.origem_lat),
+    lng: Number(p.lng ?? p.origem_lng),
+    nome: p.nome || p.origem_texto || p.destino_texto || null,
+  };
+}
+
+/** Snap no catálogo (nome exato ou nó mais próximo dentro de snap_km). */
+function snapNoCatalogo(lat, lng, nomeOpc, codigo) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const cat = catalogoDoProjeto(codigo);
+  if (!cat.grafo) return null;
+  const lim = limitesDoProjeto(codigo);
+  if (nomeOpc && cat.grafo.byNome.get(nomeOpc)) {
+    const n = cat.grafo.byNome.get(nomeOpc);
+    return { nome: nomeOpc, lat: n.lat, lng: n.lng };
+  }
+  const snap = noMaisProximo(lat, lng, cat.locais, lim.snap_km);
+  return snap ? { nome: snap.nome, lat: snap.lat, lng: snap.lng } : null;
+}
+
+/**
+ * Posição de um ponto na polilinha da rota do motorista.
+ * idx = índice do nó snapado em nomes[] (malha), quando existir; senão usa t.
+ */
+function posicaoNoPercurso(lat, lng, nomeOpc, poly, nomes, codigo) {
+  const cor = corredorPolilinhaKm(lat, lng, poly);
+  const snap = codigo ? snapNoCatalogo(lat, lng, nomeOpc, codigo) : null;
+  let idx = -1;
+  if (snap?.nome && Array.isArray(nomes) && nomes.length) {
+    idx = nomes.indexOf(snap.nome);
+  }
+  return {
+    t: cor.t,
+    dist: cor.dist,
+    idx,
+    snapNome: snap?.nome || null,
+    naPista: cor.dist <= RAIO_ROTA_KM,
+  };
+}
+
+/** Embarque vem antes do desembarque no sentido da rota do motorista. */
+function antesNoPercurso(a, b) {
+  if (a.idx >= 0 && b.idx >= 0 && a.idx !== b.idx) return a.idx < b.idx;
+  return a.t < b.t - 0.015;
+}
+
+/**
+ * Match pela malha: rota do motorista → nomes[] ordenados; passageiro precisa
+ * caber no "sanduíche" (embarque antes do desembarque, ambos na pista, sentido certo).
+ *
+ * @returns {{ compat: string, embarque?: object, desembarque?: object, nomes?: string[] }}
+ */
+function classificarMatchRota(origPax, destPax, origMot, destMot, locaisOrOpts) {
+  const opts = parseOpts(locaisOrOpts);
+  const oP = pontoGeo(origPax);
+  const dP = pontoGeo(destPax);
+  const oM = pontoGeo(origMot);
+  const dM = pontoGeo(destMot);
+  if (![oP.lat, oP.lng, dP.lat, dP.lng, oM.lat, oM.lng, dM.lat, dM.lng].every(Number.isFinite)) {
+    return { compat: "none" };
+  }
+
+  if (haversineKmCoord(dM.lat, dM.lng, dP.lat, dP.lng) <= RAIO_MESMO_DEST_KM) {
+    return { compat: "total" };
+  }
+
+  const poly = polilinhaDaCarona(oM.lat, oM.lng, dM.lat, dM.lng, opts);
+  let nomes = [];
+  if (opts.codigo) {
+    const rotaMot = calcularRotaCarona(oM, dM, opts.codigo);
+    if (rotaMot.fonte === "malha" && rotaMot.nomes?.length) nomes = rotaMot.nomes;
+  }
+
+  const emb = posicaoNoPercurso(oP.lat, oP.lng, oP.nome, poly, nomes, opts.codigo);
+  const des = posicaoNoPercurso(dP.lat, dP.lng, dP.nome, poly, nomes, opts.codigo);
+
+  if (!emb.naPista || !des.naPista) {
+    return { compat: "none", embarque: emb, desembarque: des, nomes };
+  }
+
+  if (!antesNoPercurso(emb, des)) {
+    return { compat: "none", embarque: emb, desembarque: des, nomes };
+  }
+
+  if (des.t <= 1.02) return { compat: "total", embarque: emb, desembarque: des, nomes };
+  if (des.t > 1.02) return { compat: "parcial", embarque: emb, desembarque: des, nomes };
+
+  return { compat: "none", embarque: emb, desembarque: des, nomes };
+}
+
+/** Destino do passageiro vs rota do motorista (sem origem do passageiro). */
+function classificarDestinoSemOrigem(dl, dg, oM, dM, poly, opts) {
+  const cor = corredorPolilinhaKm(dl, dg, poly);
+  if (cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1) return { compat: "total" };
+  if (cor.dist <= RAIO_ROTA_KM && cor.t > 1) return { compat: "parcial" };
+  if (opts.codigo) {
+    const rotaPax = calcularRotaCarona(oM, { lat: dl, lng: dg }, opts.codigo);
+    if (rotaPax.fonte === "malha" && rotaPax.nomes?.length) {
+      const snapD = snapNoCatalogo(dM.lat, dM.lng, dM.nome, opts.codigo);
+      if (snapD && rotaPax.nomes.includes(snapD.nome)
+        && haversineKmCoord(dM.lat, dM.lng, dl, dg) > RAIO_MESMO_DEST_KM) {
+        const idx = rotaPax.nomes.indexOf(snapD.nome);
+        if (idx >= 0 && idx < rotaPax.nomes.length - 1) return { compat: "parcial" };
+      }
+    }
+  }
+  const pertoDest = haversineKmCoord(dM.lat, dM.lng, dl, dg) <= RAIO_PROXIMO_KM;
+  const pertoCor = cor.dist <= RAIO_PROXIMO_KM;
+  if (pertoDest || pertoCor) return { compat: "proximo" };
+  return { compat: "none" };
+}
+
 /**
  * Compat do destino do passageiro com a rota do motorista.
- * 7º arg: locais[] OU { locais, rota_pontos, codigo }
+ * 7º arg: locais[] OU { locais, rota_pontos, codigo, origPax?: {lat,lng,nome?} }
+ * Com origPax: usa sanduíche ordenado na malha (classificarMatchRota).
  */
 function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDestLat, carDestLng, locaisOrOpts) {
   const opts = parseOpts(locaisOrOpts);
@@ -553,34 +669,22 @@ function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDes
   const dLng = Number(carDestLng);
   if (![dl, dg, oLat, oLng, dLat, dLng].every(Number.isFinite)) return "none";
 
+  if (opts.origPax) {
+    const r = classificarMatchRota(
+      opts.origPax,
+      { lat: dl, lng: dg },
+      { lat: oLat, lng: oLng },
+      { lat: dLat, lng: dLng },
+      opts
+    );
+    return r.compat;
+  }
+
   if (haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_MESMO_DEST_KM) return "total";
 
-  // Com malha/rota gravada: distância à polilinha real.
   if (opts.rota_pontos || opts.codigo) {
     const poly = polilinhaDaCarona(oLat, oLng, dLat, dLng, opts);
-    const cor = corredorPolilinhaKm(dl, dg, poly);
-    if (cor.dist <= RAIO_ROTA_KM && cor.t >= 0 && cor.t <= 1) return "total";
-    if (cor.dist <= RAIO_ROTA_KM && cor.t > 1) return "parcial";
-    // Parcial por malha: destino do motorista está no caminho do pax na malha.
-    if (opts.codigo) {
-      const rotaPax = calcularRotaCarona(
-        { lat: oLat, lng: oLng },
-        { lat: dl, lng: dg },
-        opts.codigo
-      );
-      if (rotaPax.fonte === "malha" && rotaPax.nomes && rotaPax.nomes.length) {
-        const snapD = noMaisProximo(dLat, dLng, catalogoDoProjeto(opts.codigo).locais);
-        if (snapD && rotaPax.nomes.includes(snapD.nome)
-          && haversineKmCoord(dLat, dLng, dl, dg) > RAIO_MESMO_DEST_KM) {
-          const idx = rotaPax.nomes.indexOf(snapD.nome);
-          if (idx >= 0 && idx < rotaPax.nomes.length - 1) return "parcial";
-        }
-      }
-    }
-    const pertoDest = haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_PROXIMO_KM;
-    const pertoCor = cor.dist <= RAIO_PROXIMO_KM;
-    if (pertoDest || pertoCor) return "proximo";
-    return "none";
+    return classificarDestinoSemOrigem(dl, dg, { lat: oLat, lng: oLng }, { lat: dLat, lng: dLng }, poly, opts).compat;
   }
 
   // Legado (sem codigo/rota_pontos)
@@ -743,6 +847,9 @@ module.exports = {
   corredorPolilinhaKm,
   corredorRotaCaronaKm,
   compatRotaPassageiro,
+  classificarMatchRota,
+  posicaoNoPercurso,
+  snapNoCatalogo,
   ENCAIXE_AVANCO_MIN_KM,
   locaisDoProjetoCodigo,
   catalogoDoProjeto,
