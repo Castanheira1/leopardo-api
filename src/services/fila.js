@@ -140,14 +140,23 @@ async function contarMotoristasOnline(projetoId, excluirUsuarioId, pedidoIdSemRe
  *   5 só está por perto da origem (600 m amarelo / barra da carona)
  */
 async function rankearMotoristasParaPedido(ped, projetoId) {
-  const orig = { lat: Number(ped.origem_lat), lng: Number(ped.origem_lng) };
-  const dest = { lat: Number(ped.destino_lat), lng: Number(ped.destino_lng) };
+  const orig = {
+    lat: Number(ped.origem_lat),
+    lng: Number(ped.origem_lng),
+    nome: ped.origem_texto || null,
+  };
+  const dest = {
+    lat: Number(ped.destino_lat),
+    lng: Number(ped.destino_lng),
+    nome: ped.destino_texto || null,
+  };
   const distOrigem = haversine("l.lat", "l.lng", "$1", "$2");
   const { rows } = await pool.query(
     `SELECT DISTINCT ON (u.id) u.id AS motorista_id, l.lat, l.lng, l.vagas AS lo_vagas,
             ${distOrigem} AS dist_km,
             ca.id AS carona_id, ca.origem_lat AS ca_olat, ca.origem_lng AS ca_olng,
             ca.destino_lat AS ca_dlat, ca.destino_lng AS ca_dlng,
+            ca.origem_texto AS ca_origem_texto, ca.destino_texto AS ca_destino_texto,
             ca.raio_km AS ca_raio, ca.vagas AS ca_vagas, ca.rota_pontos AS ca_rota_pontos,
             (SELECT COUNT(*)::int FROM viagens vv
               WHERE vv.motorista_id = u.id AND vv.status = 'em_andamento') AS viagens_ativas,
@@ -161,7 +170,8 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
      JOIN habilitacoes_motorista h
        ON h.motorista_id = u.id AND h.status = 'ativa' AND ${sqlSelfieValida("h")}
      LEFT JOIN LATERAL (
-       SELECT id, origem_lat, origem_lng, destino_lat, destino_lng, raio_km, vagas, rota_pontos
+       SELECT id, origem_lat, origem_lng, destino_lat, destino_lng, raio_km, vagas, rota_pontos,
+              origem_texto, destino_texto
        FROM caronas WHERE motorista_id = u.id AND status = 'ativa'
        ORDER BY created_at DESC LIMIT 1
      ) ca ON TRUE
@@ -248,7 +258,13 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
     let classe = 5;
     let encaixe = null;
     if (temCarona) {
-      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, optsRota);
+      const compat = compatRotaPassageiro(dest.lat, dest.lng, caOrig.lat, caOrig.lng, caDest.lat, caDest.lng, {
+        ...optsRota,
+        origPax: orig,
+        destPax: dest,
+        motOrigem_texto: m.ca_origem_texto || null,
+        motDestino_texto: m.ca_destino_texto || null,
+      });
       if (compat === "total") classe = 0;
       else if (compat === "parcial") classe = 1;
       else {

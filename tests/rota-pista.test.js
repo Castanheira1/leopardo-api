@@ -5,6 +5,8 @@ const {
   calcularRotaCarona,
   catalogoDoProjeto,
   compatRotaPassageiro,
+  classificarMatchRota,
+  resolverNoCatalogo,
   corredorRotaCaronaKm,
   desvioInsercaoKm,
   limitesDoProjeto,
@@ -144,6 +146,78 @@ const encBloq = melhorPontoDeEncaixe(
   { ...opts(rotaPortCentro.pontos), desvio_acumulado_km: 99 }
 );
 ok(encBloq == null, "encaixe bloqueado se desvio acumulado estoura o limite");
+
+// --- Sanduíche ordenado (origem + destino do passageiro na rota do motorista) ---
+const rotaMroPort = calcularRotaCarona(mro, port, codigo);
+ok(rotaMroPort.nomes.includes("Central de Operações S11D"), "Centro é intermediário MRO→Portaria");
+
+const sandOpts = (rota) => ({ locais, codigo, rota_pontos: rota.pontos });
+
+ok(
+  classificarMatchRota(arara, cmd, mro, c07, sandOpts(rotaMroC07)).compat === "total",
+  "pax Arara→CMD dentro de motorista MRO→C07 = total"
+);
+
+ok(
+  classificarMatchRota(mro, centro, mro, port, sandOpts(rotaMroPort)).compat === "total",
+  "pax MRO→Centro dentro de motorista MRO→Portaria = total"
+);
+
+ok(
+  classificarMatchRota(port, centro, mro, port, sandOpts(rotaMroPort)).compat === "none",
+  "pax Portaria→Centro com motorista MRO→Portaria = none (volta — Centro antes da Portaria)"
+);
+
+ok(
+  classificarMatchRota(port, centro, port, centro, sandOpts(rotaPortCentro)).compat === "total",
+  "pax Portaria→Centro com motorista Portaria→Centro = total"
+);
+
+ok(
+  compatRotaPassageiro(
+    cmd.lat, cmd.lng, mro.lat, mro.lng, c07.lat, c07.lng,
+    { ...sandOpts(rotaMroC07), origPax: arara }
+  ) === "total",
+  "compat com origPax: Arara→CMD em MRO→C07 = total"
+);
+
+ok(
+  compatRotaPassageiro(
+    centro.lat, centro.lng, mro.lat, mro.lng, port.lat, port.lng,
+    { ...sandOpts(rotaMroPort), origPax: port }
+  ) === "none",
+  "compat com origPax: Portaria→Centro em MRO→Portaria = none"
+);
+
+// Usina vs Mina: coordenadas fixas do catálogo (lista de locais).
+const bombeiros = by("Estação Bombeiros 09");
+ok(
+  resolverNoCatalogo(arara.lat, arara.lng, "Usina", codigo)?.nome?.includes("Arara Azul"),
+  "texto 'Usina' resolve ao POI do catálogo pelas coordenadas"
+);
+ok(
+  resolverNoCatalogo(bombeiros.lat, bombeiros.lng, "Mina", codigo)?.nome?.includes("Bombeiros"),
+  "texto 'Mina' resolve ao POI do catálogo pelas coordenadas"
+);
+
+const rotaPortUsina = calcularRotaCarona(port, arara, codigo);
+ok(rotaPortUsina.fonte === "malha", "Portaria→Usina (Arara) na malha");
+
+ok(
+  classificarMatchRota(
+    port, bombeiros, port, arara,
+    { locais, codigo, rota_pontos: rotaPortUsina.pontos }
+  ).compat === "parcial",
+  "pax Portaria→Mina com motorista Portaria→Usina = parcial (Mina além da Usina)"
+);
+
+ok(
+  classificarMatchRota(
+    port, arara, port, arara,
+    { locais, codigo, rota_pontos: rotaPortUsina.pontos }
+  ).compat === "total",
+  "pax Portaria→Usina com motorista Portaria→Usina = total"
+);
 
 if (failed) {
   console.error(`\n${failed} verificação(ões) falharam.`);
