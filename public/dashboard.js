@@ -1573,8 +1573,8 @@
                 ocrPlaca: true,
                 titulo: reutilizarSelfie ? 'Foto do veículo NOVO' : 'Foto do veículo — placa dianteira',
                 hint: reutilizarSelfie
-                    ? 'Tire a foto do carro que você vai usar agora — placa dianteira obrigatória'
-                    : 'Enquadre a placa dianteira do veículo',
+                    ? 'Coloque a placa do carro NOVO no retângulo dourado'
+                    : 'Enquadre a placa dianteira no retângulo dourado',
             });
             veiculoPend = { selfie, carro, reutilizarSelfie, trocar };
             document.getElementById('veicPlaca').value = (carro.placa || '').toUpperCase();
