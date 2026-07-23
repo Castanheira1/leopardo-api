@@ -18,8 +18,15 @@
     <script src="/platform.js"></script>
     <script>
         // Sessão ativa: não fica na tela de login por causa do botão voltar.
-        (function () {
+        // Aguarda a recuperação da sessão durável (Preferences) antes de decidir:
+        // no app nativo o SO pode ter limpado o localStorage, mas a sessão ainda
+        // existe na storage nativa — recuperando, o usuário volta para onde estava
+        // em vez de cair no login "do nada".
+        (async function () {
             try {
+                if (window.VapPlatform && VapPlatform.authReady) {
+                    await VapPlatform.authReady;
+                }
                 const t = localStorage.getItem('token');
                 const u = JSON.parse(localStorage.getItem('user') || 'null');
                 if (t && u) {

@@ -110,6 +110,61 @@
     } catch (_) {}
   }
 
+  // ---------- Sessão durável (evita "desloga sozinho" no app nativo) ----------
+  // O WebView nativo (iOS/Android) pode LIMPAR o localStorage sob pressão de
+  // armazenamento, apagando o token → o usuário cai fora sem ter feito nada.
+  // Para não perder a sessão (nem o contexto de tela), espelhamos as chaves
+  // essenciais em Capacitor Preferences (storage nativo durável) e as
+  // recuperamos no boot caso o localStorage tenha sido esvaziado pelo SO.
+  // 'token'/'user' = sessão; 'papel'/'viagemAtiva' = "voltar de onde estava".
+  var DURABLE_KEYS = ["token", "user", "papel", "viagemAtiva"];
+
+  // Write-through: intercepta setItem/removeItem para as chaves duráveis e
+  // reflete em Preferences (nativo). Captura TODOS os pontos de gravação já
+  // existentes sem precisar alterá-los um a um. No-op/inofensivo no PWA.
+  function installDurableMirror() {
+    if (!isNative()) return;
+    try {
+      var ls = global.localStorage;
+      if (!ls || global.__vapDurableMirror) return;
+      var origSet = ls.setItem.bind(ls);
+      var origRemove = ls.removeItem.bind(ls);
+      ls.setItem = function (key, value) {
+        origSet(key, value);
+        if (DURABLE_KEYS.indexOf(key) !== -1) { prefSet(key, value); }
+      };
+      ls.removeItem = function (key) {
+        origRemove(key);
+        if (DURABLE_KEYS.indexOf(key) !== -1) { prefRemove(key); }
+      };
+      global.__vapDurableMirror = true;
+    } catch (_) { /* engine sem override: segue só com localStorage */ }
+  }
+
+  // Recupera do Preferences para o localStorage o que o SO tiver apagado.
+  // Só restaura quando o localStorage NÃO tem a chave (não sobrescreve sessão
+  // atual válida). Resolve antes de qualquer redirect de login no boot.
+  async function hydrateAuth() {
+    if (!isNative()) return;
+    try {
+      var ls = global.localStorage;
+      for (var i = 0; i < DURABLE_KEYS.length; i++) {
+        var k = DURABLE_KEYS[i];
+        var atual = null;
+        try { atual = ls.getItem(k); } catch (_) {}
+        if (atual != null && atual !== "") continue;
+        var salvo = await prefGet(k);
+        if (salvo != null && salvo !== "") {
+          try { ls.setItem(k, salvo); } catch (_) {}
+        }
+      }
+    } catch (_) { /* sem Preferences: segue com o que houver no localStorage */ }
+  }
+
+  installDurableMirror();
+  // Promise que o boot das telas aguarda antes de decidir login x sessão ativa.
+  var authReady = hydrateAuth();
+
   // Buffer de pontos da rota — snapshot único (sem duplicar memória+prefs).
   // Fluxo: load no início da viagem → pontos só na memória → persist() grava
   // o array inteiro → takeAll limpa prefs e devolve o que estava salvo (offline).
@@ -245,6 +300,7 @@
     prefGet: prefGet,
     prefSet: prefSet,
     prefRemove: prefRemove,
+    authReady: authReady,
     RouteBuffer: RouteBuffer,
     startTripTracking: startTripTracking,
     stopTripTracking: stopTripTracking,

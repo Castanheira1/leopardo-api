@@ -22,6 +22,12 @@ function gerarSessaoId() {
   return crypto.randomBytes(24).toString("hex");
 }
 
+// Validade do token. Antes eram 8h, o que derrubava a sessão todo dia (app usado
+// de manhã e de tarde caía no 401 → logout). Como a segurança já vem da sessão
+// única por conta (sessao_id: novo login noutro aparelho invalida o anterior),
+// um token longo é seguro e evita o "desloga sozinho". Configurável por env.
+const JWT_EXPIRES = process.env.JWT_EXPIRES || "30d";
+
 /** Emite JWT e invalida sessão anterior da mesma conta (1 dispositivo por vez). */
 async function emitirTokenSessao(user) {
   const sessao_id = gerarSessaoId();
@@ -36,7 +42,7 @@ async function emitirTokenSessao(user) {
       sid: sessao_id,
     },
     JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: JWT_EXPIRES }
   );
 }
 
