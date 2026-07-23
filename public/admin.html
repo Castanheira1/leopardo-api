@@ -791,11 +791,17 @@ function periodoQuery() {
 }
 function fmtMoeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function fmtNum(v) { return Number(v || 0).toLocaleString('pt-BR'); }
+function ymdLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
 function iniPeriodo() {
     const hoje = new Date();
     const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    document.getElementById('filtroDe').value = inicio.toISOString().slice(0, 10);
-    document.getElementById('filtroAte').value = hoje.toISOString().slice(0, 10);
+    document.getElementById('filtroDe').value = ymdLocal(inicio);
+    document.getElementById('filtroAte').value = ymdLocal(hoje);
 }
 function kpi(ico, lbl, val, hint, destaque) {
     return `<div class="kpi ${destaque ? 'destaque' : ''}">
@@ -843,7 +849,7 @@ function chartViagensPorDia(el, viagens, diasLimite) {
         if (!v.deslocamento_valido) return;
         const d = v.iniciada_em ? new Date(v.iniciada_em) : null;
         if (!d || isNaN(d)) return;
-        const k = d.toISOString().slice(0, 10);
+        const k = ymdLocal(d);
         dias[k] = (dias[k] || 0) + 1;
     });
     const lim = Number(diasLimite) || 14;
