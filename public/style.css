@@ -2714,6 +2714,23 @@ body.aguardando-papel .navbar {
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     pointer-events: none;
 }
+/* Guia OCR: faixa inferior onde o scanner lê a placa (para-choque). */
+.cam-placa-guia {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 2;
+}
+.cam-placa-guia span {
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    bottom: 14%;
+    height: 22%;
+    border: 2px solid rgba(234, 210, 152, 0.95);
+    border-radius: 10px;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.28);
+}
 .cam-live .cam-actions { margin-top: 10px; }
 .cam-live .cam-actions .btn { flex: 1; padding: 14px; font-size: 1rem; }
 

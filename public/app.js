@@ -1552,9 +1552,9 @@ function ultimaPosConhecida() {
 */
 function capturarFoto(opts = {}) {
     const { tipo = 'outros', facing = 'environment', ocrPlaca = false, titulo = 'Tirar foto', hint } = opts;
-    const hintPadrao = ocrPlaca
-        ? 'Enquadre a placa dianteira do veículo'
-        : 'Posicione o rosto e capture';
+            const hintPadrao = ocrPlaca
+                ? 'Enquadre a placa no retângulo dourado'
+                : 'Posicione o rosto e capture';
     const hintTexto = hint || hintPadrao;
 
     return new Promise((resolve, reject) => {
@@ -1563,8 +1563,9 @@ function capturarFoto(opts = {}) {
         overlay.innerHTML = `
             <div class="cam-box">
                 <h3>${titulo}</h3>
-                <div class="cam-video-wrap">
+                <div class="cam-video-wrap${ocrPlaca ? ' cam-video-wrap--placa' : ''}">
                     <video class="cam-video" autoplay playsinline muted></video>
+                    ${ocrPlaca ? '<div class="cam-placa-guia" aria-hidden="true"><span></span></div>' : ''}
                     <p class="cam-hint">${hintTexto} • foto real (sem zoom/espelho) · só câmera ao vivo</p>
                 </div>
                 <div class="cam-status"></div>
@@ -1708,14 +1709,19 @@ function preCarregarOcr() {
     return _ocrWorkerPromise;
 }
 
-function canvasRecortePlaca(src) {
+/** Recorta faixa horizontal e binariza (melhor contraste pra OCR). */
+function canvasRecortePlaca(src, faixa = 'baixo') {
     const w = src.width;
     const h = src.height;
-    const cw = Math.round(w * 0.9);
-    const ch = Math.round(h * 0.34);
+    const cw = Math.round(w * 0.92);
+    const ch = Math.round(h * 0.30);
     const sx = Math.round((w - cw) / 2);
-    const sy = Math.max(0, h - ch - Math.round(h * 0.06));
-    const ocrMax = 520;
+    // baixo = para-choque; meio = quem centralizou a placa no quadro (pós câmera 4:3).
+    let sy;
+    if (faixa === 'meio') sy = Math.round((h - ch) / 2);
+    else if (faixa === 'alto') sy = Math.round(h * 0.18);
+    else sy = Math.max(0, h - ch - Math.round(h * 0.05));
+    const ocrMax = 640;
     const scale = Math.min(1, ocrMax / cw);
     const out = document.createElement('canvas');
     out.width = Math.max(1, Math.round(cw * scale));
@@ -1726,7 +1732,7 @@ function canvasRecortePlaca(src) {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
         const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        const v = g > 155 ? 255 : g < 85 ? 0 : g;
+        const v = g > 150 ? 255 : g < 90 ? 0 : g;
         d[i] = d[i + 1] = d[i + 2] = v;
     }
     ctx.putImageData(img, 0, 0);
@@ -1735,6 +1741,7 @@ function canvasRecortePlaca(src) {
 
 function extrairPlacaTexto(texto) {
     const limpo = (texto || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // Mercosul ABC1D23 ou antiga ABC1234
     const m = limpo.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);
     return m ? m[0] : null;
 }
@@ -1742,9 +1749,14 @@ function extrairPlacaTexto(texto) {
 async function lerPlaca(canvas) {
     try {
         const worker = await preCarregarOcr();
-        const crop = canvasRecortePlaca(canvas);
-        const { data } = await worker.recognize(crop);
-        return extrairPlacaTexto(data.text);
+        // Tenta baixo → meio → alto (quem enquadra no centro costumava falhar).
+        for (const faixa of ['baixo', 'meio', 'alto']) {
+            const crop = canvasRecortePlaca(canvas, faixa);
+            const { data } = await worker.recognize(crop);
+            const placa = extrairPlacaTexto(data.text);
+            if (placa) return placa;
+        }
+        return null;
     } catch (e) {
         console.warn('OCR falhou:', e.message);
         return null;
