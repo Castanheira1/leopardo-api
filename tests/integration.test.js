@@ -940,6 +940,10 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
 
     let pedidoPulsoId;
     await test("pedido broadcast (sem fila): motorista perto vê o pulso", async () => {
+      // C ainda está na rota do teste anterior e rankeia melhor que A/B na origem —
+      // tira ele do ar pra A ser o motorista da vez de forma determinística.
+      const offC = await api("DELETE", "/api/motorista/online", { token: tokFilaC });
+      eq(offC.status, 200, "C offline");
       // A e B vão para a origem exata (dentro dos 600 m do modo amarelo).
       for (const tok of [tokFilaA, tokFilaB]) {
         const { status } = await api("POST", "/api/motorista/online", {
