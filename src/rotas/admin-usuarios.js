@@ -1,6 +1,5 @@
 // Admin: desativar/reativar usuários, segurança, push-status, reset de senha e chamados de acesso.
 require("dotenv").config();
-const bcrypt = require("bcrypt");
 const app = require("../app");
 const { PORT } = require("../config");
 const { pool } = require("../db");
@@ -166,22 +165,10 @@ app.get("/api/admin/push-status", verificarAuth, carregarAdminEscopo, async (req
   }
 });
 
-app.post("/api/admin/reset-senha", verificarAuth, carregarAdminEscopo, async (req, res) => {
-  const { matricula } = req.body;
-  if (!matricula || matricula.length < 6) return res.status(400).json({ error: "Matrícula inválida" });
-  const pid = req.adminEscopo.admin_projeto_id;
-  try {
-    const senha_hash = await bcrypt.hash("123456", 10);
-    const { rowCount } = await pool.query(
-      "UPDATE usuarios SET senha_hash = $1 WHERE matricula = $2 AND projeto_id = $3",
-      [senha_hash, matricula.trim(), pid]
-    );
-    if (rowCount === 0) return res.status(404).json({ error: "Usuário não encontrado neste projeto" });
-    res.json({ success: true, message: `Senha de ${matricula} resetada para: 123456` });
-  } catch (err) {
-    res.status(500).json({ error: "Erro interno" });
-  }
-});
+// Reset de senha pelo admin foi REMOVIDO: era herança de outro app e definia a
+// senha para "123456" (padrão conhecido). O usuário que esquecer a senha usa o
+// autoatendimento por email — "Esqueceu a senha?" no login → link de token →
+// ele mesmo define a nova senha (rotas /api/recuperar-senha/* em auth.js).
 
 // Solicitar acesso admin — grava chamado, notifica por email e aguarda aprovação no painel.
 async function notificarChamadoAdmin(chamado) {
@@ -289,26 +276,26 @@ async function promoverAdminCanteiro(c) {
     err.status = 400;
     throw err;
   }
-  const senha_hash = await bcrypt.hash("123456", 10);
+  // O solicitante já tem conta normal (criada por ele, com a própria senha) —
+  // aprovar apenas PROMOVE a admin, mantendo a senha dele; ele já pode logar.
+  // Sem conta = pediu antes de se cadastrar: não fabricamos conta com senha
+  // padrão. Ele cria a conta normal e solicita admin de novo.
   const existente = (await pool.query("SELECT id FROM usuarios WHERE matricula = $1", [c.matricula])).rows[0];
-  if (existente) {
-    await pool.query(
-      `UPDATE usuarios SET
-         is_admin = TRUE, admin_projeto_id = $1, projeto_id = $1,
-         nome = COALESCE($2, nome), empresa_nome = COALESCE($3, empresa_nome),
-         telefone = COALESCE($4, telefone), email = COALESCE($5, email),
-         ativo = TRUE
-       WHERE id = $6`,
-      [pid, c.nome, c.empresa_nome, c.telefone, c.email, existente.id]
-    );
-    invalidarProjetoCache(existente.id);
-  } else {
-    await pool.query(
-      `INSERT INTO usuarios (nome, matricula, senha_hash, telefone, email, is_admin, empresa_nome, projeto_id, admin_projeto_id, ativo, politica_aceita_em, politica_versao)
-       VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$7,TRUE,NOW(),'1.0')`,
-      [c.nome, c.matricula, senha_hash, c.telefone, c.email, c.empresa_nome, pid]
-    );
+  if (!existente) {
+    const err = new Error("Solicitante ainda sem cadastro. Peça para criar a conta normal (com a própria senha) e solicitar admin de novo.");
+    err.status = 400;
+    throw err;
   }
+  await pool.query(
+    `UPDATE usuarios SET
+       is_admin = TRUE, admin_projeto_id = $1, projeto_id = $1,
+       nome = COALESCE($2, nome), empresa_nome = COALESCE($3, empresa_nome),
+       telefone = COALESCE($4, telefone), email = COALESCE($5, email),
+       ativo = TRUE
+     WHERE id = $6`,
+    [pid, c.nome, c.empresa_nome, c.telefone, c.email, existente.id]
+  );
+  invalidarProjetoCache(existente.id);
 }
 
 // Aprova: só o dono (CEO) em dono.html. Até aprovar, o solicitante NÃO tem is_admin.
@@ -327,7 +314,7 @@ app.post("/api/admin/chamados/:id/aprovar", verificarAuth, verificarAdmin, exigi
     await promoverAdminCanteiro(c);
     await pool.query("UPDATE admin_chamados SET status = 'aprovado' WHERE id = $1", [chamadoId]);
     res.json({
-      message: `Admin do canteiro aprovado! Matrícula ${c.matricula} — senha inicial: 123456 (peça para trocar).`,
+      message: `Admin do canteiro aprovado! ${c.nome} (matrícula ${c.matricula}) já pode entrar com a própria senha.`,
     });
   } catch (e) {
     console.error(e);
