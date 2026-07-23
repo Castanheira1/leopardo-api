@@ -1,13 +1,12 @@
 // Pedidos de carona: criação (com fila), listagem, edição de agendamento e cancelamento.
 require("dotenv").config();
 const app = require("../app");
-const { RAIO_ONLINE_KM, RAIO_VISIVEL_KM } = require("../config");
 const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { exigirProjeto, projetoDoUsuario } = require("../usuarios");
 const { horarioValido } = require("../datas");
-const { codigoDoProjeto, compatRotaPassageiro, haversine, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado } = require("../geo");
 const { iniciarFilaPedido } = require("../services/fila");
+const { listarPedidosMapaMotorista } = require("../services/listagem-pedidos");
 
 /* ============================ PEDIDOS ============================ */
 app.post("/api/pedidos", verificarAuth, async (req, res) => {
@@ -120,120 +119,11 @@ app.get("/api/pedidos", verificarAuth, async (req, res) => {
     if (lat && lng) {
       const pid = await projetoDoUsuario(req.user.id);
       if (!pid) return res.json([]);
-      const temCarona = (await pool.query(
-        `SELECT raio_km FROM caronas WHERE motorista_id = $1 AND status = 'ativa' LIMIT 1`,
-        [req.user.id]
-      )).rows[0];
-      const raioKm = temCarona ? (Number(temCarona.raio_km) || RAIO_VISIVEL_KM) : RAIO_ONLINE_KM;
-      const distOrigem = haversine("p.origem_lat", "p.origem_lng", "$1", "$2");
-      const params = [lat, lng, raioKm, pid, req.user.id];
-      const { rows } = await pool.query(
-        `SELECT * FROM (
-           SELECT p.*, u.nome AS passageiro_nome, u.sexo AS passageiro_sexo,
-                  ${distOrigem} AS dist_origem
-           FROM pedidos p
-           JOIN usuarios u ON p.passageiro_id = u.id
-           WHERE p.status = 'aberto'
-             AND COALESCE(u.ativo, TRUE) = TRUE
-             AND (p.horario IS NULL OR p.horario <= NOW())
-             -- Solicitação vencida: pedido "para agora" (ou agendado que já disparou)
-             -- parado há mais de 30 min é velho — não aparece mais pro motorista.
-             AND COALESCE(p.horario, p.created_at) > NOW() - INTERVAL '30 minutes'
-             -- Passageiro já embarcado/em viagem: o pedido antigo dele não reaparece.
-             AND NOT EXISTS (SELECT 1 FROM viagens v
-                             WHERE v.passageiro_id = p.passageiro_id AND v.status = 'em_andamento')
-             -- Pedido em busca automática EXCLUSIVA (usar_fila): só o motorista
-             -- da vez responde, pelos endpoints /api/pedido-fila. Não vira pulso
-             -- no mapa dos outros enquanto a fila está VIVA (aguardando/ofertada).
-             -- Fila NÃO-exclusiva (busca inteligente do broadcast) não esconde
-             -- nada: o pulso continua para todos.
-             AND NOT EXISTS (SELECT 1 FROM pedido_fila f
-                             WHERE f.pedido_id = p.id
-                               AND f.status IN ('aguardando', 'ofertada')
-                               AND f.exclusiva)
-             -- Este motorista já recusou: o pulso não volta pra ele (nem após reload).
-             AND NOT EXISTS (SELECT 1 FROM pedido_fila fr
-                             WHERE fr.pedido_id = p.id
-                               AND fr.motorista_id = $5
-                               AND fr.status = 'recusada')
-             AND u.projeto_id = $4
-         ) s
-         WHERE s.dist_origem <= $3
-         ORDER BY s.dist_origem ASC
-         LIMIT 60`,
-        params
-      );
-      const caronaMot = (await pool.query(
-        `SELECT origem_lat, origem_lng, destino_lat, destino_lng, destino_texto, rota_pontos
-         FROM caronas WHERE motorista_id = $1 AND status = 'ativa'
-         ORDER BY created_at DESC LIMIT 1`,
-        [req.user.id]
-      )).rows[0];
-      const codPed = await codigoDoProjeto(pid);
-      const locaisEnc = caronaMot?.destino_lat != null
-        ? locaisDoProjetoCodigo(codPed)
-        : [];
-      const caOrigMot = caronaMot
-        ? { lat: +caronaMot.origem_lat, lng: +caronaMot.origem_lng }
-        : null;
-      const caDestMot = caronaMot
-        ? { lat: +caronaMot.destino_lat, lng: +caronaMot.destino_lng }
-        : null;
-      const optsRota = {
-        locais: locaisEnc,
-        codigo: codPed,
-        rota_pontos: caronaMot?.rota_pontos || null,
-      };
-      // Paradas já a bordo deste motorista (desvio acumulado local).
-      let desvioJaMot = 0;
-      if (caronaMot && caOrigMot && caDestMot) {
-        try {
-          const { rows: paradas } = await pool.query(
-            `SELECT destino_motorista_lat AS lat, destino_motorista_lng AS lng,
-                    destino_motorista_texto AS nome
-             FROM viagens
-             WHERE motorista_id = $1 AND status = 'em_andamento'
-               AND destino_motorista_lat IS NOT NULL`,
-            [req.user.id]
-          );
-          desvioJaMot = somarDesvioAcumulado(caOrigMot, caDestMot, paradas.map((x) => ({
-            lat: Number(x.lat), lng: Number(x.lng), nome: x.nome || null,
-          })), optsRota);
-        } catch (_) { /* coluna ausente em ambientes antigos */ }
-      }
-      const enriquecido = rows.map((p) => {
-        if (!caronaMot?.destino_lat || p.destino_lat == null) return p;
-        const compat = compatRotaPassageiro(
-          p.destino_lat, p.destino_lng,
-          caronaMot.origem_lat, caronaMot.origem_lng,
-          caronaMot.destino_lat, caronaMot.destino_lng,
-          optsRota
-        );
-        // Destino "não bate" mas a rota do motorista passa por um ponto em comum
-        // que adianta o passageiro: o pulso mostra até onde dá pra levar.
-        if (compat === "none" && p.origem_lat != null) {
-          const enc = melhorPontoDeEncaixe(
-            { lat: +p.origem_lat, lng: +p.origem_lng },
-            { lat: +p.destino_lat, lng: +p.destino_lng },
-            caOrigMot, caDestMot,
-            { ...optsRota, desvio_acumulado_km: desvioJaMot }
-          );
-          if (enc) {
-            return {
-              ...p,
-              compat_rota: "encaixe",
-              destino_motorista_texto: caronaMot.destino_texto,
-              encaixe_texto: enc.nome || caronaMot.destino_texto || null,
-              encaixe_lat: enc.lat,
-              encaixe_lng: enc.lng,
-            };
-          }
-        }
-        return {
-          ...p,
-          compat_rota: compat,
-          destino_motorista_texto: caronaMot.destino_texto,
-        };
+      const enriquecido = await listarPedidosMapaMotorista({
+        pid,
+        motoristaId: req.user.id,
+        lat: +lat,
+        lng: +lng,
       });
       return res.json(enriquecido);
     }

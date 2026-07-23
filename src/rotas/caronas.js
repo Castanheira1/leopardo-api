@@ -1,12 +1,12 @@
 // Publicação/listagem/cancelamento de caronas e ajuste de raio ao vivo.
 require("dotenv").config();
 const app = require("../app");
-const { RAIO_MESMO_DEST_KM, RAIO_ROTA_KM, RAIO_VISIVEL_KM, SQL_GPS_FRESH } = require("../config");
 const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { exigirProjeto, habilitacaoAtiva, projetoDoUsuario, registrarEventoUso } = require("../usuarios");
 const { horarioValido } = require("../datas");
-const { calcularRotaCarona, codigoDoProjeto, compatRotaPassageiro, corredorRotaCaronaKm, haversine, haversineKmCoord, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado, sqlCorredorSegmento, sqlDestinoProximoCarona } = require("../geo");
+const { calcularRotaCarona, codigoDoProjeto } = require("../geo");
+const { listarCaronasParaPassageiro } = require("../services/listagem-caronas");
 
 /* ============================ CARONAS ============================ */
 app.post("/api/caronas", verificarAuth, async (req, res) => {
@@ -123,161 +123,14 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     const pid = await projetoDoUsuario(req.user.id);
     if (!pid) return res.json([]);
 
-    const temPos = lat != null && lng != null;
-    const temDest = dest_lat != null && dest_lng != null;
-    const params = [];
-
-    // Distância da MINHA posição até a origem do motorista (ordenação perto->longe).
-    let distSel = "";
-    if (temPos) {
-      params.push(lat, lng);
-      distSel = `, ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} AS dist_origem`;
-    }
-
-    // Modo "indo para este local": filtra caronas cujo DESTINO é ~o local escolhido
-    // e que ainda têm vaga. Sem destino, mantém o comportamento antigo (raio na origem).
-    let destFiltro = "", origemRaio = "", compatSel = "";
-    if (temDest) {
-      params.push(dest_lat, dest_lng);
-      const dl = `$${params.length - 1}`, dg = `$${params.length}`;
-      const corPax = sqlCorredorSegmento(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng", RAIO_ROTA_KM);
-      const mesmoDest = `${haversine("c.destino_lat", "c.destino_lng", dl, dg)} <= ${RAIO_MESMO_DEST_KM}`;
-      const compatTotal = `(${mesmoDest} OR ${corPax.noSegmento})`;
-      const compatParcial = corPax.alemDestino;
-      const compatProximo = sqlDestinoProximoCarona(dl, dg, "c.origem_lat", "c.origem_lng", "c.destino_lat", "c.destino_lng");
-      // Não filtra por compatibilidade aqui: caronas 'none' ainda podem virar
-      // ENCAIXE por ponto em comum (calculado em JS logo abaixo, com o catálogo
-      // de locais). Quem ficar 'none' sem encaixe sai da resposta.
-      destFiltro = `AND c.vagas > 0`;
-      compatSel = `, CASE WHEN ${compatTotal} THEN 'total' WHEN ${compatParcial} THEN 'parcial' WHEN ${compatProximo} THEN 'proximo' ELSE 'none' END AS compat_rota`;
-    } else if (temPos) {
-      // Alcance por carona (barra do motorista, default 10 km) em vez de fixo.
-      origemRaio = `AND ${haversine("c.origem_lat", "c.origem_lng", "$1", "$2")} <= COALESCE(c.raio_km, ${RAIO_VISIVEL_KM})`;
-    }
-
-    params.push(pid);
-    const filtroProj = `AND u.projeto_id = $${params.length}`;
-    const orderBy = temPos ? "dist_origem ASC" : "c.created_at DESC";
-
-    const { rows } = await pool.query(
-      `SELECT c.*, u.nome AS motorista_nome, u.empresa_nome AS motorista_empresa,
-              h.placa, h.tag, h.foto_carro_url,
-              (lo.disponivel = TRUE) AS motorista_online,
-              (SELECT COUNT(*)::int FROM viagens vv
-               WHERE vv.motorista_id = c.motorista_id AND vv.status = 'em_andamento'
-                 AND vv.carona_id IS NULL) AS viagens_fora_carona ${distSel}${compatSel}
-       FROM caronas c
-       JOIN usuarios u ON c.motorista_id = u.id
-       LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
-       JOIN localizacoes_online lo ON lo.usuario_id = c.motorista_id
-       WHERE c.status = 'ativa' AND COALESCE(u.ativo, TRUE) = TRUE
-       AND lo.disponivel = TRUE
-       AND ${SQL_GPS_FRESH.replace("atualizado_em", "lo.atualizado_em")}
-       AND c.id = (
-         SELECT cx.id FROM caronas cx
-         WHERE cx.motorista_id = c.motorista_id AND cx.status = 'ativa'
-         ORDER BY cx.created_at DESC LIMIT 1
-       )
-       ${filtroProj}
-       ${origemRaio}
-       ${destFiltro}
-       ORDER BY ${orderBy}`,
-      params
-    );
-    if (!temDest) {
-      const filtradas = rows.filter((c) => {
-        const fora = Number(c.viagens_fora_carona) || 0;
-        return (c.vagas || 0) - fora > 0;
-      });
-      return res.json(filtradas);
-    }
-
-    // Reavalia compat na malha/rota_pontos — o SQL ainda usa reta como pré-filtro.
-    const origPax = temPos ? { lat: +lat, lng: +lng } : null;
-    const destPax = { lat: +dest_lat, lng: +dest_lng };
-    const cod = await codigoDoProjeto(pid);
-    const locais = locaisDoProjetoCodigo(cod);
-
-    // Desvio já comprometido por pax a bordo (paradas parciais/encaixe).
-    const idsMot = [...new Set(rows.map((c) => c.motorista_id).filter(Boolean))];
-    const paradasPorMot = new Map();
-    if (idsMot.length) {
-      try {
-        const { rows: paradas } = await pool.query(
-          `SELECT motorista_id, destino_motorista_lat AS lat, destino_motorista_lng AS lng,
-                  destino_motorista_texto AS nome
-           FROM viagens
-           WHERE status = 'em_andamento'
-             AND destino_motorista_lat IS NOT NULL
-             AND motorista_id = ANY($1::int[])`,
-          [idsMot]
-        );
-        for (const p of paradas) {
-          if (!paradasPorMot.has(p.motorista_id)) paradasPorMot.set(p.motorista_id, []);
-          paradasPorMot.get(p.motorista_id).push({
-            lat: Number(p.lat), lng: Number(p.lng), nome: p.nome || null,
-          });
-        }
-      } catch (e) {
-        console.warn("listar caronas desvio acumulado:", e.message);
-      }
-    }
-
-    const comEncaixe = [];
-    for (const c of rows) {
-      const fora = Number(c.viagens_fora_carona) || 0;
-      if ((c.vagas || 0) - fora <= 0) continue;
-      if (c.origem_lat == null || c.destino_lat == null) {
-        if (c.compat_rota !== "none") comEncaixe.push(c);
-        continue;
-      }
-      const caOrig = { lat: +c.origem_lat, lng: +c.origem_lng };
-      const caDest = { lat: +c.destino_lat, lng: +c.destino_lng };
-      const optsRota = {
-        locais,
-        codigo: cod,
-        rota_pontos: c.rota_pontos || null,
-      };
-      // Compat pela polilinha da pista (malha gravada ou calculada).
-      const compatJs = compatRotaPassageiro(
-        destPax.lat, destPax.lng,
-        caOrig.lat, caOrig.lng, caDest.lat, caDest.lng,
-        optsRota
-      );
-      if (compatJs !== "none") {
-        comEncaixe.push({ ...c, compat_rota: compatJs });
-        continue;
-      }
-      if (!origPax) continue;
-      // Embarque viável: passageiro na pista da carona ou dentro do alcance dela.
-      const cor = corredorRotaCaronaKm(
-        origPax.lat, origPax.lng,
-        caOrig.lat, caOrig.lng, caDest.lat, caDest.lng,
-        optsRota
-      );
-      const noCorredor = cor.dist <= RAIO_ROTA_KM && cor.t >= -0.05 && cor.t <= 1.05;
-      const distOrigemCarona = haversineKmCoord(origPax.lat, origPax.lng, caOrig.lat, caOrig.lng);
-      if (!noCorredor && distOrigemCarona > (Number(c.raio_km) || RAIO_VISIVEL_KM)) continue;
-      const desvioJa = somarDesvioAcumulado(
-        caOrig, caDest,
-        paradasPorMot.get(c.motorista_id) || [],
-        optsRota
-      );
-      const enc = melhorPontoDeEncaixe(
-        origPax, destPax, caOrig, caDest,
-        { ...optsRota, desvio_acumulado_km: desvioJa }
-      );
-      if (!enc) continue;
-      comEncaixe.push({
-        ...c,
-        compat_rota: "encaixe",
-        encaixe_texto: enc.nome || c.destino_texto || null,
-        encaixe_lat: enc.lat,
-        encaixe_lng: enc.lng,
-        encaixe_restante_km: Math.round(enc.restante_km * 10) / 10,
-      });
-    }
-    res.json(comEncaixe);
+    const caronas = await listarCaronasParaPassageiro({
+      pid,
+      lat: req.query.lat,
+      lng: req.query.lng,
+      dest_lat: req.query.dest_lat,
+      dest_lng: req.query.dest_lng,
+    });
+    res.json(caronas);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar caronas" });

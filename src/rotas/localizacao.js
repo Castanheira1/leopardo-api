@@ -1,7 +1,7 @@
 // Localização ao vivo, modo motorista online (amarelo) e motoristas visíveis no mapa/rota.
 require("dotenv").config();
 const app = require("../app");
-const { RAIO_ONLINE_KM, RAIO_VISIVEL_KM, SQL_GPS_FRESH, SQL_GPS_STALE, sqlGpsVisivelMapa } = require("../config");
+const { RAIO_ONLINE_KM, RAIO_VISIVEL_KM, SQL_GPS_STALE, sqlGpsVisivelMapa } = require("../config");
 const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { habilitacaoAtiva, projetoDoUsuario, registrarEventoUso, sqlSelfieValida } = require("../usuarios");
@@ -137,7 +137,7 @@ function motoristaVisivelPassageiro(row) {
   };
 }
 
-// Motoristas habilitados e online nos últimos 3 min (vistos pelo passageiro).
+// Motoristas habilitados visíveis no mapa (GPS fresco ou modo amarelo até STALE).
 app.get("/api/motoristas-online", verificarAuth, async (req, res) => {
   const { lat, lng } = req.query;
   try {
@@ -216,6 +216,9 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
                 h.placa, h.tag, h.foto_carro_url, h.foto_carro_em, h.selfie_url, h.selfie_em,
                 ca.id AS carona_id, ca.origem_texto, ca.destino_texto,
                 ca.origem_lat, ca.origem_lng, ca.destino_lat, ca.destino_lng, ca.vagas AS carona_vagas,
+                (SELECT COUNT(*)::int FROM viagens vv
+                 WHERE vv.motorista_id = u.id AND vv.status = 'em_andamento'
+                   AND vv.carona_id IS NULL) AS viagens_fora_carona,
                 ${distOrigem} AS dist_km
          FROM localizacoes_online l
          JOIN usuarios u ON u.id = l.usuario_id
@@ -228,7 +231,7 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
          ) ca ON TRUE
          WHERE l.disponivel = TRUE
            AND COALESCE(u.ativo, TRUE) = TRUE
-           AND ${SQL_GPS_FRESH.replace("atualizado_em", "l.atualizado_em")}
+           AND ${sqlGpsVisivelMapa("l")}
            AND u.id <> $1
            AND u.projeto_id = $6
            AND (ca.vagas IS NULL OR ca.vagas > 0)
@@ -239,7 +242,13 @@ app.get("/api/motoristas-rota", verificarAuth, async (req, res) => {
        LIMIT 100`,
       [req.user.id, origem_lat, origem_lng, destino_lat, destino_lng, pid]
     );
-    res.json(rows.map((r, i) => ({ ...motoristaVisivelPassageiro(r), ordem: i })));
+    const visiveis = rows.filter((r) => {
+      const fora = Number(r.viagens_fora_carona) || 0;
+      const vagas = r.carona_vagas != null ? Number(r.carona_vagas) : null;
+      if (vagas != null && vagas - fora <= 0) return false;
+      return true;
+    });
+    res.json(visiveis.map((r, i) => ({ ...motoristaVisivelPassageiro(r), ordem: i })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao listar motoristas na rota" });
