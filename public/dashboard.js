@@ -5216,8 +5216,7 @@
     }
 
     // Loop único dos dois lados: cada um transmite a SUA posição (GPS) e busca a
-    // posição do OUTRO no servidor. Assim motorista e passageiro se veem no mapa.
-    // Isolamento: nativo usa Socket.io (+ FG service); PWA mantém HTTP polling.
+    // posição do OUTRO. Socket.io (PWA + nativo); HTTP polling como fallback.
     function iniciarViagemLoop() {
         const vv = viagemView;
         if (trackState && trackState.watchId != null) {
@@ -5276,11 +5275,21 @@
         // 1) GPS: 1ª posição rápida (cache/rede), depois alta precisão.
         // Timeout 12s + highAccuracy travava e o passageiro sumia do mapa.
         let ultimoEnvioLoc = 0;
+        let ultimoPtEnviado = null;
         const enviarLoc = (pt) => {
-            if (Date.now() - ultimoEnvioLoc < 1500) return;
-            ultimoEnvioLoc = Date.now();
-            // Nativo + socket conectado: WS. Senão (PWA ou WS caiu): HTTP.
-            if (nativo && window.VapRealtime && VapRealtime.connected() && VapRealtime.emitLoc(vv.id, pt)) {
+            const agora = Date.now();
+            if (agora - ultimoEnvioLoc < 1500) return;
+            // Sem movimento relevante: não martela servidor/WS (<12 m e <8 s).
+            if (ultimoPtEnviado && agora - ultimoEnvioLoc < 8000) {
+                const dKm = (typeof distKmGps === 'function')
+                    ? distKmGps(ultimoPtEnviado, pt)
+                    : haversineKmApp(ultimoPtEnviado.lat, ultimoPtEnviado.lng, pt.lat, pt.lng);
+                if (dKm < 0.012) return;
+            }
+            ultimoEnvioLoc = agora;
+            ultimoPtEnviado = pt;
+            // Socket conectado: WS. Senão: HTTP.
+            if (window.VapRealtime && VapRealtime.connected() && VapRealtime.emitLoc(vv.id, pt)) {
                 return;
             }
             fetchWithAuth('/api/localizacao', {
@@ -5376,8 +5385,22 @@
             } catch (_) { /* rede instável: tenta no próximo ciclo */ }
         }
 
-        if (nativo && window.VapRealtime) {
-            // Socket.io: peer em tempo real; poll HTTP só como fallback lento (15s).
+        function iniciarPollRapidoHttp() {
+            let ticksRapidos = 0;
+            async function tick() {
+                await tickHttp();
+                ticksRapidos++;
+                if (ticksRapidos === 8 && acompTimer) {
+                    clearInterval(acompTimer);
+                    acompTimer = setInterval(tick, VIAGEM_POLL_MS);
+                }
+            }
+            tick();
+            acompTimer = setInterval(tick, 1200);
+        }
+
+        // Socket.io (PWA + nativo): peer em push; HTTP só fallback / meta.
+        if (window.VapRealtime) {
             VapRealtime.joinViagem(vv.id, {
                 onPeerLoc: (payload) => {
                     if (!vv || vv.status !== 'em_andamento') return;
@@ -5392,26 +5415,18 @@
                 onMeta: (payload) => {
                     aplicarMetaLoc({ status: payload.status, fase: payload.fase });
                 },
-            }).then(() => {
-                // 1ª leitura HTTP garante fase/status mesmo se WS atrasar
+            }).then((ok) => {
                 tickHttp();
-            }).catch(() => {
-                tickHttp();
-            });
-            acompTimer = setInterval(tickHttp, 15000);
-        } else {
-            // PWA: polling HTTP original (rápido no início, depois VIAGEM_POLL_MS).
-            let ticksRapidos = 0;
-            async function tick() {
-                await tickHttp();
-                ticksRapidos++;
-                if (ticksRapidos === 8 && acompTimer) {
-                    clearInterval(acompTimer);
-                    acompTimer = setInterval(tick, VIAGEM_POLL_MS);
+                if (ok && VapRealtime.connected()) {
+                    acompTimer = setInterval(tickHttp, 15000);
+                } else {
+                    iniciarPollRapidoHttp();
                 }
-            }
-            tick();
-            acompTimer = setInterval(tick, 1200);
+            }).catch(() => {
+                iniciarPollRapidoHttp();
+            });
+        } else {
+            iniciarPollRapidoHttp();
         }
         if (vv.ehMotorista) trackState.timer = setInterval(enviarPontos, 15000);
     }
@@ -5674,8 +5689,8 @@
     // Frota (passageiro): preta = até onde o motorista vai; dourada = só o resto (parcial).
     const FLEET_ROTA_OPTS = { strokeColor: '#000000', strokeWeight: 5, strokeOpacity: 0.9 };
     const FLEET_EXTRA_OPTS = { strokeColor: '#EAD298', strokeWeight: 5, strokeOpacity: 0.92 };
-    const FLEET_POLL_MS = 3000;          // posição ao vivo no mapa passageiro
-    const VIAGEM_POLL_MS = 2000;         // posição do outro durante viagem
+    const FLEET_POLL_MS = 4000;          // frota no mapa (Pedir) — 4s equilibra fluidez e carga
+    const VIAGEM_POLL_MS = 2000;         // fallback HTTP se Socket.io cair
 
     // Rota na frota: UMA vez por destino (não a cada tick de GPS).
     // Antes: a cada 3s, se o carro saía 80 m da polyline, recalculava com NOVA
@@ -6805,6 +6820,8 @@
         const intervalo = () => (viagemView ? 2500 : (broadcastModoOnline ? 3500 : 5000));
         async function envia() {
             if (document.hidden && !broadcastModoOnline) return;
+            // Em viagem o loop da viagem já transmite GPS — evita POST duplicado.
+            if (viagemView && viagemView.status === 'em_andamento') return;
             await enviarLocalizacaoAgora(false);
         }
         envia();

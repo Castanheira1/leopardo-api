@@ -1,6 +1,5 @@
-// Transporte em tempo real da viagem.
-// - Nativo (Capacitor): Socket.io com reconexão exponencial.
-// - PWA/Web: não conecta — o dashboard mantém o HTTP polling atual.
+// Transporte em tempo real da viagem (PWA + Capacitor).
+// Socket.io com reconexão; HTTP polling no dashboard fica como fallback.
 (function (global) {
   "use strict";
 
@@ -48,7 +47,6 @@
   }
 
   async function connect() {
-    if (!isNative()) return null;
     if (socket && socket.connected) return socket;
     if (connectPromise) return connectPromise;
 
@@ -116,12 +114,11 @@
   }
 
   async function joinViagem(viagemId, handlers) {
-    if (!isNative()) return false;
     joinedViagemId = viagemId;
     onPeerLoc = handlers && handlers.onPeerLoc ? handlers.onPeerLoc : null;
     onMeta = handlers && handlers.onMeta ? handlers.onMeta : null;
     var s = await connect();
-    if (!s) return false;
+    if (!s || !s.connected) return false;
     s.emit("join_viagem", { viagemId: viagemId });
     return true;
   }
@@ -136,7 +133,7 @@
   }
 
   function emitLoc(viagemId, pt) {
-    if (!isNative() || !socket || !socket.connected) return false;
+    if (!socket || !socket.connected) return false;
     if (!pt || !Number.isFinite(+pt.lat) || !Number.isFinite(+pt.lng)) return false;
     socket.emit("loc_update", {
       viagemId: viagemId,
