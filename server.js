@@ -31,15 +31,10 @@ app.use(rateLimit({
   max: Number(process.env.RATE_LIMIT_MAX || 1200),
 }));
 
-// CORS restrito. O front (PWA) é servido pela MESMA origem desta API, então não
-// precisa de CORS cross-origin no uso normal. Por padrão, nenhuma origem externa
-// é liberada (same-origin continua funcionando). Para liberar um app/origem
-// específica, defina CORS_ORIGINS="https://a.com,https://b.com" no ambiente.
-// Antes era origin:"*", que deixava qualquer site chamar a API com o token do usuário.
-const CORS_ORIGINS = (process.env.CORS_ORIGINS || process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || "")
-  .split(",").map((s) => s.trim()).filter(Boolean);
+// CORS: PWA = mesma origem; app Capacitor = capacitor://localhost → API HTTPS.
+const { corsOriginCallback } = require("./src/cors-origins");
 app.use(cors({
-  origin: CORS_ORIGINS.length ? CORS_ORIGINS : false, // false = sem CORS externo (só mesma origem)
+  origin: corsOriginCallback,
   credentials: true,
 }));
 
@@ -81,9 +76,13 @@ app.get("/.well-known/apple-app-site-association", (req, res) => {
   res.type("application/json");
   res.sendFile(path.join(__dirname, "public", ".well-known", "apple-app-site-association"));
 });
+app.get("/.well-known/assetlinks.json", (req, res) => {
+  res.type("application/json");
+  res.sendFile(path.join(__dirname, "public", ".well-known", "assetlinks.json"));
+});
 
 // Imagens/fontes mudam raramente: cache de 7 dias no navegador corta requisições
-// repetidas (CPU/banda na instância free do Render). HTML/JS/CSS e o
+// repetidas (CPU/banda). HTML/JS/CSS e o
 // service-worker ficam em no-cache: o navegador revalida sempre (304 barato) e
 // atualizações do app chegam na hora — o cache offline fica por conta do SW.
 app.use(express.static(path.join(__dirname, "public"), {

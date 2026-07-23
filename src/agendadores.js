@@ -28,13 +28,12 @@ setInterval(async () => {
   }
 }, AGENDADO_TICK_MS);
 
-// Keep-alive: o plano FREE do Render hiberna o serviço após ~15 min sem
-// tráfego — a próxima visita paga 30-60s de partida a frio e os agendadores
-// param (aviso de pedido agendado, expiração). Um auto-ping a cada 10 min
-// mantém tudo acordado. O Render define RENDER_EXTERNAL_URL sozinho; sem a
-// env (dev local), não faz nada. Alternativa definitiva: plan starter.
+// Keep-alive: só no plano FREE do Render (hiberna ~15 min). No starter (US$7)
+// não hiberna — ping a cada 10 min só gasta CPU. Ative com RENDER_KEEPALIVE=true
+// se ainda estiver no free tier.
 const KEEPALIVE_MS = Number(process.env.KEEPALIVE_MS || 10 * 60 * 1000);
-if (process.env.RENDER_EXTERNAL_URL) {
+const keepAliveLigado = /^(1|true|yes|on)$/i.test(String(process.env.RENDER_KEEPALIVE || ""));
+if (keepAliveLigado && process.env.RENDER_EXTERNAL_URL) {
   setInterval(() => {
     fetch(`${process.env.RENDER_EXTERNAL_URL}/api/config`)
       .then((r) => { if (!r.ok) console.warn("keep-alive: resposta", r.status); })

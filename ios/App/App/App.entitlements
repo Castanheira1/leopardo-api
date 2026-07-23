@@ -14,5 +14,9 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:leopardo-api.onrender.com</string>
+	</array>
 </dict>
 </plist>

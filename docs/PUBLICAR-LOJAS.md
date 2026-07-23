@@ -1,5 +1,9 @@
 # Publicar o VAP na Google Play e na App Store
 
+> **Resumo para você:** o que já está pronto vs o que depende das contas de desenvolvedor
+> está em [`docs/LOJA-SEU-PASSO-A-PASSO.md`](LOJA-SEU-PASSO-A-PASSO.md).
+> Rode `npm run store:check` para ver pendências.
+
 Guia prático para a **primeira publicação**. O app é um shell Capacitor que carrega o
 backend publicado (`https://leopardo-api.onrender.com`). App ID: **`com.vap.carona`**.
 
@@ -157,8 +161,9 @@ fotos de segurança apagadas em 30 dias.
   — obrigatório no upload ao App Store Connect desde 2024.
 - **App tipo "webview" / 4.2:** o VAP usa bundle local + API HTTPS + recursos nativos
   (câmera, GPS, foreground service, push). Se a Apple questionar, cite isso.
-- **Backend no Render (plano free) "dorme"**: cold start — prefira plano que não hiberne
-  durante a revisão da loja.
+- **Backend no Render:** com o plano **starter (US$ 7/mês)** o serviço **não hiberna**.
+  Se voltar ao free tier, defina `RENDER_KEEPALIVE=true` no painel ou use um monitor
+  em `/api/health`.
 - **Guarde o keystore Android** e as credenciais Apple.
 
 ---

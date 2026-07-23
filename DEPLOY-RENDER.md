@@ -27,9 +27,9 @@ ignora as policies de Storage — então não precisa criar policy de INSERT.
 No Supabase → botão **Connect** (topo) → aba **Connection string**.
 
 > **Importante:** use a string do **Session pooler** (IPv4), **não** a
-> "Direct connection". O Render free roda em IPv4 e o host direto
+> "Direct connection". O host direto
 > (`db.vsxnqtecnvhhvekmkshb.supabase.co`) só responde em IPv6 — a conexão direta
-> falha com timeout.
+> falha com timeout no Render.
 
 A string do pooler tem este formato (usuário com o ref do projeto + host `pooler`):
 
@@ -107,8 +107,8 @@ Supabase → **Project Settings → Database → Reset database password**.
   `DATABASE_URL`), então não depende de RLS. Mas se a `anon key` do projeto
   estiver em uso em algum lugar, considere habilitar RLS nas tabelas para que a
   API PostgREST pública não exponha os dados.
-- **CORS:** hoje está `origin: "*"`. Para um app interno, vale restringir ao
-  domínio final depois que a URL estiver definida.
+- **CORS:** allowlist automática — PWA (mesma origem), app Capacitor (`capacitor://localhost`)
+  e `RENDER_EXTERNAL_URL`. Sites externos só com `CORS_ORIGINS` explícito.
 
 ## Monitoramento
 

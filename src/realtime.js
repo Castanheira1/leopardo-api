@@ -4,7 +4,7 @@ require("dotenv").config();
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("./config");
-const { pool } = require("./db");
+const { allAllowedOrigins } = require("./cors-origins");
 
 let io = null;
 
@@ -58,15 +58,12 @@ async function upsertLocalizacao(userId, lat, lng, disponivel) {
  * @param {import('http').Server} httpServer
  */
 function attachRealtime(httpServer) {
-  const CORS_ORIGINS = (process.env.CORS_ORIGINS || process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const origins = allAllowedOrigins();
 
   io = new Server(httpServer, {
     path: "/socket.io",
     cors: {
-      origin: CORS_ORIGINS.length ? CORS_ORIGINS : true,
+      origin: origins.length ? origins : true,
       credentials: true,
     },
     // reconexão é responsabilidade do client; server aceita de novo
