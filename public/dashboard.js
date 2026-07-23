@@ -4336,15 +4336,18 @@
         solicitacaoAtual = p;
         const tipo = p.carona_id ? 'Passageiro quer sua carona' : 'Motorista oferece carona';
         const rota = p.carona_id ? `${esc(p.c_origem || '')} → ${esc(p.c_destino || '')}` : `${esc(p.p_origem || '')} → ${esc(p.p_destino || '')}`;
-        document.getElementById('solNome').textContent = p.de_nome || 'Solicitação';
+        const nome = p.de_nome || 'Solicitação';
+        document.getElementById('solNome').textContent = nome;
         document.querySelector('#modalSolicitacao .sol-badge').textContent =
             p.carona_id ? 'Nova solicitação' : 'Embarque Aprovado';
         document.getElementById('solTipo').textContent = tipo;
         document.getElementById('solRota').innerHTML = `${ICN.pin} ${rota}`;
         document.getElementById('solMsg').textContent = p.mensagem ? `"${p.mensagem}"` : '';
-        const selfie = document.getElementById('solSelfie');
-        if (p.selfie_url) { selfie.src = p.selfie_url; selfie.style.display = 'block'; }
-        else { selfie.style.display = 'none'; }
+        // Pedido de vaga → selfie do passageiro; oferta do motorista → foto dele.
+        const foto = p.carona_id
+            ? (p.selfie_url || null)
+            : (p.motorista_selfie || p.selfie_url || null);
+        aplicarSelfieMatch('solSelfie', 'solSelfiePh', foto, nome);
         document.getElementById('modalSolicitacao').style.display = 'flex';
     }
     async function responderSolicitacao(aceito) {
@@ -4374,6 +4377,7 @@
     }
     function mostrarOfertaFila(o) {
         ofertaFilaAtual = o;
+        const nomePax = o.passageiro_nome || 'Passageiro';
         document.getElementById('filaOfNome').textContent = o.passageiro_nome
             ? `${o.passageiro_nome} está pedindo carona` : 'Passageiro pedindo carona';
         document.getElementById('filaOfRota').innerHTML =
@@ -4384,6 +4388,7 @@
             + (o.encaixe_texto
                 ? `<div style="margin-top:6px;">${ICN.pin} <b>Você deixa em:</b> ${esc(o.encaixe_texto)}</div>`
                 : '');
+        aplicarSelfieMatch('filaOfSelfie', 'filaOfSelfiePh', o.selfie_url || null, nomePax);
         document.getElementById('modalOfertaFila').style.display = 'flex';
         pararCronometroFila();
         const tick = () => {
@@ -4707,14 +4712,38 @@
 
         // Mostra o "outro": passageiro vê o motorista; motorista vê o passageiro.
         const nome = ehMotorista ? v.passageiro_nome : v.motorista_nome;
-        const selfie = ehMotorista ? v.passageiro_selfie : v.motorista_selfie;
+        // Pedido via fila pode não gravar selfie na proposta — cai no pedido_selfie.
+        const selfieUrl = ehMotorista
+            ? (v.passageiro_selfie || v.pedido_selfie || null)
+            : (v.motorista_selfie || null);
         const sel = document.getElementById('viagemSelfie');
-        if (selfie) { sel.src = selfie; sel.style.display = 'block'; } else { sel.style.display = 'none'; }
+        const ini = document.getElementById('viagemIniciais');
+        if (selfieUrl) {
+            if (sel) { sel.src = selfieUrl; sel.alt = nome || ''; sel.style.display = 'block'; }
+            if (ini) ini.style.display = 'none';
+        } else {
+            if (sel) { sel.removeAttribute('src'); sel.style.display = 'none'; }
+            if (ini) {
+                ini.textContent = iniciaisNome(nome);
+                ini.style.display = 'flex';
+            }
+        }
         document.getElementById('viagemNome').textContent = (nome || '—').trim();
         document.getElementById('viagemCarro').textContent = ehMotorista ? 'Passageiro' : (v.tag || 'Veículo');
         const plEl = document.getElementById('viagemPlaca');
         plEl.textContent = (!ehMotorista && v.placa) ? v.placa : '';
         plEl.style.display = (!ehMotorista && v.placa) ? 'inline-block' : 'none';
+        const carroFoto = document.getElementById('viagemCarroFoto');
+        if (carroFoto) {
+            if (!ehMotorista && v.foto_carro_url) {
+                carroFoto.src = v.foto_carro_url;
+                carroFoto.alt = v.tag || 'Veículo';
+                carroFoto.style.display = 'block';
+            } else {
+                carroFoto.removeAttribute('src');
+                carroFoto.style.display = 'none';
+            }
+        }
         const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
 
         g = await carregarMaps();
@@ -6441,6 +6470,39 @@
         const p = (nome || 'P').trim().split(/\s+/).filter(Boolean);
         if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
         return (p[0]?.[0] || 'P').toUpperCase();
+    }
+    /** Avatar redondo/portrait em cards de match (solicitação, fila). */
+    function aplicarSelfieMatch(imgId, phId, url, nome) {
+        const sf = document.getElementById(imgId);
+        const ph = document.getElementById(phId);
+        if (!sf && !ph) return;
+        const limpa = () => {
+            if (!sf) return;
+            sf.onload = null;
+            sf.onerror = null;
+            sf.removeAttribute('src');
+            sf.style.display = 'none';
+        };
+        if (url && sf) {
+            if (ph) ph.style.display = 'none';
+            sf.onerror = () => {
+                limpa();
+                if (ph) {
+                    ph.textContent = iniciaisNome(nome);
+                    ph.style.display = 'flex';
+                }
+            };
+            sf.onload = () => { sf.style.display = 'block'; };
+            sf.alt = 'Foto de ' + (nome || '');
+            sf.src = url;
+            sf.style.display = 'block';
+        } else {
+            limpa();
+            if (ph) {
+                ph.textContent = iniciaisNome(nome);
+                ph.style.display = 'flex';
+            }
+        }
     }
     function aplicarSelfieNoModalPedido(url, nome) {
         const sf = document.getElementById('pedidoSelfie');
