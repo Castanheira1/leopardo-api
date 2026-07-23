@@ -1,9 +1,10 @@
-// Socket.io: canal em tempo real para coordenadas da viagem (clientes nativos).
-// PWA continua em HTTP polling — este módulo só atende quem se conecta via WS.
+// Socket.io: canal em tempo real para coordenadas da viagem (PWA + nativo).
+// HTTP polling continua como fallback se o WS cair.
 require("dotenv").config();
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("./config");
+const { pool } = require("./db");
 const { allAllowedOrigins } = require("./cors-origins");
 
 let io = null;
@@ -53,6 +54,17 @@ async function upsertLocalizacao(userId, lat, lng, disponivel) {
   );
 }
 
+function cacheViagemNoSocket(socket, viagemId, v) {
+  socket.data.viagemId = viagemId;
+  socket.data.viagemPeers = {
+    motorista_id: v.motorista_id,
+    passageiro_id: v.passageiro_id,
+    status: v.status,
+    fase: v.fase,
+  };
+  socket.data.viagemPeersAt = Date.now();
+}
+
 /**
  * Anexa Socket.io ao http.Server do Express.
  * @param {import('http').Server} httpServer
@@ -66,7 +78,6 @@ function attachRealtime(httpServer) {
       origin: origins.length ? origins : true,
       credentials: true,
     },
-    // reconexão é responsabilidade do client; server aceita de novo
     pingInterval: 20000,
     pingTimeout: 20000,
   });
@@ -95,9 +106,8 @@ function attachRealtime(httpServer) {
           if (typeof ack === "function") ack({ ok: false, error: "sem permissão" });
           return;
         }
-        const room = `viagem:${viagemId}`;
-        await socket.join(room);
-        socket.data.viagemId = viagemId;
+        await socket.join(`viagem:${viagemId}`);
+        cacheViagemNoSocket(socket, viagemId, v);
         if (typeof ack === "function") ack({ ok: true, status: v.status, fase: v.fase });
       } catch (e) {
         console.warn("join_viagem:", e.message);
@@ -109,7 +119,10 @@ function attachRealtime(httpServer) {
       const viagemId = Number(msg?.viagemId || socket.data.viagemId);
       if (!viagemId) return;
       await socket.leave(`viagem:${viagemId}`);
-      if (socket.data.viagemId === viagemId) socket.data.viagemId = null;
+      if (socket.data.viagemId === viagemId) {
+        socket.data.viagemId = null;
+        socket.data.viagemPeers = null;
+      }
     });
 
     socket.on("loc_update", async (msg) => {
@@ -120,20 +133,32 @@ function attachRealtime(httpServer) {
         if (!viagemId || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
 
-        const v = await podeAcessarViagem(uid, viagemId);
-        if (!v || v.status !== "em_andamento") return;
+        // Cache da permissão (~12s): evita SELECT a cada ponto GPS (~1,5s).
+        const agora = Date.now();
+        let peers = socket.data.viagemPeers;
+        const cacheOk = peers
+          && Number(socket.data.viagemId) === viagemId
+          && agora - (socket.data.viagemPeersAt || 0) < 12000;
+
+        if (!cacheOk) {
+          const v = await podeAcessarViagem(uid, viagemId);
+          if (!v || v.status !== "em_andamento") return;
+          cacheViagemNoSocket(socket, viagemId, v);
+          peers = socket.data.viagemPeers;
+        } else if (peers.status !== "em_andamento") {
+          return;
+        }
 
         await upsertLocalizacao(uid, lat, lng, msg?.disponivel !== false);
 
-        // Espelha para o outro participante da viagem (não ecoa pro próprio socket).
         socket.to(`viagem:${viagemId}`).emit("viagem_loc", {
           viagemId,
           usuarioId: uid,
           lat,
           lng,
-          papel: uid === v.motorista_id ? "motorista" : "passageiro",
-          fase: v.fase,
-          status: v.status,
+          papel: uid === peers.motorista_id ? "motorista" : "passageiro",
+          fase: peers.fase,
+          status: peers.status,
           em: Date.now(),
         });
       } catch (e) {
@@ -146,14 +171,29 @@ function attachRealtime(httpServer) {
     });
   });
 
-  console.log("Socket.io: canal realtime de viagens ativo");
+  console.log("Socket.io: canal realtime de viagens ativo (PWA + nativo)");
   return io;
 }
 
-/** Notifica a sala da viagem sobre mudança de fase/status (opcional, para nativos). */
+/** Notifica a sala da viagem sobre mudança de fase/status. */
 function emitViagemMeta(viagemId, meta) {
   if (!io) return;
-  io.to(`viagem:${viagemId}`).emit("viagem_meta", {
+  const room = `viagem:${viagemId}`;
+  // Atualiza cache de fase/status nos sockets da sala (próximos loc_update).
+  try {
+    const sockets = io.sockets.adapter.rooms.get(room);
+    if (sockets) {
+      for (const sid of sockets) {
+        const s = io.sockets.sockets.get(sid);
+        if (s?.data?.viagemPeers && Number(s.data.viagemId) === Number(viagemId)) {
+          if (meta.status != null) s.data.viagemPeers.status = meta.status;
+          if (meta.fase != null) s.data.viagemPeers.fase = meta.fase;
+          s.data.viagemPeersAt = Date.now();
+        }
+      }
+    }
+  } catch (_) { /* best-effort */ }
+  io.to(room).emit("viagem_meta", {
     viagemId: Number(viagemId),
     ...meta,
     em: Date.now(),
