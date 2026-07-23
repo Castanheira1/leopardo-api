@@ -8,6 +8,7 @@ const app = require("../app");
 const { pool } = require("../db");
 const { exigirSuperAdmin, verificarAdmin, verificarAuth } = require("../auth");
 const { periodoFromQuery } = require("../datas");
+const { sqlViagemKmValido } = require("../km");
 
 const DIAS_MES = 30.44; // média civil — prorrateia o contrato mensal no período
 
@@ -17,6 +18,8 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
   const par = [periodo.de, periodo.ate];
   // Janela da viagem: mesma regra do rateio (finalização; antigas caem no início).
   const noPeriodo = "COALESCE(v.finalizada_em, v.iniciada_em) >= $1::timestamptz AND COALESCE(v.finalizada_em, v.iniciada_em) < $2::timestamptz";
+  // Km e custos unitários: só viagens com GPS válido (igual Admin/rateio).
+  const kmValido = sqlViagemKmValido("v");
   try {
     // qSegura: cold start / coluna opcional não derruba o dashboard inteiro.
     const qSegura = async (sql, params) => {
@@ -36,13 +39,14 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
         SELECT projeto_id, COUNT(*)::int AS cadastrados,
                COUNT(*) FILTER (WHERE COALESCE(ativo, TRUE))::int AS ativos
         FROM usuarios WHERE projeto_id IS NOT NULL GROUP BY projeto_id`),
-      // Aderência: quem PARTICIPOU no período (viajou, pediu ou ofertou carona).
+      // Aderência: quem PARTICIPOU no período (viagem concluída, pediu ou ofertou).
+      // Canceladas NÃO contam — alinhado ao rateio/métricas do Admin.
       qSegura(`
         SELECT u.projeto_id, COUNT(DISTINCT u.id)::int AS engajados
         FROM usuarios u
         WHERE u.id IN (
-          SELECT v.motorista_id FROM viagens v WHERE ${noPeriodo}
-          UNION SELECT v.passageiro_id FROM viagens v WHERE ${noPeriodo}
+          SELECT v.motorista_id FROM viagens v WHERE v.status = 'concluida' AND ${noPeriodo}
+          UNION SELECT v.passageiro_id FROM viagens v WHERE v.status = 'concluida' AND ${noPeriodo}
           UNION SELECT p.passageiro_id FROM pedidos p WHERE p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz
           UNION SELECT c.motorista_id FROM caronas c WHERE c.created_at >= $1::timestamptz AND c.created_at < $2::timestamptz
         )
@@ -50,25 +54,26 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
       qSegura(`
         SELECT m.projeto_id,
                COUNT(*) FILTER (WHERE v.status = 'concluida')::int AS concluidas,
+               COUNT(*) FILTER (WHERE v.status = 'concluida' AND ${kmValido})::int AS concluidas_gps,
                COUNT(*) FILTER (WHERE v.status = 'concluida' AND v.destino_motorista_lat IS NOT NULL)::int AS parciais,
                COUNT(*) FILTER (WHERE v.status = 'cancelada')::int AS canceladas,
-               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND COALESCE(v.deslocamento_valido, TRUE)), 0)::float8 AS km
+               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND ${kmValido}), 0)::float8 AS km
         FROM viagens v JOIN usuarios m ON m.id = v.motorista_id
         WHERE ${noPeriodo}
         GROUP BY m.projeto_id`, par),
-      // Pico por hora local (a sessão do pool já roda no fuso do canteiro).
+      // Pico: só concluídas (cancelada não é demanda atendida).
       qSegura(`
         SELECT m.projeto_id, EXTRACT(HOUR FROM v.iniciada_em)::int AS hora, COUNT(*)::int AS viagens
         FROM viagens v JOIN usuarios m ON m.id = v.motorista_id
-        WHERE ${noPeriodo}
+        WHERE v.status = 'concluida' AND ${noPeriodo}
         GROUP BY 1, 2`, par),
-      // Passageiros transportados por sexo (viagens concluídas).
+      // Passageiros transportados por sexo (viagens concluídas com GPS — igual Admin).
       qSegura(`
         SELECT m.projeto_id, COALESCE(pa.sexo, '?') AS sexo, COUNT(*)::int AS n
         FROM viagens v
         JOIN usuarios m ON m.id = v.motorista_id
         JOIN usuarios pa ON pa.id = v.passageiro_id
-        WHERE v.status = 'concluida' AND ${noPeriodo}
+        WHERE v.status = 'concluida' AND ${kmValido} AND ${noPeriodo}
         GROUP BY 1, 2`, par),
       qSegura(`
         SELECT u.projeto_id, COUNT(*)::int AS total,
@@ -86,8 +91,8 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
         GROUP BY u.projeto_id`, par),
       qSegura(`
         SELECT m.projeto_id, date_trunc('day', COALESCE(v.finalizada_em, v.iniciada_em)) AS dia,
-               COUNT(*) FILTER (WHERE v.status = 'concluida')::int AS viagens,
-               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND COALESCE(v.deslocamento_valido, TRUE)), 0)::float8 AS km
+               COUNT(*) FILTER (WHERE v.status = 'concluida' AND ${kmValido})::int AS viagens,
+               COALESCE(SUM(v.distancia_km) FILTER (WHERE v.status = 'concluida' AND ${kmValido}), 0)::float8 AS km
         FROM viagens v JOIN usuarios m ON m.id = v.motorista_id
         WHERE ${noPeriodo}
         GROUP BY 1, 2 ORDER BY 2`, par),
@@ -116,9 +121,13 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
     const lista = projetos.rows.map((p) => {
       const u = mUsuarios.get(p.id) || { cadastrados: 0, ativos: 0 };
       const e = mEngajados.get(p.id) || { engajados: 0 };
-      const v = mViagens.get(p.id) || { concluidas: 0, parciais: 0, canceladas: 0, km: 0 };
+      const v = mViagens.get(p.id) || {
+        concluidas: 0, concluidas_gps: 0, parciais: 0, canceladas: 0, km: 0,
+      };
       const pd = mPedidos.get(p.id) || { total: 0, atendidos: 0, frustrados: 0 };
       const f = mFila.get(p.id) || { recusas: 0, expiradas: 0 };
+      // CEO: prorrateia o contrato no período (7d / 30d / mês).
+      // Admin/rateio usa o contrato cheio (medição mensal) — intenções diferentes.
       const custoPeriodo = (p.contrato / DIAS_MES) * dias;
       const picoProj = new Array(24).fill(0);
       for (const r of pico.rows) if (r.projeto_id === p.id) picoProj[r.hora] = r.viagens;
@@ -128,6 +137,8 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
         if (String(r.sexo).toUpperCase().startsWith("M")) sx.m += r.n;
         else if (String(r.sexo).toUpperCase().startsWith("F")) sx.f += r.n;
       }
+      // Denominadores de custo = viagens/km GPS-válidos (mesma base do Admin).
+      const viagensCusto = v.concluidas_gps || 0;
       return {
         id: p.id, nome: p.nome, codigo: p.codigo, ativo: p.ativo,
         contrato_mensal: p.contrato,
@@ -136,10 +147,12 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
           aderencia_pct: pct(e.engajados, u.ativos),
         },
         viagens: {
-          concluidas: v.concluidas, parciais: v.parciais,
+          concluidas: v.concluidas,
+          concluidas_gps: viagensCusto,
+          parciais: v.parciais,
           totais: v.concluidas - v.parciais, canceladas: v.canceladas,
           km: Math.round(v.km * 10) / 10,
-          km_dia: div(v.km, dias), por_dia: div(v.concluidas, dias),
+          km_dia: div(v.km, dias), por_dia: div(viagensCusto, dias),
         },
         pedidos: {
           total: pd.total, atendidos: pd.atendidos, frustrados: pd.frustrados,
@@ -149,7 +162,7 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
         sexo: sx,
         custo: {
           periodo: Math.round(custoPeriodo * 100) / 100,
-          por_viagem: div(custoPeriodo, v.concluidas),
+          por_viagem: div(custoPeriodo, viagensCusto),
           por_km: div(custoPeriodo, v.km),
           por_colaborador_mes: div(p.contrato, u.ativos),
           por_engajado_mes: div(p.contrato, e.engajados),
@@ -167,11 +180,15 @@ app.get("/api/admin/dono/dashboard", verificarAuth, verificarAdmin, exigirSuperA
       usuarios_ativos: soma((p) => p.usuarios.ativos),
       engajados: soma((p) => p.usuarios.engajados),
       aderencia_pct: pct(soma((p) => p.usuarios.engajados), soma((p) => p.usuarios.ativos)),
-      viagens: soma((p) => p.viagens.concluidas),
+      viagens: soma((p) => p.viagens.concluidas_gps),
+      viagens_todas: soma((p) => p.viagens.concluidas),
       km: Math.round(soma((p) => p.viagens.km) * 10) / 10,
       recusas: soma((p) => p.fila.recusas),
       custo_por_km: div((soma((p) => p.contrato_mensal) / DIAS_MES) * dias, soma((p) => p.viagens.km)),
-      custo_por_viagem: div((soma((p) => p.contrato_mensal) / DIAS_MES) * dias, soma((p) => p.viagens.concluidas)),
+      custo_por_viagem: div(
+        (soma((p) => p.contrato_mensal) / DIAS_MES) * dias,
+        soma((p) => p.viagens.concluidas_gps)
+      ),
       pico: new Array(24).fill(0).map((_, h) => soma((p) => p.pico[h])),
       sexo: { m: soma((p) => p.sexo.m), f: soma((p) => p.sexo.f) },
     };
