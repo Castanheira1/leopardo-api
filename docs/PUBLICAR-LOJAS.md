@@ -1,5 +1,9 @@
 # Publicar o VAP na Google Play e na App Store
 
+> **Resumo para você:** o que já está pronto vs o que depende das contas de desenvolvedor
+> está em [`docs/LOJA-SEU-PASSO-A-PASSO.md`](LOJA-SEU-PASSO-A-PASSO.md).
+> Rode `npm run store:check` para ver pendências.
+
 Guia prático para a **primeira publicação**. O app é um shell Capacitor que carrega o
 backend publicado (`https://leopardo-api.onrender.com`). App ID: **`com.vap.carona`**.
 
