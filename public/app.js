@@ -1100,16 +1100,42 @@ function criarOverlayHtml(map, position, content, zIndex, title) {
     return ov;
 }
 
+/** Chip de texto no mapa (estilo mockup: “Embarque”, “Desembarca aqui”…). */
+function montarLegendaMapa(texto, tom) {
+    const chip = document.createElement('div');
+    chip.className = 'map-pin-legenda' + (tom ? ' map-pin-legenda--' + tom : '');
+    chip.textContent = String(texto || '').trim();
+    return chip;
+}
+
+function envolverMarcadorComLegenda(content, texto, tom) {
+    const wrap = document.createElement('div');
+    wrap.className = 'map-pin-wrap';
+    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;'
+        + 'background:transparent;pointer-events:none;';
+    const iconBox = document.createElement('div');
+    iconBox.style.cssText = 'line-height:0;pointer-events:auto;';
+    if (content) iconBox.appendChild(content);
+    wrap.appendChild(iconBox);
+    wrap.appendChild(montarLegendaMapa(texto, tom));
+    return wrap;
+}
+
 // Marcador moderno: AdvancedMarkerElement (com Map ID real) ou OverlayView (DEMO + estilo local).
 function criarMarcador(opts = {}) {
-    const { map, position, title, icon, label, zIndex, cor, invisivel, badge, iconW, iconH, heading, iconVariant } = opts;
+    const {
+        map, position, title, icon, label, zIndex, cor, invisivel, badge,
+        iconW, iconH, heading, iconVariant, legenda, legendaTom, legendaSo,
+    } = opts;
     let pinEl = null;
     let content = null;
     let imgEl = null;
     let rotEl = null;
     let wrapEl = null;
     let mapRef = map || null;
-    if (invisivel) {
+    if (legendaSo && legenda) {
+        content = montarLegendaMapa(legenda, legendaTom);
+    } else if (invisivel) {
         const d = document.createElement('div');
         d.style.cssText = 'width:36px;height:36px;opacity:0.001;';
         content = d;
@@ -1189,6 +1215,16 @@ function criarMarcador(opts = {}) {
                 content = pinEl;
             } catch (_) { /* mantém HTML */ }
         }
+    }
+
+    // Rótulo visível no mapa (embarque / desembarque / destino…), estilo mockup.
+    if (legenda && content && !legendaSo) {
+        content = envolverMarcadorComLegenda(
+            (content && content.element) ? content.element : content,
+            legenda,
+            legendaTom,
+        );
+        wrapEl = content;
     }
 
     // Advanced Marker só com Map ID real; DEMO (mapa branco) → OverlayView HTML.

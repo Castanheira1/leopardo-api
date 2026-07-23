@@ -16,13 +16,20 @@ app.post("/api/localizacao", verificarAuth, async (req, res) => {
       nlat < -90 || nlat > 90 || nlng < -180 || nlng > 180) {
     return res.status(400).json({ error: "Coordenadas inválidas" });
   }
+  let speedKmh = null;
+  const rawVel = Number(req.body.speed_kmh ?? req.body.speedKmh);
+  if (Number.isFinite(rawVel) && rawVel >= 0 && rawVel <= 160) {
+    speedKmh = Math.round(rawVel * 10) / 10;
+  }
   try {
     await pool.query(
-      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, atualizado_em)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, speed_kmh, atualizado_em)
+       VALUES ($1, $2, $3, $4, $5, NOW())
        ON CONFLICT (usuario_id)
-       DO UPDATE SET lat = $2, lng = $3, disponivel = $4, atualizado_em = NOW()`,
-      [req.user.id, nlat, nlng, req.body.disponivel !== false]
+       DO UPDATE SET lat = $2, lng = $3, disponivel = $4,
+                     speed_kmh = COALESCE($5, localizacoes_online.speed_kmh),
+                     atualizado_em = NOW()`,
+      [req.user.id, nlat, nlng, req.body.disponivel !== false, speedKmh]
     );
     res.json({ success: true });
   } catch (err) {

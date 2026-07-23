@@ -94,10 +94,16 @@ app.get("/api/viagens/:id/localizacao", verificarAuth, async (req, res) => {
     }
     // Posição ao vivo dos dois lados (cada um transmite a sua) para que um veja o outro.
     const locs = (await pool.query(
-      "SELECT usuario_id, lat, lng FROM localizacoes_online WHERE usuario_id = ANY($1)",
+      "SELECT usuario_id, lat, lng, speed_kmh FROM localizacoes_online WHERE usuario_id = ANY($1)",
       [[v.motorista_id, v.passageiro_id]]
     )).rows;
-    const posDe = (id) => { const l = locs.find((x) => x.usuario_id === id); return l ? { lat: l.lat, lng: l.lng } : null; };
+    const posDe = (id) => {
+      const l = locs.find((x) => x.usuario_id === id);
+      if (!l) return null;
+      const out = { lat: l.lat, lng: l.lng };
+      if (l.speed_kmh != null && Number.isFinite(+l.speed_kmh)) out.speed_kmh = +l.speed_kmh;
+      return out;
+    };
     // Sempre devolve fase/status (o passageiro reage à mudança), mesmo sem posição ainda.
     // `lat/lng` no topo = posição do motorista (compatível com versões antigas do app).
     const motorista = posDe(v.motorista_id);
@@ -240,7 +246,11 @@ app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
               -- no caminho dele — o mapa desenha a "rota única com parada" até lá.
               cfinal.destino_texto AS motorista_destino_final_texto,
               cfinal.destino_lat AS motorista_destino_final_lat,
-              cfinal.destino_lng AS motorista_destino_final_lng
+              cfinal.destino_lng AS motorista_destino_final_lng,
+              -- Partida do motorista (origem da rota publicada) — pino no mapa.
+              cfinal.origem_texto AS motorista_partida_texto,
+              cfinal.origem_lat AS motorista_partida_lat,
+              cfinal.origem_lng AS motorista_partida_lng
        FROM viagens v
        JOIN usuarios m ON v.motorista_id = m.id
        JOIN usuarios pa ON v.passageiro_id = pa.id
@@ -248,7 +258,8 @@ app.get("/api/viagens/:id", verificarAuth, async (req, res) => {
        LEFT JOIN propostas pr ON v.proposta_id = pr.id
        LEFT JOIN pedidos pd ON v.pedido_id = pd.id
        LEFT JOIN LATERAL (
-         SELECT c.destino_texto, c.destino_lat, c.destino_lng
+         SELECT c.destino_texto, c.destino_lat, c.destino_lng,
+                c.origem_texto, c.origem_lat, c.origem_lng
          FROM caronas c
          WHERE c.id = v.carona_id
             OR (c.motorista_id = v.motorista_id AND c.status = 'ativa')

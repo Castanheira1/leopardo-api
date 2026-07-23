@@ -331,6 +331,8 @@ async function garantirColunasLocalizacao() {
   try {
     await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS online_desde TIMESTAMP");
     await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS vagas INTEGER DEFAULT 1");
+    // Velocidade ao vivo (km/h) — passageiro vê e o ETA usa no cálculo.
+    await pool.query("ALTER TABLE localizacoes_online ADD COLUMN IF NOT EXISTS speed_kmh NUMERIC(5,1)");
     await corrigirInconsistenciasModoAmarelo();
   } catch (e) {
     console.warn("garantirColunasLocalizacao:", e.message);

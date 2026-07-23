@@ -4625,6 +4625,9 @@
         + encodeURIComponent(SVG_PIN_MAPA('#C9A24B', '#8f6f2a'));
     const PIN_BRONZE_ICON = 'data:image/svg+xml;charset=utf-8,'
         + encodeURIComponent(SVG_PIN_MAPA('#8a6d3b', '#5e4a26'));
+    // Partida do motorista (origem da rota) — azul-ardósia, distinto do verde (embarque).
+    const PIN_PARTIDA_ICON = 'data:image/svg+xml;charset=utf-8,'
+        + encodeURIComponent(SVG_PIN_MAPA('#5B7C99', '#3d556b'));
     const SVG_PAX_DESCE = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50">
         <path d="M20 49l-6-11h12z" fill="#F4EBD3" stroke="#C9A24B" stroke-width="1.4"/>
         <circle cx="20" cy="19" r="17" fill="#F4EBD3" stroke="#C9A24B" stroke-width="2.2"/>
@@ -4673,13 +4676,29 @@
             for (const x of outras) {
                 const emb = { lat: +x.origem_lat, lng: +x.origem_lng };
                 const dst = { lat: +x.destino_lat, lng: +x.destino_lng };
-                criarMarcador({ position: emb, map: vv.map, cor: '#22c55e',
-                    title: `Próximo embarque: ${x.passageiro_nome || 'passageiro'}` });
+                criarMarcador({
+                    position: emb, map: vv.map, cor: '#22c55e',
+                    title: `Próximo embarque: ${x.passageiro_nome || 'passageiro'}`,
+                    legenda: 'Próximo embarque',
+                    legendaTom: 'verde',
+                });
                 // Pino bronze: novo local de desembarque da perna encadeada.
-                criarMarcador({ position: dst, map: vv.map, icon: PIN_BRONZE_ICON, iconW: 30, iconH: 39,
-                    title: `Novo desembarque: ${x.destino_texto || 'destino do passageiro'}` });
+                criarMarcador({
+                    position: dst, map: vv.map, icon: PIN_BRONZE_ICON, iconW: 30, iconH: 39,
+                    title: `Novo desembarque: ${x.destino_texto || 'destino do passageiro'}`,
+                    legenda: 'Novo desembarque',
+                    legendaTom: 'ouro',
+                });
                 const rota = criarRotaControle(vv.map, ROTA_TRACEJADA_OPTS);
                 rota.calcular(emb, dst).catch(() => {});
+                criarMarcador({
+                    map: vv.map,
+                    position: { lat: (emb.lat + dst.lat) / 2, lng: (emb.lng + dst.lng) / 2 },
+                    legenda: 'Próxima perna',
+                    legendaTom: 'ouro',
+                    legendaSo: true,
+                    zIndex: 35,
+                });
             }
         } catch (_) { /* ramificação é informativa: falhou, segue sem */ }
     }
@@ -4745,6 +4764,8 @@
             }
         }
         const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
+        const velEl = document.getElementById('viagemVel');
+        if (velEl) { velEl.style.display = 'none'; velEl.textContent = ''; }
 
         g = await carregarMaps();
         const embarque = v.origem_lat != null ? { lat: +v.origem_lat, lng: +v.origem_lng } : null;
@@ -4752,10 +4773,35 @@
         const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
         const map = novoMapa('mapViagem', { center: centro, zoom: 16 });
 
-        // Pinos fixos (linguagem dos mockups): embarque (verde), desembarque do
-        // passageiro (selo com pedestre), destino final do motorista (pino dourado).
+        // Pinos fixos com rótulos (linguagem do mockup):
+        // partida → embarque → desembarque → destino final do motorista.
         const destTitulo = (v.destino_texto && String(v.destino_texto).trim()) || 'Destino';
-        if (embarque) criarMarcador({ position: embarque, map, cor: '#22c55e', title: 'Embarque' });
+        const partidaMot = (v.motorista_partida_lat != null && v.motorista_partida_lng != null)
+            ? { lat: +v.motorista_partida_lat, lng: +v.motorista_partida_lng }
+            : null;
+        const partidaTxt = (v.motorista_partida_texto && String(v.motorista_partida_texto).trim())
+            || 'Partida do motorista';
+        const encurtarMapa = (t, n = 26) => {
+            const s = String(t || '').trim();
+            return s.length > n ? s.slice(0, n - 1) + '…' : s;
+        };
+        if (partidaMot && (!embarque || distKmGps(partidaMot, embarque) > 0.08)) {
+            criarMarcador({
+                position: partidaMot, map,
+                icon: PIN_PARTIDA_ICON, iconW: 30, iconH: 39,
+                title: `Partida — ${partidaTxt}`,
+                legenda: 'Partida',
+                legendaTom: 'partida',
+            });
+        }
+        if (embarque) {
+            criarMarcador({
+                position: embarque, map, cor: '#22c55e',
+                title: 'Embarque',
+                legenda: 'Embarque',
+                legendaTom: 'verde',
+            });
+        }
         const paradaMotEarly = (v.destino_motorista_lat != null && v.destino_motorista_lng != null)
             ? { lat: +v.destino_motorista_lat, lng: +v.destino_motorista_lng }
             : null;
@@ -4777,8 +4823,12 @@
 
         // Parada intermediária (parcial/encaixe): é onde o passageiro desce.
         if (temParadaSeparada) {
-            criarMarcador({ position: paradaMotEarly, map, icon: PAX_DESCE_ICON, iconW: 34, iconH: 42,
-                title: `Passageiro desembarca aqui — ${paradaMotTxtEarly}` });
+            criarMarcador({
+                position: paradaMotEarly, map, icon: PAX_DESCE_ICON, iconW: 34, iconH: 42,
+                title: `Passageiro desembarca aqui — ${paradaMotTxtEarly}`,
+                legenda: 'Desembarca aqui',
+                legendaTom: 'ouro',
+            });
         }
         // Destino da viagem: se o carro SEGUE além dele (rota única com parada), o
         // ponto é "passageiro desembarca aqui"; se é o fim da linha, bandeira.
@@ -4789,13 +4839,58 @@
                 icon: ehSoParada ? PAX_DESCE_ICON : FLAG_ICON,
                 iconW: ehSoParada ? 34 : 28, iconH: ehSoParada ? 42 : 30,
                 title: ehSoParada ? `Passageiro desembarca aqui — ${destTitulo}` : destTitulo,
+                legenda: ehSoParada ? 'Desembarca aqui' : encurtarMapa(destTitulo),
+                legendaTom: ehSoParada ? 'ouro' : 'destino',
             });
         }
         if (continuaAlem) {
-            criarMarcador({ position: destinoFinalMot, map, icon: PIN_OURO_ICON, iconW: 30, iconH: 39,
-                title: `Destino final do motorista — ${destinoFinalTxt}` });
+            criarMarcador({
+                position: destinoFinalMot, map, icon: PIN_OURO_ICON, iconW: 30, iconH: 39,
+                title: `Destino final do motorista — ${destinoFinalTxt}`,
+                legenda: 'Destino final',
+                legendaTom: 'ouro',
+            });
             const rotaCont = criarRotaControle(map, ROTA_TRACEJADA_OPTS);
             rotaCont.calcular(pontoDesembarque, destinoFinalMot).catch(() => {});
+            // Rótulo no meio do trecho (como no mockup: “rota única com parada”).
+            if (pontoDesembarque) {
+                criarMarcador({
+                    map,
+                    position: {
+                        lat: (pontoDesembarque.lat + destinoFinalMot.lat) / 2,
+                        lng: (pontoDesembarque.lng + destinoFinalMot.lng) / 2,
+                    },
+                    legenda: 'Continua após o desembarque',
+                    legendaTom: 'rota',
+                    legendaSo: true,
+                    zIndex: 35,
+                });
+            }
+            if (embarque && pontoDesembarque) {
+                criarMarcador({
+                    map,
+                    position: {
+                        lat: (embarque.lat + pontoDesembarque.lat) / 2,
+                        lng: (embarque.lng + pontoDesembarque.lng) / 2,
+                    },
+                    legenda: 'Rota com parada',
+                    legendaTom: 'rota',
+                    legendaSo: true,
+                    zIndex: 34,
+                });
+            }
+        } else if (embarque && destino && distKmGps(embarque, destino) > 0.3) {
+            criarMarcador({
+                map,
+                position: {
+                    lat: (embarque.lat + destino.lat) / 2,
+                    lng: (embarque.lng + destino.lng) / 2,
+                },
+                legenda: 'Rota da viagem',
+                legendaTom: 'rota',
+                legendaSo: true,
+                zIndex: 34,
+            });
         }
 
         // Rota preta no mapa (dois lados). Parcial: preta até parada do motorista + dourada só o resto.
@@ -4816,12 +4911,16 @@
             id: viagemId, ehMotorista, fase: v.fase || 'encontro', status: v.status,
             embarque, destino, map, rotaCtrl, rotaCtrlExtra,
             paradaMot, paradaMotTexto,
+            partida: partidaMot,
+            partidaMarcador: null,
             destinoTexto: (v.destino_texto && String(v.destino_texto).trim()) || '',
             origemTexto: (v.origem_texto && String(v.origem_texto).trim()) || '',
             embarqueReal: (v.fase === 'destino' && embarque) ? { ...embarque } : null,
             chegadaDestino: false, chegadaDestinoDesde: null, autoFinalizarTimer: null,
             passageiroSexo: v.passageiro_sexo || (ehMotorista ? null : user?.sexo) || null,
             posMotorista: null,
+            velMotoristaKmh: null,
+            velMotoristaEm: 0,
             posPassageiro: posPaxInicial,
             carMarker: null, pessoaMarker: null, ultimaRota: 0,
             rotaPath: null, rotaKmTotal: 0, rotaDurMsTotal: 0,
@@ -5062,7 +5161,8 @@
                 vv.rotaCtrl.desenhar(fb);
                 vv.rotaPath = fb;
                 vv.rotaKmTotal = distKmGps(de, alvo);
-                vv.rotaDurMsTotal = Math.max(60000, Math.round((vv.rotaKmTotal / 0.45) * 60000));
+                const vel = velocidadeEtaKmh(vv);
+                vv.rotaDurMsTotal = Math.max(60000, etaMsPorKm(vv.rotaKmTotal, vel));
                 return { km: vv.rotaKmTotal, _fallbackLine: fb };
             } catch (__) { return null; }
         } finally {
@@ -5083,17 +5183,97 @@
         const alvo = focoMapaViagem(vv);
         if (alvo) { vv.map.panTo(alvo); vv.map.setZoom(ZOOM_FOCO_ORIGEM); }
     }
-    function rotuloProximidadeMotorista(km) {
+    function rotuloProximidadeMotorista(km, velKmh) {
         if (km < 0.05) return 'Motorista chegando';
         const m = Math.round(km * 1000);
-        const min = Math.max(1, Math.round(km / 0.45));   // ~27 km/h urbano
+        const min = etaMinutosPorKm(km, velKmh);
         return m >= 1000 ? `~${min} min · ${km.toFixed(1)} km` : `~${min} min · ${m} m`;
+    }
+    /** Velocidade útil pro ETA: GPS ao vivo (fresco) ou fallback urbano ~27 km/h. */
+    const VEL_ETA_FALLBACK_KMH = 27;   // 0.45 km/min
+    const VEL_ETA_MIN_KMH = 8;
+    const VEL_ETA_MAX_KMH = 100;
+    const VEL_FRESCA_MS = 20000;
+    function velocidadeEtaKmh(vv) {
+        const v = vv?.velMotoristaKmh;
+        const em = vv?.velMotoristaEm || 0;
+        if (v == null || !Number.isFinite(v) || Date.now() - em > VEL_FRESCA_MS) {
+            return VEL_ETA_FALLBACK_KMH;
+        }
+        if (v < 3) return VEL_ETA_MIN_KMH; // parado/quase: não zera o ETA
+        return Math.min(VEL_ETA_MAX_KMH, Math.max(VEL_ETA_MIN_KMH, v));
+    }
+    function etaMinutosPorKm(km, velKmh) {
+        const v = (velKmh != null && Number.isFinite(velKmh) && velKmh > 0)
+            ? Math.min(VEL_ETA_MAX_KMH, Math.max(VEL_ETA_MIN_KMH, velKmh))
+            : VEL_ETA_FALLBACK_KMH;
+        return Math.max(1, Math.round((km / v) * 60));
+    }
+    function etaMsPorKm(km, velKmh) {
+        return etaMinutosPorKm(km, velKmh) * 60000;
+    }
+    function registrarVelMotorista(vv, speedKmh, deGps) {
+        if (!vv) return;
+        let v = speedKmh;
+        if (v == null || !Number.isFinite(+v)) {
+            // Deriva pela distância se o aparelho não informar coords.speed.
+            if (deGps && vv.posMotorista && vv._velPrevPos) {
+                const dtH = (Date.now() - (vv._velPrevEm || Date.now())) / 3600000;
+                if (dtH > 0.0003 && dtH < 0.05) {
+                    const d = distKmGps(vv._velPrevPos, deGps);
+                    if (Number.isFinite(d)) v = d / dtH;
+                }
+            }
+        }
+        if (deGps) {
+            vv._velPrevPos = { lat: +deGps.lat, lng: +deGps.lng };
+            vv._velPrevEm = Date.now();
+        }
+        if (v == null || !Number.isFinite(+v) || +v < 0 || +v > 160) return;
+        vv.velMotoristaKmh = Math.round(+v * 10) / 10;
+        vv.velMotoristaEm = Date.now();
+    }
+    function atualizarVelViagemUi(vv) {
+        const el = document.getElementById('viagemVel');
+        if (!el) return;
+        // Passageiro vê a velocidade do carro; motorista também (próprio GPS).
+        const fresca = vv?.velMotoristaKmh != null
+            && Date.now() - (vv.velMotoristaEm || 0) < VEL_FRESCA_MS;
+        if (!fresca) {
+            el.style.display = 'none';
+            el.textContent = '';
+            el.classList.remove('sheet-vel--parado');
+            return;
+        }
+        const v = vv.velMotoristaKmh;
+        el.style.display = 'block';
+        if (v < 3) {
+            el.textContent = 'Parado';
+            el.classList.add('sheet-vel--parado');
+        } else {
+            el.textContent = Math.round(v) + ' km/h';
+            el.classList.remove('sheet-vel--parado');
+        }
+    }
+    /** Congela o 1º GPS do carro como "partida" se a rota publicada não tinha origem. */
+    function garantirPinoPartida(vv, pt) {
+        if (!vv || !vv.map || !pt || vv.partidaMarcador || vv.partida) return;
+        if (vv.embarque && distKmGps(pt, vv.embarque) < 0.08) return;
+        vv.partida = { lat: +pt.lat, lng: +pt.lng };
+        vv.partidaMarcador = criarMarcador({
+            position: vv.partida, map: vv.map,
+            icon: PIN_PARTIDA_ICON, iconW: 30, iconH: 39,
+            title: 'Partida do motorista',
+            legenda: 'Partida',
+            legendaTom: 'partida',
+        });
     }
     // Motorista: carro + passageiro + rota até o alvo. Passageiro: só acompanha o carro.
     async function renderViagem() {
         const vv = viagemView; if (!vv || vv.status !== 'em_andamento') return;
         // Carro do motorista (visível nos dois lados).
         if (vv.posMotorista) {
+            garantirPinoPartida(vv, vv.posMotorista);
             if (vv.carMarker) {
                 const prev = vv.carPosAnterior || vv.posMotorista;
                 atualizarPosicaoCarro(vv.carMarker, vv.posMotorista, prev);
@@ -5129,6 +5309,8 @@
         const eta = document.getElementById('viagemEta');
         const alvo = alvoViagem();
         const deEfetivo = origemRotaViagem(vv);
+        const velEta = velocidadeEtaKmh(vv);
+        atualizarVelViagemUi(vv);
 
         const atualizarKmEta = (kmRota, distText, durText) => {
             if (vv.ehMotorista && vv.fase === 'destino' && kmRota > 0) {
@@ -5147,7 +5329,15 @@
                 const destSuf = (!vv.ehMotorista && vv.destinoTexto)
                     ? ` · ${vv.destinoTexto}`
                     : '';
-                const dur = (!durText || /^0(\s|$)/.test(String(durText))) ? '<1 min' : durText;
+                // Com velocidade ao vivo, recalcula o tempo a partir do km restante.
+                let dur = durText;
+                const velFresca = vv.velMotoristaKmh != null
+                    && Date.now() - (vv.velMotoristaEm || 0) < VEL_FRESCA_MS
+                    && vv.velMotoristaKmh >= 3;
+                if (velFresca && kmRota > 0) {
+                    dur = formatarDuracaoMs(etaMsPorKm(kmRota, velEta)) || dur;
+                }
+                if (!dur || /^0(\s|$)/.test(String(dur))) dur = '<1 min';
                 eta.textContent = `~${dur} · ${distText}${kmMostrar}${destSuf}`;
             }
         };
@@ -5161,7 +5351,9 @@
                 const leg = resp.routes?.[0]?.legs?.[0];
                 if (leg) atualizarKmEta(resp.km || 0, leg.distance.text, leg.duration.text);
                 else if (resp.km != null) {
-                    const durMs = resp._durationMillis || vv.rotaDurMsTotal || 0;
+                    const durMs = (vv.velMotoristaKmh != null && Date.now() - (vv.velMotoristaEm || 0) < VEL_FRESCA_MS)
+                        ? etaMsPorKm(resp.km, velEta)
+                        : (resp._durationMillis || vv.rotaDurMsTotal || etaMsPorKm(resp.km, velEta));
                     atualizarKmEta(resp.km, formatarMetros(resp.km * 1000), formatarDuracaoMs(durMs) || '<1 min');
                 }
             } else if (vv.rotaPath && deEfetivo) {
@@ -5171,7 +5363,11 @@
                 }
                 const p = progressoNaRota(deEfetivo, vv.rotaPath);
                 if (p && vv.rotaKmTotal > 0) {
-                    const durMs = vv.rotaDurMsTotal * (p.kmRestante / vv.rotaKmTotal);
+                    const velFresca = vv.velMotoristaKmh != null
+                        && Date.now() - (vv.velMotoristaEm || 0) < VEL_FRESCA_MS;
+                    const durMs = velFresca
+                        ? etaMsPorKm(p.kmRestante, velEta)
+                        : (vv.rotaDurMsTotal * (p.kmRestante / vv.rotaKmTotal));
                     atualizarKmEta(p.kmRestante, formatarMetros(p.kmRestante * 1000), formatarDuracaoMs(durMs) || '<1 min');
                 }
             }
@@ -5182,7 +5378,7 @@
                 if (vv.fase === 'encontro') {
                     const ref = vv.posPassageiro || vv.embarque;
                     eta.textContent = ref
-                        ? rotuloProximidadeMotorista(distKmGps(ref, vv.posMotorista))
+                        ? rotuloProximidadeMotorista(distKmGps(ref, vv.posMotorista), velEta)
                         : 'Motorista a caminho';
                 } else if (!vv.chegadaDestino) {
                     const nome = vv.destinoTexto || 'destino';
@@ -5230,6 +5426,7 @@
         if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
         if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
         const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+        const velEl = document.getElementById('viagemVel'); if (velEl) { velEl.style.display = 'none'; velEl.textContent = ''; }
         const btnRec = document.getElementById('btnRecentrar'); if (btnRec) btnRec.style.display = 'none';
     }
 
@@ -5327,13 +5524,26 @@
             if (window.VapRealtime && VapRealtime.connected() && VapRealtime.emitLoc(vv.id, pt)) {
                 return;
             }
+            const body = { lat: pt.lat, lng: pt.lng, disponivel: true };
+            if (pt.speed_kmh != null) body.speed_kmh = pt.speed_kmh;
             fetchWithAuth('/api/localizacao', {
                 method: 'POST',
-                body: JSON.stringify({ lat: pt.lat, lng: pt.lng, disponivel: true }),
+                body: JSON.stringify(body),
             }).catch(() => {});
         };
         const onGpsOk = (pos) => {
             const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            // Velocidade do aparelho (m/s → km/h); senão deriva pela distância.
+            let speedKmh = null;
+            if (typeof pos.coords.speed === 'number' && pos.coords.speed >= 0) {
+                speedKmh = pos.coords.speed * 3.6;
+            }
+            if (vv.ehMotorista) {
+                registrarVelMotorista(vv, speedKmh, pt);
+                if (vv.velMotoristaKmh != null) pt.speed_kmh = vv.velMotoristaKmh;
+            } else if (speedKmh != null) {
+                pt.speed_kmh = Math.round(speedKmh * 10) / 10;
+            }
             aplicarGpsProprio(pt);
             enviarLoc(pt);
         };
@@ -5395,6 +5605,9 @@
             }
             if (!vv.ehMotorista && d.motorista) {
                 vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
+                if (d.motorista.speed_kmh != null) {
+                    registrarVelMotorista(vv, +d.motorista.speed_kmh, vv.posMotorista);
+                }
             }
             if (vv.ehMotorista && d.passageiro) {
                 vv.posPassageiro = { lat: +d.passageiro.lat, lng: +d.passageiro.lng };
@@ -5440,7 +5653,12 @@
                 onPeerLoc: (payload) => {
                     if (!vv || vv.status !== 'em_andamento') return;
                     const pt = { lat: +payload.lat, lng: +payload.lng };
-                    if (payload.papel === 'motorista' && !vv.ehMotorista) vv.posMotorista = pt;
+                    if (payload.papel === 'motorista' && !vv.ehMotorista) {
+                        vv.posMotorista = pt;
+                        if (payload.speed_kmh != null) {
+                            registrarVelMotorista(vv, +payload.speed_kmh, pt);
+                        }
+                    }
                     if (payload.papel === 'passageiro' && vv.ehMotorista) vv.posPassageiro = pt;
                     if (payload.fase && payload.fase !== vv.fase) {
                         aplicarMetaLoc({ status: payload.status, fase: payload.fase });

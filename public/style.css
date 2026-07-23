@@ -2185,6 +2185,64 @@ body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
 .sheet-top { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; padding-top: 2px; }
 .sheet-fase { color: #fff; font-size: 1.12rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
 .sheet-eta { color: #EAD298; font-weight: 600; font-size: 0.92rem; line-height: 1.3; margin: 0; }
+.sheet-vel {
+    margin: 2px 0 0;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #cfd2d6;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+}
+.sheet-vel--parado { color: #9aa0a6; font-weight: 500; }
+/* Rótulos dos pinos no mapa da viagem (embarque / desembarque / destino) */
+.map-pin-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.map-pin-legenda {
+    max-width: 132px;
+    padding: 4px 9px;
+    border-radius: 9px;
+    background: rgba(11, 11, 13, 0.9);
+    color: #fff;
+    font: 700 10.5px/1.25 system-ui, -apple-system, "Segoe UI", sans-serif;
+    letter-spacing: -0.01em;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    white-space: normal;
+    pointer-events: none;
+    -webkit-font-smoothing: antialiased;
+}
+.map-pin-legenda--ouro {
+    background: rgba(26, 22, 12, 0.94);
+    color: #EAD298;
+    border-color: rgba(234, 210, 152, 0.5);
+}
+.map-pin-legenda--verde {
+    background: rgba(8, 28, 18, 0.92);
+    color: #86efac;
+    border-color: rgba(34, 197, 94, 0.45);
+}
+.map-pin-legenda--partida {
+    background: rgba(15, 23, 36, 0.92);
+    color: #93c5fd;
+    border-color: rgba(91, 124, 153, 0.55);
+}
+.map-pin-legenda--destino {
+    background: rgba(11, 11, 13, 0.92);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+.map-pin-legenda--rota {
+    background: rgba(234, 210, 152, 0.95);
+    color: #1a160c;
+    border-color: rgba(201, 162, 75, 0.7);
+    font-weight: 800;
+    box-shadow: 0 2px 8px rgba(234, 210, 152, 0.35);
+}
 .sheet-hint { color: #9aa0a6; font-size: 0.92rem; text-align: center; padding: 8px 0; margin: 0; }
 .sheet-hint--chegada {
     color: #EAD298;

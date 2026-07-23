@@ -44,13 +44,24 @@ async function podeAcessarViagem(userId, viagemId) {
   return v;
 }
 
-async function upsertLocalizacao(userId, lat, lng, disponivel) {
+function normalizarSpeedKmh(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  // GPS ruidoso: ignora picos absurdos; 0 = parado (válido).
+  if (n > 160) return null;
+  return Math.round(n * 10) / 10;
+}
+
+async function upsertLocalizacao(userId, lat, lng, disponivel, speedKmh) {
+  const vel = normalizarSpeedKmh(speedKmh);
   await pool.query(
-    `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, atualizado_em)
-     VALUES ($1, $2, $3, $4, NOW())
+    `INSERT INTO localizacoes_online (usuario_id, lat, lng, disponivel, speed_kmh, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (usuario_id)
-     DO UPDATE SET lat = $2, lng = $3, disponivel = $4, atualizado_em = NOW()`,
-    [userId, lat, lng, disponivel !== false]
+     DO UPDATE SET lat = $2, lng = $3, disponivel = $4,
+                   speed_kmh = COALESCE($5, localizacoes_online.speed_kmh),
+                   atualizado_em = NOW()`,
+    [userId, lat, lng, disponivel !== false, vel]
   );
 }
 
@@ -132,6 +143,7 @@ function attachRealtime(httpServer) {
         const lng = Number(msg?.lng);
         if (!viagemId || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+        const speedKmh = normalizarSpeedKmh(msg?.speed_kmh ?? msg?.speedKmh);
 
         // Cache da permissão (~12s): evita SELECT a cada ponto GPS (~1,5s).
         const agora = Date.now();
@@ -149,9 +161,9 @@ function attachRealtime(httpServer) {
           return;
         }
 
-        await upsertLocalizacao(uid, lat, lng, msg?.disponivel !== false);
+        await upsertLocalizacao(uid, lat, lng, msg?.disponivel !== false, speedKmh);
 
-        socket.to(`viagem:${viagemId}`).emit("viagem_loc", {
+        const payload = {
           viagemId,
           usuarioId: uid,
           lat,
@@ -160,7 +172,9 @@ function attachRealtime(httpServer) {
           fase: peers.fase,
           status: peers.status,
           em: Date.now(),
-        });
+        };
+        if (speedKmh != null) payload.speed_kmh = speedKmh;
+        socket.to(`viagem:${viagemId}`).emit("viagem_loc", payload);
       } catch (e) {
         console.warn("loc_update:", e.message);
       }
