@@ -54,9 +54,12 @@ app.post("/api/pedido-fila/:id/aceitar", verificarAuth, async (req, res) => {
     )).rows[0];
     const viagem = await criarViagemDaProposta(proposta.id);
     if (!viagem) {
-      // Outro motorista levou o pedido no mesmo instante (gate atômico): desfaz
-      // o aceite pendurado e avisa com clareza — "tente de novo" aqui enganava.
       await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [proposta.id]).catch(() => {});
+      await pool.query(
+        "UPDATE pedido_fila SET status = 'recusada', respondida_em = NOW() WHERE id = $1",
+        [oferta.id]
+      ).catch(() => {});
+      await ofertarProximo(oferta.pedido_id);
       return res.status(409).json({ error: "Este pedido acabou de ser atendido por outro motorista." });
     }
 
@@ -137,7 +140,7 @@ app.get("/api/pedidos/:id/fila-status", verificarAuth, async (req, res) => {
     const pid = await projetoDoUsuario(ped.passageiro_id);
     const online = pid ? await contarMotoristasOnline(pid, ped.passageiro_id) : 0;
     const total = tot?.total || 0;
-    const restantes = tot?.restantes || 0;
+    const restantes = ped.status === "aberto" ? (tot?.restantes || 0) : 0;
     res.json({
       status: ped.status,
       atual: atual ? {

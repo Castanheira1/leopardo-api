@@ -180,6 +180,42 @@ async function validarMesmoProjeto(userIdA, userIdB, res) {
   return true;
 }
 
+/** Passageiro com viagem em_andamento (não pode abrir outro fluxo de embarque). */
+async function passageiroEmViagem(passageiroId) {
+  if (!passageiroId) return false;
+  const { rows } = await pool.query(
+    "SELECT 1 FROM viagens WHERE passageiro_id = $1 AND status = 'em_andamento' LIMIT 1",
+    [passageiroId]
+  );
+  return rows.length > 0;
+}
+
+/** Cancela pedidos abertos e fila ativa do passageiro (ex.: ao pedir vaga direta). */
+async function cancelarPedidosAbertosPassageiro(passageiroId) {
+  const { rows } = await pool.query(
+    "SELECT id FROM pedidos WHERE passageiro_id = $1 AND status = 'aberto'",
+    [passageiroId]
+  );
+  for (const p of rows) {
+    await pool.query(
+      `UPDATE pedido_fila SET status = 'cancelada'
+       WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada')`,
+      [p.id]
+    );
+  }
+  if (rows.length) {
+    await pool.query(
+      `UPDATE propostas SET status = 'recusado'
+       WHERE pedido_id = ANY($1::int[]) AND status = 'pendente'`,
+      [rows.map((r) => r.id)]
+    );
+    await pool.query(
+      "UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto'",
+      [passageiroId]
+    );
+  }
+}
+
 
 const habilitacaoAtiva = async (userId) => {
   const { rows } = await pool.query(
@@ -212,5 +248,7 @@ module.exports = {
   buscarUsuarioFront,
   exigirProjeto,
   validarMesmoProjeto,
+  passageiroEmViagem,
+  cancelarPedidosAbertosPassageiro,
   habilitacaoAtiva,
 };

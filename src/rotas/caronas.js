@@ -29,10 +29,18 @@ app.post("/api/caronas", verificarAuth, async (req, res) => {
     const hab = await habilitacaoAtiva(req.user.id);
     if (!hab) return res.status(403).json({ error: "Ative o modo motorista (foto do carro + selfie) antes de oferecer carona" });
 
-    await pool.query(
-      "UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'",
+    const { rows: canceladas } = await pool.query(
+      `UPDATE caronas SET status = 'cancelada' WHERE motorista_id = $1 AND status = 'ativa'
+       RETURNING id`,
       [req.user.id]
     );
+    if (canceladas.length) {
+      await pool.query(
+        `UPDATE propostas SET status = 'recusado'
+         WHERE carona_id = ANY($1::int[]) AND status = 'pendente'`,
+        [canceladas.map((c) => c.id)]
+      );
+    }
 
     // Caminho na malha do projeto (troncos/vias) — gravado na carona pro match.
     const cod = await codigoDoProjeto(pid);
@@ -154,7 +162,10 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.*, u.nome AS motorista_nome, u.empresa_nome AS motorista_empresa,
               h.placa, h.tag, h.foto_carro_url,
-              (lo.disponivel = TRUE) AS motorista_online ${distSel}${compatSel}
+              (lo.disponivel = TRUE) AS motorista_online,
+              (SELECT COUNT(*)::int FROM viagens vv
+               WHERE vv.motorista_id = c.motorista_id AND vv.status = 'em_andamento'
+                 AND vv.carona_id IS NULL) AS viagens_fora_carona ${distSel}${compatSel}
        FROM caronas c
        JOIN usuarios u ON c.motorista_id = u.id
        LEFT JOIN habilitacoes_motorista h ON c.habilitacao_id = h.id
@@ -173,7 +184,13 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
        ORDER BY ${orderBy}`,
       params
     );
-    if (!temDest) return res.json(rows);
+    if (!temDest) {
+      const filtradas = rows.filter((c) => {
+        const fora = Number(c.viagens_fora_carona) || 0;
+        return (c.vagas || 0) - fora > 0;
+      });
+      return res.json(filtradas);
+    }
 
     // Reavalia compat na malha/rota_pontos — o SQL ainda usa reta como pré-filtro.
     const origPax = temPos ? { lat: +lat, lng: +lng } : null;
@@ -208,6 +225,8 @@ app.get("/api/caronas", verificarAuth, async (req, res) => {
 
     const comEncaixe = [];
     for (const c of rows) {
+      const fora = Number(c.viagens_fora_carona) || 0;
+      if ((c.vagas || 0) - fora <= 0) continue;
       if (c.origem_lat == null || c.destino_lat == null) {
         if (c.compat_rota !== "none") comEncaixe.push(c);
         continue;
