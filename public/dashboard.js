@@ -1579,7 +1579,13 @@
             veiculoPend = { selfie, carro, reutilizarSelfie, trocar };
             document.getElementById('veicPlaca').value = (carro.placa || '').toUpperCase();
             document.getElementById('veicTag').value = reutilizarSelfie && habHoje?.tag ? habHoje.tag : '';
-            document.getElementById('veicMsg').textContent = '';
+            const veicMsg = document.getElementById('veicMsg');
+            if (veicMsg) {
+                veicMsg.textContent = carro.placa
+                    ? ''
+                    : 'Não li a placa automaticamente — confira e digite se precisar.';
+                veicMsg.style.color = carro.placa ? '' : '#b45309';
+            }
             const prev = document.getElementById('veicFoto');
             if (carro.url) { prev.src = carro.url; prev.style.display = 'block'; } else { prev.style.display = 'none'; }
             const tituloVeic = document.getElementById('veicTitulo');
