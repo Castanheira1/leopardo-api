@@ -4,3 +4,11 @@ node_modules/
 .DS_Store
 public/uploads/
 .claude/
+
+# Loja / assinatura (nunca commitar)
+*.jks
+*.keystore
+android/app/google-services.json
+ios/App/App/GoogleService-Info.plist
+store/firebase/google-services.json
+store/firebase/GoogleService-Info.plist

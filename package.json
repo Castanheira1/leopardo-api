@@ -12,8 +12,11 @@
     "test": "node tests/integration.test.js",
     "test:pg": "bash scripts/test-com-pg-local.sh",
     "cap:sync": "cap sync",
+    "cap:prepare": "cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios",
+    "store:check": "node scripts/verificar-loja.js",
+    "store:sha256": "bash scripts/extrair-sha256-android.sh",
     "projetos:estrutura": "node scripts/garantir-estrutura-projetos.js"
   },
   "keywords": [
