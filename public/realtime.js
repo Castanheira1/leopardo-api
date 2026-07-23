@@ -135,12 +135,16 @@
   function emitLoc(viagemId, pt) {
     if (!socket || !socket.connected) return false;
     if (!pt || !Number.isFinite(+pt.lat) || !Number.isFinite(+pt.lng)) return false;
-    socket.emit("loc_update", {
+    var payload = {
       viagemId: viagemId,
       lat: +pt.lat,
       lng: +pt.lng,
       disponivel: true,
-    });
+    };
+    if (pt.speed_kmh != null && Number.isFinite(+pt.speed_kmh)) {
+      payload.speed_kmh = +pt.speed_kmh;
+    }
+    socket.emit("loc_update", payload);
     return true;
   }
 

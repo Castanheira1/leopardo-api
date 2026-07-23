@@ -359,6 +359,7 @@ CREATE TABLE IF NOT EXISTS localizacoes_online (
     lng NUMERIC(10,6) NOT NULL,
     disponivel BOOLEAN DEFAULT TRUE,
     vagas INTEGER DEFAULT 1,
+    speed_kmh NUMERIC(5,1),
     online_desde TIMESTAMP,
     atualizado_em TIMESTAMP DEFAULT NOW()
 );
