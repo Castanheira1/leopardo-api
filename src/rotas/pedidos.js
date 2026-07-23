@@ -71,11 +71,12 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
     // ZONE no connect). Antes isto passava a Date do node-pg de volta por
     // horarioValido() e o Postgres rejeitava a string "GMT..." (erro 500 ao agendar).
     const agendadoFuturo = !!ped.agendado_futuro;
-    res.json(ped);
 
     // Pedido "para agora" (sem horário ou horário já vencido): notifica os motoristas
     // perto na hora. Pedido AGENDADO (horário futuro): não notifica agora — o agendador
     // dispara a notificação na hora marcada (notificado continua FALSE até lá).
+    // A fila precisa existir ANTES do 200: senão o motorista recusa o pulso enquanto
+    // iniciarFilaPedido ainda roda e avancou=false sem motivo.
     if (!agendadoFuturo) {
       // usar_fila: fila EXCLUSIVA clássica (pulso oculto, só o da vez responde).
       // Sem usar_fila (padrão do app): busca inteligente — o pedido vira pulso
@@ -88,6 +89,7 @@ app.post("/api/pedidos", verificarAuth, async (req, res) => {
         await pool.query("UPDATE pedidos SET notificado = TRUE WHERE id = $1", [ped.id]).catch(() => {});
       }
     }
+    res.json(ped);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar pedido" });
