@@ -290,6 +290,11 @@ app.delete("/api/pedidos/:id", verificarAuth, async (req, res) => {
        WHERE pedido_id = $1 AND status = 'pendente'`,
       [req.params.id]
     );
+    await pool.query(
+      `UPDATE pedido_fila SET status = 'cancelada'
+       WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada')`,
+      [req.params.id]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Erro ao cancelar pedido" });

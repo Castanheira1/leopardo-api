@@ -154,6 +154,13 @@ CREATE TABLE propostas (
     selfie_lng NUMERIC(10,6),
     selfie_em TIMESTAMP,
     mensagem TEXT,
+    pessoas INTEGER DEFAULT 1,
+    encaixe_texto TEXT,
+    encaixe_lat NUMERIC(10,6),
+    encaixe_lng NUMERIC(10,6),
+    dest_passageiro_texto TEXT,
+    dest_passageiro_lat NUMERIC(10,6),
+    dest_passageiro_lng NUMERIC(10,6),
     status VARCHAR(20) DEFAULT 'pendente' CHECK (status IN ('pendente', 'aceito', 'recusado')),
     created_at TIMESTAMP DEFAULT NOW()
 );

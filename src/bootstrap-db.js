@@ -461,6 +461,13 @@ async function garantirColunasViagens() {
     // Oferta a um contato ("quer carona"/buzina): guarda de qual contato veio, pra
     // a viagem herdar embarque/destino do passageiro e desenhar a rota.
     await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS contato_id INTEGER");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS pessoas INTEGER DEFAULT 1");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS encaixe_texto TEXT");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS encaixe_lat NUMERIC(10,6)");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS encaixe_lng NUMERIC(10,6)");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS dest_passageiro_texto TEXT");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS dest_passageiro_lat NUMERIC(10,6)");
+    await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS dest_passageiro_lng NUMERIC(10,6)");
     // Alcance (km) ajustável da carona com destino: raio em que passageiros veem a
     // rota e o motorista recebe/enxerga os pedidos. Barra 1–25 km no app (default 10).
     await pool.query("ALTER TABLE caronas ADD COLUMN IF NOT EXISTS raio_km NUMERIC(4,1) DEFAULT 10");

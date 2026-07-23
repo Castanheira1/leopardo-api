@@ -4,33 +4,64 @@ const app = require("../app");
 const { pool } = require("../db");
 const { enviarPush } = require("../push");
 const { verificarAuth } = require("../auth");
-const { habilitacaoAtiva, motoristaGpsVivo, sqlSelfieValida, validarMesmoProjeto } = require("../usuarios");
-const { criarViagemDaProposta, reverterRecursosDaViagem } = require("../services/viagens");
+const { habilitacaoAtiva, motoristaGpsVivo, sqlSelfieValida, validarMesmoProjeto, passageiroEmViagem, cancelarPedidosAbertosPassageiro } = require("../usuarios");
+const { criarViagemDaProposta, pessoasDaProposta, reverterRecursosDaViagem } = require("../services/viagens");
 const { ofertarProximo } = require("../services/fila");
 
 /* ============================ PROPOSTAS ============================ */
 app.post("/api/propostas", verificarAuth, async (req, res) => {
-  const { carona_id, pedido_id, contato_id, mensagem, selfie_url, selfie_lat, selfie_lng, selfie_em, pessoas } = req.body;
+  const {
+    carona_id, pedido_id, contato_id, mensagem,
+    selfie_url, selfie_lat, selfie_lng, selfie_em, pessoas,
+    encaixe_texto, encaixe_lat, encaixe_lng,
+    dest_passageiro_texto, dest_passageiro_lat, dest_passageiro_lng,
+  } = req.body;
   if (!carona_id && !pedido_id && !contato_id) return res.status(400).json({ error: "Informe carona_id, pedido_id ou contato_id" });
 
   try {
+    if (await passageiroEmViagem(req.user.id)) {
+      return res.status(400).json({ error: "Você já está em uma viagem. Finalize ou cancele antes de solicitar outra carona." });
+    }
+
     let para_usuario_id, dadosSelfie = {};
     const npessoas = Math.min(6, Math.max(parseInt(pessoas, 10) || 1, 1));
+    let encaixeDados = {
+      encaixe_texto: encaixe_texto ? String(encaixe_texto).slice(0, 200) : null,
+      encaixe_lat: encaixe_lat != null ? +encaixe_lat : null,
+      encaixe_lng: encaixe_lng != null ? +encaixe_lng : null,
+    };
+    if (encaixeDados.encaixe_lat == null || encaixeDados.encaixe_lng == null) {
+      encaixeDados = { encaixe_texto: null, encaixe_lat: null, encaixe_lng: null };
+    }
+    const destPass = {
+      dest_passageiro_texto: dest_passageiro_texto ? String(dest_passageiro_texto).slice(0, 200) : null,
+      dest_passageiro_lat: dest_passageiro_lat != null ? +dest_passageiro_lat : null,
+      dest_passageiro_lng: dest_passageiro_lng != null ? +dest_passageiro_lng : null,
+    };
+    if (destPass.dest_passageiro_lat == null || destPass.dest_passageiro_lng == null) {
+      Object.assign(destPass, { dest_passageiro_texto: null, dest_passageiro_lat: null, dest_passageiro_lng: null });
+    }
 
     if (carona_id) {
-      // Passageiro pedindo uma vaga numa carona -> precisa de selfie
       if (!selfie_url) return res.status(400).json({ error: "Selfie é obrigatória para pedir vaga" });
       const car = (await pool.query("SELECT * FROM caronas WHERE id = $1 AND status = 'ativa'", [carona_id])).rows[0];
       if (!car) return res.status(404).json({ error: "Carona indisponível" });
       if (car.motorista_id === req.user.id) return res.status(400).json({ error: "Você é o motorista desta carona" });
       if (!(await validarMesmoProjeto(req.user.id, car.motorista_id, res))) return;
-      if ((car.vagas || 0) < npessoas) {
+      const foraCarona = (await pool.query(
+        `SELECT COUNT(*)::int AS n FROM viagens
+         WHERE motorista_id = $1 AND status = 'em_andamento' AND carona_id IS NULL`,
+        [car.motorista_id]
+      )).rows[0]?.n || 0;
+      const vagasEfetivas = (car.vagas || 0) - foraCarona;
+      if (vagasEfetivas < npessoas) {
         return res.status(400).json({
           error: npessoas === 1
             ? "Não há vagas disponíveis nesta carona"
-            : `Só há ${car.vagas} vaga(s) — você pediu ${npessoas}.`,
+            : `Só há ${Math.max(vagasEfetivas, 0)} vaga(s) — você pediu ${npessoas}.`,
         });
       }
+      await cancelarPedidosAbertosPassageiro(req.user.id);
       para_usuario_id = car.motorista_id;
       dadosSelfie = { selfie_url, selfie_lat, selfie_lng, selfie_em: selfie_em || new Date() };
     } else if (contato_id) {
@@ -75,13 +106,18 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO propostas
          (de_usuario_id, para_usuario_id, carona_id, pedido_id, contato_id, mensagem,
-          selfie_url, selfie_lat, selfie_lng, selfie_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          selfie_url, selfie_lat, selfie_lng, selfie_em, pessoas,
+          encaixe_texto, encaixe_lat, encaixe_lng,
+          dest_passageiro_texto, dest_passageiro_lat, dest_passageiro_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       [
         req.user.id, para_usuario_id, carona_id || null, pedido_id || null, contato_id || null, mensagem || null,
         dadosSelfie.selfie_url || null, dadosSelfie.selfie_lat || null,
         dadosSelfie.selfie_lng || null, dadosSelfie.selfie_em || null,
+        npessoas,
+        encaixeDados.encaixe_texto, encaixeDados.encaixe_lat, encaixeDados.encaixe_lng,
+        destPass.dest_passageiro_texto, destPass.dest_passageiro_lat, destPass.dest_passageiro_lng,
       ]
     );
     res.json(rows[0]);
@@ -157,11 +193,13 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
     // Cria a viagem na hora do aceite: já liga os dois, habilita rastreamento e contato.
     const viagem = await criarViagemDaProposta(req.params.id);
     if (!viagem) {
-      // Pedido-based: o pedido acabou de ser atendido por outro caminho (gate
-      // atômico) — desfaz o aceite e explica; "tente novamente" aqui enganava.
       if (rows[0].pedido_id) {
         await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [req.params.id]).catch(() => {});
         return res.status(409).json({ error: "Este pedido acabou de ser atendido por outra carona." });
+      }
+      if (rows[0].carona_id) {
+        await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [req.params.id]).catch(() => {});
+        return res.status(409).json({ error: "Carona indisponível ou sem vagas suficientes." });
       }
       console.error("[aceitar proposta] viagem não criada para proposta", req.params.id);
       return res.status(500).json({ error: "Não foi possível iniciar a viagem. Tente novamente." });
@@ -243,11 +281,12 @@ app.post("/api/propostas/:id/cancelar", verificarAuth, async (req, res) => {
     // criarViagemDaProposta) — devolve essa vaga agora.
     if (pr.carona_id) {
       const car = (await pool.query("SELECT motorista_id FROM caronas WHERE id = $1", [pr.carona_id])).rows[0];
+      const np = pessoasDaProposta(pr);
       if (car && await motoristaGpsVivo(car.motorista_id)) {
         if (pr.status_anterior === "aceito") {
           await pool.query(
-            "UPDATE caronas SET vagas = vagas + 1, status = 'ativa' WHERE id = $1 AND status <> 'cancelada'",
-            [pr.carona_id]
+            "UPDATE caronas SET vagas = vagas + $2, status = 'ativa' WHERE id = $1 AND status <> 'cancelada'",
+            [pr.carona_id, np]
           );
         } else {
           await pool.query("UPDATE caronas SET status = 'ativa' WHERE id = $1 AND status <> 'cancelada'", [pr.carona_id]);

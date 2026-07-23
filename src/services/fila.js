@@ -291,6 +291,12 @@ async function rankearMotoristasParaPedido(ped, projetoId) {
 async function iniciarFilaPedido(pedidoId, { exclusiva = true } = {}) {
   const ped = (await pool.query("SELECT * FROM pedidos WHERE id = $1", [pedidoId])).rows[0];
   if (!ped) return;
+  const filaViva = (await pool.query(
+    `SELECT 1 FROM pedido_fila
+     WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada', 'aceita') LIMIT 1`,
+    [pedidoId]
+  )).rows[0];
+  if (filaViva) return;
   const pid = await projetoDoUsuario(ped.passageiro_id);
   if (!pid) return;
   const candidatos = await rankearMotoristasParaPedido(ped, pid);

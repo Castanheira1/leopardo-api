@@ -2735,6 +2735,8 @@
                     compatRota: c.compat_rota || 'total',
                     destinoMotorista: c.destino_texto,
                     encaixeTexto: c.encaixe_texto || null,
+                    encaixeLat: c.encaixe_lat != null ? +c.encaixe_lat : null,
+                    encaixeLng: c.encaixe_lng != null ? +c.encaixe_lng : null,
                     lat: c.lat != null ? +c.lat : (c.origem_lat != null ? +c.origem_lat : null),
                     lng: c.lng != null ? +c.lng : (c.origem_lng != null ? +c.origem_lng : null),
                     empresa: c.motorista_empresa || null,
@@ -2815,12 +2817,35 @@
         if (vagasDisp != null && pessoas > vagasDisp) {
             return msg(`Este veículo tem ${vagasDisp} vaga(s). Você pediu ${pessoas}.`, 'error');
         }
+        const item = (carroSel && +carroSel.caronaId === +caronaId)
+            ? carroSel
+            : (ultimaListaMotoristas || []).find((x) => +x.caronaId === +caronaId);
+        const body = {
+            carona_id: caronaId,
+            pessoas,
+            selfie_url: null,
+            selfie_lat: null,
+            selfie_lng: null,
+            selfie_em: null,
+        };
+        if (item?.encaixeTexto && item.encaixeLat != null && item.encaixeLng != null) {
+            body.encaixe_texto = item.encaixeTexto;
+            body.encaixe_lat = item.encaixeLat;
+            body.encaixe_lng = item.encaixeLng;
+        }
+        const destPax = selPed?.getDestino?.();
+        if (destPax?.lat != null && destPax?.lng != null) {
+            body.dest_passageiro_texto = destPax.texto || null;
+            body.dest_passageiro_lat = destPax.lat;
+            body.dest_passageiro_lng = destPax.lng;
+        }
         try {
             const selfie = await obterSelfieSeguranca('Selfie para pedir a vaga');
-            const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify({
-                carona_id: caronaId, pessoas,
-                selfie_url: selfie.url, selfie_lat: selfie.lat, selfie_lng: selfie.lng, selfie_em: selfie.em,
-            }) });
+            body.selfie_url = selfie.url;
+            body.selfie_lat = selfie.lat;
+            body.selfie_lng = selfie.lng;
+            body.selfie_em = selfie.em;
+            const r = await fetchWithAuth('/api/propostas', { method: 'POST', body: JSON.stringify(body) });
             const d = await r.json();
             if (!r.ok) return msg(d.error || 'Erro', 'error');
             mostrarChamando({ nome: carroSel && carroSel.nome, propostaId: d.id, pessoas });
