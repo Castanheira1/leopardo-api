@@ -4676,13 +4676,29 @@
             for (const x of outras) {
                 const emb = { lat: +x.origem_lat, lng: +x.origem_lng };
                 const dst = { lat: +x.destino_lat, lng: +x.destino_lng };
-                criarMarcador({ position: emb, map: vv.map, cor: '#22c55e',
-                    title: `Próximo embarque: ${x.passageiro_nome || 'passageiro'}` });
+                criarMarcador({
+                    position: emb, map: vv.map, cor: '#22c55e',
+                    title: `Próximo embarque: ${x.passageiro_nome || 'passageiro'}`,
+                    legenda: 'Próximo embarque',
+                    legendaTom: 'verde',
+                });
                 // Pino bronze: novo local de desembarque da perna encadeada.
-                criarMarcador({ position: dst, map: vv.map, icon: PIN_BRONZE_ICON, iconW: 30, iconH: 39,
-                    title: `Novo desembarque: ${x.destino_texto || 'destino do passageiro'}` });
+                criarMarcador({
+                    position: dst, map: vv.map, icon: PIN_BRONZE_ICON, iconW: 30, iconH: 39,
+                    title: `Novo desembarque: ${x.destino_texto || 'destino do passageiro'}`,
+                    legenda: 'Novo desembarque',
+                    legendaTom: 'ouro',
+                });
                 const rota = criarRotaControle(vv.map, ROTA_TRACEJADA_OPTS);
                 rota.calcular(emb, dst).catch(() => {});
+                criarMarcador({
+                    map: vv.map,
+                    position: { lat: (emb.lat + dst.lat) / 2, lng: (emb.lng + dst.lng) / 2 },
+                    legenda: 'Próxima perna',
+                    legendaTom: 'ouro',
+                    legendaSo: true,
+                    zIndex: 35,
+                });
             }
         } catch (_) { /* ramificação é informativa: falhou, segue sem */ }
     }
@@ -4748,6 +4764,8 @@
             }
         }
         const eta = document.getElementById('viagemEta'); eta.style.display = 'none'; eta.textContent = '';
+        const velEl = document.getElementById('viagemVel');
+        if (velEl) { velEl.style.display = 'none'; velEl.textContent = ''; }
 
         g = await carregarMaps();
         const embarque = v.origem_lat != null ? { lat: +v.origem_lat, lng: +v.origem_lng } : null;
@@ -4755,22 +4773,35 @@
         const centro = embarque || destino || { lat: -6.40, lng: -49.85 };
         const map = novoMapa('mapViagem', { center: centro, zoom: 16 });
 
-        // Pinos fixos (linguagem dos mockups):
-        // 1) partida do motorista  2) embarque (verde)  3) desembarque (bandeira/selo).
+        // Pinos fixos com rótulos (linguagem do mockup):
+        // partida → embarque → desembarque → destino final do motorista.
         const destTitulo = (v.destino_texto && String(v.destino_texto).trim()) || 'Destino';
         const partidaMot = (v.motorista_partida_lat != null && v.motorista_partida_lng != null)
             ? { lat: +v.motorista_partida_lat, lng: +v.motorista_partida_lng }
             : null;
         const partidaTxt = (v.motorista_partida_texto && String(v.motorista_partida_texto).trim())
             || 'Partida do motorista';
+        const encurtarMapa = (t, n = 26) => {
+            const s = String(t || '').trim();
+            return s.length > n ? s.slice(0, n - 1) + '…' : s;
+        };
         if (partidaMot && (!embarque || distKmGps(partidaMot, embarque) > 0.08)) {
             criarMarcador({
                 position: partidaMot, map,
                 icon: PIN_PARTIDA_ICON, iconW: 30, iconH: 39,
                 title: `Partida — ${partidaTxt}`,
+                legenda: 'Partida',
+                legendaTom: 'partida',
             });
         }
-        if (embarque) criarMarcador({ position: embarque, map, cor: '#22c55e', title: 'Embarque' });
+        if (embarque) {
+            criarMarcador({
+                position: embarque, map, cor: '#22c55e',
+                title: 'Embarque',
+                legenda: 'Embarque',
+                legendaTom: 'verde',
+            });
+        }
         const paradaMotEarly = (v.destino_motorista_lat != null && v.destino_motorista_lng != null)
             ? { lat: +v.destino_motorista_lat, lng: +v.destino_motorista_lng }
             : null;
@@ -4792,8 +4823,12 @@
 
         // Parada intermediária (parcial/encaixe): é onde o passageiro desce.
         if (temParadaSeparada) {
-            criarMarcador({ position: paradaMotEarly, map, icon: PAX_DESCE_ICON, iconW: 34, iconH: 42,
-                title: `Passageiro desembarca aqui — ${paradaMotTxtEarly}` });
+            criarMarcador({
+                position: paradaMotEarly, map, icon: PAX_DESCE_ICON, iconW: 34, iconH: 42,
+                title: `Passageiro desembarca aqui — ${paradaMotTxtEarly}`,
+                legenda: 'Desembarca aqui',
+                legendaTom: 'ouro',
+            });
         }
         // Destino da viagem: se o carro SEGUE além dele (rota única com parada), o
         // ponto é "passageiro desembarca aqui"; se é o fim da linha, bandeira.
@@ -4804,13 +4839,58 @@
                 icon: ehSoParada ? PAX_DESCE_ICON : FLAG_ICON,
                 iconW: ehSoParada ? 34 : 28, iconH: ehSoParada ? 42 : 30,
                 title: ehSoParada ? `Passageiro desembarca aqui — ${destTitulo}` : destTitulo,
+                legenda: ehSoParada ? 'Desembarca aqui' : encurtarMapa(destTitulo),
+                legendaTom: ehSoParada ? 'ouro' : 'destino',
             });
         }
         if (continuaAlem) {
-            criarMarcador({ position: destinoFinalMot, map, icon: PIN_OURO_ICON, iconW: 30, iconH: 39,
-                title: `Destino final do motorista — ${destinoFinalTxt}` });
+            criarMarcador({
+                position: destinoFinalMot, map, icon: PIN_OURO_ICON, iconW: 30, iconH: 39,
+                title: `Destino final do motorista — ${destinoFinalTxt}`,
+                legenda: 'Destino final',
+                legendaTom: 'ouro',
+            });
             const rotaCont = criarRotaControle(map, ROTA_TRACEJADA_OPTS);
             rotaCont.calcular(pontoDesembarque, destinoFinalMot).catch(() => {});
+            // Rótulo no meio do trecho (como no mockup: “rota única com parada”).
+            if (pontoDesembarque) {
+                criarMarcador({
+                    map,
+                    position: {
+                        lat: (pontoDesembarque.lat + destinoFinalMot.lat) / 2,
+                        lng: (pontoDesembarque.lng + destinoFinalMot.lng) / 2,
+                    },
+                    legenda: 'Continua após o desembarque',
+                    legendaTom: 'rota',
+                    legendaSo: true,
+                    zIndex: 35,
+                });
+            }
+            if (embarque && pontoDesembarque) {
+                criarMarcador({
+                    map,
+                    position: {
+                        lat: (embarque.lat + pontoDesembarque.lat) / 2,
+                        lng: (embarque.lng + pontoDesembarque.lng) / 2,
+                    },
+                    legenda: 'Rota com parada',
+                    legendaTom: 'rota',
+                    legendaSo: true,
+                    zIndex: 34,
+                });
+            }
+        } else if (embarque && destino && distKmGps(embarque, destino) > 0.3) {
+            criarMarcador({
+                map,
+                position: {
+                    lat: (embarque.lat + destino.lat) / 2,
+                    lng: (embarque.lng + destino.lng) / 2,
+                },
+                legenda: 'Rota da viagem',
+                legendaTom: 'rota',
+                legendaSo: true,
+                zIndex: 34,
+            });
         }
 
         // Rota preta no mapa (dois lados). Parcial: preta até parada do motorista + dourada só o resto.
@@ -5184,6 +5264,8 @@
             position: vv.partida, map: vv.map,
             icon: PIN_PARTIDA_ICON, iconW: 30, iconH: 39,
             title: 'Partida do motorista',
+            legenda: 'Partida',
+            legendaTom: 'partida',
         });
     }
     // Motorista: carro + passageiro + rota até o alvo. Passageiro: só acompanha o carro.
@@ -5344,6 +5426,7 @@
         if (vv.carMarker) { vv.carMarker.setMap(null); vv.carMarker = null; }
         if (vv.pessoaMarker) { vv.pessoaMarker.setMap(null); vv.pessoaMarker = null; }
         const eta = document.getElementById('viagemEta'); if (eta) { eta.style.display = 'none'; eta.textContent = ''; }
+        const velEl = document.getElementById('viagemVel'); if (velEl) { velEl.style.display = 'none'; velEl.textContent = ''; }
         const btnRec = document.getElementById('btnRecentrar'); if (btnRec) btnRec.style.display = 'none';
     }
 
