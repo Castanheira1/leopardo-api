@@ -784,7 +784,14 @@ function compatRotaPassageiro(pDestLat, pDestLng, carOrigLat, carOrigLng, carDes
       },
       opts
     );
-    return r.compat;
+    if (r.compat !== "none") return r.compat;
+    // Sanduíche negou (origem fora da ordem ou destino fora da pista): ainda pode
+    // ser buzina "proximo" (ex. Portaria↔Central ~3 km), sem reabrir total/parcial.
+    const poly = polilinhaDaCarona(oLat, oLng, dLat, dLng, opts);
+    const prox = classificarDestinoSemOrigem(
+      dl, dg, { lat: oLat, lng: oLng }, { lat: dLat, lng: dLng }, poly, opts
+    ).compat;
+    return prox === "proximo" ? "proximo" : "none";
   }
 
   if (haversineKmCoord(dLat, dLng, dl, dg) <= RAIO_MESMO_DEST_KM) return "total";
