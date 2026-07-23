@@ -1,4 +1,7 @@
 // Propostas: criar/listar e aceitar/recusar/cancelar (cria a viagem no aceite).
+// Pedido aberto ou buzina com destino: a resposta do motorista já nasce aceita
+// e vira viagem na hora — o passageiro pediu, o motorista aceitou, sem segunda
+// confirmação (mesmo caminho do aceite da fila).
 require("dotenv").config();
 const app = require("../app");
 const { pool } = require("../db");
@@ -24,6 +27,9 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
     }
 
     let para_usuario_id, dadosSelfie = {};
+    // Aceite direto: o passageiro já pediu (pedido aberto ou buzina com destino);
+    // a resposta do motorista confirma a viagem na hora.
+    let aceiteDireto = false;
     const npessoas = Math.min(6, Math.max(parseInt(pessoas, 10) || 1, 1));
     let encaixeDados = {
       encaixe_texto: encaixe_texto ? String(encaixe_texto).slice(0, 200) : null,
@@ -74,6 +80,10 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       if (!cont) return res.status(404).json({ error: "Contato indisponível" });
       if (!(await validarMesmoProjeto(req.user.id, cont.passageiro_id, res))) return;
       para_usuario_id = cont.passageiro_id;
+      // Buzina com destino = pedido explícito; sem destino é só "combinar no
+      // WhatsApp" e aí a oferta ainda precisa do aceite do passageiro.
+      aceiteDireto = cont.destino_lat != null && cont.destino_lng != null
+        && !(await passageiroEmViagem(cont.passageiro_id));
       await pool.query("UPDATE contatos_motorista SET lido = TRUE WHERE id = $1", [contato_id]);
       await pool.query(
         `UPDATE contatos_motorista SET lido = TRUE
@@ -101,6 +111,7 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
       )).rows[0];
       if (temFila) return res.status(400).json({ error: "Este pedido está usando busca automática por proximidade" });
       para_usuario_id = ped.passageiro_id;
+      aceiteDireto = true;
     }
 
     const { rows } = await pool.query(
@@ -108,8 +119,8 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
          (de_usuario_id, para_usuario_id, carona_id, pedido_id, contato_id, mensagem,
           selfie_url, selfie_lat, selfie_lng, selfie_em, pessoas,
           encaixe_texto, encaixe_lat, encaixe_lng,
-          dest_passageiro_texto, dest_passageiro_lat, dest_passageiro_lng)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          dest_passageiro_texto, dest_passageiro_lat, dest_passageiro_lng, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING *`,
       [
         req.user.id, para_usuario_id, carona_id || null, pedido_id || null, contato_id || null, mensagem || null,
@@ -118,8 +129,32 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
         npessoas,
         encaixeDados.encaixe_texto, encaixeDados.encaixe_lat, encaixeDados.encaixe_lng,
         destPass.dest_passageiro_texto, destPass.dest_passageiro_lat, destPass.dest_passageiro_lng,
+        aceiteDireto ? "aceito" : "pendente",
       ]
     );
+
+    if (aceiteDireto) {
+      const viagem = await criarViagemDaProposta(rows[0].id);
+      if (!viagem) {
+        await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [rows[0].id]).catch(() => {});
+        return res.status(409).json({
+          error: pedido_id
+            ? "Este pedido acabou de ser atendido por outro motorista."
+            : "Não foi possível confirmar a carona. Tente novamente.",
+        });
+      }
+      const parcial = !!viagem.destino_motorista_texto;
+      res.json({ ...rows[0], viagem_id: viagem.id, parcial });
+      enviarPush(para_usuario_id, {
+        title: "Carona confirmada!",
+        body: parcial
+          ? `O motorista vai até ${viagem.destino_motorista_texto}. Desembarque lá e peça outra carona.`
+          : "Um motorista aceitou sua solicitação. Toque para acompanhar ao vivo.",
+        url: "/dashboard.html",
+      });
+      return;
+    }
+
     res.json(rows[0]);
 
     // Notifica quem recebeu a solicitação (mesmo com o app fechado).

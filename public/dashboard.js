@@ -6532,6 +6532,19 @@
             await fetchWithAuth('/api/motorista/contatos/' + contatoId + '/lido', { method: 'POST' });
         } catch (_) {}
     }
+    // Aceite direto: o passageiro já tinha pedido — a resposta do motorista fecha a
+    // viagem na hora, sem tela "Aguardando o passageiro" nem novo aceite.
+    async function entrarViagemConfirmada(d) {
+        if (viagemView && viagemView.status === 'em_andamento') {
+            // Já dirigindo outra perna: a nova carona entra encadeada (tracejada).
+            marcarViagemAberta(d.viagem_id);
+            msg('Nova carona encadeada! Ela aparece tracejada no mapa — finalize a perna atual primeiro.');
+            desenharProximasPernas(viagemView);
+            return;
+        }
+        const ok = await entrarNaViagem(d.viagem_id, 'Carona confirmada! Acompanhe ao vivo.');
+        if (!ok) msg('Carona confirmada. Sincronizando…', 'info');
+    }
     async function oferecerAoPedido() {
         if (contatoSel) return oferecerAoContato();
         const p = pedidoSel;
@@ -6547,6 +6560,7 @@
         if (!r.ok) return msg(d.error || 'Erro', 'error');
         if (navigator.vibrate) navigator.vibrate(80);   // vibrasinha curta ao aceitar
         removerPulsoPedido(p.id);                        // o círculo pulsando some
+        if (d.viagem_id) return entrarViagemConfirmada(d);
         mostrarChamando({ nome: p.passageiro_nome, propostaId: d.id, pessoas: p.pessoas, souMotorista: true });
     }
 
@@ -6587,6 +6601,7 @@
         if (navigator.vibrate) navigator.vibrate(80);
         await marcarContatoLido(c.id);
         removerPulsoContato(c.passageiro_id);
+        if (d.viagem_id) return entrarViagemConfirmada(d);
         mostrarChamando({ nome: c.passageiro_nome, propostaId: d.id, pessoas: c.pessoas, souMotorista: true });
     }
 

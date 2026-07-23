@@ -1225,18 +1225,18 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const filaTok = gOfertado ? tokDbG : tokDbH;
       const ofertaId = gOfertado ? oG.json.id : oH.json.id;
       const propTok = gOfertado ? tokDbH : tokDbG;
-      const prop = await api("POST", "/api/propostas", { token: propTok, body: { pedido_id: pedidoId } });
-      eq(prop.status, 200, "proposta manual criada");
-      const propostaId = prop.json.id;
-      // DISPARO SIMULTÂNEO: motorista aceita pela fila E passageiro aceita a proposta.
+      // DISPARO SIMULTÂNEO: um aceita pela fila E o outro manda a proposta manual
+      // (aceite direto: o passageiro já pediu, a proposta nasce aceita e vira viagem).
       const [rFila, rProp] = await Promise.all([
         api("POST", `/api/pedido-fila/${ofertaId}/aceitar`, { token: filaTok }),
-        api("POST", `/api/propostas/${propostaId}/aceitar`, { token: tokDbP }),
+        api("POST", "/api/propostas", { token: propTok, body: { pedido_id: pedidoId } }),
       ]);
       // Exatamente um 200; o perdedor recebe erro claro (409 do gate, ou 404 por
       // o pedido já não estar 'aberto') — jamais os dois vencendo.
       const oks = [rFila.status, rProp.status].filter((s) => s === 200);
       eq(oks.length, 1, "exatamente um aceite deveria vencer");
+      const vencedor = rFila.status === 200 ? rFila : rProp;
+      assert(vencedor.json.viagem_id, "o vencedor deveria receber viagem_id na resposta");
       const perdedor = rFila.status === 200 ? rProp.status : rFila.status;
       assert(perdedor === 409 || perdedor === 404, `o perdedor deveria receber 409/404, veio ${perdedor}`);
       // Prova de fogo: UMA viagem só para o pedido, e o pedido fica 'atendido'.
@@ -1475,15 +1475,22 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
         assert(f.rows[0].total > 0, "o agendador deveria ter criado a fila do pedido");
         eq(f.rows[0].exclusivas, 0, "a fila do agendado deveria ser NÃO-exclusiva");
       } finally { await pg2.end(); }
-      // Prova de comportamento: proposta manual de outro motorista é LIBERADA
-      // (fila exclusiva antiga devolveria 400).
-      const prop = await api("POST", "/api/propostas", { token: tokAgMot2, body: { pedido_id: pedidoId } });
-      eq(prop.status, 200, "proposta manual deveria ser aceita (fila não-exclusiva)");
-      // E o pulso continua visível no mapa de um motorista perto.
+      // Pulso visível no mapa de um motorista perto (fila não-exclusiva não esconde).
       const mapa = await api("GET", `/api/pedidos?lat=${AG_ORIG.lat}&lng=${AG_ORIG.lng}`, { token: tokAgMot2 });
       eq(mapa.status, 200, "status mapa");
       assert(Array.isArray(mapa.json) && mapa.json.some((p) => p.id === pedidoId),
         "o pulso do agendado deveria aparecer no mapa (fila não-exclusiva não esconde)");
+      // Prova de comportamento: proposta manual de outro motorista é LIBERADA
+      // (fila exclusiva antiga devolveria 400) e, como o passageiro já pediu,
+      // nasce aceita e vira viagem na hora (aceite direto).
+      const prop = await api("POST", "/api/propostas", { token: tokAgMot2, body: { pedido_id: pedidoId } });
+      eq(prop.status, 200, "proposta manual deveria ser aceita (fila não-exclusiva)");
+      assert(prop.json.viagem_id, "aceite direto: a proposta ao pedido deveria vir com viagem_id");
+      // Pedido atendido some do mapa.
+      const mapa2 = await api("GET", `/api/pedidos?lat=${AG_ORIG.lat}&lng=${AG_ORIG.lng}`, { token: tokAgMot2 });
+      eq(mapa2.status, 200, "status mapa pós-aceite");
+      assert(Array.isArray(mapa2.json) && !mapa2.json.some((p) => p.id === pedidoId),
+        "pedido atendido não deveria mais pulsar no mapa");
     });
 
     /* =================== LOCALIZAÇÃO AO VIVO =================== */
@@ -1902,6 +1909,27 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       const { status, json } = await api("GET", "/api/motorista/contatos/mapa", { token: tokDriver });
       eq(status, 200, "status");
       assert(!json.some((x) => x.destino_texto === PORTARIA_S11D.texto), "pulso fantasma mesmo destino");
+    });
+    await test("motorista responde à buzina com destino: aceite direto vira viagem", async () => {
+      // O passageiro já disse aonde quer ir (buzina com destino) → a resposta do
+      // motorista nasce aceita e cria a viagem, sem segunda confirmação no app.
+      const buz = await api("POST", `/api/motoristas-online/${idDriver}/contato`, {
+        token: tokPax,
+        body: {
+          origem_lat: ORIGEM_S11D.lat, origem_lng: ORIGEM_S11D.lng,
+          destino_lat: CENTRAL_S11D.lat, destino_lng: CENTRAL_S11D.lng,
+          destino_texto: CENTRAL_S11D.texto,
+          pessoas: 1,
+        },
+      });
+      eq(buz.status, 200, "status buzina");
+      const prop = await api("POST", "/api/propostas", { token: tokDriver, body: { contato_id: buz.json.contato_id } });
+      eq(prop.status, 200, "status proposta");
+      eq(prop.json.status, "aceito", "proposta nasce aceita");
+      assert(prop.json.viagem_id, "aceite direto deveria criar a viagem");
+      const v = await api("GET", `/api/viagens/${prop.json.viagem_id}`, { token: tokDriver });
+      eq(v.status, 200, "viagem consultável");
+      eq(v.json.destino_texto, CENTRAL_S11D.texto, "destino da viagem = destino da buzina");
     });
 
     /* =================== ANTI-FORÇA-BRUTA (rate limit) =================== */
