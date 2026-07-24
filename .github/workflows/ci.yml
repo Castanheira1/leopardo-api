@@ -10,6 +10,9 @@
 #    sido compiladas. O artefato fica disponível na aba Actions por 14 dias. A
 #    assinatura para a Play Store continua local (keystore), ver
 #    docs/PUBLICAR-LOJAS.md.
+# 3. "ios": mesmas condições do "android", em runner macOS (gratuito em repo
+#    público) — compila o Swift para simulador, sem assinatura. É o que evita
+#    descobrir erro de compilação só depois de alugar um Mac.
 name: CI
 
 on:
@@ -170,3 +173,46 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/bundle/release/app-release.aab
+
+  # Compila o app iOS num runner macOS. Roda nas mesmas condições do job android.
+  #
+  # Existe porque o código Swift (TripTrackingPlugin, MainViewController) não é
+  # compilado em nenhum outro lugar: sem isto, um erro de Swift só apareceria ao
+  # abrir o Xcode — que aqui significa alugar um Mac por hora. Runner macOS é
+  # gratuito e ilimitado em repositório público, então a validação não custa nada.
+  #
+  # Build para simulador de propósito: dispensa certificado e provisioning
+  # profile, e ainda assim compila todo o Swift e valida o Info.plist. Assinar e
+  # enviar para a App Store é outro passo (docs/PUBLICAR-LOJAS.md).
+  ios:
+    name: Build iOS (Capacitor)
+    needs: [testes, nativo]
+    if: >-
+      ${{ !cancelled() && needs.testes.result == 'success'
+          && (github.event_name != 'pull_request' || needs.nativo.outputs.mudou == 'true') }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Capacitor sync (copia webDir e resolve plugins)
+        run: npx cap sync ios
+
+      - name: Compilar (simulador, sem assinatura)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            build
