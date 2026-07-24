@@ -3,10 +3,13 @@
 # 1. "testes": roda em todo push/PR — sintaxe do backend, testes de contrato
 #    (sem banco) e a suíte de integração completa contra um Postgres efêmero
 #    com o schema.sql aplicado (mesmo fluxo de scripts/test-com-pg-local.sh).
-# 2. "android": só em push na main (ou manual) — valida o shell Capacitor de
-#    ponta a ponta gerando o APK de debug e o AAB de release (sem assinatura).
-#    O artefato fica disponível na aba Actions por 14 dias. A assinatura para
-#    a Play Store continua local (keystore), ver docs/PUBLICAR-LOJAS.md.
+# 2. "android": em push na main, manual, e em PR que mexa em android/, ios/,
+#    capacitor.config.ts ou package*.json — valida o shell Capacitor de ponta a
+#    ponta gerando o APK de debug e o AAB de release (sem assinatura). Sem a
+#    cobertura em PR, mudanças no código nativo chegavam à main sem nunca terem
+#    sido compiladas. O artefato fica disponível na aba Actions por 14 dias. A
+#    assinatura para a Play Store continua local (keystore), ver
+#    docs/PUBLICAR-LOJAS.md.
 name: CI
 
 on:
@@ -68,10 +71,41 @@ jobs:
       - name: Suíte de integração (rotas HTTP reais)
         run: node tests/integration.test.js
 
+  # Em PR, o build Android só roda quando o shell nativo muda — compilar o Gradle
+  # em todo PR de backend custaria minutos à toa.
+  nativo:
+    name: Detecta mudanças no shell nativo
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      mudou: ${{ steps.check.outputs.mudou }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --name-only "$BASE...$HEAD" \
+             | grep -qE '^(android/|ios/|capacitor\.config\.ts|package(-lock)?\.json)'; then
+            echo "mudou=true" >> "$GITHUB_OUTPUT"
+            echo "Shell nativo alterado — build Android será executado."
+          else
+            echo "mudou=false" >> "$GITHUB_OUTPUT"
+            echo "Sem mudanças nativas — build Android dispensado."
+          fi
+
   android:
     name: Build Android (Capacitor)
-    needs: testes
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [testes, nativo]
+    # push/manual: sempre. PR: só se o shell nativo mudou (job "nativo" acima,
+    # que é pulado fora de PR — daí o !cancelled() em vez de depender do sucesso
+    # de todos os needs).
+    if: >-
+      ${{ !cancelled() && needs.testes.result == 'success'
+          && (github.event_name != 'pull_request' || needs.nativo.outputs.mudou == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
