@@ -18,7 +18,9 @@ Verificação automática: `npm run store:check`
 
 - Projetos nativos **Android** (`android/`) e **iOS** (`ios/`) com Capacitor 8.4
 - **Ícones e splash** em todos os tamanhos (fonte: `assets/icon-only.png`)
-- **Permissões** declaradas: câmera, GPS (incl. background), push, foreground service
+- **Permissões** declaradas: câmera, GPS, push, foreground service (rastreio da viagem
+  no Android). Sem permissão de localização em segundo plano — no Play Console
+  responda **"Não"** a essa pergunta (detalhes na seção 7 de `docs/PUBLICAR-LOJAS.md`)
 - **Excluir conta** no app (Perfil) + página web `excluir-conta.html`
 - **Política de privacidade** e **termos de uso** hospedados na API
 - **Privacy Manifest** iOS (`PrivacyInfo.xcprivacy`) — obrigatório desde 2024

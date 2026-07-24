@@ -95,7 +95,49 @@ if (hasKeystoreEnv || exists("vap-release.jks")) {
   issues++;
 }
 
-console.log("\n7. Versão do app (lojas)");
+console.log("\n7. Coerência de localização (motivo comum de rejeição)");
+// Os comentários explicam por que certas chaves NÃO estão declaradas e citam os
+// próprios nomes — sem removê-los, a checagem acusaria falso positivo.
+const semComentarios = (s) => s.replace(/<!--[\s\S]*?-->/g, "");
+const manifest = semComentarios(read("android/app/src/main/AndroidManifest.xml"));
+if (manifest.includes("ACCESS_BACKGROUND_LOCATION")) {
+  fail("ACCESS_BACKGROUND_LOCATION voltou ao manifest — exige a declaração de");
+  fail("  background location no Play Console (formulário + vídeo). Veja PUBLICAR-LOJAS.md §7");
+  issues++;
+} else {
+  ok("Android sem ACCESS_BACKGROUND_LOCATION (Foreground Service cobre a viagem)");
+}
+if (manifest.includes('android:foregroundServiceType="location"')) {
+  ok("TripTrackingService declarado como foreground service de localização");
+} else {
+  fail("foregroundServiceType=location ausente — rastreio da viagem para em background");
+  issues++;
+}
+
+const infoPlist = semComentarios(read("ios/App/App/Info.plist"));
+const bgModes = infoPlist.match(/<key>UIBackgroundModes<\/key>\s*<array>([\s\S]*?)<\/array>/);
+if (bgModes && bgModes[1].includes("<string>location</string>")) {
+  fail("iOS declara UIBackgroundModes=location sem implementação nativa de background");
+  fail("  location — rejeição 2.5.4 da App Store. Veja PUBLICAR-LOJAS.md §7");
+  issues++;
+} else {
+  ok("iOS sem UIBackgroundModes=location (bate com o que o app faz)");
+}
+if (/NSLocationAlways(AndWhenInUse)?UsageDescription/.test(infoPlist)) {
+  warn("Info.plist pede permissão 'Always' mas o app nunca a usa — remova as chaves");
+  issues++;
+}
+
+const privacy = semComentarios(read("ios/App/App/PrivacyInfo.xcprivacy"));
+if (/<key>NSPrivacyCollectedDataTypes<\/key>\s*<array\s*\/>/.test(privacy)) {
+  fail("PrivacyInfo.xcprivacy declara zero dados coletados, mas o app coleta");
+  fail("  localização, fotos e contato — precisa bater com o App Store Connect");
+  issues++;
+} else {
+  ok("PrivacyInfo.xcprivacy com dados coletados declarados");
+}
+
+console.log("\n8. Versão do app (lojas)");
 const gradle = read("android/app/build.gradle");
 const vc = gradle.match(/versionCode\s+(\d+)/);
 const vn = gradle.match(/versionName\s+"([^"]+)"/);

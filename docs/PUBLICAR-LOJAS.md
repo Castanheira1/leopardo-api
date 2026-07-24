@@ -15,10 +15,11 @@ backend publicado (`https://leopardo-api.onrender.com`). App ID: **`com.vap.caro
   A API é chamada em `https://leopardo-api.onrender.com` quando o app é nativo.
   Dev remoto: `CAPACITOR_SERVER_URL=... npx cap sync`.
 - **Permissões nativas declaradas** (sem elas as lojas rejeitam / o recurso trava):
-  - Android: `CAMERA`, localização fine/coarse/**background**, `FOREGROUND_SERVICE(_LOCATION)`,
+  - Android: `CAMERA`, localização fine/coarse, `FOREGROUND_SERVICE(_LOCATION)`,
     `POST_NOTIFICATIONS`, `INTERNET`, `VIBRATE` + serviço `TripTrackingService`.
-  - iOS: câmera, location when-in-use + always (texto de uso), `UIBackgroundModes`
-    location + remote-notification, `ITSAppUsesNonExemptEncryption=false`.
+    **Sem `ACCESS_BACKGROUND_LOCATION`** — veja a seção 7.
+  - iOS: câmera, location **when-in-use**, `UIBackgroundModes=remote-notification`,
+    `ITSAppUsesNonExemptEncryption=false`.
 - **Excluir conta** no app (Perfil → Excluir conta) — exigência das lojas.
 - **Documentos jurídicos publicados** (URLs exigidas pelas lojas):
   - Política de Privacidade: `https://leopardo-api.onrender.com/politica-privacidade.html`
@@ -130,13 +131,25 @@ fotos de segurança apagadas em 30 dias.
 
 ## 7. Pontos de atenção
 
-- **Localização em segundo plano (já no código):** o app declara
-  `ACCESS_BACKGROUND_LOCATION` + `FOREGROUND_SERVICE_LOCATION` (Android) e
-  *Always* + `UIBackgroundModes=location` (iOS) porque o **rastreio ao vivo da
-  viagem** precisa continuar com a tela apagada. No **Google Play Console** preencha
-  a declaração de *Background location* (justificativa: segurança da carona /
-  acompanhamento motorista–passageiro; ideal: vídeo curto mostrando a notificação
-  “Rastreando sua viagem”). Na Apple, explique o mesmo no App Review notes.
+- **Localização em segundo plano — o que o app faz (e o que não declara).**
+
+  **Android:** o rastreio com a tela apagada é feito pelo `TripTrackingService`, um
+  Foreground Service do tipo `location` iniciado com o app aberto. Enquanto ele roda,
+  o GPS continua liberado mesmo com o app minimizado — que é exatamente o caso da
+  carona. Por isso o app **não** declara `ACCESS_BACKGROUND_LOCATION`: seria
+  redundante e obrigaria a passar pela *declaração de Background location* do Play
+  Console (formulário + vídeo de demonstração), que costuma atrasar semanas a
+  publicação. **No Play Console, responda "Não" para uso de localização em segundo
+  plano.** Se um dia o app precisar de GPS sem nenhum serviço em execução, aí sim a
+  permissão volta — junto com a declaração.
+
+  **iOS:** não existe rastreio em background. O `WKWebView` é suspenso quando o app
+  sai de primeiro plano e não há `CLLocationManager` nativo com
+  `allowsBackgroundLocationUpdates` (o plugin `TripTracking` só existe no Android).
+  Por isso o `Info.plist` declara apenas `remote-notification` em `UIBackgroundModes`
+  e somente a descrição *when-in-use*. Declarar `location` sem implementar a
+  funcionalidade é a **rejeição 2.5.4** clássica da App Store. No iOS, portanto, a
+  rota é gravada com o app aberto na tela da viagem.
 - **Push nativo (FCM HTTP v1):** a API legada `fcm/send` foi desligada em 2024.
   Configure no Render `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON da service account do
   Firebase) e coloque `android/app/google-services.json` no projeto nativo.

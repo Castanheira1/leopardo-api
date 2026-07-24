@@ -20,6 +20,14 @@ public class TripTrackingPlugin extends Plugin {
         String title = call.getString("title", "VAP");
         String body = call.getString("body", "Rastreando sua viagem");
 
+        // Checa antes de disparar: o serviço é do tipo "location" e, sem permissão, o
+        // Android 14+ derruba o processo no startForeground (dentro do serviço, fora
+        // deste try/catch). Aqui o JS recebe um erro tratável.
+        if (!TripTrackingService.temPermissaoLocalizacao(getContext())) {
+            call.reject("Permissão de localização não concedida");
+            return;
+        }
+
         Intent intent = new Intent(getContext(), TripTrackingService.class);
         intent.putExtra(TripTrackingService.EXTRA_TITLE, title);
         intent.putExtra(TripTrackingService.EXTRA_BODY, body);

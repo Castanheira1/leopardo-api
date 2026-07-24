@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -52,11 +53,36 @@
     <!-- Localização (uso em primeiro plano): mapa, match por proximidade e rota. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- Rastreamento contínuo da viagem (Foreground Service + background). -->
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!--
+      Rastreamento contínuo da viagem via Foreground Service do tipo "location":
+      enquanto o serviço roda, o GPS continua liberado com o app minimizado e a tela
+      apagada — que é exatamente o caso de uso da carona.
+
+      Não declaramos ACCESS_BACKGROUND_LOCATION de propósito: o serviço só é iniciado
+      com o app em primeiro plano, então a permissão seria redundante, e declará-la
+      obriga a passar pela revisão de localização em segundo plano do Google Play
+      (formulário dedicado + vídeo de demonstração), que atrasa a publicação.
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
+    <!--
+      Android 11+ filtra a visibilidade de outros apps. Sem isto, checar se o WhatsApp
+      está instalado (esquema whatsapp://) falha e o contato cai sempre no wa.me.
+    -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
 </manifest>

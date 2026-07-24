@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+): controla backup na nuvem e transferência entre aparelhos.
+
+  O app guarda o token JWT da sessão e o buffer de rota em Preferences/SharedPreferences.
+  Nada disso deve sair do aparelho — um backup restaurado em outro dispositivo levaria
+  junto a sessão autenticada do colaborador.
+
+  Em conjunto com android:allowBackup="false" no manifest, isto desliga os dois caminhos
+  (backup em nuvem e transferência D2D).
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>
