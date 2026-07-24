@@ -86,12 +86,20 @@ Mínimo sugerido (5 telas):
 App interno de caronas para colaboradores autorizados (login com matrícula).
 
 Recursos nativos além do WebView:
-- GPS em primeiro plano, para o mapa e para gravar a rota da viagem
+- GPS em primeiro e segundo plano durante a viagem, para gravar a rota
 - Câmera para a selfie de segurança e a foto do veículo
 - Push notifications para ofertas e pedidos de carona
 
-O app não usa localização em segundo plano: a rota é gravada enquanto a tela da
-viagem está aberta. O Info.plist declara apenas remote-notification em UIBackgroundModes.
+Localização em segundo plano (UIBackgroundModes: location):
+Usada apenas durante uma carona em andamento, para registrar a rota quando o
+motorista guarda o telefone ou apaga a tela — é o registro de segurança que
+protege motorista e passageiro em caso de incidente. A coleta começa quando o
+usuário inicia a viagem no app e para quando a viagem termina. Usamos apenas
+autorização "When In Use" (não pedimos "Always"), e o indicador azul da barra
+de status fica visível durante todo o rastreamento.
+
+Como reproduzir na revisão: entrar > iniciar uma viagem > enviar o app para
+segundo plano > observar o indicador azul > reabrir e ver a rota gravada.
 
 Conta de teste para revisão:
 Matrícula: [PREENCHER]

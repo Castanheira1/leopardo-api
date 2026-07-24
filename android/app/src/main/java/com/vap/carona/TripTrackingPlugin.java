@@ -3,6 +3,7 @@ package com.vap.carona;
 import android.content.Intent;
 import android.os.Build;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -38,7 +39,12 @@ public class TripTrackingPlugin extends Plugin {
             } else {
                 getContext().startService(intent);
             }
-            call.resolve();
+            // nativePositions=false: no Android o serviço só mantém o processo e a
+            // WebView vivos — quem lê o GPS continua sendo o watchPosition do JS.
+            // (No iOS o plugin devolve as posições, porque lá a WebView é suspensa.)
+            JSObject ret = new JSObject();
+            ret.put("nativePositions", false);
+            call.resolve(ret);
         } catch (Exception e) {
             call.reject("Falha ao iniciar rastreamento: " + e.getMessage());
         }

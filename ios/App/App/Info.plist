@@ -53,17 +53,21 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O VAP usa sua localização para mostrar motoristas e passageiros próximos, calcular a rota e registrar a viagem.</string>
 	<!--
-	  Sem "location" em UIBackgroundModes e sem as chaves NSLocationAlways*: no iOS o
-	  rastreamento roda apenas com o app em primeiro plano (o WebView é suspenso em
-	  background e não há CLLocationManager nativo com allowsBackgroundLocationUpdates).
-	  Declarar o modo sem implementar a funcionalidade é rejeição certa na diretriz 2.5.4
-	  da App Store. Se um dia o rastreamento nativo em background for implementado,
-	  reponha "location" aqui junto com as descrições de uso "Always".
+	  location: rastreamento da viagem com o app em segundo plano, implementado em
+	  TripTrackingPlugin.swift (CLLocationManager com allowsBackgroundLocationUpdates).
+	  O modo só pode ser declarado porque a funcionalidade existe de fato — declará-lo
+	  sem implementação é a rejeição 2.5.4 da App Store.
+
+	  Não pedimos autorização "Always" (por isso não há chaves NSLocationAlways*):
+	  "When In Use" + este modo de fundo já entregam posição em segundo plano, com o
+	  indicador azul na barra de status. "Always" só serviria para rastrear sem o app
+	  ter sido aberto, o que a carona não faz.
 
 	  remote-notification: push FCM/APNs com o app fechado.
 	-->
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>location</string>
 		<string>remote-notification</string>
 	</array>
 	<!-- Sem criptografia proprietária: dispensa o formulário de conformidade de exportação. -->
