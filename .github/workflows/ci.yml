@@ -76,12 +76,16 @@ jobs:
 
   # Em PR, o build Android só roda quando o shell nativo muda — compilar o Gradle
   # em todo PR de backend custaria minutos à toa.
+  # Cada plataforma é avaliada em separado: mexer só no Android não deve disparar o
+  # build iOS. Isso importa mais em repositório privado, onde runner macOS consome
+  # 10x da cota de minutos do Actions.
   nativo:
     name: Detecta mudanças no shell nativo
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     outputs:
-      mudou: ${{ steps.check.outputs.mudou }}
+      android: ${{ steps.check.outputs.android }}
+      ios: ${{ steps.check.outputs.ios }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,24 +95,35 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          if git diff --name-only "$BASE...$HEAD" \
-             | grep -qE '^(android/|ios/|capacitor\.config\.ts|package(-lock)?\.json)'; then
-            echo "mudou=true" >> "$GITHUB_OUTPUT"
-            echo "Shell nativo alterado — build Android será executado."
+          arquivos=$(git diff --name-only "$BASE...$HEAD")
+          # Mudanças comuns às duas plataformas: config do Capacitor e dependências.
+          comum='^(capacitor\.config\.ts|package(-lock)?\.json)'
+
+          if grep -qE "^android/|$comum" <<<"$arquivos"; then
+            echo "android=true" >> "$GITHUB_OUTPUT"
+            echo "Shell Android alterado — build será executado."
           else
-            echo "mudou=false" >> "$GITHUB_OUTPUT"
-            echo "Sem mudanças nativas — build Android dispensado."
+            echo "android=false" >> "$GITHUB_OUTPUT"
+            echo "Sem mudanças no Android — build dispensado."
+          fi
+
+          if grep -qE "^ios/|$comum" <<<"$arquivos"; then
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+            echo "Shell iOS alterado — build será executado."
+          else
+            echo "ios=false" >> "$GITHUB_OUTPUT"
+            echo "Sem mudanças no iOS — build dispensado."
           fi
 
   android:
     name: Build Android (Capacitor)
     needs: [testes, nativo]
-    # push/manual: sempre. PR: só se o shell nativo mudou (job "nativo" acima,
+    # push/manual: sempre. PR: só se o shell Android mudou (job "nativo" acima,
     # que é pulado fora de PR — daí o !cancelled() em vez de depender do sucesso
     # de todos os needs).
     if: >-
       ${{ !cancelled() && needs.testes.result == 'success'
-          && (github.event_name != 'pull_request' || needs.nativo.outputs.mudou == 'true') }}
+          && (github.event_name != 'pull_request' || needs.nativo.outputs.android == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -174,12 +189,17 @@ jobs:
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/bundle/release/app-release.aab
 
-  # Compila o app iOS num runner macOS. Roda nas mesmas condições do job android.
+  # Compila o app iOS num runner macOS.
   #
   # Existe porque o código Swift (TripTrackingPlugin, MainViewController) não é
   # compilado em nenhum outro lugar: sem isto, um erro de Swift só apareceria ao
-  # abrir o Xcode — que aqui significa alugar um Mac por hora. Runner macOS é
-  # gratuito e ilimitado em repositório público, então a validação não custa nada.
+  # abrir o Xcode — que, sem Mac próprio, significa alugar um por hora.
+  #
+  # CUSTO: gratuito e ilimitado enquanto o repositório for público. Ao torná-lo
+  # privado, runner macOS passa a consumir 10x da cota de minutos do Actions
+  # (~6 min de build = ~60 min de cota; o plano Free dá 2.000/mês). Por isso o
+  # job só roda quando ios/, capacitor.config.ts ou package*.json mudam — mexer
+  # no Android ou no backend não dispara build de iOS.
   #
   # Build para simulador de propósito: dispensa certificado e provisioning
   # profile, e ainda assim compila todo o Swift e valida o Info.plist. Assinar e
@@ -189,7 +209,7 @@ jobs:
     needs: [testes, nativo]
     if: >-
       ${{ !cancelled() && needs.testes.result == 'success'
-          && (github.event_name != 'pull_request' || needs.nativo.outputs.mudou == 'true') }}
+          && (github.event_name != 'pull_request' || needs.nativo.outputs.ios == 'true') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
