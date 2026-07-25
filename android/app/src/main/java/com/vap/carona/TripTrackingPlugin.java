@@ -3,6 +3,7 @@ package com.vap.carona;
 import android.content.Intent;
 import android.os.Build;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -20,6 +21,14 @@ public class TripTrackingPlugin extends Plugin {
         String title = call.getString("title", "VAP");
         String body = call.getString("body", "Rastreando sua viagem");
 
+        // Checa antes de disparar: o serviço é do tipo "location" e, sem permissão, o
+        // Android 14+ derruba o processo no startForeground (dentro do serviço, fora
+        // deste try/catch). Aqui o JS recebe um erro tratável.
+        if (!TripTrackingService.temPermissaoLocalizacao(getContext())) {
+            call.reject("Permissão de localização não concedida");
+            return;
+        }
+
         Intent intent = new Intent(getContext(), TripTrackingService.class);
         intent.putExtra(TripTrackingService.EXTRA_TITLE, title);
         intent.putExtra(TripTrackingService.EXTRA_BODY, body);
@@ -30,7 +39,12 @@ public class TripTrackingPlugin extends Plugin {
             } else {
                 getContext().startService(intent);
             }
-            call.resolve();
+            // nativePositions=false: no Android o serviço só mantém o processo e a
+            // WebView vivos — quem lê o GPS continua sendo o watchPosition do JS.
+            // (No iOS o plugin devolve as posições, porque lá a WebView é suspensa.)
+            JSObject ret = new JSObject();
+            ret.put("nativePositions", false);
+            call.resolve(ret);
         } catch (Exception e) {
             call.reject("Falha ao iniciar rastreamento: " + e.getMessage());
         }

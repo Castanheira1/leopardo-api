@@ -95,7 +95,78 @@ if (hasKeystoreEnv || exists("vap-release.jks")) {
   issues++;
 }
 
-console.log("\n7. Versão do app (lojas)");
+console.log("\n7. Coerência de localização (motivo comum de rejeição)");
+// Os comentários explicam por que certas chaves NÃO estão declaradas e citam os
+// próprios nomes — sem removê-los, a checagem acusaria falso positivo.
+const semComentarios = (s) => s.replace(/<!--[\s\S]*?-->/g, "");
+const manifest = semComentarios(read("android/app/src/main/AndroidManifest.xml"));
+if (manifest.includes("ACCESS_BACKGROUND_LOCATION")) {
+  fail("ACCESS_BACKGROUND_LOCATION voltou ao manifest — exige a declaração de");
+  fail("  background location no Play Console (formulário + vídeo). Veja PUBLICAR-LOJAS.md §7");
+  issues++;
+} else {
+  ok("Android sem ACCESS_BACKGROUND_LOCATION (Foreground Service cobre a viagem)");
+}
+if (manifest.includes('android:foregroundServiceType="location"')) {
+  ok("TripTrackingService declarado como foreground service de localização");
+} else {
+  fail("foregroundServiceType=location ausente — rastreio da viagem para em background");
+  issues++;
+}
+
+// A Apple rejeita (2.5.4) quem declara o modo de fundo sem implementá-lo. O modo
+// só é legítimo enquanto existir o plugin nativo ligando allowsBackgroundLocationUpdates.
+const infoPlist = semComentarios(read("ios/App/App/Info.plist"));
+const bgModes = infoPlist.match(/<key>UIBackgroundModes<\/key>\s*<array>([\s\S]*?)<\/array>/);
+const declaraLocation = !!(bgModes && bgModes[1].includes("<string>location</string>"));
+const pluginIos = exists("ios/App/App/TripTrackingPlugin.swift")
+  && read("ios/App/App/TripTrackingPlugin.swift").includes("allowsBackgroundLocationUpdates");
+const noTargetIos = read("ios/App/App.xcodeproj/project.pbxproj")
+  .includes("TripTrackingPlugin.swift in Sources");
+
+// O Capacitor só auto-registra plugins vindos de npm (packageClassList do
+// capacitor.config.json). O plugin local depende do registro manual na
+// MainViewController — se isso quebrar, o rastreio some sem erro nenhum.
+const registrado =
+  exists("ios/App/App/MainViewController.swift")
+  && read("ios/App/App/MainViewController.swift").includes("registerPluginInstance(TripTrackingPlugin())")
+  && read("ios/App/App/Base.lproj/Main.storyboard").includes('customClass="MainViewController"');
+
+if (declaraLocation && pluginIos && noTargetIos && registrado) {
+  ok("iOS: background location declarado, implementado e plugin registrado");
+} else if (declaraLocation && pluginIos && noTargetIos) {
+  fail("TripTrackingPlugin.swift existe mas não é registrado — Capacitor.Plugins.");
+  fail("  TripTracking fica indefinido e o rastreio para sem erro. Confira");
+  fail("  MainViewController.swift e o customClass no Main.storyboard");
+  issues++;
+} else if (declaraLocation) {
+  fail("iOS declara UIBackgroundModes=location sem implementação nativa completa");
+  if (!pluginIos) fail("  falta TripTrackingPlugin.swift com allowsBackgroundLocationUpdates");
+  if (!noTargetIos) fail("  TripTrackingPlugin.swift fora do target App no project.pbxproj");
+  fail("  Rejeição 2.5.4 da App Store. Veja PUBLICAR-LOJAS.md §7");
+  issues++;
+} else if (pluginIos) {
+  fail("TripTrackingPlugin.swift existe mas falta 'location' em UIBackgroundModes —");
+  fail("  sem o modo, o iOS suspende o app e o rastreio para na tela apagada");
+  issues++;
+} else {
+  ok("iOS sem background location (declaração e implementação coerentes)");
+}
+if (/NSLocationAlways(AndWhenInUse)?UsageDescription/.test(infoPlist)) {
+  warn("Info.plist pede 'Always', mas 'When In Use' + modo de fundo já bastam —");
+  warn("  'Always' é atrito extra e mais escrutínio na revisão. Considere remover.");
+}
+
+const privacy = semComentarios(read("ios/App/App/PrivacyInfo.xcprivacy"));
+if (/<key>NSPrivacyCollectedDataTypes<\/key>\s*<array\s*\/>/.test(privacy)) {
+  fail("PrivacyInfo.xcprivacy declara zero dados coletados, mas o app coleta");
+  fail("  localização, fotos e contato — precisa bater com o App Store Connect");
+  issues++;
+} else {
+  ok("PrivacyInfo.xcprivacy com dados coletados declarados");
+}
+
+console.log("\n8. Versão do app (lojas)");
 const gradle = read("android/app/build.gradle");
 const vc = gradle.match(/versionCode\s+(\d+)/);
 const vn = gradle.match(/versionName\s+"([^"]+)"/);

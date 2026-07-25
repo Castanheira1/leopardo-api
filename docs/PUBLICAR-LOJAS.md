@@ -15,10 +15,12 @@ backend publicado (`https://leopardo-api.onrender.com`). App ID: **`com.vap.caro
   A API é chamada em `https://leopardo-api.onrender.com` quando o app é nativo.
   Dev remoto: `CAPACITOR_SERVER_URL=... npx cap sync`.
 - **Permissões nativas declaradas** (sem elas as lojas rejeitam / o recurso trava):
-  - Android: `CAMERA`, localização fine/coarse/**background**, `FOREGROUND_SERVICE(_LOCATION)`,
+  - Android: `CAMERA`, localização fine/coarse, `FOREGROUND_SERVICE(_LOCATION)`,
     `POST_NOTIFICATIONS`, `INTERNET`, `VIBRATE` + serviço `TripTrackingService`.
-  - iOS: câmera, location when-in-use + always (texto de uso), `UIBackgroundModes`
-    location + remote-notification, `ITSAppUsesNonExemptEncryption=false`.
+    **Sem `ACCESS_BACKGROUND_LOCATION`** — veja a seção 7.
+  - iOS: câmera, location **when-in-use**, `UIBackgroundModes` location +
+    remote-notification, `ITSAppUsesNonExemptEncryption=false`. Rastreio em segundo
+    plano implementado em `TripTrackingPlugin.swift` (sem exigir "Always").
 - **Excluir conta** no app (Perfil → Excluir conta) — exigência das lojas.
 - **Documentos jurídicos publicados** (URLs exigidas pelas lojas):
   - Política de Privacidade: `https://leopardo-api.onrender.com/politica-privacidade.html`
@@ -130,13 +132,38 @@ fotos de segurança apagadas em 30 dias.
 
 ## 7. Pontos de atenção
 
-- **Localização em segundo plano (já no código):** o app declara
-  `ACCESS_BACKGROUND_LOCATION` + `FOREGROUND_SERVICE_LOCATION` (Android) e
-  *Always* + `UIBackgroundModes=location` (iOS) porque o **rastreio ao vivo da
-  viagem** precisa continuar com a tela apagada. No **Google Play Console** preencha
-  a declaração de *Background location* (justificativa: segurança da carona /
-  acompanhamento motorista–passageiro; ideal: vídeo curto mostrando a notificação
-  “Rastreando sua viagem”). Na Apple, explique o mesmo no App Review notes.
+- **Localização em segundo plano — o que o app faz (e o que não declara).**
+
+  **Android:** o rastreio com a tela apagada é feito pelo `TripTrackingService`, um
+  Foreground Service do tipo `location` iniciado com o app aberto. Enquanto ele roda,
+  o GPS continua liberado mesmo com o app minimizado — que é exatamente o caso da
+  carona. Por isso o app **não** declara `ACCESS_BACKGROUND_LOCATION`: seria
+  redundante e obrigaria a passar pela *declaração de Background location* do Play
+  Console (formulário + vídeo de demonstração), que costuma atrasar semanas a
+  publicação. **No Play Console, responda "Não" para uso de localização em segundo
+  plano.** Se um dia o app precisar de GPS sem nenhum serviço em execução, aí sim a
+  permissão volta — junto com a declaração.
+
+  **iOS:** o rastreio em background é feito por `ios/App/App/TripTrackingPlugin.swift`,
+  um plugin Capacitor nativo com `CLLocationManager` e `allowsBackgroundLocationUpdates`.
+  Isso é necessário porque o `WKWebView` é suspenso ao sair de primeiro plano — o
+  `watchPosition()` do JS simplesmente para, então a coleta precisa ser nativa.
+
+  A autorização usada é **"When In Use"**, não "Always": junto com o modo de fundo
+  `location`, ela já entrega posição em segundo plano e acende o indicador azul na
+  barra de status. "Always" só serve para rastrear sem o app ter sido aberto, o que
+  a carona não faz — pedir seria atrito a mais e escrutínio a mais na revisão.
+
+  O `UIBackgroundModes: location` só pode continuar declarado **enquanto esse plugin
+  existir**: declarar o modo sem a implementação é a rejeição 2.5.4 clássica. O
+  `npm run store:check` (seção 7) trava as duas pontas — falha se o modo sumir com o
+  plugin presente, e vice-versa.
+
+  As posições chegam ao JS por dois caminhos, porque nem sempre ele está rodando:
+  o evento `position` (consumo ao vivo) e o `drain()`, que devolve o trecho
+  acumulado enquanto a WebView esteve suspensa — sem ele a rota ficaria com buraco.
+  No iOS o `watchPosition` do JS é desligado durante a viagem, senão cada ponto
+  entraria duas vezes.
 - **Push nativo (FCM HTTP v1):** a API legada `fcm/send` foi desligada em 2024.
   Configure no Render `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON da service account do
   Firebase) e coloque `android/app/google-services.json` no projeto nativo.

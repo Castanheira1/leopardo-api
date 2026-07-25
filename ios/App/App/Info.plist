@@ -52,12 +52,19 @@
 	<string>O VAP usa a câmera para a selfie ao vivo e a foto do veículo, que garantem a segurança das caronas.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O VAP usa sua localização para mostrar motoristas e passageiros próximos, calcular a rota e registrar a viagem.</string>
-	<!-- Background durante viagem ativa (tela apagada / app em 2º plano). -->
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>O VAP continua usando a localização em segundo plano apenas durante uma carona em andamento, para o outro participante acompanhar a rota com segurança.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>O VAP continua usando a localização em segundo plano apenas durante uma carona em andamento, para o outro participante acompanhar a rota com segurança.</string>
-	<!-- location: GPS da viagem; remote-notification: push FCM/APNs com app fechado. -->
+	<!--
+	  location: rastreamento da viagem com o app em segundo plano, implementado em
+	  TripTrackingPlugin.swift (CLLocationManager com allowsBackgroundLocationUpdates).
+	  O modo só pode ser declarado porque a funcionalidade existe de fato — declará-lo
+	  sem implementação é a rejeição 2.5.4 da App Store.
+
+	  Não pedimos autorização "Always" (por isso não há chaves NSLocationAlways*):
+	  "When In Use" + este modo de fundo já entregam posição em segundo plano, com o
+	  indicador azul na barra de status. "Always" só serviria para rastrear sem o app
+	  ter sido aberto, o que a carona não faz.
+
+	  remote-notification: push FCM/APNs com o app fechado.
+	-->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

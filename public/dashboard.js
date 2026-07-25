@@ -5449,8 +5449,23 @@
 
     // Loop único dos dois lados: cada um transmite a SUA posição (GPS) e busca a
     // posição do OUTRO. Socket.io (PWA + nativo); HTTP polling como fallback.
+    // Cancela a assinatura de posições nativas (iOS). Fica fora do bloco do
+    // watchId porque nesse caminho não existe watch do navigator para limpar.
+    function pararPosicoesNativas() {
+        if (!trackState) return;
+        if (trackState.pararPosNativa) {
+            try { trackState.pararPosNativa(); } catch (_) {}
+            trackState.pararPosNativa = null;
+        }
+        if (trackState.pararDreno) {
+            try { trackState.pararDreno(); } catch (_) {}
+            trackState.pararDreno = null;
+        }
+    }
+
     function iniciarViagemLoop() {
         const vv = viagemView;
+        pararPosicoesNativas();
         if (trackState && trackState.watchId != null) {
             try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
             if (trackState.nativeWatchId != null && window.VapPlatform) {
@@ -5547,7 +5562,31 @@
             aplicarGpsProprio(pt);
             enviarLoc(pt);
         };
-        if (navigator.geolocation) {
+        // iOS: as posições vêm do plugin nativo (a WebView é suspensa em segundo
+        // plano e o watchPosition do JS para). Usar os dois caminhos duplicaria
+        // cada ponto da rota, então aqui é um ou outro.
+        if (window.VapPlatform && VapPlatform.tripPositionsFromNative()) {
+            trackState.pararPosNativa = VapPlatform.onTripPosition((pos) => {
+                if (!trackState || trackState.viagemId !== vv.id) return;
+                if (pos && pos.coords) onGpsOk(pos);
+            });
+
+            // O trecho percorrido com o app em segundo plano fica num buffer nativo:
+            // ao voltar, drena e reaplica em ordem para a rota não ficar com buraco.
+            const drenarNativas = () => {
+                if (document.visibilityState !== 'visible') return;
+                if (!trackState || trackState.viagemId !== vv.id) return;
+                VapPlatform.drainTripPositions().then((pontos) => {
+                    if (!trackState || trackState.viagemId !== vv.id) return;
+                    pontos.forEach((p) => { if (p && p.coords) onGpsOk(p); });
+                }).catch(() => {});
+            };
+            document.addEventListener('visibilitychange', drenarNativas);
+            trackState.pararDreno = () => {
+                document.removeEventListener('visibilitychange', drenarNativas);
+            };
+            drenarNativas();
+        } else if (navigator.geolocation) {
             // 1ª fix rápida (rede/cache) — evita mapa sem posição após embarque.
             navigator.geolocation.getCurrentPosition(
                 onGpsOk,
@@ -5772,6 +5811,7 @@
             viagemView.chegadaCountdownTimer = null;
         }
         await enviarPontos();
+        pararPosicoesNativas();
         if (trackState) {
             if (trackState.watchId != null) {
                 try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
@@ -5874,6 +5914,7 @@
     // Sai da tela de viagem (concluída/cancelada) e volta ao mapa do papel atual.
     // NÃO abre o seletor de papel — usuário permanece onde estava.
     function sairDaViagem() {
+        pararPosicoesNativas();
         if (trackState && trackState.watchId != null) {
             try { navigator.geolocation.clearWatch(trackState.watchId); } catch (_) {}
         }

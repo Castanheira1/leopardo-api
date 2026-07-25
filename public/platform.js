@@ -204,22 +204,82 @@
     },
   };
 
-  // ---------- Foreground Service (Android nativo, viagem ativa) ----------
+  // ---------- Rastreamento da viagem (nativo) ----------
+  // Android: Foreground Service que mantém o processo e a WebView vivos — quem lê o
+  //   GPS continua sendo o watchPosition do JS.
+  // iOS: CLLocationManager nativo que ENTREGA as posições, porque a WebView é
+  //   suspensa em segundo plano e o watchPosition do JS para.
+  function platformName() {
+    try {
+      var C = cap();
+      return (C && C.getPlatform && C.getPlatform()) || "web";
+    } catch (_) {
+      return "web";
+    }
+  }
+
+  /** true quando as posições da viagem vêm do plugin nativo, e não do navigator. */
+  function tripPositionsFromNative() {
+    return isNative() && platformName() === "ios" && !!plugin("TripTracking");
+  }
+
   async function startTripTracking(opts) {
     if (!isNative()) return false;
     try {
       var T = plugin("TripTracking");
       if (T && typeof T.start === "function") {
-        await T.start({
+        return (await T.start({
           title: (opts && opts.title) || "VAP",
           body: (opts && opts.body) || "Rastreando sua viagem",
-        });
-        return true;
+        })) || true;
       }
     } catch (e) {
       console.warn("TripTracking.start:", e && e.message);
     }
     return false;
+  }
+
+  /**
+   * Assina as posições emitidas pelo plugin (iOS). O callback recebe o mesmo
+   * formato do GeolocationPosition da web. Devolve uma função para cancelar.
+   */
+  function onTripPosition(cb) {
+    var T = plugin("TripTracking");
+    if (!T || typeof T.addListener !== "function") return function () {};
+    var handle = null;
+    var cancelado = false;
+    try {
+      // addListener devolve promise (Capacitor 8) ou o handle direto.
+      handle = T.addListener("position", cb);
+    } catch (e) {
+      console.warn("TripTracking.addListener:", e && e.message);
+      return function () {};
+    }
+    return function () {
+      if (cancelado) return;
+      cancelado = true;
+      Promise.resolve(handle)
+        .then(function (h) {
+          if (h && typeof h.remove === "function") h.remove();
+        })
+        .catch(function () {});
+    };
+  }
+
+  /**
+   * Recupera o trecho que o plugin acumulou enquanto a WebView estava suspensa.
+   * Chamar ao voltar para primeiro plano — sem isso o trajeto fica com buraco.
+   */
+  async function drainTripPositions() {
+    var T = plugin("TripTracking");
+    if (!T || typeof T.drain !== "function") return [];
+    try {
+      var r = await T.drain();
+      return (r && r.positions) || [];
+    } catch (e) {
+      console.warn("TripTracking.drain:", e && e.message);
+      return [];
+    }
   }
 
   async function stopTripTracking() {
@@ -302,8 +362,12 @@
     prefRemove: prefRemove,
     authReady: authReady,
     RouteBuffer: RouteBuffer,
+    platformName: platformName,
+    tripPositionsFromNative: tripPositionsFromNative,
     startTripTracking: startTripTracking,
     stopTripTracking: stopTripTracking,
+    onTripPosition: onTripPosition,
+    drainTripPositions: drainTripPositions,
     watchPositionNative: watchPositionNative,
     clearWatchNative: clearWatchNative,
   };

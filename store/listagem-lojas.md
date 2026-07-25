@@ -86,23 +86,33 @@ Mínimo sugerido (5 telas):
 App interno de caronas para colaboradores autorizados (login com matrícula).
 
 Recursos nativos além do WebView:
-- GPS em primeiro e segundo plano durante viagem ativa (foreground service no Android)
-- Câmera para selfie de segurança
-- Push notifications para ofertas de carona
+- GPS em primeiro e segundo plano durante a viagem, para gravar a rota
+- Câmera para a selfie de segurança e a foto do veículo
+- Push notifications para ofertas e pedidos de carona
+
+Localização em segundo plano (UIBackgroundModes: location):
+Usada apenas durante uma carona em andamento, para registrar a rota quando o
+motorista guarda o telefone ou apaga a tela — é o registro de segurança que
+protege motorista e passageiro em caso de incidente. A coleta começa quando o
+usuário inicia a viagem no app e para quando a viagem termina. Usamos apenas
+autorização "When In Use" (não pedimos "Always"), e o indicador azul da barra
+de status fica visível durante todo o rastreamento.
+
+Como reproduzir na revisão: entrar > iniciar uma viagem > enviar o app para
+segundo plano > observar o indicador azul > reabrir e ver a rota gravada.
 
 Conta de teste para revisão:
 Matrícula: [PREENCHER]
 Senha: [PREENCHER]
-
-Localização em background: usada apenas durante viagem em andamento, com notificação visível ao motorista.
 ```
 
 ---
 
-## Declaração — localização em segundo plano (Google Play)
+## Localização em segundo plano (Google Play)
 
-**Por que o app precisa de localização em background?**
+**Responda "Não"** na pergunta sobre localização em segundo plano.
 
-Para rastrear a viagem em andamento quando o motorista ou passageiro minimiza o app, garantindo segurança e acompanhamento da carona em tempo real. Uma notificação persistente informa que o rastreamento está ativo.
-
-Anexe um vídeo curto (30–60 s) mostrando: iniciar viagem → minimizar app → notificação “Rastreando sua viagem” visível.
+O app não declara `ACCESS_BACKGROUND_LOCATION`. O rastreamento da viagem no Android
+usa um Foreground Service com notificação visível ("Rastreando sua viagem"), iniciado
+com o app aberto — o que não conta como uso em segundo plano para o Play. Com isso
+você **não** precisa preencher a declaração nem gravar o vídeo de demonstração.

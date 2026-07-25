@@ -18,7 +18,12 @@ Verificação automática: `npm run store:check`
 
 - Projetos nativos **Android** (`android/`) e **iOS** (`ios/`) com Capacitor 8.4
 - **Ícones e splash** em todos os tamanhos (fonte: `assets/icon-only.png`)
-- **Permissões** declaradas: câmera, GPS (incl. background), push, foreground service
+- **Permissões** declaradas: câmera, GPS, push
+- **Rastreio da viagem em segundo plano nas duas plataformas** — Foreground Service no
+  Android, plugin nativo `TripTrackingPlugin.swift` no iOS. No Android isso **não**
+  exige a permissão de localização em segundo plano, então no Play Console responda
+  **"Não"** a essa pergunta. Na Apple, o `store/listagem-lojas.md` já traz o texto de
+  justificativa para as notas de revisão (detalhes na seção 7 de `docs/PUBLICAR-LOJAS.md`)
 - **Excluir conta** no app (Perfil) + página web `excluir-conta.html`
 - **Política de privacidade** e **termos de uso** hospedados na API
 - **Privacy Manifest** iOS (`PrivacyInfo.xcprivacy`) — obrigatório desde 2024
