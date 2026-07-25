@@ -1,7 +1,7 @@
 # TERMO DE USO
 ### Aplicativo VAP — caronas entre colaboradores
 
-**Versão 1.2 — vigente desde 06/07/2026**
+**Versão 1.4 — vigente desde 25/07/2026**
 
 > **Antes de publicar:** substitua os campos entre colchetes `[ ]` pelos dados reais e
 > submeta à revisão jurídica antes do uso comercial. Complementado pela *Política de
@@ -215,8 +215,8 @@ o tratamento dos dados conforme a Política de Privacidade e a legislação apli
 ## 13. Suporte
 
 Dúvidas, solicitações e denúncias podem ser encaminhadas pelo canal oficial de
-atendimento: **castanheira.wrc@gmail.com**. Solicitações relativas a dados pessoais devem
-ser direcionadas ao Encarregado (DPO): **Wanderlei Ribeiro de Castro Castanheira — castanheira.wrc@gmail.com**.
+atendimento: **contato@[DOMINIO]**. Solicitações relativas a dados pessoais devem
+ser direcionadas ao Encarregado (DPO): **[NOME DO DPO]** — **dpo@[DOMINIO]**.
 
 ---
 
@@ -234,7 +234,7 @@ Consentimento**. Parte do tratamento ocorre com base no **consentimento** do Usu
 (uso de imagem e localização) e parte com base em outras hipóteses legais previstas na
 LGPD — em especial a **execução de contrato/procedimentos preliminares** e o **legítimo
 interesse** (operação do serviço, segurança e rateio). O Usuário pode exercer seus
-direitos junto ao Encarregado (DPO): **Wanderlei Ribeiro de Castro Castanheira — castanheira.wrc@gmail.com**.
+direitos junto ao Encarregado (DPO): **[NOME DO DPO]** — **dpo@[DOMINIO]**.
 
 ---
 
@@ -250,7 +250,7 @@ publicada no Aplicativo.
 
 17.1. Este Termo é regido pelas leis da República Federativa do Brasil.
 
-17.2. Fica eleito o foro da comarca de **[CIDADE/UF]** para dirimir controvérsias. Nas
+17.2. Fica eleito o foro da comarca de **Canaã dos Carajás/PA** para dirimir controvérsias. Nas
 relações regidas pelo Código de Defesa do Consumidor, fica **ressalvado o direito do
 Usuário de ajuizar demanda no foro do seu domicílio**, conforme a legislação aplicável.
 
@@ -266,7 +266,7 @@ primeiro acesso, para contas anteriores), com data, hora e versão.
 | **Nome:** | ______________________________________ |
 | **Matrícula:** | ____________________ |
 | **Data do aceite:** | ____ / ____ / ________ |
-| **Versão aceita:** | 1.2 |
+| **Versão aceita:** | 1.4 |
 
 ---
 
