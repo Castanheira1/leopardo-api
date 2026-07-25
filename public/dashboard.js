@@ -1261,10 +1261,10 @@
         esconderBootSplash();
         limparEstadoTeclado();
         document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
-        document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
-        document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
-        document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
-        document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
+        document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'flex' : 'none';
+        document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'flex' : 'none';
+        document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'flex' : 'none';
+        document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'flex' : 'none';
         // Viagem em curso: não joga pro mapa de pedir/oferecer — mantém/retoma a viagem.
         if (viagemView && viagemView.status === 'em_andamento') {
             document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
@@ -1378,15 +1378,17 @@
         const emailEl = document.getElementById('perfilEmail');
         emailEl.value = user.email || '';
         emailEl.readOnly = !!user.email;
-        emailEl.style.opacity = user.email ? '0.85' : '1';
         document.getElementById('perfilTelefone').value = user.telefone || '';
         document.getElementById('perfilSexo').value = user.sexo || '';
-        // Cabeçalho estilo app: avatar com inicial + nome + empresa/projeto.
+        // Cabeçalho estilo Instagram: avatar grande + nome + empresa/projeto.
         const nomeCurto = (user.nome || '').trim();
         const heroNome = document.getElementById('perfilHeroNome');
         if (heroNome) heroNome.textContent = nomeCurto || 'Meu perfil';
         const heroSub = document.getElementById('perfilHeroSub');
-        if (heroSub) heroSub.textContent = [user.empresa_nome, user.projeto_codigo].filter(Boolean).join(' · ');
+        if (heroSub) {
+            const mat = user.matricula ? ' · ' + user.matricula : '';
+            heroSub.textContent = ([user.empresa_nome, user.projeto_codigo].filter(Boolean).join(' · ') || 'Conta VAP') + mat;
+        }
         const avatarEl = document.getElementById('perfilAvatar');
         if (avatarEl) avatarEl.textContent = (nomeCurto[0] || '?').toUpperCase();
         document.getElementById('modalPerfil').style.display = 'flex';
@@ -1480,9 +1482,11 @@
         const st = document.getElementById('habStatusPerfil');
         const ativo = !!(habHoje && selfieAindaValida(habHoje));
         if (nav) {
-            nav.innerHTML = ativo
-                ? '<span style="color:#22c55e">●</span> Habilitado (perfil)'
-                : 'Ativar no Perfil';
+            const tit = nav.querySelector('.ig-settings-txt strong');
+            const sub = nav.querySelector('.ig-settings-txt small');
+            if (tit) tit.textContent = ativo ? 'Habilitado' : 'Ativar no Perfil';
+            if (sub) sub.textContent = ativo ? 'Modo motorista ativo' : 'Habilitar modo motorista';
+            nav.classList.toggle('ig-settings-row--on', !!ativo);
         }
         if (st) {
             if (ativo) {
@@ -4027,7 +4031,7 @@
         const badge = document.getElementById('badgeAgendamentos');
         const menu = document.getElementById('menuAgendamentos');
         if (document.getElementById('modoTitulo')?.textContent === 'Passageiro') {
-            if (menu) menu.style.display = 'block';
+            if (menu) menu.style.display = 'flex';
         }
         if (banner) banner.style.display = n ? 'flex' : 'none';
         if (txt) {
@@ -7201,10 +7205,10 @@
             document.getElementById('telaPapel').style.display = 'none';
             document.getElementById('modoTitulo').textContent =
                 papel === 'motorista' ? 'Motorista' : 'Passageiro';
-            document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'block' : 'none';
-            document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'block' : 'none';
-            document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'block' : 'none';
-            document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'block' : 'none';
+            document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'flex' : 'none';
+            document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'flex' : 'none';
+            document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'flex' : 'none';
+            document.getElementById('menuAgendamentos').style.display = papel === 'passageiro' ? 'flex' : 'none';
             esconderBootSplash();
             const ok = await abrirViagem(ativa.id);
             if (ok) atualizarIndicadorModoOperante();

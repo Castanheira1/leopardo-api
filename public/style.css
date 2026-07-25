@@ -116,15 +116,79 @@ body {
     flex-shrink: 0;
 }
 
-/* Menu (hambúrguer) — alinhado à barra Passageiro/Motorista */
+/* Menu (hambúrguer) — Configurações estilo Instagram */
 .nav-menu-wrap { position: relative; flex-shrink: 0; }
 .nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-/* Menu claro (mesmo padrão do painel Locais) */
-.nav-menu { position: absolute; right: 0; top: calc(100% + 8px); background: #fff; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); min-width: 210px; overflow: hidden; z-index: 60; }
+.nav-menu {
+    position: absolute; right: 0; top: calc(100% + 8px);
+    background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+    min-width: 288px; max-width: min(92vw, 340px);
+    overflow: hidden; z-index: 60;
+    max-height: min(78vh, 640px); overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+/* Compat: itens antigos (se algum JS ainda usar) */
 .nav-menu-item { display: block; width: 100%; text-align: left; padding: 14px 18px; background: none; border: none; color: #111; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
-.nav-menu-item:hover { background: #f6f0df; color: #111; }
-.nav-menu-item:active { background: #f0e6c8; }
-.nav-menu-item + .nav-menu-item { border-top: 1px solid rgba(0, 0, 0, 0.06); }
+.nav-menu-item:hover { background: #f5f5f5; color: #111; }
+.nav-menu-item:active { background: #efefef; }
+.nav-menu-item + .nav-menu-item { border-top: 1px solid #efefef; }
+
+.ig-settings { padding: 0 0 10px; }
+.ig-settings-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px; position: sticky; top: 0; background: #fff; z-index: 2;
+    border-bottom: 1px solid #efefef;
+}
+.ig-settings-title {
+    font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; color: #0f0f0f;
+}
+.ig-settings-close {
+    width: 32px; height: 32px; border: none; border-radius: 50%;
+    background: #f2f2f2; color: #0f0f0f; display: grid; place-items: center; cursor: pointer;
+}
+.ig-settings-close:active { background: #e8e8e8; }
+.ig-settings-group { padding: 10px 10px 4px; }
+.ig-settings-group--danger { padding-top: 4px; }
+.ig-settings-label {
+    font-size: 0.72rem; font-weight: 650; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #8e8e8e;
+    padding: 6px 10px 8px;
+}
+.ig-settings-row {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 11px 12px; margin: 0 0 2px; border: none; border-radius: 12px;
+    background: transparent; color: #0f0f0f; text-align: left; cursor: pointer;
+    text-decoration: none; font: inherit;
+    transition: background 0.12s ease;
+}
+.ig-settings-row:hover, .ig-settings-row:active { background: #f5f5f5; }
+.ig-settings-icn {
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+    display: grid; place-items: center; background: #fafafa; color: #0f0f0f;
+    border: 1px solid #efefef;
+}
+.ig-settings-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ig-settings-txt strong {
+    font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em;
+    color: #0f0f0f; line-height: 1.25;
+}
+.ig-settings-txt small {
+    font-size: 0.75rem; font-weight: 450; color: #8e8e8e; line-height: 1.25;
+}
+.ig-settings-chev {
+    color: #c7c7c7; font-size: 1.35rem; font-weight: 300; line-height: 1; padding-left: 2px;
+}
+.ig-settings-row--danger {
+    justify-content: center; margin-top: 4px;
+    border: 1px solid #efefef; background: #fff;
+}
+.ig-settings-row--danger .ig-settings-txt { align-items: center; }
+.ig-settings-row--danger strong { color: #ed4956; font-weight: 650; }
+.ig-settings-row--on .ig-settings-txt strong { color: #1a7f37; }
+.ig-settings-row--on .ig-settings-icn {
+    background: #eaf7ee; border-color: #ccebd6; color: #1a7f37;
+}
 .nav-tag {
     font-size: 0.8rem;
     font-weight: 700;
@@ -2984,7 +3048,129 @@ body.aguardando-papel .navbar {
 .perfil-secao { padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .perfil-secao:first-of-type { border-top: none; padding-top: 4px; }
 
-/* Perfil estilo app: cabeçalho com avatar + nome (cara de app de verdade) */
+/* —— Perfil estilo Instagram —— */
+.ig-perfil-overlay.cam-overlay-alto {
+    background: rgba(0, 0, 0, 0.45);
+    padding: max(18px, calc(env(safe-area-inset-top) + 8px)) 12px max(12px, env(safe-area-inset-bottom));
+}
+.cam-overlay.ig-perfil-overlay .cam-box.ig-perfil-box {
+    background: #fafafa;
+    border-radius: 18px;
+    max-height: min(92vh, calc(var(--appvh, 1vh) * 92));
+    padding: 0 0 calc(14px + env(safe-area-inset-bottom));
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+.ig-perfil-top {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #fff;
+    border-bottom: 1px solid #efefef;
+    position: sticky; top: 0; z-index: 3;
+}
+.ig-perfil-title {
+    margin: 0; text-align: center;
+    font-size: 1rem; font-weight: 700; letter-spacing: -0.02em; color: #0f0f0f;
+}
+.ig-perfil-x, .ig-perfil-top .perfil-voltar {
+    width: 36px; height: 36px; border: none; border-radius: 50%;
+    background: transparent; color: #0f0f0f; display: grid; place-items: center;
+    cursor: pointer; padding: 0; font-size: 1.6rem; line-height: 1;
+}
+.ig-perfil-x:active { background: #f2f2f2; }
+.ig-perfil-done {
+    border: none; background: transparent; color: #0095f6;
+    font-size: 0.95rem; font-weight: 700; cursor: pointer; padding: 8px 4px;
+    font-family: inherit;
+}
+.ig-perfil-done:active { opacity: 0.65; }
+.ig-perfil-done--ghost { width: 48px; visibility: hidden; pointer-events: none; }
+.ig-perfil-hero {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 22px 16px 18px; background: #fff;
+    border-bottom: 1px solid #efefef;
+}
+.ig-perfil-avatar.perfil-avatar {
+    width: 86px; height: 86px; font-size: 2rem;
+    background: linear-gradient(145deg, #262626 0%, #525252 100%);
+    color: #fff; box-shadow: none; margin-bottom: 12px;
+}
+.ig-perfil-hero .perfil-hero-nome {
+    font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em;
+    color: #0f0f0f; text-align: center;
+}
+.ig-perfil-hero .perfil-hero-sub {
+    font-size: 0.82rem; color: #8e8e8e; margin-top: 3px; text-align: center;
+}
+.ig-perfil-section-label {
+    font-size: 0.72rem; font-weight: 650; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #8e8e8e;
+    padding: 16px 18px 8px;
+}
+.ig-perfil-card {
+    margin: 12px 12px 0;
+    background: #fff;
+    border: 1px solid #efefef;
+    border-radius: 14px;
+    overflow: hidden;
+    padding: 2px 14px;
+}
+.ig-perfil-card--motorista {
+    padding: 12px 14px 14px;
+}
+.ig-perfil-row {
+    display: grid;
+    grid-template-columns: 118px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 13px 0;
+    border-bottom: 1px solid #efefef;
+}
+.ig-perfil-row--last { border-bottom: none; }
+.ig-perfil-row--stack {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    align-items: stretch;
+}
+.ig-perfil-row label {
+    margin: 0; font-size: 0.9rem; font-weight: 550; color: #0f0f0f;
+}
+.ig-perfil-input {
+    width: 100%; border: none; outline: none; background: transparent;
+    font: inherit; font-size: 0.95rem; color: #0f0f0f;
+    padding: 0; text-align: right;
+    appearance: none; -webkit-appearance: none;
+}
+.ig-perfil-row--stack .ig-perfil-input {
+    text-align: left;
+    border: 1px solid #efefef; border-radius: 10px;
+    padding: 12px 12px; background: #fafafa;
+}
+.ig-perfil-input:focus { color: #0f0f0f; }
+.ig-perfil-input[readonly] { color: #8e8e8e; }
+.ig-perfil-input::placeholder { color: #c7c7c7; }
+select.ig-perfil-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e8e' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right center; padding-right: 16px;
+}
+.ig-perfil-hint {
+    margin: 8px 18px 0; font-size: 0.75rem; color: #8e8e8e; line-height: 1.35;
+}
+.ig-perfil-msg { margin: 8px 18px 0; min-height: 1.2em; }
+.ig-perfil-box .perfil-excluir-link {
+    display: block; width: calc(100% - 24px); margin: 18px 12px 8px;
+    background: #fff; border: 1px solid #efefef; border-radius: 12px;
+    text-align: center; padding: 14px; font-size: 0.92rem; font-weight: 650;
+    color: #ed4956; font-family: inherit; cursor: pointer;
+}
+.ig-perfil-box .perfil-excluir-link:hover,
+.ig-perfil-box .perfil-excluir-link:active { background: #fff5f5; text-decoration: none; }
+.ig-perfil-box .hab-actions { margin-top: 8px; }
+.ig-perfil-box .hab-status { margin: 0 0 4px; font-size: 0.88rem; }
+.ig-perfil-box #btnExcluirConta { margin-top: 14px; }
+
 .perfil-hero { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
 .perfil-avatar {
     width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
@@ -3005,17 +3191,16 @@ body.aguardando-papel .navbar {
 }
 /* Botões de ação do perfil em largura total (padrão de app mobile) */
 .perfil-view .perfil-secao > .btn { width: 100%; margin-top: 12px; }
-/* Único item de navegação restante: link discreto, padrão dos apps grandes */
 .perfil-excluir-link {
     display: block; width: 100%; background: none; border: none; cursor: pointer;
     text-align: center; padding: 12px 0 4px; font-size: 0.85rem; font-weight: 700;
     color: #c0392b; font-family: inherit;
 }
 .perfil-excluir-link:hover, .perfil-excluir-link:active { text-decoration: underline; }
-.painel-claro .perfil-hero-nome { color: #26231b; }
-.painel-claro .perfil-hero-sub { color: #8a857a; }
-.painel-claro .perfil-secao-titulo { color: #8a857a; }
-.painel-claro .perfil-excluir-link { color: #b03a2e; }
+.painel-claro .perfil-hero-nome { color: #0f0f0f; }
+.painel-claro .perfil-hero-sub { color: #8e8e8e; }
+.painel-claro .perfil-secao-titulo { color: #8e8e8e; }
+.painel-claro .perfil-excluir-link { color: #ed4956; }
 
 /* Hub do perfil: navegação para sub-telas */
 .perfil-nav-btn {
@@ -3301,7 +3486,7 @@ body.aguardando-papel .navbar {
     }
     .nav-logo { height: 50px; }
     .nav-user { font-size: 0.88rem; }
-    .nav-menu { min-width: 190px; }
+    .nav-menu { min-width: 288px; }
 
     .card {
         padding: 18px 14px;
