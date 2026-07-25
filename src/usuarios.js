@@ -1,6 +1,6 @@
 // Helpers de usuário: projeto (com cache 60s), selfie, habilitação ativa, shape do front e validações.
 require("dotenv").config();
-const { HAB_SELFIE_HORAS, SQL_GPS_FRESH } = require("./config");
+const { HAB_SELFIE_HORAS, SQL_GPS_FRESH, POLITICA_VERSAO_ATUAL } = require("./config");
 const { pool } = require("./db");
 
 /** Última selfie de validação do passageiro (pedido / proposta). */
@@ -151,9 +151,10 @@ function usuarioParaFront(row) {
     projeto_nome: row.projeto_nome || null,
     projeto_codigo: row.projeto_codigo || null,
     admin_projeto_id: row.admin_projeto_id || null,
-    // LGPD: usuários cadastrados antes do consentimento têm politica_aceita_em NULL.
-    // O front usa isto para exibir o portão de consentimento no próximo acesso.
-    politica_pendente: !row.politica_aceita_em,
+    // LGPD: sem aceite OU versão desatualizada → portão no front.
+    politica_pendente: !row.politica_aceita_em
+      || String(row.politica_versao || "") !== String(POLITICA_VERSAO_ATUAL),
+    politica_versao: row.politica_versao || null,
   };
 }
 

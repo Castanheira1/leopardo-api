@@ -348,10 +348,79 @@ async function cancelarViagemAtiva(viagemId, usuarioId) {
   return { ok: true, viagem: rows[0] };
 }
 
+/**
+ * Cancela viagens em_andamento abandonadas (TTL). Não reabre pedido antigo —
+ * marca como cancelado; devolve vaga da carona se o motorista ainda estiver no ar.
+ */
+async function cancelarViagensPresas(ttlHoras = null) {
+  const { VIAGEM_TTL_H } = require("../config");
+  const { enviarPush } = require("../push");
+  const horas = Number(ttlHoras != null ? ttlHoras : VIAGEM_TTL_H);
+  if (!Number.isFinite(horas) || horas <= 0) return { canceladas: 0 };
+
+  const { rows } = await pool.query(
+    `UPDATE viagens
+     SET status = 'cancelada', finalizada_em = COALESCE(finalizada_em, NOW())
+     WHERE status = 'em_andamento'
+       AND COALESCE(iniciada_em, created_at) < NOW() - make_interval(hours => $1::int)
+     RETURNING *`,
+    [Math.round(horas)]
+  );
+
+  for (const v of rows) {
+    try {
+      const pr = v.proposta_id
+        ? (await pool.query("SELECT pessoas FROM propostas WHERE id = $1", [v.proposta_id])).rows[0]
+        : null;
+      const npessoas = pessoasDaProposta(pr);
+      if (v.carona_id) {
+        const car = (await pool.query("SELECT motorista_id FROM caronas WHERE id = $1", [v.carona_id])).rows[0];
+        if (car && await motoristaGpsVivo(car.motorista_id)) {
+          await pool.query(
+            `UPDATE caronas
+             SET vagas = LEAST(vagas + $2, 6),
+                 status = CASE WHEN status IN ('concluida', 'cancelada') THEN 'ativa' ELSE status END
+             WHERE id = $1`,
+            [v.carona_id, npessoas]
+          );
+        } else {
+          await pool.query(
+            "UPDATE caronas SET status = 'cancelada' WHERE id = $1 AND status IN ('ativa', 'concluida')",
+            [v.carona_id]
+          );
+        }
+      }
+      // Pedido antigo demais: cancela (não faz sentido reabrir busca de horas atrás).
+      if (v.pedido_id) {
+        await pool.query(
+          "UPDATE pedidos SET status = 'cancelado' WHERE id = $1 AND status IN ('aberto', 'atendido')",
+          [v.pedido_id]
+        );
+      }
+    } catch (e) {
+      console.warn(`cancelarViagensPresas #${v.id} recursos:`, e.message);
+    }
+
+    const aviso = {
+      title: "Viagem encerrada",
+      body: "A viagem ficou parada tempo demais e foi encerrada automaticamente. Peça ou ofereça de novo se ainda precisar.",
+      url: "/dashboard.html",
+    };
+    enviarPush(v.motorista_id, aviso);
+    enviarPush(v.passageiro_id, aviso);
+  }
+
+  if (rows.length) {
+    console.log(`Viagens presas: ${rows.length} cancelada(s) (TTL ${horas}h).`);
+  }
+  return { canceladas: rows.length, ids: rows.map((r) => r.id) };
+}
+
 
 module.exports = {
   pessoasDaProposta,
   criarViagemDaProposta,
   reverterRecursosDaViagem,
   cancelarViagemAtiva,
+  cancelarViagensPresas,
 };

@@ -78,7 +78,7 @@ function instalarAvisoTrocaSessao(usuarioAtual) {
 }
 
 /* -------------------- LGPD: portão de consentimento -------------------- */
-const POLITICA_VERSAO = '1.0';
+const POLITICA_VERSAO = '1.2';
 async function verificarConsentimentoLGPD() {
     try {
         if (!localStorage.getItem('token')) return;
@@ -316,7 +316,12 @@ async function registrarPushWeb(silencioso) {
     if (Notification.permission === 'default' && silencioso) return;
 
     const cfg = await (await fetch('/api/config')).json();
-    if (!cfg.pushPublicKey) return;   // servidor sem VAPID: push desligado
+    if (!cfg.pushPublicKey) {
+        if (!silencioso && typeof mostrarToast === 'function') {
+            mostrarToast('Avisos push desligados no servidor (faltam chaves VAPID). Você ainda usa o app normalmente.', 'error');
+        }
+        return;   // servidor sem VAPID: push desligado
+    }
 
     if (Notification.permission === 'default') {
         const p = await Notification.requestPermission();

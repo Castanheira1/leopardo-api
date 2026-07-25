@@ -543,7 +543,7 @@
             <div class="admin-notice">
                 O acesso admin de canteiro permite relatórios e operação daquele projeto.
                 Sua solicitação fica <strong>bloqueada</strong> até o dono da empresa aprovar.
-                Você só entra no painel depois da aprovação (senha inicial será informada).
+                Você só entra no painel depois da aprovação — use a mesma senha do seu cadastro.
             </div>
             <form id="adminForm">
                 <div class="field">
@@ -771,7 +771,7 @@
                         email: document.getElementById('email').value,
                         senha: document.getElementById('senha').value,
                         aceite_politica: document.getElementById('aceitePolitica').checked,
-                        politica_versao: '1.0',
+                        politica_versao: '1.2',
                     })
                 });
                 const data = await response.json();

@@ -5065,10 +5065,18 @@
                     ? `A caminho de <strong>${esc(parada)}</strong>. De lá, peça outra carona até <strong>${esc(dest)}</strong>.`
                     : `Você está sendo levado para <strong>${esc(dest)}</strong>`;
             }
-            // Sem "Cancelar viagem" pro passageiro: um cancelamento acidental dele,
-            // já embarcado e a caminho, perderia a medição de km que o admin usa.
-            // Só o motorista controla finalizar/cancelar.
-            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>';
+            // Sem sinal do motorista: aviso claro (não deixa o passageiro preso no limbo).
+            const semSinalMot = !vv.ehMotorista && vv.posMotEm
+                && (Date.now() - vv.posMotEm) > 3 * 60 * 1000;
+            if (semSinalMot) {
+                hint += '<br><span style="color:#b0562f">Sem sinal do motorista há alguns minutos.</span>';
+            }
+            // Escape: passageiro pode encerrar se o motorista sumiu / viagem travou.
+            // Finalizar (km/rateio) continua só com o motorista.
+            const btnEscape = btnViagem('outline',
+                semSinalMot ? 'Motorista sumiu — encerrar' : 'Encerrar viagem',
+                `cancelarViagemPassageiro(${vv.id})`);
+            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>' + mapsBtn + btnEscape;
         }
     }
     // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
@@ -5411,6 +5419,8 @@
         }
 
         if (vv.fase === 'destino') verificarChegadaDestino(vv);
+        // Atualiza aviso "sem sinal" / botão de escape do passageiro.
+        if (!vv.ehMotorista) atualizarCabecalhoViagem();
     }
 
     // Viagem concluída: tira a rota, o carro e o bonequinho do mapa (não fica
@@ -5644,6 +5654,7 @@
             }
             if (!vv.ehMotorista && d.motorista) {
                 vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
+                vv.posMotEm = Date.now();
                 if (d.motorista.speed_kmh != null) {
                     registrarVelMotorista(vv, +d.motorista.speed_kmh, vv.posMotorista);
                 }
@@ -5891,8 +5902,9 @@
             if (ok) msg(`Próxima perna: buscar ${prox.passageiro_nome || 'o passageiro'}.`);
         } catch (_) { /* sem próxima perna: fica na tela de encerramento */ }
     }
-    async function cancelarViagem(viagemId) {
-        if (!confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
+    async function cancelarViagem(viagemId, opts) {
+        const skipConfirm = opts && opts.skipConfirm;
+        if (!skipConfirm && !confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
         try {
             const r = await fetchWithAuth('/api/viagens/' + viagemId + '/cancelar', { method: 'POST' });
             const d = await r.json().catch(() => ({}));
@@ -5910,6 +5922,11 @@
         } catch (_) {
             msg('Sem resposta do servidor ao encerrar. Verifique a conexão.', 'error');
         }
+    }
+    // Passageiro: confirmação mais explícita (evita toque acidental a caminho).
+    async function cancelarViagemPassageiro(viagemId) {
+        if (!confirm('Encerrar esta viagem?\n\nUse só se o motorista sumiu ou a carona não vai acontecer. Se você já está no carro, peça para o motorista finalizar.')) return;
+        return cancelarViagem(viagemId, { skipConfirm: true });
     }
     // Sai da tela de viagem (concluída/cancelada) e volta ao mapa do papel atual.
     // NÃO abre o seletor de papel — usuário permanece onde estava.
@@ -7372,7 +7389,9 @@
         } catch (_) {}
         instalarGuardaVoltar(fecharCamadaVoltar);
         setTimeout(esconderBootSplash, 8000);
-        carregarMaps().catch(() => {});
+        carregarMaps().catch(() => {
+            msg('Mapa indisponível no momento. Verifique a conexão e tente de novo.', 'error', 9000);
+        });
         iniciarTransmissaoPassageiro();
 
         // 1) Viagem em andamento → volta direto nela (papel certo).

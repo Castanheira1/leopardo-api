@@ -66,6 +66,11 @@ if (!JWT_SECRET) {
 
 
 const HAB_SELFIE_HORAS = 12;
+// Versão vigente da Política de Privacidade (cadastro + portão LGPD).
+// Ao mudar o texto legal, incremente e peça novo aceite.
+const POLITICA_VERSAO_ATUAL = process.env.POLITICA_VERSAO || "1.2";
+// Viagens em_andamento sem atividade: cancelamento automático (horas).
+const VIAGEM_TTL_H = Number(process.env.VIAGEM_TTL_H || 6);
 
 
 module.exports = {
@@ -93,4 +98,6 @@ module.exports = {
   RAIO_CHEGADA_DEST_KM,
   FUSO_APP,
   HAB_SELFIE_HORAS,
+  POLITICA_VERSAO_ATUAL,
+  VIAGEM_TTL_H,
 };
