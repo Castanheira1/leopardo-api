@@ -1176,6 +1176,14 @@ html.teclado-aberto {
     justify-content: center;
     margin: 0 0 12px;
 }
+/* No sheet do motorista, "Limpar destino" fica ABAIXO do resumo (km · km/h · °C)
+   pra não competir com o gesto da alça. */
+.acao-sheet-ofe .limpar-rota-bar {
+    margin: 2px 0 12px;
+}
+.acao-sheet-ofe .alcance-info {
+    margin: 4px 0 8px;
+}
 /* "Limpar destino": padrão Claude — amarelinho claro e suave por dentro,
    texto escuro e contorno dourado fraco (igual ao banner "Recebendo todas as
    chamadas"). As regras :hover/:active próprias vencem o verde do

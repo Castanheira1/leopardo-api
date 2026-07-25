@@ -226,9 +226,6 @@
                             <span class="acao-handle" aria-hidden="true"></span>
                             <span class="acao-titulo">Ficar online</span>
                         </div>
-                        <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
-                            <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar destino</button>
-                        </div>
                         <div id="alcanceOfeWrap" class="alcance-wrap" style="display:none;">
                             <div class="alcance-top">
                                 <span class="alcance-label">Alcance da vaga</span>
@@ -239,7 +236,9 @@
                             <div class="alcance-hint">Passageiros até essa distância veem sua rota — e você recebe os pedidos deles.</div>
                         </div>
                         <!-- Depois de escolher o raio, a barra vira este resumo compacto
-                             (raio + velocidade média + temperatura). Toque = barra volta. -->
+                             (raio + velocidade média + temperatura). Toque = barra volta.
+                             Fica logo abaixo da alça: "Limpar destino" fica mais abaixo
+                             pra não apagar a rota ao tentar abaixar o sheet. -->
                         <button type="button" id="alcanceInfoOfe" class="alcance-info" style="display:none;"
                                 onclick="reabrirBarraAlcance()" title="Toque para ajustar o alcance"
                                 aria-label="Ajustar alcance da vaga">
@@ -249,6 +248,9 @@
                             <span class="alcance-info-sep" aria-hidden="true">·</span>
                             <span id="alcanceInfoTemp">—°C</span>
                         </button>
+                        <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
+                            <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar destino</button>
+                        </div>
                         <div class="acao-sheet-body">
                         <p id="hintMotoristaOnline" class="cam-hint" style="margin:0 0 10px;">
                             Informe as <strong>vagas</strong> e <strong>arraste para ficar online</strong>.
