@@ -118,7 +118,7 @@ async function projetoDoUsuario(userId) {
 const SQL_USUARIO_FRONT = `
   SELECT u.id, u.nome, u.funcao, u.matricula, u.telefone, u.email, u.is_admin, u.sexo,
          u.empresa_nome, u.centro_custo, u.projeto_id, u.admin_projeto_id,
-         u.politica_aceita_em,
+         u.politica_aceita_em, u.politica_versao,
          p.nome AS projeto_nome, p.codigo AS projeto_codigo
   FROM usuarios u
   LEFT JOIN projetos p ON p.id = u.projeto_id`;

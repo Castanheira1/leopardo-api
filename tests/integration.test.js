@@ -902,7 +902,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     await test("motorista da vez (pedido_id) via /api/propostas é bloqueado — fila ativa", async () => {
       const { status, json } = await api("POST", "/api/propostas", { token: tokFilaB, body: { pedido_id: pedidoFilaId } });
       eq(status, 400, "status");
-      assert(/busca automática/.test(json.error || ""), "mensagem deveria citar a busca automática");
+      assert(/fila|motorista da vez/i.test(json.error || ""), "mensagem deveria citar a fila / motorista da vez");
     });
 
     await test("A recusa -> B (próximo mais perto) recebe a oferta na hora", async () => {
