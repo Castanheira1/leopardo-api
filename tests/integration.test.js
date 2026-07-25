@@ -2004,6 +2004,92 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
         "com a viagem criada o pedido deve sair do mapa");
     });
 
+    grupo("Double-match: pedido aberto + pedir vaga");
+    const uDmMot = novoUsuario(63, "S11D");
+    const uDmMot2 = novoUsuario(64, "S11D");
+    const uDmPax = novoUsuario(65, "S11D");
+    let tokDmMot, tokDmMot2, tokDmPax, caronaDm1, caronaDm2, propDm1, propDm2;
+
+    await test("prepara: passageiro pede vaga em DUAS caronas (pedido fica aberto)", async () => {
+      for (const [u, set] of [
+        [uDmMot, (t) => (tokDmMot = t)], [uDmMot2, (t) => (tokDmMot2 = t)], [uDmPax, (t) => (tokDmPax = t)],
+      ]) {
+        const { status, json } = await api("POST", "/api/register", { body: u });
+        eq(status, 200, "registro");
+        set(json.token);
+      }
+      for (const tok of [tokDmMot, tokDmMot2]) {
+        const { status } = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "DM" + Math.floor(Math.random() * 9000 + 1000), tag: "DM",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(status, 200, "habilitação");
+      }
+      const c1 = await api("POST", "/api/caronas", {
+        token: tokDmMot,
+        body: { origem_texto: "Portaria S11D", origem_lat: REC_ORIG.lat, origem_lng: REC_ORIG.lng,
+          destino_texto: "Mina de Ferro do Complexo Serra Sul",
+          destino_lat: REC_DEST.lat, destino_lng: REC_DEST.lng, vagas: 2 },
+      });
+      eq(c1.status, 200, "carona 1");
+      caronaDm1 = c1.json.id;
+      const c2 = await api("POST", "/api/caronas", {
+        token: tokDmMot2,
+        body: { origem_texto: "Portaria S11D", origem_lat: REC_ORIG.lat, origem_lng: REC_ORIG.lng,
+          destino_texto: "Mina de Ferro do Complexo Serra Sul",
+          destino_lat: REC_DEST.lat, destino_lng: REC_DEST.lng, vagas: 2 },
+      });
+      eq(c2.status, 200, "carona 2");
+      caronaDm2 = c2.json.id;
+      // Pedido aberto (visível) + duas solicitações de vaga pendentes.
+      const ped = await api("POST", "/api/pedidos", {
+        token: tokDmPax,
+        body: { origem_texto: "Portaria S11D", origem_lat: REC_ORIG.lat, origem_lng: REC_ORIG.lng,
+          destino_texto: "Mina de Ferro do Complexo Serra Sul",
+          destino_lat: REC_DEST.lat, destino_lng: REC_DEST.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1 },
+      });
+      eq(ped.status, 200, "pedido");
+      const p1 = await api("POST", "/api/propostas", {
+        token: tokDmPax, body: { carona_id: caronaDm1, selfie_url: SELFIE, selfie_em: nowISO() },
+      });
+      eq(p1.status, 200, "proposta 1");
+      propDm1 = p1.json.id;
+      const p2 = await api("POST", "/api/propostas", {
+        token: tokDmPax, body: { carona_id: caronaDm2, selfie_url: SELFIE, selfie_em: nowISO() },
+      });
+      eq(p2.status, 200, "proposta 2");
+      propDm2 = p2.json.id;
+    });
+
+    await test("aceite simultâneo das duas vagas: só UMA viagem em_andamento", async () => {
+      const [a1, a2] = await Promise.all([
+        api("POST", `/api/propostas/${propDm1}/aceitar`, { token: tokDmMot }),
+        api("POST", `/api/propostas/${propDm2}/aceitar`, { token: tokDmMot2 }),
+      ]);
+      const oks = [a1, a2].filter((r) => r.status === 200 && r.json?.viagem_id);
+      eq(oks.length, 1, "exatamente um aceite deve criar viagem");
+      const perdedor = a1.status === 200 && a1.json?.viagem_id ? a2 : a1;
+      assert(perdedor.status === 409 || perdedor.status === 404,
+        `perdedor deveria ser 409/404, veio ${perdedor.status}`);
+      // Prova de fogo no banco: 1 viagem viva pro passageiro.
+      const { Pool } = require("pg");
+      const pg = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const uid = (await pg.query(
+          "SELECT id FROM usuarios WHERE matricula = $1", [uDmPax.matricula]
+        )).rows[0].id;
+        const { rows } = await pg.query(
+          "SELECT id FROM viagens WHERE passageiro_id = $1 AND status = 'em_andamento'",
+          [uid]
+        );
+        eq(rows.length, 1, "passageiro só pode ter 1 viagem em_andamento");
+      } finally {
+        await pg.end();
+      }
+    });
+
     grupo("Anti-força-bruta no login (rate limit)");
     await test("excesso de tentativas de login retorna 429", async () => {
       let viu429 = false;
