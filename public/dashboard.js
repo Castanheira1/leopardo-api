@@ -1494,8 +1494,8 @@
                 const tag = habHoje.tag ? String(habHoje.tag) : '';
                 const veic = [tag, placa].filter(Boolean).join(' · ') || 'veículo ok';
                 st.style.display = 'block';
-                st.innerHTML = `<span style="color:#22c55e">●</span> <strong>Habilitado para motorista</strong>`
-                    + `<br><small>${esc(veic)} · selfie 12h · use <b>Ficar online</b> no mapa</small>`;
+                st.innerHTML = `<strong>Habilitado para motorista</strong>`
+                    + `<br><small>${esc(veic)} · selfie 12h · use Ficar online no mapa</small>`;
             } else {
                 st.style.display = 'none';
                 st.innerHTML = '';
