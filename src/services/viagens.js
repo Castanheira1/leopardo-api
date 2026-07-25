@@ -1,7 +1,7 @@
 // Ciclo da viagem a partir da proposta aceita; reversão de recursos no cancelamento.
 require("dotenv").config();
 const { pool } = require("../db");
-const { habilitacaoAtiva, motoristaGpsVivo, projetoDoUsuario } = require("../usuarios");
+const { habilitacaoAtiva, motoristaGpsVivo, projetoDoUsuario, cancelarPedidosAbertosPassageiro } = require("../usuarios");
 const { codigoDoProjeto, compatRotaPassageiro, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado } = require("../geo");
 
 function pessoasDaProposta(pr) {
@@ -265,10 +265,11 @@ async function criarViagemDaProposta(propostaId) {
     ).catch(() => {});
   }
 
-  await pool.query(
-    "UPDATE pedidos SET status = 'cancelado' WHERE passageiro_id = $1 AND status = 'aberto' AND id <> COALESCE($2, -1)",
-    [passageiro_id, pr.pedido_id || null]
-  );
+  // Agora que a viagem existe, encerra o que o passageiro ainda tinha em aberto:
+  // cancela os pedidos, mata as filas desses pedidos e recusa as propostas
+  // pendentes neles. O pedido desta viagem (pr.pedido_id) já saiu de 'aberto' no
+  // gate acima, então não é afetado.
+  await cancelarPedidosAbertosPassageiro(passageiro_id);
   return rows[0];
 }
 
