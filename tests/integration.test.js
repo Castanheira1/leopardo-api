@@ -1920,6 +1920,90 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
 
     /* =================== ANTI-FORÇA-BRUTA (rate limit) =================== */
     // Deve rodar por ÚLTIMO: estoura de propósito o teto de tentativas de login.
+    /* ============ RECUSA NÃO PODE APAGAR O PEDIDO DO PASSAGEIRO ============ */
+    // Regressão: pedir vaga cancelava na hora os pedidos abertos do passageiro.
+    // Se o motorista recusasse, o pedido ficava 'cancelado' para sempre e o
+    // passageiro sumia do mapa de todos os outros motoristas, sem aviso.
+    grupo("Recusa da proposta mantém o passageiro visível");
+    const uRecMot = novoUsuario(60, "S11D");
+    const uRecMot2 = novoUsuario(61, "S11D");
+    const uRecPax = novoUsuario(62, "S11D");
+    let tokRecMot, tokRecMot2, tokRecPax, caronaRecId, pedidoRecId, propostaRecId;
+    const REC_ORIG = { lat: -6.454156, lng: -50.208344 };  // Portaria S11D
+    const REC_DEST = { lat: -6.405713, lng: -50.325258 };  // Mina de Ferro
+
+    await test("prepara dois motoristas com carona e um passageiro com pedido aberto", async () => {
+      for (const [u, set] of [
+        [uRecMot, (t) => (tokRecMot = t)], [uRecMot2, (t) => (tokRecMot2 = t)], [uRecPax, (t) => (tokRecPax = t)],
+      ]) {
+        const { status, json } = await api("POST", "/api/register", { body: u });
+        eq(status, 200, "registro");
+        set(json.token);
+      }
+      for (const tok of [tokRecMot, tokRecMot2]) {
+        const { status } = await api("POST", "/api/habilitacao", {
+          token: tok,
+          body: { placa: "REC" + Math.floor(Math.random() * 9000 + 1000), tag: "Recusa",
+            foto_carro_url: CARRO, foto_carro_em: nowISO(), selfie_url: SELFIE, selfie_em: nowISO() },
+        });
+        eq(status, 200, "habilitação");
+      }
+      for (const tok of [tokRecMot, tokRecMot2]) {
+        const { status, json } = await api("POST", "/api/caronas", {
+          token: tok,
+          body: { origem_texto: "Portaria S11D", origem_lat: REC_ORIG.lat, origem_lng: REC_ORIG.lng,
+            destino_texto: "Mina de Ferro do Complexo Serra Sul",
+            destino_lat: REC_DEST.lat, destino_lng: REC_DEST.lng, vagas: 2 },
+        });
+        eq(status, 200, "carona");
+        if (tok === tokRecMot) caronaRecId = json.id;
+      }
+      const rp = await api("POST", "/api/pedidos", {
+        token: tokRecPax,
+        body: { origem_texto: "Portaria S11D", origem_lat: REC_ORIG.lat, origem_lng: REC_ORIG.lng,
+          destino_texto: "Mina de Ferro do Complexo Serra Sul",
+          destino_lat: REC_DEST.lat, destino_lng: REC_DEST.lng,
+          selfie_url: SELFIE, selfie_em: nowISO(), pessoas: 1 },
+      });
+      eq(rp.status, 200, "pedido");
+      pedidoRecId = rp.json.id;
+    });
+
+    await test("pedir vaga NÃO cancela o pedido aberto do passageiro", async () => {
+      const pr = await api("POST", "/api/propostas", {
+        token: tokRecPax, body: { carona_id: caronaRecId, selfie_url: SELFIE, selfie_em: nowISO() },
+      });
+      eq(pr.status, 200, "proposta");
+      propostaRecId = pr.json.id;
+      const q = `?lat=${REC_ORIG.lat}&lng=${REC_ORIG.lng}&dest_lat=${REC_DEST.lat}&dest_lng=${REC_DEST.lng}`;
+      const { json } = await api("GET", "/api/pedidos" + q, { token: tokRecMot2 });
+      assert(Array.isArray(json) && json.some((p) => p.id === pedidoRecId),
+        "com a proposta pendente o pedido deve continuar visível para outros motoristas");
+    });
+
+    await test("após a RECUSA o passageiro continua visível para outros motoristas", async () => {
+      const { status } = await api("POST", `/api/propostas/${propostaRecId}/recusar`, { token: tokRecMot });
+      eq(status, 200, "status recusar");
+      const q = `?lat=${REC_ORIG.lat}&lng=${REC_ORIG.lng}&dest_lat=${REC_DEST.lat}&dest_lng=${REC_DEST.lng}`;
+      const { json } = await api("GET", "/api/pedidos" + q, { token: tokRecMot2 });
+      assert(Array.isArray(json) && json.some((p) => p.id === pedidoRecId),
+        "recusado por um motorista, o pedido NÃO pode sumir para os demais");
+    });
+
+    await test("no aceite, aí sim o pedido aberto é encerrado", async () => {
+      const pr = await api("POST", "/api/propostas", {
+        token: tokRecPax, body: { carona_id: caronaRecId, selfie_url: SELFIE, selfie_em: nowISO() },
+      });
+      eq(pr.status, 200, "nova proposta");
+      const ac = await api("POST", `/api/propostas/${pr.json.id}/aceitar`, { token: tokRecMot });
+      eq(ac.status, 200, "aceite");
+      assert(ac.json.viagem_id, "aceite deveria criar a viagem");
+      const q = `?lat=${REC_ORIG.lat}&lng=${REC_ORIG.lng}&dest_lat=${REC_DEST.lat}&dest_lng=${REC_DEST.lng}`;
+      const { json } = await api("GET", "/api/pedidos" + q, { token: tokRecMot2 });
+      assert(!(Array.isArray(json) && json.some((p) => p.id === pedidoRecId)),
+        "com a viagem criada o pedido deve sair do mapa");
+    });
+
     grupo("Anti-força-bruta no login (rate limit)");
     await test("excesso de tentativas de login retorna 429", async () => {
       let viu429 = false;

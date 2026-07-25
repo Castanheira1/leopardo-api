@@ -4,7 +4,7 @@ const app = require("../app");
 const { pool } = require("../db");
 const { enviarPush } = require("../push");
 const { verificarAuth } = require("../auth");
-const { habilitacaoAtiva, motoristaGpsVivo, sqlSelfieValida, validarMesmoProjeto, passageiroEmViagem, cancelarPedidosAbertosPassageiro } = require("../usuarios");
+const { habilitacaoAtiva, motoristaGpsVivo, sqlSelfieValida, validarMesmoProjeto, passageiroEmViagem } = require("../usuarios");
 const { criarViagemDaProposta, pessoasDaProposta, reverterRecursosDaViagem } = require("../services/viagens");
 const { ofertarProximo } = require("../services/fila");
 
@@ -61,7 +61,10 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
             : `Só há ${Math.max(vagasEfetivas, 0)} vaga(s) — você pediu ${npessoas}.`,
         });
       }
-      await cancelarPedidosAbertosPassageiro(req.user.id);
+      // NÃO cancelar aqui os pedidos abertos do passageiro. Pedir vaga é só um
+      // convite: se o motorista recusar, o passageiro precisa continuar visível
+      // para os outros. A limpeza acontece no aceite, em criarViagemDaProposta,
+      // que é quando ele de fato tem carona.
       para_usuario_id = car.motorista_id;
       dadosSelfie = { selfie_url, selfie_lat, selfie_lng, selfie_em: selfie_em || new Date() };
     } else if (contato_id) {
