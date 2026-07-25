@@ -1,7 +1,10 @@
 // Ciclo da viagem a partir da proposta aceita; reversão de recursos no cancelamento.
 require("dotenv").config();
 const { pool } = require("../db");
-const { habilitacaoAtiva, motoristaGpsVivo, projetoDoUsuario, cancelarPedidosAbertosPassageiro } = require("../usuarios");
+const {
+  habilitacaoAtiva, motoristaGpsVivo, projetoDoUsuario,
+  cancelarPedidosAbertosPassageiro, passageiroEmViagem,
+} = require("../usuarios");
 const { codigoDoProjeto, compatRotaPassageiro, locaisDoProjetoCodigo, melhorPontoDeEncaixe, somarDesvioAcumulado } = require("../geo");
 
 function pessoasDaProposta(pr) {
@@ -179,6 +182,11 @@ async function criarViagemDaProposta(propostaId) {
   }
   const hab = await habilitacaoAtiva(motorista_id);
 
+  // Passageiro já em viagem: não cria a segunda (ex.: pedido aberto + pedir vaga
+  // em carona — o #338 preserva o pedido na solicitação, então os dois caminhos
+  // podem aceitar quase ao mesmo tempo sem este gate).
+  if (await passageiroEmViagem(passageiro_id)) return null;
+
   // GATE atômico contra double-booking de pedido.
   if (pr.pedido_id) {
     const gate = await pool.query(
@@ -241,6 +249,10 @@ async function criarViagemDaProposta(propostaId) {
         [pr.carona_id, npessoas]
       ).catch(() => {});
     }
+    // Unique idx_viagens_um_passageiro_andamento: outro aceite ganhou a corrida.
+    if (e && (e.code === "23505" || /idx_viagens_um_passageiro_andamento/i.test(String(e.message || "")))) {
+      return null;
+    }
     throw e;
   }
 
@@ -270,6 +282,18 @@ async function criarViagemDaProposta(propostaId) {
   // pendentes neles. O pedido desta viagem (pr.pedido_id) já saiu de 'aberto' no
   // gate acima, então não é afetado.
   await cancelarPedidosAbertosPassageiro(passageiro_id);
+
+  // Recusa QUALQUER outra proposta pendente desse passageiro (pedir vaga em
+  // outra carona, oferta manual, etc.). cancelarPedidosAbertosPassageiro só
+  // limpa propostas ligadas a pedido_id — sem isto, um segundo aceite criava
+  // outra viagem em_andamento.
+  await pool.query(
+    `UPDATE propostas SET status = 'recusado'
+     WHERE status = 'pendente' AND id <> $1
+       AND (de_usuario_id = $2 OR para_usuario_id = $2)`,
+    [pr.id, passageiro_id]
+  ).catch(() => {});
+
   return rows[0];
 }
 

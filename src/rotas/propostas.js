@@ -196,12 +196,16 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
     // Cria a viagem na hora do aceite: já liga os dois, habilita rastreamento e contato.
     const viagem = await criarViagemDaProposta(req.params.id);
     if (!viagem) {
+      await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [req.params.id]).catch(() => {});
+      // Passageiro já embarcou noutro fluxo (pedido/fila + pedir vaga).
+      const paxId = rows[0].carona_id ? rows[0].de_usuario_id : rows[0].para_usuario_id;
+      if (paxId && await passageiroEmViagem(paxId)) {
+        return res.status(409).json({ error: "Este passageiro já está em outra viagem." });
+      }
       if (rows[0].pedido_id) {
-        await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [req.params.id]).catch(() => {});
         return res.status(409).json({ error: "Este pedido acabou de ser atendido por outra carona." });
       }
       if (rows[0].carona_id) {
-        await pool.query("UPDATE propostas SET status = 'recusado' WHERE id = $1", [req.params.id]).catch(() => {});
         return res.status(409).json({ error: "Carona indisponível ou sem vagas suficientes." });
       }
       console.error("[aceitar proposta] viagem não criada para proposta", req.params.id);

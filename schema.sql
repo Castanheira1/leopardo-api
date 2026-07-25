@@ -240,6 +240,10 @@ CREATE INDEX IF NOT EXISTS idx_viagens_motorista_andamento
   ON viagens (motorista_id) WHERE status = 'em_andamento';
 CREATE INDEX IF NOT EXISTS idx_viagens_passageiro_andamento
   ON viagens (passageiro_id) WHERE status = 'em_andamento';
+-- No máx. 1 viagem em_andamento por passageiro (pedido + pedir vaga não
+-- podem aceitar os dois e criar duas viagens).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_viagens_um_passageiro_andamento
+  ON viagens (passageiro_id) WHERE status = 'em_andamento';
 
 -- ------------------------------------------------------------
 -- Pontos da rota (rastreamento GPS ao vivo da viagem)

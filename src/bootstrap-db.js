@@ -460,6 +460,11 @@ async function garantirColunasViagens() {
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS destino_motorista_texto TEXT");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS destino_motorista_lat NUMERIC(10,6)");
     await pool.query("ALTER TABLE viagens ADD COLUMN IF NOT EXISTS destino_motorista_lng NUMERIC(10,6)");
+    // Único passageiro ativo: fecha corrida pedido+vaga aceitos juntos.
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_viagens_um_passageiro_andamento
+       ON viagens (passageiro_id) WHERE status = 'em_andamento'`
+    );
     // Oferta a um contato ("quer carona"/buzina): guarda de qual contato veio, pra
     // a viagem herdar embarque/destino do passageiro e desenhar a rota.
     await pool.query("ALTER TABLE propostas ADD COLUMN IF NOT EXISTS contato_id INTEGER");
