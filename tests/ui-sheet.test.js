@@ -22,7 +22,8 @@ ok(!/theme-dark \.map-stage \{\s*height: 100%;\s*min-height: 0;/.test(css), "sem
 // Ratchet: o SW precisa estar versionado e no mínimo na versão que trouxe o sheet.
 const swVer = Number((sw.match(/VERSION = "v(\d+)"/) || [])[1] || 0);
 ok(swVer >= 249, `sw versionado >= v249 (atual v${swVer})`);
-ok(/id="acaoSheetPed" class="acao-sheet acao-sheet-ped"/.test(h), "sheet ped aberto no HTML");
-ok(/id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe"/.test(h), "sheet ofe aberto no HTML");
+// Classes extras (ex.: acao-sheet--clara) são permitidas; o contrato é o sheet aberto no HTML.
+ok(/id="acaoSheetPed" class="acao-sheet acao-sheet-ped(?:\s|")/.test(h), "sheet ped aberto no HTML");
+ok(/id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe(?:\s|")/.test(h), "sheet ofe aberto no HTML");
 if (failed) process.exit(1);
 console.log("\nUI sheet OK");
