@@ -117,16 +117,23 @@ body {
 }
 
 /* Menu (hambúrguer) — Configurações estilo Instagram */
-.nav-menu-wrap { position: relative; flex-shrink: 0; }
-.nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.nav-menu-wrap { position: relative; flex-shrink: 0; z-index: 80; }
+.nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation; position: relative; z-index: 81; }
 .nav-menu {
-    position: absolute; right: 0; top: calc(100% + 8px);
+    /* fixed é aplicado no JS ao abrir — overflow:hidden do dashboard cortava o painel */
+    position: fixed; right: 12px; top: 110px;
     background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
     min-width: 288px; max-width: min(92vw, 340px);
-    overflow: hidden; z-index: 60;
-    max-height: min(78vh, 640px); overflow-y: auto;
+    overflow-x: hidden; overflow-y: auto; z-index: 10050;
+    max-height: min(78vh, 640px);
     -webkit-overflow-scrolling: touch;
+}
+.theme-dark .modo-bar {
+    position: relative;
+    z-index: 80;
+    overflow: visible;
+    flex-shrink: 0;
 }
 /* Compat: itens antigos (se algum JS ainda usar) */
 .nav-menu-item { display: block; width: 100%; text-align: left; padding: 14px 18px; background: none; border: none; color: #111; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
