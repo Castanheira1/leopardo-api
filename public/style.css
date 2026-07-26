@@ -115,23 +115,6 @@ body {
     height: 38px;
     flex-shrink: 0;
 }
-/* Atalho de perfil no header (mock moderno) */
-.nav-profile-btn {
-    width: 44px;
-    height: 38px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1.5px solid rgba(255, 255, 255, 0.55);
-    border-radius: 50%;
-    background: transparent;
-    color: #fff;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-}
-.nav-profile-btn:active { background: rgba(255, 255, 255, 0.08); }
 
 /* Menu (hambúrguer) — Configurações estilo Instagram */
 .nav-menu-wrap { position: relative; flex-shrink: 0; }
@@ -1230,29 +1213,6 @@ html.teclado-aberto {
     font-size: 1rem;
     letter-spacing: 0.3px;
 }
-.acao-titulo-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-}
-.acao-titulo-art {
-    display: inline-flex;
-    line-height: 0;
-    flex-shrink: 0;
-}
-.btn-cta-pill {
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    border-radius: 999px !important;
-    background: #FFD400 !important;
-    color: #111 !important;
-    box-shadow: 0 8px 22px rgba(255, 212, 0, 0.35) !important;
-}
-.btn-cta-pill svg { flex-shrink: 0; }
 .btn-limpar-dest {
     position: absolute;
     right: 0;
@@ -2522,141 +2482,6 @@ body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
 }
 .mot-stats-col small { font-size: 0.75rem; color: #9aa0a6; }
 .mot-stats-col b { font-size: 1rem; font-weight: 700; color: #EAD298; }
-
-/* ===== Sheet passageiro claro (mock moderno) ===== */
-.acao-sheet.acao-sheet--clara {
-    background: #fff;
-    box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.18);
-}
-.acao-sheet.acao-sheet--clara .acao-titulo { color: #111; }
-.acao-sheet.acao-sheet--clara .acao-handle {
-    background: rgba(17, 17, 17, 0.18);
-}
-.acao-sheet.acao-sheet--clara.collapsed .acao-handle {
-    background: rgba(17, 17, 17, 0.28);
-}
-.acao-sheet.acao-sheet--clara.collapsed {
-    background: rgba(255, 255, 255, 0.97);
-}
-.acao-sheet.acao-sheet--clara .acao-sheet-footer {
-    background: #fff;
-    border-top-color: rgba(0, 0, 0, 0.06);
-}
-.acao-sheet.acao-sheet--clara .cam-hint,
-.acao-sheet.acao-sheet--clara .hint-destino-obrigatorio {
-    color: #4b5563;
-}
-.acao-sheet.acao-sheet--clara .hint-destino-obrigatorio {
-    background: #FFF8D6;
-    border-color: rgba(255, 212, 0, 0.55);
-}
-.theme-dark .acao-sheet.acao-sheet--clara label { color: #374151; }
-.theme-dark .acao-sheet.acao-sheet--clara input,
-.theme-dark .acao-sheet.acao-sheet--clara select {
-    background: #f3f4f6;
-    color: #111;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 12px;
-}
-.acao-sheet.acao-sheet--clara .mot-stats {
-    background: #f8fafc;
-    border-color: rgba(0, 0, 0, 0.08);
-    color: #111;
-}
-.acao-sheet.acao-sheet--clara .mot-stats-head { color: #6b7280; }
-.acao-sheet.acao-sheet--clara .mot-stats-num { color: #111; }
-.acao-sheet.acao-sheet--clara .mot-stats-col small { color: #6b7280; }
-.acao-sheet.acao-sheet--clara .mot-stats-col b { color: #9a7412; }
-.acao-sheet.acao-sheet--clara .mot-stats-col + .mot-stats-col {
-    border-left-color: rgba(0, 0, 0, 0.08);
-}
-.acao-sheet.acao-sheet--clara .mot-stats--vazio {
-    background: #FFF6C8;
-    border-color: rgba(255, 212, 0, 0.55);
-}
-.acao-sheet.acao-sheet--clara .mot-stats--vazio .mot-stats-num {
-    color: #5c4a0a;
-    font-size: 1.02rem;
-}
-.acao-sheet.acao-sheet--clara .painel-tit--lista { color: #6b7280; }
-.acao-sheet.acao-sheet--clara .lista-vazia-leve { color: #4b5563; }
-
-/* Barra inferior estilo app */
-.app-bottom-nav {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 60;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-    background: #fff;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.08);
-}
-.app-bottom-nav__item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    min-height: 52px;
-    padding: 4px 6px;
-    border: none;
-    background: transparent;
-    color: #6b7280;
-    text-decoration: none;
-    font: inherit;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-}
-.app-bottom-nav__ico {
-    width: 40px;
-    height: 32px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-}
-.app-bottom-nav__lab {
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-}
-.app-bottom-nav__item.is-active { color: #111; }
-.app-bottom-nav__item.is-active .app-bottom-nav__ico {
-    background: #FFD400;
-    color: #111;
-}
-body.theme-dark {
-    --app-bottom-nav-h: calc(58px + env(safe-area-inset-bottom, 0px));
-}
-body.theme-dark .container {
-    padding-bottom: var(--app-bottom-nav-h, 0px);
-}
-body.theme-dark .acao-sheet {
-    /* Teclado aberto: sobe pelo inset. Fechado: fica acima da barra inferior. */
-    bottom: max(var(--app-bottom-nav-h, 0px), min(var(--sheet-kbd, 0px), 45vh));
-}
-body.theme-dark .acao-sheet .acao-sheet-footer {
-    padding-bottom: 14px;
-}
-body.theme-dark .acao-sheet.collapsed .acao-grip {
-    padding-bottom: 12px;
-}
-body.theme-dark .viagem-sheet {
-    bottom: max(var(--app-bottom-nav-h, 0px), var(--sheet-kbd, 0px));
-    padding-bottom: 14px;
-}
-body.aguardando-papel .app-bottom-nav,
-body.buscando-carona .app-bottom-nav {
-    visibility: hidden;
-    pointer-events: none;
-}
-
 .map-stage-controls .map-tipo-btn {
     pointer-events: auto;
     margin: 0;

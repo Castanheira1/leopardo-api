@@ -28,9 +28,7 @@
         <div class="nav-container">
             <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
             <span id="userName" class="nav-user"></span>
-            <button type="button" class="nav-profile-btn" onclick="abrirPerfil()" aria-label="Perfil">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 19c1.5-3.5 4-5 7-5s5.5 1.5 7 5"/></svg>
-            </button>
+            <span class="nav-spacer" aria-hidden="true"></span>
         </div>
     </nav>
 
@@ -148,27 +146,10 @@
                         </button>
                     </div>
                     <!-- Aberto por padrão: botão visível no 1º paint (sem esperar Maps). -->
-                    <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped acao-sheet--clara">
+                    <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped">
                         <div class="acao-grip" id="gripPed">
                             <span class="acao-handle" aria-hidden="true"></span>
-                            <div class="acao-titulo-row">
-                                <span class="acao-titulo">Solicitar carona</span>
-                                <span class="acao-titulo-art" aria-hidden="true">
-                                    <svg width="56" height="28" viewBox="0 0 56 28" fill="none">
-                                        <ellipse cx="28" cy="24" rx="18" ry="3" fill="rgba(0,0,0,.08)"/>
-                                        <path d="M10 18h36l-3-8c-1-2.5-3-4-6-4H19c-3 0-5 1.5-6 4l-3 8z" fill="#f4f4f5" stroke="#1a1a1a" stroke-width="1.2"/>
-                                        <path d="M18 10.5h8l1.5 5H16.5l1.5-5z" fill="#9ca3af"/>
-                                        <path d="M30 10.5h8l1.5 5H28.5l1.5-5z" fill="#9ca3af"/>
-                                        <circle cx="17" cy="18.5" r="2.6" fill="#1a1a1a"/>
-                                        <circle cx="39" cy="18.5" r="2.6" fill="#1a1a1a"/>
-                                        <circle cx="17" cy="18.5" r="1.1" fill="#d1d5db"/>
-                                        <circle cx="39" cy="18.5" r="1.1" fill="#d1d5db"/>
-                                        <circle cx="22" cy="8" r="2" fill="#FFD400"/>
-                                        <circle cx="28" cy="6.5" r="2.2" fill="#FFD400"/>
-                                        <circle cx="34" cy="8" r="2" fill="#FFD400"/>
-                                    </svg>
-                                </span>
-                            </div>
+                            <span class="acao-titulo">Solicitar carona</span>
                         </div>
                         <div id="limparRotaPedWrap" class="limpar-rota-bar dest-faixa-wrap" style="display:none;">
                             <div class="dest-faixa" role="status">
@@ -201,7 +182,7 @@
                              completa atualiza. Toque abre a lista detalhada (com destino). -->
                         <button type="button" class="mot-stats" id="motStatsCard" style="display:none;" onclick="toggleListaMotoristas()" aria-expanded="false">
                             <span class="mot-stats-head">
-                                <span class="mot-stats-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg> <span id="motStatsLabTxt">Motoristas por perto</span></span>
+                                <span class="mot-stats-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg> Motoristas por perto</span>
                                 <svg class="mot-stats-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                             </span>
                             <span class="mot-stats-num" id="motStatsNum">—</span>
@@ -224,10 +205,7 @@
                         </div>
                         </div>
                         <div class="acao-sheet-footer">
-                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet btn-cta-pill" onclick="ctaPedirClick()">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-                                Escolher local
-                            </button>
+                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="ctaPedirClick()">Escolher local</button>
                         </div>
                     </div>
                 </div>
@@ -696,27 +674,6 @@
             </div>
         </div>
     </div>
-
-    <nav class="app-bottom-nav" id="appBottomNav" aria-label="Navegação principal">
-        <button type="button" class="app-bottom-nav__item is-active" data-nav="solicitar" onclick="navInferior('solicitar')" aria-current="page">
-            <span class="app-bottom-nav__ico" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg>
-            </span>
-            <span class="app-bottom-nav__lab">Solicitar</span>
-        </button>
-        <a class="app-bottom-nav__item" href="historico.html" data-nav="viagens">
-            <span class="app-bottom-nav__ico" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
-            </span>
-            <span class="app-bottom-nav__lab">Viagens</span>
-        </a>
-        <button type="button" class="app-bottom-nav__item" data-nav="perfil" onclick="navInferior('perfil')">
-            <span class="app-bottom-nav__ico" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="3.5"/><path d="M5 19c1.5-3.5 4-5 7-5s5.5 1.5 7 5"/></svg>
-            </span>
-            <span class="app-bottom-nav__lab">Perfil</span>
-        </button>
-    </nav>
 
     <script src="platform.js"></script>
     <script src="realtime.js"></script>
