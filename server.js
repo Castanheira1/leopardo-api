@@ -17,69 +17,7 @@ const { PORT } = require("./src/config");
 // Cedo de propósito: patcha console.error e captura uncaught/unhandled desde o boot.
 require("./src/erros");
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      "default-src": ["'self'"],
-      "script-src": [
-        "'self'",
-        "'unsafe-inline'",
-        "https://maps.googleapis.com",
-        "https://maps.gstatic.com",
-        "https://cdn.jsdelivr.net",
-      ],
-      "script-src-elem": [
-        "'self'",
-        "'unsafe-inline'",
-        "https://maps.googleapis.com",
-        "https://maps.gstatic.com",
-        "https://cdn.jsdelivr.net",
-      ],
-      "worker-src": ["'self'", "blob:", "https://cdn.jsdelivr.net"],
-      "child-src": ["'self'", "blob:"],
-      "style-src": [
-        "'self'",
-        "'unsafe-inline'",
-        "https://fonts.googleapis.com",
-        "https://maps.googleapis.com",
-        "https://maps.gstatic.com",
-      ],
-      "style-src-elem": [
-        "'self'",
-        "'unsafe-inline'",
-        "https://fonts.googleapis.com",
-        "https://maps.gstatic.com",
-      ],
-      "img-src": [
-        "'self'",
-        "data:",
-        "blob:",
-        "https://maps.googleapis.com",
-        "https://maps.gstatic.com",
-        "https://*.googleusercontent.com",
-        "https://*.supabase.co",
-      ],
-      "font-src": ["'self'", "data:", "https://fonts.gstatic.com"],
-      "connect-src": [
-        "'self'",
-        "https://maps.googleapis.com",
-        "https://maps.gstatic.com",
-        "https://routes.googleapis.com",
-        "https://cdn.jsdelivr.net",
-        "https://api.open-meteo.com",
-        "https://*.supabase.co",
-        "wss:",
-        "ws:",
-      ],
-      "frame-src": ["'self'", "https://maps.googleapis.com"],
-      "media-src": ["'self'", "blob:", "data:"],
-      "object-src": ["'none'"],
-      "base-uri": ["'self'"],
-      "form-action": ["'self'"],
-    },
-  },
-}));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression({
   filter: (req, res) => {
     if (String(req.url || "").includes("/export")) return false;

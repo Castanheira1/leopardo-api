@@ -1,8 +1,3 @@
--- EMERGÊNCIA APENAS.
--- O job automático em src/agendadores.js (cancelarViagensPresas / VIAGEM_TTL_H)
--- já cancela viagens "em_andamento" expiradas. Use este script só se o job falhar
--- ou for preciso intervenção manual pontual.
---
 -- Viagens presas em "em_andamento" (não canceladas nem concluídas)
 -- Rode no SQL Editor do Supabase (projeto leopardo) com cuidado.
 --

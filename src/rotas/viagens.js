@@ -148,11 +148,6 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
     const v = (await pool.query("SELECT * FROM viagens WHERE id = $1", [req.params.id])).rows[0];
     if (!v) return res.status(404).json({ error: "Viagem não encontrada" });
     if (req.user.id !== v.motorista_id) return res.status(403).json({ error: "Apenas o motorista finaliza" });
-    // Sem este guard, cancelada (escape do passageiro / TTL) voltava a 'concluida'
-    // e entrava no rateio — o app do motorista ainda dispara auto-finalizar no destino.
-    if (v.status !== "em_andamento") {
-      return res.status(409).json({ error: "Viagem já encerrada", status: v.status });
-    }
 
     const lat = Number(req.body?.lat);
     const lng = Number(req.body?.lng);
@@ -181,12 +176,9 @@ app.post("/api/viagens/:id/finalizar", verificarAuth, async (req, res) => {
       `UPDATE viagens SET status = 'concluida', finalizada_em = NOW(),
               distancia_km = $2, deslocamento_valido = $3,
               km_maps = $4, km_tela = $5, km_fonte = $6
-       WHERE id = $1 AND status = 'em_andamento' RETURNING *`,
+       WHERE id = $1 RETURNING *`,
       [req.params.id, med.km, med.valido, med.km_maps, med.km_tela, med.fonte]
     );
-    if (!rows[0]) {
-      return res.status(409).json({ error: "Viagem já encerrada" });
-    }
     emitViagemMeta(rows[0].id, { status: rows[0].status, fase: rows[0].fase || "destino" });
     res.json({
       ...rows[0],

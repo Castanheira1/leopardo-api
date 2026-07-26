@@ -6,7 +6,6 @@ const { pool } = require("../db");
 const { verificarAuth } = require("../auth");
 const { buscarUsuarioFront, invalidarProjetoCache, resolverProjetoId } = require("../usuarios");
 const { apagarFotoStorage } = require("../storage");
-const { POLITICA_VERSAO_ATUAL } = require("../config");
 
 app.get("/api/perfil", verificarAuth, async (req, res) => {
   try {
@@ -19,14 +18,15 @@ app.get("/api/perfil", verificarAuth, async (req, res) => {
 });
 
 // LGPD: aceite da Política por usuário JÁ logado (portão de consentimento para
-// quem se cadastrou antes desta versão ou com versão desatualizada).
+// quem se cadastrou antes desta versão). Só grava se ainda não havia aceite, para
+// preservar o carimbo original de quem já consentiu.
 app.post("/api/perfil/aceitar-politica", verificarAuth, async (req, res) => {
-  const versao = String(req.body?.politica_versao || POLITICA_VERSAO_ATUAL).slice(0, 20);
+  const versao = String(req.body?.politica_versao || "1.0").slice(0, 20);
   try {
     await pool.query(
       `UPDATE usuarios
          SET politica_aceita_em = COALESCE(politica_aceita_em, NOW()),
-             politica_versao = $1
+             politica_versao = COALESCE(politica_versao, $1)
        WHERE id = $2`,
       [versao, req.user.id]
     );

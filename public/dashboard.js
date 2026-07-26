@@ -61,39 +61,6 @@
         return !!document.querySelector('.tab-content.active .acao-sheet:not(.collapsed)');
     }
     /** Restaura sheet/botão se a tela ficou "limpa" (altura 0 / teclado residual). */
-    // Prende a aba ativa ao espaço que REALMENTE sobra na tela.
-    //
-    // O piso do CSS (`min-height: min(70svh, 520px)`) é medido contra a JANELA,
-    // não contra o que resta depois da navbar e dos avisos de cadastro. Numa tela
-    // de 640px com um aviso aberto ele pedia 448px para um espaço de 392px: a aba
-    // estourava 56px para baixo e levava junto o rodapé do sheet — o CTA
-    // "Escolher local"/"Solicitar carona" ficava fora do alcance do dedo.
-    //
-    // Só ENCOLHE (nunca estica além do CSS) e só escreve quando muda de verdade,
-    // senão o ResizeObserver que chama isto entraria em laço.
-    function ajustarAlturaAba() {
-        if (document.documentElement.classList.contains('teclado-aberto')) return;
-        const tab = document.querySelector('.tab-content.active');
-        if (!tab) return;
-        const h = window.visualViewport?.height || window.innerHeight || 700;
-        const disponivel = Math.round(h - tab.getBoundingClientRect().top);
-        if (disponivel < 160) return;   // medida ainda não confiável
-        const atual = Math.round(tab.getBoundingClientRect().height);
-        if (atual <= disponivel + 2 && !tab.style.minHeight) {
-            // Cabe e o CSS está no comando: nada a fazer.
-            return;
-        }
-        if (atual <= disponivel + 2 && tab.style.minHeight === disponivel + 'px') return;
-        // min-height VENCE max-height no CSS: para encolher a aba é preciso
-        // sobrescrever o próprio piso, não só pôr um teto.
-        tab.style.minHeight = disponivel + 'px';
-        tab.style.maxHeight = disponivel + 'px';
-        const stage = tab.querySelector('.map-stage');
-        if (stage && Math.round(stage.getBoundingClientRect().height) > disponivel) {
-            stage.style.minHeight = disponivel + 'px';
-        }
-    }
-
     function garantirUiAcaoVisivel(abrirCta) {
         limparEstadoTeclado();
         // --appvh já no primeiro paint (não espera visualViewport/Maps).
@@ -107,7 +74,6 @@
                 stage.style.minHeight = Math.round(Math.min(h * 0.62, 520)) + 'px';
             }
         }
-        ajustarAlturaAba();
         document.querySelectorAll('.tab-content.active .acao-sheet').forEach((sheet) => {
             // Busca rodando ("Procurando motorista…"): o sheet fica oculto pelo
             // CSS — não força visível por cima, senão sobra um pedaço na tela.
@@ -668,19 +634,11 @@
 
     async function abrirPainelLocais() {
         fecharMenu();
-        // Sheet colapsado esconde o CTA; ao abrir Locais por outro caminho
-        // (menu) expandimos pra tela de trás não ficar "muda" ao fechar o painel.
-        document.querySelectorAll('.acao-sheet.collapsed').forEach((s) => s.classList.remove('collapsed'));
         const titulo = document.getElementById('favTitulo');
         const subtitulo = document.getElementById('favSubtitulo');
         const filtro = document.getElementById('favFiltro');
         const lista = document.getElementById('listaFavoritos');
-        const painel = document.getElementById('painelFavoritos');
-        // Garante que o overlay está no <body> e acima de qualquer sheet/mapa
-        // (mesmo truque do menu — evita painel "abrir" sem receber toque).
-        if (painel && painel.parentElement !== document.body) document.body.appendChild(painel);
-        painel.style.display = 'flex';
-        painel.style.zIndex = '10040';
+        document.getElementById('painelFavoritos').style.display = 'flex';
         lista.innerHTML = '<div class="fav-vazio">Carregando…</div>';
 
         if (favModoPainel === 'pessoais') {
@@ -761,12 +719,7 @@
             ? favCatalogoLocais.filter((l) => locCoincideFiltro(l, filtro))
             : favCatalogoLocais;
         if (!visiveis.length) {
-            // Catálogo do projeto ainda vazio (só o S11D está calibrado) é
-            // diferente de "o filtro não achou nada" — dizer "Nenhum local
-            // encontrado" fazia o usuário caçar um filtro que não existe.
-            lista.innerHTML = favCatalogoLocais.length
-                ? '<div class="fav-vazio">Nenhum local encontrado com esse filtro.</div>'
-                : `<div class="fav-vazio">Os locais de ${esc(favProjeto?.nome || 'seu projeto')} ainda não foram cadastrados.<br>Use a busca do mapa para marcar o destino.</div>`;
+            lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
             return;
         }
         const origem = origemParaLocais();
@@ -5116,18 +5069,10 @@
                     ? `A caminho de <strong>${esc(parada)}</strong>. De lá, peça outra carona até <strong>${esc(dest)}</strong>.`
                     : `Você está sendo levado para <strong>${esc(dest)}</strong>`;
             }
-            // Sem sinal do motorista: aviso claro (não deixa o passageiro preso no limbo).
-            const semSinalMot = !vv.ehMotorista && vv.posMotEm
-                && (Date.now() - vv.posMotEm) > 3 * 60 * 1000;
-            if (semSinalMot) {
-                hint += '<br><span style="color:#b0562f">Sem sinal do motorista há alguns minutos.</span>';
-            }
-            // Escape: passageiro pode encerrar se o motorista sumiu / viagem travou.
-            // Finalizar (km/rateio) continua só com o motorista.
-            const btnEscape = btnViagem('outline',
-                semSinalMot ? 'Motorista sumiu — encerrar' : 'Encerrar viagem',
-                `cancelarViagemPassageiro(${vv.id})`);
-            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>' + mapsBtn + btnEscape;
+            // Sem "Cancelar viagem" pro passageiro: um cancelamento acidental dele,
+            // já embarcado e a caminho, perderia a medição de km que o admin usa.
+            // Só o motorista controla finalizar/cancelar.
+            ctrl.innerHTML = '<p class="sheet-hint">' + hint + '</p>';
         }
     }
     // Ponto que o mapa deve seguir: motorista = GPS próprio; passageiro = carro ao vivo.
@@ -5470,8 +5415,6 @@
         }
 
         if (vv.fase === 'destino') verificarChegadaDestino(vv);
-        // Atualiza aviso "sem sinal" / botão de escape do passageiro.
-        if (!vv.ehMotorista) atualizarCabecalhoViagem();
     }
 
     // Viagem concluída: tira a rota, o carro e o bonequinho do mapa (não fica
@@ -5705,7 +5648,6 @@
             }
             if (!vv.ehMotorista && d.motorista) {
                 vv.posMotorista = { lat: +d.motorista.lat, lng: +d.motorista.lng };
-                vv.posMotEm = Date.now();
                 if (d.motorista.speed_kmh != null) {
                     registrarVelMotorista(vv, +d.motorista.speed_kmh, vv.posMotorista);
                 }
@@ -5916,24 +5858,6 @@
             return msg('Sem resposta do servidor. Tente "Cancelar viagem" ou aguarde e tente de novo.', 'error');
         }
         const d = await r.json().catch(() => ({}));
-        // 409: a viagem já foi encerrada (o passageiro cancelou, ou outra aba
-        // finalizou). Não é erro do motorista e não adianta tentar de novo —
-        // fecha a tela da viagem em vez de insistir no "toque para finalizar".
-        if (r.status === 409) {
-            if (viagemView) {
-                viagemView.finalizando = false;
-                viagemView.autoFinalizarTimer = null;
-                // Qualquer valor != 'em_andamento' já fecha a tela; o servidor
-                // só manda `status` no guard, não na corrida com o UPDATE.
-                viagemView.status = d.status || 'encerrada';
-                atualizarCabecalhoViagem();
-                limparRotaViagem();
-            }
-            viagensAbertas.delete(viagemKey(viagemId));
-            msg(d.error || 'Esta viagem já foi encerrada.', d.status === 'cancelada' ? 'error' : 'info', 7000);
-            sairDaViagem();
-            return;
-        }
         if (!r.ok) {
             if (viagemView) {
                 viagemView.finalizando = false;
@@ -5971,9 +5895,8 @@
             if (ok) msg(`Próxima perna: buscar ${prox.passageiro_nome || 'o passageiro'}.`);
         } catch (_) { /* sem próxima perna: fica na tela de encerramento */ }
     }
-    async function cancelarViagem(viagemId, opts) {
-        const skipConfirm = opts && opts.skipConfirm;
-        if (!skipConfirm && !confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
+    async function cancelarViagem(viagemId) {
+        if (!confirm('Encerrar esta viagem? Ela será cancelada no sistema e você volta ao mapa.')) return;
         try {
             const r = await fetchWithAuth('/api/viagens/' + viagemId + '/cancelar', { method: 'POST' });
             const d = await r.json().catch(() => ({}));
@@ -5991,11 +5914,6 @@
         } catch (_) {
             msg('Sem resposta do servidor ao encerrar. Verifique a conexão.', 'error');
         }
-    }
-    // Passageiro: confirmação mais explícita (evita toque acidental a caminho).
-    async function cancelarViagemPassageiro(viagemId) {
-        if (!confirm('Encerrar esta viagem?\n\nUse só se o motorista sumiu ou a carona não vai acontecer. Se você já está no carro, peça para o motorista finalizar.')) return;
-        return cancelarViagem(viagemId, { skipConfirm: true });
     }
     // Sai da tela de viagem (concluída/cancelada) e volta ao mapa do papel atual.
     // NÃO abre o seletor de papel — usuário permanece onde estava.
@@ -7457,22 +7375,8 @@
             document.documentElement.style.setProperty('--sheet-kbd', '0px');
         } catch (_) {}
         instalarGuardaVoltar(fecharCamadaVoltar);
-        // Os avisos de cadastro entram DEPOIS (quando /api/perfil responde) e
-        // empurram a aba para baixo. Sem re-medir, a conta de ajustarAlturaAba
-        // ficaria presa no valor de antes deles — com o CTA fora da tela.
-        try {
-            const alvo = document.querySelector('.container');
-            if (alvo && window.ResizeObserver) {
-                new ResizeObserver(() => ajustarAlturaAba()).observe(alvo);
-                document.querySelectorAll('#avisoTelefone, #avisoCadastro').forEach((el) => {
-                    new ResizeObserver(() => ajustarAlturaAba()).observe(el);
-                });
-            }
-        } catch (_) { /* sem ResizeObserver: sobra o ajuste dos pontos normais */ }
         setTimeout(esconderBootSplash, 8000);
-        carregarMaps().catch(() => {
-            msg('Mapa indisponível no momento. Verifique a conexão e tente de novo.', 'error', 9000);
-        });
+        carregarMaps().catch(() => {});
         iniciarTransmissaoPassageiro();
 
         // 1) Viagem em andamento → volta direto nela (papel certo).

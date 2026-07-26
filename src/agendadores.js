@@ -95,16 +95,6 @@ setInterval(() => {
 setInterval(() => { aplicarRetencaoFotos().catch((e) => console.warn("retencao:", e.message)); }, 24 * 60 * 60 * 1000);
 setTimeout(() => { aplicarRetencaoFotos().catch(() => {}); }, 60 * 1000);
 
-// Viagens abandonadas em_andamento (ex.: app fechado, GPS sumiu, ninguém cancelou).
-// Default 6h — ver VIAGEM_TTL_H. Substitui o SQL manual limpar-viagens-presas.sql.
-const { cancelarViagensPresas } = require("./services/viagens");
-setInterval(() => {
-  cancelarViagensPresas().catch((err) => console.error("Erro ao cancelar viagens presas:", err.message));
-}, 5 * 60 * 1000);
-setTimeout(() => {
-  cancelarViagensPresas().catch(() => {});
-}, 90 * 1000);
-
 
 module.exports = {
   AGENDADO_TICK_MS,

@@ -783,53 +783,10 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(json.status, "concluida", "status viagem");
       assert(Number(json.distancia_km) > 0, "distância deveria ser > 0");
     });
-    await test("finalizar DE NOVO a viagem concluída → 409 (não recalcula km)", async () => {
-      const antes = (await api("GET", `/api/viagens/${viagemId}`, { token: tokDriver })).json;
-      const { status } = await api("POST", `/api/viagens/${viagemId}/finalizar`, { token: tokDriver });
-      eq(status, 409, "status");
-      const depois = (await api("GET", `/api/viagens/${viagemId}`, { token: tokDriver })).json;
-      eq(String(depois.distancia_km), String(antes.distancia_km), "km não pode mudar");
-      eq(depois.finalizada_em, antes.finalizada_em, "finalizada_em não pode mudar");
-    });
     await test("GET /api/viagens lista a viagem para o passageiro", async () => {
       const { status, json } = await api("GET", "/api/viagens", { token: tokPax });
       eq(status, 200, "status");
       assert(json.some((v) => v.id === viagemId), "viagem não listada");
-    });
-    // Regressão: o auto-finalizar do motorista ao chegar no destino ressuscitava
-    // uma viagem que o passageiro já tinha cancelado pelo escape — ela voltava a
-    // 'concluida', com km e deslocamento_valido, e entrava no rateio.
-    await test("viagem CANCELADA não pode ser finalizada → 409 e continua cancelada", async () => {
-      const pg = pgTeste();
-      // Snapshot/restore: os testes de admin/rateio adiante contam viagens
-      // concluídas — esta fixture volta como estava no fim.
-      const antes = (await pg.query(
-        "SELECT status, distancia_km, deslocamento_valido FROM viagens WHERE id = $1",
-        [viagemId]
-      )).rows[0];
-      try {
-        await pg.query(
-          `UPDATE viagens SET status = 'cancelada', distancia_km = 0,
-                  deslocamento_valido = FALSE WHERE id = $1`,
-          [viagemId]
-        );
-        const { status, json } = await api("POST", `/api/viagens/${viagemId}/finalizar`, { token: tokDriver });
-        eq(status, 409, "status");
-        eq(json.status, "cancelada", "status devolvido no erro");
-        const { rows } = await pg.query(
-          "SELECT status, distancia_km, deslocamento_valido FROM viagens WHERE id = $1",
-          [viagemId]
-        );
-        eq(rows[0].status, "cancelada", "status no banco");
-        eq(Number(rows[0].distancia_km), 0, "km não pode ser gravado");
-        eq(rows[0].deslocamento_valido, false, "cancelada não pode entrar no rateio");
-      } finally {
-        await pg.query(
-          "UPDATE viagens SET status = $2, distancia_km = $3, deslocamento_valido = $4 WHERE id = $1",
-          [viagemId, antes.status, antes.distancia_km, antes.deslocamento_valido]
-        );
-        await pg.end();
-      }
     });
 
     /* =================== MOTORISTA ONLINE: VISIBILIDADE DE PEDIDOS ===================
@@ -945,7 +902,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
     await test("motorista da vez (pedido_id) via /api/propostas é bloqueado — fila ativa", async () => {
       const { status, json } = await api("POST", "/api/propostas", { token: tokFilaB, body: { pedido_id: pedidoFilaId } });
       eq(status, 400, "status");
-      assert(/fila|motorista da vez/i.test(json.error || ""), "mensagem deveria citar a fila / motorista da vez");
+      assert(/busca automática/.test(json.error || ""), "mensagem deveria citar a busca automática");
     });
 
     await test("A recusa -> B (próximo mais perto) recebe a oferta na hora", async () => {
@@ -1634,7 +1591,6 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(status, 200, "status");
       eq(json.db, true, "db");
       assert(json.versao, "sem versão");
-      assert("push_web" in json && "email" in json && "maps" in json, "health deve expor flags operacionais");
     });
     await test("GET /api/admin/erros exige super admin (driver → 403; dono → 200)", async () => {
       const r1 = await api("GET", "/api/admin/erros", { token: tokDriver });
@@ -1757,7 +1713,7 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       assert(c, "chamado não apareceu na fila do admin");
       chamadoId = c.id;
     });
-    await test("aprovar chamado promove admin (mantém a senha do cadastro)", async () => {
+    await test("aprovar chamado cria o admin (senha inicial 123456)", async () => {
       const { status } = await api("POST", `/api/admin/chamados/${chamadoId}/aprovar`, { token: tokDono });
       eq(status, 200, "status aprovar");
       const r = await api("POST", "/api/login", {
@@ -1805,31 +1761,12 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(r.status, 200, "status perfil");
       eq(r.json.politica_pendente, true, "deveria estar pendente após zerar o aceite");
 
-      r = await api("POST", "/api/perfil/aceitar-politica", { token: tokPax, body: { politica_versao: "1.2" } });
+      r = await api("POST", "/api/perfil/aceitar-politica", { token: tokPax, body: { politica_versao: "1.0" } });
       eq(r.status, 200, "status aceite");
       eq(r.json.politica_pendente, false, "após aceitar, não deve mais estar pendente");
 
       r = await api("GET", "/api/perfil", { token: tokPax });
       eq(r.json.politica_pendente, false, "perfil deve refletir o aceite persistido");
-    });
-
-    await test("versão antiga da política deixa politica_pendente=true", async () => {
-      const pg = pgTeste();
-      try {
-        await pg.query(
-          "UPDATE usuarios SET politica_aceita_em = NOW(), politica_versao = '1.0' WHERE matricula = $1",
-          [uPax.matricula]
-        );
-      } finally {
-        await pg.end();
-      }
-      const r = await api("GET", "/api/perfil", { token: tokPax });
-      eq(r.status, 200, "status");
-      eq(r.json.politica_pendente, true, "versão 1.0 deve pedir novo aceite");
-      const r2 = await api("POST", "/api/perfil/aceitar-politica", {
-        token: tokPax, body: { politica_versao: "1.2" },
-      });
-      eq(r2.json.politica_pendente, false, "aceite 1.2 limpa pendência");
     });
 
     /* =================== RECUPERAÇÃO DE SENHA (email + link) =================== */
@@ -2150,52 +2087,6 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
         eq(rows.length, 1, "passageiro só pode ter 1 viagem em_andamento");
       } finally {
         await pg.end();
-      }
-    });
-
-    grupo("Viagens presas (TTL automático)");
-    await test("cancelarViagensPresas encerra em_andamento antiga e cancela o pedido", async () => {
-      const { cancelarViagensPresas } = require("../src/services/viagens");
-      const pg = pgTeste();
-      let viagemId, pedidoId;
-      try {
-        // Reaproveita a viagem em_andamento do double-match (se existir) ou cria stub mínimo.
-        const viva = await pg.query(
-          `SELECT v.id, v.pedido_id FROM viagens v
-           WHERE v.status = 'em_andamento' ORDER BY v.id DESC LIMIT 1`
-        );
-        assert(viva.rows[0], "precisa de uma viagem em_andamento no banco de teste");
-        viagemId = viva.rows[0].id;
-        pedidoId = viva.rows[0].pedido_id;
-        await pg.query(
-          `UPDATE viagens SET iniciada_em = NOW() - INTERVAL '7 hours',
-             created_at = NOW() - INTERVAL '7 hours' WHERE id = $1`,
-          [viagemId]
-        );
-        if (pedidoId) {
-          await pg.query(
-            "UPDATE pedidos SET status = 'atendido' WHERE id = $1",
-            [pedidoId]
-          );
-        }
-      } finally {
-        await pg.end();
-      }
-
-      const out = await cancelarViagensPresas(6);
-      assert(out.canceladas >= 1, "deveria cancelar ao menos 1 viagem presa");
-      assert(out.ids.includes(viagemId), "a viagem envelhecida deveria estar na lista");
-
-      const pg2 = pgTeste();
-      try {
-        const st = (await pg2.query("SELECT status FROM viagens WHERE id = $1", [viagemId])).rows[0];
-        eq(st.status, "cancelada", "viagem deveria estar cancelada");
-        if (pedidoId) {
-          const ped = (await pg2.query("SELECT status FROM pedidos WHERE id = $1", [pedidoId])).rows[0];
-          eq(ped.status, "cancelado", "pedido antigo não deve reabrir");
-        }
-      } finally {
-        await pg2.end();
       }
     });
 
