@@ -50,80 +50,20 @@
                         <button class="btn btn-secondary btn-sm" id="btnViagemAndamento" style="display:none;" onclick="showTab('tabViagem')">Em andamento</button>
                     </div>
                     <div class="nav-menu-wrap">
-                        <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Configurações">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+                        <button id="btnMenu" class="nav-menu-btn" onclick="toggleMenu(event)" aria-label="Menu">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
                         </button>
-                        <div id="navMenu" class="nav-menu ig-settings" style="display:none;" role="menu" aria-label="Configurações">
-                            <div class="ig-settings-head">
-                                <span class="ig-settings-title">Configurações</span>
-                                <button type="button" class="ig-settings-close" onclick="fecharMenu()" aria-label="Fechar">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-                                </button>
-                            </div>
-
-                            <div class="ig-settings-group">
-                                <div class="ig-settings-label">Sua atividade</div>
-                                <button id="navAtivar" onclick="abrirPerfil()" class="ig-settings-row" style="display:none;">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 19c1.5-3.5 4-5 7-5s5.5 1.5 7 5"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Ativar no Perfil</strong><small>Habilitar modo motorista</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                                <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="ig-settings-row" style="display:none;">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h10M4 17h14"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Caronas &amp; solicitações</strong><small>Pedidos e matches</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                                <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="ig-settings-row" style="display:none;">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2"/><circle cx="16.5" cy="16" r="1.2"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Solicitações &amp; viagens</strong><small>Painel do motorista</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                                <a href="historico.html" class="ig-settings-row">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Histórico</strong><small>Viagens anteriores</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </a>
-                                <button onclick="abrirPainelAgendamentos()" class="ig-settings-row" id="menuAgendamentos" style="display:none;">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Meus agendamentos</strong><small>Pedidos marcados</small></span>
-                                    <span id="badgeAgendamentos" class="nav-badge" style="display:none;"></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                            </div>
-
-                            <div class="ig-settings-group">
-                                <div class="ig-settings-label">Mapa e locais</div>
-                                <button onclick="abrirLocais()" class="ig-settings-row">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Locais</strong><small>Catálogo do canteiro</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                                <button onclick="abrirFavoritos()" class="ig-settings-row">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 18l-6.2 3.3 1.2-7L2 9.3l7.1-1L12 2l2.9 6.3 7.1 1-5 4.9 1.2 7z"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Meus locais favoritos</strong><small>Atalhos no mapa</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                            </div>
-
-                            <div class="ig-settings-group">
-                                <div class="ig-settings-label">Conta</div>
-                                <button onclick="abrirPerfil()" class="ig-settings-row">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 19c1.5-3.5 4-5 7-5s5.5 1.5 7 5"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Editar perfil</strong><small>Dados, WhatsApp e motorista</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                                <button onclick="abrirEscolhaPapel()" class="ig-settings-row">
-                                    <span class="ig-settings-icn" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 7h10v10H7z"/><path d="M3 3h4v4H3zM17 3h4v4h-4zM3 17h4v4H3zM17 17h4v4h-4z"/></svg></span>
-                                    <span class="ig-settings-txt"><strong>Trocar papel</strong><small>Pedir ou oferecer carona</small></span>
-                                    <span class="ig-settings-chev" aria-hidden="true">›</span>
-                                </button>
-                            </div>
-
-                            <div class="ig-settings-group ig-settings-group--danger">
-                                <button onclick="logout()" class="ig-settings-row ig-settings-row--danger">
-                                    <span class="ig-settings-txt"><strong>Sair</strong></span>
-                                </button>
-                            </div>
+                        <div id="navMenu" class="nav-menu" style="display:none;">
+                            <button id="navAtivar" onclick="abrirPerfil()" class="nav-menu-item" style="display:none;">Ativar no Perfil</button>
+                            <button id="menuPainelPas" onclick="abrirPainel('painelPassageiro')" class="nav-menu-item" style="display:none;">Caronas &amp; solicitações</button>
+                            <button id="menuPainelMot" onclick="abrirPainel('painelMotorista')" class="nav-menu-item" style="display:none;">Solicitações &amp; viagens</button>
+                            <a href="historico.html" class="nav-menu-item">Histórico</a>
+                            <button onclick="abrirLocais()" class="nav-menu-item">Locais</button>
+                            <button onclick="abrirPainelAgendamentos()" class="nav-menu-item" id="menuAgendamentos" style="display:none;">Meus agendamentos <span id="badgeAgendamentos" class="nav-badge" style="display:none;"></span></button>
+                            <button onclick="abrirFavoritos()" class="nav-menu-item">Meus locais favoritos</button>
+                            <button onclick="abrirPerfil()" class="nav-menu-item">Perfil</button>
+                            <button onclick="abrirEscolhaPapel()" class="nav-menu-item">Trocar papel</button>
+                            <button onclick="logout()" class="nav-menu-item">Sair</button>
                         </div>
                     </div>
                 </div>
