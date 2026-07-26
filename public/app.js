@@ -149,7 +149,9 @@ function mostrarToast(texto, tipo = 'success') {
     if (!m) {
         m = document.createElement('div');
         m.id = 'message';
-        m.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;';
+        // pointer-events:none — o toast é aviso, não pode engolir o toque de
+        // um botão que ele cubra (ver body.theme-dark #message.message).
+        m.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;pointer-events:none;';
         document.body.appendChild(m);
     }
     m.className = 'message ' + tipo;

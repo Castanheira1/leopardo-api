@@ -773,6 +773,13 @@ body.theme-dark #message.message {
     right: 12px;
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     z-index: 9990;
+    /* O toast é só aviso — não tem nada para tocar dentro dele. Sem isto ele
+       ficava por cima do CTA do sheet ("Escolher local"/"Solicitar carona"),
+       que mora no rodapé, e ENGOLIA o toque: o botão principal do app ficava
+       morto durante os 5-9 s do aviso (o "Mapa indisponível" do boot é um).
+       Vale para qualquer botão que ele cubra — não adianta subir z-index de
+       um por um. */
+    pointer-events: none;
     margin: 0 auto;
     max-width: 380px;
     backdrop-filter: blur(22px) saturate(180%);

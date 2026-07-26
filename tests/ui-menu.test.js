@@ -65,5 +65,24 @@ ok(/onclick="abrirLocais\(\)"/.test(html), 'item "Locais" ligado a abrirLocais')
 ok(/onclick="abrirFavoritos\(\)"/.test(html), 'item "Meus locais favoritos" ligado a abrirFavoritos');
 ok(/function abrirLocais/.test(js) && /function abrirFavoritos/.test(js), "abrirLocais/abrirFavoritos definidas no escopo global");
 
+// 6) O toast (#message) não pode engolir o toque de um botão que ele cubra.
+//    Ele fica fixo no rodapé (z 9990), bem em cima do CTA do sheet — o botão
+//    principal do app ficava morto durante os 5-9 s do aviso.
+const toast = (css.match(/body\.theme-dark #message\.message \{[\s\S]*?\}/) || [""])[0];
+ok(/pointer-events:\s*none/.test(toast), "toast fixo não intercepta toque (pointer-events: none)");
+ok(
+  /pointer-events:none/.test(fs.readFileSync(path.join(root, "public/app.js"), "utf8")),
+  "toast criado em JS (mostrarToast) também não intercepta"
+);
+
+// 7) A aba ativa precisa caber no espaço real — o piso do CSS é medido contra a
+//    janela e, com os avisos de cadastro no topo, empurrava o CTA para fora.
+ok(/function ajustarAlturaAba/.test(js), "existe o ajuste de altura da aba ativa");
+ok(
+  /tab\.style\.minHeight = disponivel/.test(js),
+  "o ajuste sobrescreve o min-height (min-height vence max-height no CSS)"
+);
+ok(/new ResizeObserver\(\(\) => ajustarAlturaAba\(\)\)/.test(js), "re-mede quando os avisos entram/saem");
+
 if (failed) process.exit(1);
 console.log("\nUI menu OK");
