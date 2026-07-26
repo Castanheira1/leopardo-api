@@ -202,11 +202,18 @@ app.post("/api/propostas/:id/aceitar", verificarAuth, async (req, res) => {
       if (paxId && await passageiroEmViagem(paxId)) {
         return res.status(409).json({ error: "Este passageiro já está em outra viagem." });
       }
-      if (rows[0].pedido_id) {
-        return res.status(409).json({ error: "Este pedido acabou de ser atendido por outra carona." });
-      }
+      // A ordem espelha criarViagemDaProposta, que avalia a CARONA antes do
+      // pedido. Atribuindo ao pedido primeiro, uma proposta que carregasse os
+      // dois ids culpava o lado errado — dizia "pedido atendido por outra
+      // carona" mesmo quando nenhuma outra carona existia e o problema era a
+      // vaga. Mantenha as duas ordens iguais.
       if (rows[0].carona_id) {
         return res.status(409).json({ error: "Carona indisponível ou sem vagas suficientes." });
+      }
+      if (rows[0].pedido_id) {
+        // O gate falha quando o pedido saiu de 'aberto': atendido por outro
+        // motorista ou cancelado pelo próprio passageiro.
+        return res.status(409).json({ error: "Este pedido não está mais disponível." });
       }
       console.error("[aceitar proposta] viagem não criada para proposta", req.params.id);
       return res.status(500).json({ error: "Não foi possível iniciar a viagem. Tente novamente." });

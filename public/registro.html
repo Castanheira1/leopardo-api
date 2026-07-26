@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
     <meta name="mobile-web-app-capable" content="yes">
@@ -14,526 +14,621 @@
     <link rel="icon" href="/icon-192.png" type="image/png">
     <script src="/pwa.js" defer></script>
     <script src="/platform.js"></script>
-    <title>Criar conta - VAP</title>
+    <title>Criar conta — VAP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Montserrat', sans-serif; }
+        :root {
+            --bg: #0a0a0a;
+            --bg-elev: #141414;
+            --bg-field: #1c1c1c;
+            --line: #2a2a2a;
+            --ink: #ffffff;
+            --muted: #9a9a9a;
+            --gold: #EAD298;
+            --gold-ink: #1a1408;
+            --danger: #ff4d4f;
+            --ok: #34c759;
+            --radius: 12px;
+            --safe-b: max(16px, env(safe-area-inset-bottom));
+            --safe-t: max(12px, env(safe-area-inset-top));
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            min-height: 100%;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: Manrope, "Segoe UI", sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
 
         body {
             min-height: 100vh;
             min-height: 100dvh;
             display: flex;
             flex-direction: column;
-            align-items: stretch;
-            justify-content: stretch;
-            background: #000;
-            padding: 0;
             position: relative;
+            overflow-x: hidden;
         }
 
-        .signup-card {
-            flex: 1;
-            width: 100%;
-            max-width: none;
-            padding: 40px 28px 48px;
-            border-radius: 0;
-            background: #000;
-            color: #EAD298;
-            box-shadow: none;
+        /* Atmosfera Uber: profundidade, não fundo chapado */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(ellipse 90% 55% at 50% -10%, rgba(234, 210, 152, 0.14), transparent 55%),
+                radial-gradient(ellipse 70% 40% at 100% 100%, rgba(255, 255, 255, 0.04), transparent 50%),
+                linear-gradient(180deg, #111 0%, #0a0a0a 42%, #050505 100%);
+            z-index: 0;
+        }
+
+        .signup {
             position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 440px;
+            margin: 0 auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: calc(var(--safe-t) + 8px) 20px var(--safe-b);
+        }
+
+        /* Topo: voltar + marca */
+        .signup-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            animation: riseIn 0.45s ease-out both;
+        }
+
+        .signup-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--ink);
+            text-decoration: none;
+            font-size: 0.92rem;
+            font-weight: 600;
+            padding: 8px 2px;
+        }
+        .signup-back svg { display: block; opacity: 0.9; }
+        .signup-back:active { opacity: 0.55; }
+
+        .signup-brand {
+            height: 28px;
+            width: auto;
+            opacity: 0.95;
+        }
+
+        .signup-hero {
+            margin-bottom: 22px;
+            animation: riseIn 0.5s ease-out 0.05s both;
+        }
+
+        .signup-hero h1 {
+            font-size: clamp(1.75rem, 6vw, 2.15rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+            margin-bottom: 8px;
+        }
+
+        .signup-hero p {
+            color: var(--muted);
+            font-size: 0.95rem;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        /* Progresso estilo Uber */
+        .progress {
+            margin-bottom: 28px;
+            animation: riseIn 0.5s ease-out 0.1s both;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 10px;
+            gap: 12px;
+        }
+
+        .progress-step {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--gold);
+        }
+
+        .progress-label {
+            font-size: 0.92rem;
+            font-weight: 650;
+            color: var(--ink);
+            text-align: right;
+        }
+
+        .progress-track {
+            height: 4px;
+            border-radius: 999px;
+            background: var(--line);
             overflow: hidden;
         }
 
-        .signup-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle at center, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.2) 100%);
-            pointer-events: none;
+        .progress-fill {
+            height: 100%;
+            width: 33.333%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #c9a84f, var(--gold));
+            transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
-        .signup-inner { position: relative; z-index: 1; }
-
-        .login-logo {
-            display: block;
-            width: 180px;
-            max-width: 70%;
-            height: auto;
-            margin: 0 auto 16px;
-        }
-
-        .signup-sub {
-            text-align: center;
-            font-size: 0.7rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            opacity: 0.9;
-            margin-bottom: 14px;
-        }
-
-        /* Cartão branco (mesmo padrão claro do painel Locais do app) */
-        .signup-sheet {
-            background: #fff;
-            color: #111;
-            border-radius: 20px;
-            padding: 22px 16px 18px;
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-        }
-
-        .signup-title {
-            text-align: center;
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 20px;
-            color: #111;
-        }
-
-        /* Progresso */
-        .wizard-progress {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            margin-bottom: 24px;
-        }
-
-        .wizard-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, 0.14);
-            transition: all 0.25s;
-        }
-
-        .wizard-dot.active { background: #C4971A; transform: scale(1.15); }
-        .wizard-dot.done { background: #0F3D3E; box-shadow: 0 0 0 2px #C4971A; }
-
-        .wizard-line {
-            width: 28px;
-            height: 2px;
-            background: rgba(0, 0, 0, 0.12);
-        }
-
-        .wizard-line.done { background: #C4971A; }
-
-        .step-label {
-            text-align: center;
-            font-size: 0.75rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            color: #374151;
-            margin-bottom: 6px;
-        }
-
-        .step-hint {
-            text-align: center;
-            font-size: 0.68rem;
-            color: #6b7280;
-            margin-bottom: 18px;
-            line-height: 1.35;
-        }
-
-        .wizard-step { display: none; }
+        .wizard-step { display: none; animation: stepIn 0.32s ease-out; }
         .wizard-step.active { display: block; }
 
-        .field { margin-bottom: 14px; }
+        @keyframes riseIn {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes stepIn {
+            from { opacity: 0; transform: translateX(12px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .field { margin-bottom: 16px; }
 
         .field label {
             display: block;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-            color: #374151;
+            font-size: 0.8rem;
+            font-weight: 650;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .field label .opt {
+            font-weight: 500;
+            opacity: 0.7;
+            text-transform: none;
+            letter-spacing: 0;
         }
 
         .field small {
             display: block;
-            margin-top: 5px;
-            font-size: 0.68rem;
-            color: #6b7280;
-            line-height: 1.35;
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: var(--muted);
+            line-height: 1.4;
         }
 
         .field input,
         .field textarea,
         .field select {
             width: 100%;
-            padding: 13px 14px;
-            background: #fff;
-            border: 1px solid rgba(0, 0, 0, 0.12);
-            border-radius: 12px;
-            color: #111;
-            font-size: 0.95rem;
+            padding: 16px 16px;
+            background: var(--bg-field);
+            border: 1px solid transparent;
+            border-radius: var(--radius);
+            color: var(--ink);
+            font-size: 1rem;
+            font-weight: 500;
+            font-family: inherit;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.15s, background 0.15s;
         }
 
         .field input::placeholder,
-        .field textarea::placeholder { color: #6b7280; opacity: 1; }
+        .field textarea::placeholder { color: #666; }
 
         .field input:focus,
         .field textarea:focus,
-        .field select:focus { border-color: #EAD298; }
+        .field select:focus {
+            border-color: rgba(234, 210, 152, 0.55);
+            background: #222;
+        }
 
-        .field select option { background: #fff; color: #111; }
+        .field select option { background: #1c1c1c; color: #fff; }
+        .field textarea { resize: vertical; min-height: 88px; }
 
-        .field textarea { resize: vertical; min-height: 80px; }
-
-        .field a { color: #8a6d1a; font-weight: 600; }
-
-        /* Sexo */
+        /* Segmented control (sexo) — Uber */
         .sexo-group {
-            display: flex;
-            gap: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 4px;
+            background: var(--bg-elev);
+            border-radius: 14px;
         }
 
         .sexo-btn {
-            flex: 1;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            border-radius: 10px;
             padding: 14px 10px;
-            border: 1px solid rgba(0, 0, 0, 0.12);
-            border-radius: 12px;
-            background: #fff;
-            color: #111;
-            font-size: 0.9rem;
-            font-weight: 600;
+            font-size: 0.95rem;
+            font-weight: 700;
+            font-family: inherit;
             cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: background 0.15s, color 0.15s, transform 0.15s;
         }
-
-        .sexo-btn .icon { font-size: 1.4rem; line-height: 1; }
 
         .sexo-btn.active {
-            background: #EAD298;
-            color: #0F3D3E;
-            border-color: #EAD298;
+            background: var(--ink);
+            color: #0a0a0a;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
         }
 
-        /* Projetos */
+        .sexo-btn:active { transform: scale(0.98); }
+
+        /* Projetos: lista Uber, não cards fofos */
         .projeto-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            max-height: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 240px;
             overflow-y: auto;
             padding-right: 2px;
         }
 
         .projeto-card {
-            padding: 12px 10px;
-            border: 1px solid rgba(0, 0, 0, 0.12);
-            border-radius: 12px;
-            background: #fff;
-            color: #111;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-align: center;
+            width: 100%;
+            text-align: left;
+            padding: 15px 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            background: var(--bg-field);
+            color: var(--ink);
+            font-size: 0.95rem;
+            font-weight: 650;
+            font-family: inherit;
             cursor: pointer;
-            transition: all 0.2s;
-            line-height: 1.3;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            transition: border-color 0.15s, background 0.15s;
         }
 
-        .projeto-card:hover { border-color: rgba(196, 151, 26, 0.6); }
+        .projeto-card::after {
+            content: "";
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            border: 2px solid #555;
+            flex-shrink: 0;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+        }
 
         .projeto-card.active {
-            background: #EAD298;
-            color: #0F3D3E;
-            border-color: #EAD298;
+            border-color: var(--gold);
+            background: #1a1812;
         }
 
-        .projeto-loading {
-            grid-column: 1 / -1;
-            text-align: center;
-            font-size: 0.85rem;
-            opacity: 0.6;
-            padding: 20px;
+        .projeto-card.active::after {
+            border-color: var(--gold);
+            background: var(--gold);
+            box-shadow: inset 0 0 0 3px #1a1812;
         }
 
-        /* Botões */
-        .wizard-nav {
+        .consent {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .btn-gold {
-            flex: 1;
+            gap: 12px;
+            align-items: flex-start;
+            margin: 8px 0 4px;
             padding: 14px;
-            background: #EAD298;
-            color: #0F3D3E;
-            border: none;
-            border-radius: 50px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            cursor: pointer;
-            transition: transform 0.2s, opacity 0.2s;
+            background: var(--bg-elev);
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
         }
 
-        .btn-gold:hover { opacity: 0.9; transform: translateY(-1px); }
-        .btn-gold:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
-
-        .btn-ghost {
+        .consent input {
+            width: 18px; height: 18px;
+            margin-top: 2px;
             flex: 0 0 auto;
-            padding: 14px 20px;
-            background: #fff;
-            color: #111;
-            border: 1px solid rgba(0, 0, 0, 0.18);
-            border-radius: 50px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
+            accent-color: var(--gold);
         }
 
-        .btn-ghost:hover { background: #f6f0df; }
-
-        .signup-links {
-            text-align: center;
-            margin-top: 18px;
+        .consent label {
+            margin: 0;
             font-size: 0.82rem;
-            color: #6b7280;
+            font-weight: 500;
+            color: #cfcfcf;
+            line-height: 1.45;
         }
 
-        .signup-links a {
-            color: #8a6d1a;
-            font-weight: 600;
+        .consent a {
+            color: var(--gold);
+            font-weight: 700;
             text-decoration: none;
         }
+        .consent a:active { opacity: 0.7; }
 
-        .signup-links a:hover { text-decoration: underline; }
+        .wizard-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
 
-        .signup-links .sep { opacity: 0.4; margin: 0 8px; }
+        .btn-primary {
+            width: 100%;
+            padding: 17px 18px;
+            border: none;
+            border-radius: 10px;
+            background: var(--gold);
+            color: var(--gold-ink);
+            font-size: 1rem;
+            font-weight: 800;
+            font-family: inherit;
+            letter-spacing: -0.01em;
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s, filter 0.15s;
+        }
+        .btn-primary:hover { filter: brightness(1.04); }
+        .btn-primary:active { transform: scale(0.985); }
+        .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .btn-secondary {
+            width: 100%;
+            padding: 14px 18px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: transparent;
+            color: var(--ink);
+            font-size: 0.95rem;
+            font-weight: 650;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .btn-secondary:active { background: var(--bg-elev); }
 
         .message {
             margin-top: 14px;
-            padding: 10px 12px;
+            padding: 12px 14px;
             border-radius: 10px;
-            font-size: 0.82rem;
+            font-size: 0.88rem;
             line-height: 1.4;
+            font-weight: 550;
             display: none;
         }
-
         .message.error {
-            background: #fdecea;
-            color: #b3261e;
-            border: 1px solid rgba(179, 38, 30, 0.3);
+            background: rgba(255, 77, 79, 0.12);
+            color: #ff8a8c;
+            border: 1px solid rgba(255, 77, 79, 0.28);
         }
-
         .message.success {
-            background: #e6f4ea;
-            color: #1e7e34;
-            border: 1px solid rgba(30, 126, 52, 0.3);
+            background: rgba(52, 199, 89, 0.12);
+            color: #6ee08a;
+            border: 1px solid rgba(52, 199, 89, 0.28);
         }
 
-        .footer {
-            position: absolute;
-            bottom: max(12px, env(safe-area-inset-bottom));
-            left: 0;
-            right: 0;
+        .signup-foot {
+            margin-top: auto;
+            padding-top: 28px;
             text-align: center;
-            font-size: 0.75rem;
-            color: rgba(234, 210, 152, 0.35);
+            animation: riseIn 0.55s ease-out 0.15s both;
         }
 
-        /* Modal admin */
+        .signup-links {
+            font-size: 0.88rem;
+            color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px 14px;
+        }
+
+        .signup-links a {
+            color: var(--ink);
+            font-weight: 650;
+            text-decoration: none;
+        }
+        .signup-links a:active { color: var(--gold); }
+
+        .signup-copy {
+            margin-top: 16px;
+            font-size: 0.72rem;
+            color: #555;
+        }
+
+        /* Modais */
         .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.65);
+            background: rgba(0, 0, 0, 0.72);
             z-index: 100;
-            align-items: center;
+            align-items: flex-end;
             justify-content: center;
-            padding: 20px;
+            padding: 12px;
+            backdrop-filter: blur(4px);
         }
-
         .modal-overlay.open { display: flex; }
 
         .modal-box {
             width: 100%;
-            max-width: 420px;
+            max-width: 440px;
             max-height: 90vh;
             overflow-y: auto;
-            padding: 32px 24px 24px;
-            border-radius: 20px;
-            background: #fff;
-            color: #111;
-            box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+            padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
+            border-radius: 18px 18px 14px 14px;
+            background: #121212;
+            color: var(--ink);
+            border: 1px solid var(--line);
             position: relative;
+            animation: riseIn 0.28s ease-out;
+        }
+
+        .modal-box .field label { color: #bdbdbd; }
+        .modal-box .field input,
+        .modal-box .field textarea,
+        .modal-box .field select {
+            background: var(--bg-field);
+            color: var(--ink);
         }
 
         .modal-close {
             position: absolute;
-            top: 14px;
-            right: 16px;
-            background: none;
-            border: none;
-            color: #111;
-            font-size: 1.4rem;
+            top: 14px; right: 14px;
+            width: 36px; height: 36px;
+            border: none; border-radius: 50%;
+            background: var(--bg-field);
+            color: var(--ink);
+            font-size: 1.25rem;
             cursor: pointer;
-            opacity: 0.6;
             line-height: 1;
         }
 
-        .modal-close:hover { opacity: 1; }
-
         .admin-notice {
-            background: #faf3df;
-            border: 1px solid rgba(196, 151, 26, 0.35);
-            border-radius: 10px;
-            padding: 12px;
-            font-size: 0.78rem;
+            background: #1a1812;
+            border: 1px solid rgba(234, 210, 152, 0.28);
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 0.85rem;
             line-height: 1.45;
             margin-bottom: 16px;
-            color: #4b5563;
+            color: #d6d0c2;
         }
 
         .modal-title {
-            font-size: 1rem;
-            font-weight: 700;
-            margin-bottom: 16px;
-            padding-right: 24px;
-            color: #111;
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 14px;
+            padding-right: 36px;
         }
 
-        @media (max-width: 380px) {
-            .signup-card { padding: 32px 20px 28px; }
-            .projeto-grid { grid-template-columns: 1fr; }
+        @media (min-width: 560px) {
+            .modal-overlay { align-items: center; }
+            .modal-box { border-radius: 18px; }
         }
     </style>
 </head>
 <body class="app-mobile signup-screen">
-    <div class="signup-card">
-        <div class="signup-inner">
-            <img src="/logo-vap.png" class="login-logo" alt="VAP — Conectando Pessoas">
-            <p class="signup-sub">S11D · Caronas internas</p>
-            <!-- Cartão branco (mesmo padrão claro do painel Locais do app) -->
-            <div class="signup-sheet">
-            <h1 class="signup-title" id="subtitulo">Crie sua conta</h1>
+    <main class="signup">
+        <header class="signup-top">
+            <a class="signup-back" href="index.html" aria-label="Voltar ao login">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                Entrar
+            </a>
+            <img src="/logo-vap.png" class="signup-brand" alt="VAP">
+        </header>
 
-            <div class="wizard-progress" id="progressBar">
-                <span class="wizard-dot active" data-step="1"></span>
-                <span class="wizard-line"></span>
-                <span class="wizard-dot" data-step="2"></span>
-                <span class="wizard-line"></span>
-                <span class="wizard-dot" data-step="3"></span>
+        <div class="signup-hero">
+            <h1>Crie sua conta</h1>
+            <p>Caronas entre colaboradores — rápido, seguro e no seu projeto.</p>
+        </div>
+
+        <div class="progress" aria-live="polite">
+            <div class="progress-meta">
+                <span class="progress-step" id="progressStep">Passo 1 de 3</span>
+                <span class="progress-label" id="stepLabel">Quem é você?</span>
             </div>
-            <p class="step-label" id="stepLabel">Quem é você?</p>
-            <p class="step-hint" id="stepHint">Em seguida: empresa, projeto e dados de acesso</p>
+            <div class="progress-track" aria-hidden="true">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
 
-            <form id="registerForm" novalidate>
-                <!-- Etapa 1: Identidade -->
-                <div class="wizard-step active" data-step="1">
-                    <div class="field">
-                        <label for="nome">Nome completo</label>
-                        <input type="text" id="nome" required placeholder="Digite seu nome completo" autocomplete="name">
-                    </div>
-                    <div class="field">
-                        <label for="funcao">Função</label>
-                        <input type="text" id="funcao" placeholder="Ex: Analista, Operador" autocomplete="organization-title">
-                    </div>
-                    <div class="field">
-                        <label>Sexo</label>
-                        <input type="hidden" id="sexo" required>
-                        <div class="sexo-group">
-                            <button type="button" class="sexo-btn" data-sexo="M" onclick="setSexo('M')">
-                                <span class="icon"></span>
-                                Homem
-                            </button>
-                            <button type="button" class="sexo-btn" data-sexo="F" onclick="setSexo('F')">
-                                <span class="icon"></span>
-                                Mulher
-                            </button>
-                        </div>
-                        <small>Define o bonequinho no mapa (azul = homem, rosa = mulher)</small>
-                    </div>
-                    <div class="field">
-                        <label for="matricula">Matrícula</label>
-                        <input type="text" id="matricula" required placeholder="6 a 10 dígitos" pattern="[0-9]{6,10}" inputmode="numeric" autocomplete="username">
-                        <small>Apenas números, 6 a 10 dígitos</small>
-                    </div>
+        <form id="registerForm" novalidate>
+            <!-- Etapa 1: Identidade -->
+            <div class="wizard-step active" data-step="1">
+                <div class="field">
+                    <label for="nome">Nome completo</label>
+                    <input type="text" id="nome" required placeholder="Como aparece no crachá" autocomplete="name">
                 </div>
-
-                <!-- Etapa 2: Trabalho -->
-                <div class="wizard-step" data-step="2">
-                    <div class="field">
-                        <label for="empresa_nome">Empresa</label>
-                        <input type="text" id="empresa_nome" required placeholder="Ex: Vale, MCA, Serveng" autocomplete="organization">
-                    </div>
-                    <div class="field">
-                        <label>Projeto / Local de trabalho</label>
-                        <input type="hidden" id="projeto_codigo" required>
-                        <div class="projeto-grid" id="projetoGrid"></div>
-                    </div>
-                    <div class="field">
-                        <label for="centro_custo">Centro de custo <span style="opacity:0.5;font-weight:400">(opcional)</span></label>
-                        <input type="text" id="centro_custo" placeholder="Ex: CC-1234">
-                    </div>
+                <div class="field">
+                    <label for="funcao">Função <span class="opt">(opcional)</span></label>
+                    <input type="text" id="funcao" placeholder="Ex: Analista, Operador" autocomplete="organization-title">
                 </div>
-
-                <!-- Etapa 3: Acesso -->
-                <div class="wizard-step" data-step="3">
-                    <div class="field">
-                        <label for="telefone">WhatsApp</label>
-                        <input type="tel" id="telefone" required placeholder="(94) 99999-9999" autocomplete="tel">
-                        <small>Para contato após confirmação da carona</small>
+                <div class="field">
+                    <label>Sexo no mapa</label>
+                    <input type="hidden" id="sexo" required>
+                    <div class="sexo-group" role="group" aria-label="Sexo">
+                        <button type="button" class="sexo-btn" data-sexo="M" onclick="setSexo('M')">Homem</button>
+                        <button type="button" class="sexo-btn" data-sexo="F" onclick="setSexo('F')">Mulher</button>
                     </div>
-                    <div class="field">
-                        <label for="email">Email</label>
-                        <input type="email" id="email" required placeholder="seu.email@empresa.com" autocomplete="email">
-                        <small>Obrigatório — usado para recuperar senha no login</small>
-                    </div>
-                    <div class="field">
-                        <label for="senha">Senha (6 dígitos)</label>
-                        <input type="password" id="senha" required placeholder="Ex: 123456" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
-                    </div>
-                    <div class="field">
-                        <label for="confirmarSenha">Confirmar senha</label>
-                        <input type="password" id="confirmarSenha" required placeholder="Repita os 6 dígitos" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
-                    </div>
-                    <div class="field" style="display:flex;gap:10px;align-items:flex-start;">
-                        <input type="checkbox" id="aceitePolitica" required style="width:auto;margin-top:5px;flex:0 0 auto;">
-                        <label for="aceitePolitica" style="font-weight:400;font-size:.92rem;line-height:1.45;">
-                            Li e concordo com a
-                            <a href="politica-privacidade.html" target="_blank" rel="noopener" id="linkPolitica">Política de Privacidade</a>
-                            e autorizo o uso da minha selfie, foto do veículo e localização (GPS)
-                            para a segurança das caronas, conforme a LGPD.
-                        </label>
-                    </div>
+                    <small>Define o bonequinho no mapa durante a carona.</small>
                 </div>
-
-                <div class="wizard-nav">
-                    <button type="button" class="btn-ghost" id="btnVoltar" style="display:none;">Voltar</button>
-                    <button type="button" class="btn-gold" id="btnAvancar">Continuar</button>
-                    <button type="submit" class="btn-gold" id="btnCriar" style="display:none;">Criar conta</button>
+                <div class="field">
+                    <label for="matricula">Matrícula</label>
+                    <input type="text" id="matricula" required placeholder="6 a 10 dígitos" pattern="[0-9]{6,10}" inputmode="numeric" autocomplete="username">
                 </div>
-            </form>
+            </div>
 
-            <div id="message" class="message"></div>
+            <!-- Etapa 2: Trabalho -->
+            <div class="wizard-step" data-step="2">
+                <div class="field">
+                    <label for="empresa_nome">Empresa</label>
+                    <input type="text" id="empresa_nome" required placeholder="Ex: Vale, MCA, Serveng" autocomplete="organization">
+                </div>
+                <div class="field">
+                    <label>Projeto / local</label>
+                    <input type="hidden" id="projeto_codigo" required>
+                    <div class="projeto-grid" id="projetoGrid"></div>
+                </div>
+                <div class="field">
+                    <label for="centro_custo">Centro de custo <span class="opt">(opcional)</span></label>
+                    <input type="text" id="centro_custo" placeholder="Ex: CC-1234">
+                </div>
+            </div>
 
+            <!-- Etapa 3: Acesso -->
+            <div class="wizard-step" data-step="3">
+                <div class="field">
+                    <label for="telefone">WhatsApp</label>
+                    <input type="tel" id="telefone" required placeholder="(94) 99999-9999" autocomplete="tel">
+                    <small>Só é compartilhado depois que a carona é confirmada.</small>
+                </div>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required placeholder="seu.email@empresa.com" autocomplete="email">
+                    <small>Usado para recuperar a senha.</small>
+                </div>
+                <div class="field">
+                    <label for="senha">Senha (6 dígitos)</label>
+                    <input type="password" id="senha" required placeholder="••••••" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
+                </div>
+                <div class="field">
+                    <label for="confirmarSenha">Confirmar senha</label>
+                    <input type="password" id="confirmarSenha" required placeholder="Repita os 6 dígitos" pattern="[0-9]{6}" maxlength="6" minlength="6" inputmode="numeric" autocomplete="new-password">
+                </div>
+                <div class="consent">
+                    <input type="checkbox" id="aceitePolitica" required>
+                    <label for="aceitePolitica">
+                        Li e concordo com a
+                        <a href="politica-privacidade.html" target="_blank" rel="noopener" id="linkPolitica">Política de Privacidade</a>
+                        e autorizo o uso da minha selfie, foto do veículo e localização (GPS)
+                        para a segurança das caronas, conforme a LGPD.
+                    </label>
+                </div>
+            </div>
+
+            <div class="wizard-nav">
+                <button type="button" class="btn-primary" id="btnAvancar">Continuar</button>
+                <button type="submit" class="btn-primary" id="btnCriar" style="display:none;">Criar conta</button>
+                <button type="button" class="btn-secondary" id="btnVoltar" style="display:none;">Voltar</button>
+            </div>
+        </form>
+
+        <div id="message" class="message"></div>
+
+        <footer class="signup-foot">
             <div class="signup-links">
                 <a href="index.html">Já tenho conta</a>
-                <span class="sep">·</span>
                 <a href="index.html#recuperar">Esqueci a senha</a>
-                <span class="sep">·</span>
-                <a href="#" id="linkAdmin">Solicitar acesso admin</a>
+                <a href="#" id="linkAdmin">Acesso admin</a>
             </div>
-            </div><!-- /signup-sheet -->
-        </div>
-    </div>
-
-    <div class="footer">© 2025 Vale S11D</div>
+            <p class="signup-copy">© 2026 VAP · Vale S11D</p>
+        </footer>
+    </main>
 
     <!-- Modal admin -->
     <div class="modal-overlay" id="adminModal">
@@ -576,15 +671,13 @@
                     <label for="a_justificativa">Por que você precisa de acesso admin?</label>
                     <textarea id="a_justificativa" placeholder="Descreva sua função e necessidade de acesso..."></textarea>
                 </div>
-                <button type="submit" class="btn-gold" style="width:100%;margin-top:4px;">Enviar solicitação</button>
+                <button type="submit" class="btn-primary">Enviar solicitação</button>
                 <div id="adminMessage" class="message" style="margin-top:12px;"></div>
             </form>
         </div>
     </div>
 
-    <!-- Modal Política de Privacidade: abre SOBRE o cadastro (não navega para fora),
-         para não perder o que já foi preenchido no formulário. Funciona igual em
-         PWA e no app nativo (o target="_blank" no WebView recarregava a tela). -->
+    <!-- Modal Política de Privacidade: abre SOBRE o cadastro (não navega para fora) -->
     <div class="modal-overlay" id="politicaModal">
         <div class="modal-box" style="max-width:640px;width:92vw;height:82vh;display:flex;flex-direction:column;">
             <button type="button" class="modal-close" id="fecharPolitica" aria-label="Fechar">&times;</button>
@@ -597,19 +690,12 @@
     <script>
         let passo = 1;
         const TOTAL = 3;
-        const labels = ['Quem é você?', 'Onde você trabalha?', 'Seus dados de acesso'];
-        // Fallback se /api/projetos falhar (offline); a fonte real é o banco,
-        // então projeto novo criado no painel aparece aqui sem deploy.
+        const labels = ['Quem é você?', 'Onde você trabalha?', 'Dados de acesso'];
         const PROJETOS_FIXOS = [
             { codigo: 'S11D', label: 'S11D' },
             { codigo: 'SALOBO', label: 'SALOBO' },
             { codigo: 'CARAJAS', label: 'CARAJÁS' },
             { codigo: 'SOSSEGO', label: 'SOSSEGO' },
-        ];
-        const hints = [
-            'Em seguida: empresa, projeto e dados de acesso',
-            'Depois: WhatsApp, email e senha de 6 dígitos',
-            'Pronto para criar sua conta',
         ];
 
         function setProjeto(codigo) {
@@ -631,8 +717,6 @@
                 lista.map(p => `<option value="${p.codigo}">${escProj(p.label)}</option>`).join('');
         }
         renderProjetos(PROJETOS_FIXOS);
-        // Lista viva do banco (projetos ativos). Só letras/números/hífen no código
-        // (validado no servidor), então interpolar direto no HTML é seguro.
         fetch('/api/projetos').then(r => r.ok ? r.json() : null).then(rows => {
             if (Array.isArray(rows) && rows.length) {
                 renderProjetos(rows.map(p => ({ codigo: p.codigo, label: p.nome || p.codigo })));
@@ -644,21 +728,14 @@
                 s.classList.toggle('active', Number(s.dataset.step) === passo);
             });
             document.getElementById('stepLabel').textContent = labels[passo - 1];
-            document.getElementById('stepHint').textContent = hints[passo - 1];
-
-            const dots = document.querySelectorAll('.wizard-dot');
-            const lines = document.querySelectorAll('.wizard-line');
-            dots.forEach((d, i) => {
-                const n = i + 1;
-                d.classList.toggle('active', n === passo);
-                d.classList.toggle('done', n < passo);
-            });
-            lines.forEach((l, i) => l.classList.toggle('done', i + 1 < passo));
+            document.getElementById('progressStep').textContent = `Passo ${passo} de ${TOTAL}`;
+            document.getElementById('progressFill').style.width = ((passo / TOTAL) * 100) + '%';
 
             document.getElementById('btnVoltar').style.display = passo > 1 ? 'block' : 'none';
             document.getElementById('btnAvancar').style.display = passo < TOTAL ? 'block' : 'none';
             document.getElementById('btnCriar').style.display = passo === TOTAL ? 'block' : 'none';
             document.getElementById('message').style.display = 'none';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function setSexo(val) {
@@ -798,7 +875,6 @@
             }
         });
 
-        // Modal admin
         const adminModal = document.getElementById('adminModal');
         document.getElementById('linkAdmin').addEventListener('click', (e) => {
             e.preventDefault();
@@ -812,10 +888,6 @@
             if (e.target === adminModal) adminModal.classList.remove('open');
         });
 
-        // Política de Privacidade: abre num modal por cima do cadastro em vez de
-        // navegar (target="_blank"), que no WebView nativo recarregava a tela e
-        // apagava o que já estava preenchido. Fallback: se o JS falhar, o href
-        // original ainda abre a página.
         const politicaModal = document.getElementById('politicaModal');
         const politicaFrame = document.getElementById('politicaFrame');
         function abrirPolitica() {

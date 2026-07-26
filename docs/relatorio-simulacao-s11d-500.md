@@ -82,6 +82,15 @@ só pendente, nenhuma vaga é devolvida (nunca tinha sido ocupada).
 **Depois da correção:** as mesmas 40 caronas com `vagas > 1` — agora **40/40 ainda
 aceitam uma segunda proposta** depois do primeiro aceite, exatamente o esperado.
 
+> **Nota (jul/2026):** a checagem que produziu esse 40/40 escolhia como candidato o
+> primeiro passageiro da lista, que em geral **já estava em viagem** — e nesse caso
+> a resposta é `400 "Você já está em uma viagem"`, não um veredito sobre a vaga.
+> O número, portanto, não era confiável e deixou de reproduzir. A checagem foi
+> corrigida em `scripts/simulacao-s11d-500.js` para sortear um passageiro sem
+> viagem. O comportamento em si foi reverificado de forma isolada e **está
+> correto**: carona com 2 vagas gera 2 viagens, `vagas` cai 2 → 1 → 0, o status só
+> vira `concluida` ao esgotar, e o 3º passageiro recebe `404 "Carona indisponível"`.
+
 ### 3. Limitador de requisições global (1200/15 min) é por IP — não corrigido (fora de escopo)
 
 `server.js:51` aplica um limite global de 1200 requisições/15 min por IP a toda a

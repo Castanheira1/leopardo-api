@@ -115,16 +115,97 @@ body {
     height: 38px;
     flex-shrink: 0;
 }
+/* Atalho de perfil no header (mock moderno) */
+.nav-profile-btn {
+    width: 44px;
+    height: 38px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    border-radius: 50%;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.nav-profile-btn:active { background: rgba(255, 255, 255, 0.08); }
 
-/* Menu (hambúrguer) — alinhado à barra Passageiro/Motorista */
+/* Menu (hambúrguer) — Configurações estilo Instagram */
 .nav-menu-wrap { position: relative; flex-shrink: 0; }
 .nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-/* Menu claro (mesmo padrão do painel Locais) */
-.nav-menu { position: absolute; right: 0; top: calc(100% + 8px); background: #fff; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); min-width: 210px; overflow: hidden; z-index: 60; }
+.nav-menu {
+    position: absolute; right: 0; top: calc(100% + 8px);
+    background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+    min-width: 288px; max-width: min(92vw, 340px);
+    overflow: hidden; z-index: 60;
+    max-height: min(78vh, 640px); overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+/* Compat: itens antigos (se algum JS ainda usar) */
 .nav-menu-item { display: block; width: 100%; text-align: left; padding: 14px 18px; background: none; border: none; color: #111; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
-.nav-menu-item:hover { background: #f6f0df; color: #111; }
-.nav-menu-item:active { background: #f0e6c8; }
-.nav-menu-item + .nav-menu-item { border-top: 1px solid rgba(0, 0, 0, 0.06); }
+.nav-menu-item:hover { background: #f5f5f5; color: #111; }
+.nav-menu-item:active { background: #efefef; }
+.nav-menu-item + .nav-menu-item { border-top: 1px solid #efefef; }
+
+.ig-settings { padding: 0 0 10px; }
+.ig-settings-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px; position: sticky; top: 0; background: #fff; z-index: 2;
+    border-bottom: 1px solid #efefef;
+}
+.ig-settings-title {
+    font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; color: #0f0f0f;
+}
+.ig-settings-close {
+    width: 32px; height: 32px; border: none; border-radius: 50%;
+    background: #f2f2f2; color: #0f0f0f; display: grid; place-items: center; cursor: pointer;
+}
+.ig-settings-close:active { background: #e8e8e8; }
+.ig-settings-group { padding: 10px 10px 4px; }
+.ig-settings-group--danger { padding-top: 4px; }
+.ig-settings-label {
+    font-size: 0.72rem; font-weight: 650; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #8e8e8e;
+    padding: 6px 10px 8px;
+}
+.ig-settings-row {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 11px 12px; margin: 0 0 2px; border: none; border-radius: 12px;
+    background: transparent; color: #0f0f0f; text-align: left; cursor: pointer;
+    text-decoration: none; font: inherit;
+    transition: background 0.12s ease;
+}
+.ig-settings-row:hover, .ig-settings-row:active { background: #f5f5f5; }
+.ig-settings-icn {
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+    display: grid; place-items: center; background: #fafafa; color: #0f0f0f;
+    border: 1px solid #efefef;
+}
+.ig-settings-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ig-settings-txt strong {
+    font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em;
+    color: #0f0f0f; line-height: 1.25;
+}
+.ig-settings-txt small {
+    font-size: 0.75rem; font-weight: 450; color: #8e8e8e; line-height: 1.25;
+}
+.ig-settings-chev {
+    color: #c7c7c7; font-size: 1.35rem; font-weight: 300; line-height: 1; padding-left: 2px;
+}
+.ig-settings-row--danger {
+    justify-content: center; margin-top: 4px;
+    border: 1px solid #efefef; background: #fff;
+}
+.ig-settings-row--danger .ig-settings-txt { align-items: center; }
+.ig-settings-row--danger strong { color: #ed4956; font-weight: 650; }
+.ig-settings-row--on .ig-settings-txt strong { color: #1a7f37; }
+.ig-settings-row--on .ig-settings-icn {
+    background: #eaf7ee; border-color: #ccebd6; color: #1a7f37;
+}
 .nav-tag {
     font-size: 0.8rem;
     font-weight: 700;
@@ -1112,6 +1193,14 @@ html.teclado-aberto {
     justify-content: center;
     margin: 0 0 12px;
 }
+/* No sheet do motorista, "Limpar destino" fica ABAIXO do resumo (km · km/h · °C)
+   pra não competir com o gesto da alça. */
+.acao-sheet-ofe .limpar-rota-bar {
+    margin: 2px 0 12px;
+}
+.acao-sheet-ofe .alcance-info {
+    margin: 4px 0 8px;
+}
 /* "Limpar destino": padrão Claude — amarelinho claro e suave por dentro,
    texto escuro e contorno dourado fraco (igual ao banner "Recebendo todas as
    chamadas"). As regras :hover/:active próprias vencem o verde do
@@ -1141,6 +1230,29 @@ html.teclado-aberto {
     font-size: 1rem;
     letter-spacing: 0.3px;
 }
+.acao-titulo-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+}
+.acao-titulo-art {
+    display: inline-flex;
+    line-height: 0;
+    flex-shrink: 0;
+}
+.btn-cta-pill {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: 999px !important;
+    background: #FFD400 !important;
+    color: #111 !important;
+    box-shadow: 0 8px 22px rgba(255, 212, 0, 0.35) !important;
+}
+.btn-cta-pill svg { flex-shrink: 0; }
 .btn-limpar-dest {
     position: absolute;
     right: 0;
@@ -2410,6 +2522,141 @@ body.buscando-carona .banner-agendamentos { visibility: hidden !important; }
 }
 .mot-stats-col small { font-size: 0.75rem; color: #9aa0a6; }
 .mot-stats-col b { font-size: 1rem; font-weight: 700; color: #EAD298; }
+
+/* ===== Sheet passageiro claro (mock moderno) ===== */
+.acao-sheet.acao-sheet--clara {
+    background: #fff;
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.18);
+}
+.acao-sheet.acao-sheet--clara .acao-titulo { color: #111; }
+.acao-sheet.acao-sheet--clara .acao-handle {
+    background: rgba(17, 17, 17, 0.18);
+}
+.acao-sheet.acao-sheet--clara.collapsed .acao-handle {
+    background: rgba(17, 17, 17, 0.28);
+}
+.acao-sheet.acao-sheet--clara.collapsed {
+    background: rgba(255, 255, 255, 0.97);
+}
+.acao-sheet.acao-sheet--clara .acao-sheet-footer {
+    background: #fff;
+    border-top-color: rgba(0, 0, 0, 0.06);
+}
+.acao-sheet.acao-sheet--clara .cam-hint,
+.acao-sheet.acao-sheet--clara .hint-destino-obrigatorio {
+    color: #4b5563;
+}
+.acao-sheet.acao-sheet--clara .hint-destino-obrigatorio {
+    background: #FFF8D6;
+    border-color: rgba(255, 212, 0, 0.55);
+}
+.theme-dark .acao-sheet.acao-sheet--clara label { color: #374151; }
+.theme-dark .acao-sheet.acao-sheet--clara input,
+.theme-dark .acao-sheet.acao-sheet--clara select {
+    background: #f3f4f6;
+    color: #111;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+}
+.acao-sheet.acao-sheet--clara .mot-stats {
+    background: #f8fafc;
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #111;
+}
+.acao-sheet.acao-sheet--clara .mot-stats-head { color: #6b7280; }
+.acao-sheet.acao-sheet--clara .mot-stats-num { color: #111; }
+.acao-sheet.acao-sheet--clara .mot-stats-col small { color: #6b7280; }
+.acao-sheet.acao-sheet--clara .mot-stats-col b { color: #9a7412; }
+.acao-sheet.acao-sheet--clara .mot-stats-col + .mot-stats-col {
+    border-left-color: rgba(0, 0, 0, 0.08);
+}
+.acao-sheet.acao-sheet--clara .mot-stats--vazio {
+    background: #FFF6C8;
+    border-color: rgba(255, 212, 0, 0.55);
+}
+.acao-sheet.acao-sheet--clara .mot-stats--vazio .mot-stats-num {
+    color: #5c4a0a;
+    font-size: 1.02rem;
+}
+.acao-sheet.acao-sheet--clara .painel-tit--lista { color: #6b7280; }
+.acao-sheet.acao-sheet--clara .lista-vazia-leve { color: #4b5563; }
+
+/* Barra inferior estilo app */
+.app-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.08);
+}
+.app-bottom-nav__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 52px;
+    padding: 4px 6px;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.app-bottom-nav__ico {
+    width: 40px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+}
+.app-bottom-nav__lab {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+.app-bottom-nav__item.is-active { color: #111; }
+.app-bottom-nav__item.is-active .app-bottom-nav__ico {
+    background: #FFD400;
+    color: #111;
+}
+body.theme-dark {
+    --app-bottom-nav-h: calc(58px + env(safe-area-inset-bottom, 0px));
+}
+body.theme-dark .container {
+    padding-bottom: var(--app-bottom-nav-h, 0px);
+}
+body.theme-dark .acao-sheet {
+    /* Teclado aberto: sobe pelo inset. Fechado: fica acima da barra inferior. */
+    bottom: max(var(--app-bottom-nav-h, 0px), min(var(--sheet-kbd, 0px), 45vh));
+}
+body.theme-dark .acao-sheet .acao-sheet-footer {
+    padding-bottom: 14px;
+}
+body.theme-dark .acao-sheet.collapsed .acao-grip {
+    padding-bottom: 12px;
+}
+body.theme-dark .viagem-sheet {
+    bottom: max(var(--app-bottom-nav-h, 0px), var(--sheet-kbd, 0px));
+    padding-bottom: 14px;
+}
+body.aguardando-papel .app-bottom-nav,
+body.buscando-carona .app-bottom-nav {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .map-stage-controls .map-tipo-btn {
     pointer-events: auto;
     margin: 0;
@@ -2984,7 +3231,209 @@ body.aguardando-papel .navbar {
 .perfil-secao { padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .perfil-secao:first-of-type { border-top: none; padding-top: 4px; }
 
-/* Perfil estilo app: cabeçalho com avatar + nome (cara de app de verdade) */
+/* —— Perfil estilo Instagram (vence .theme-dark input) —— */
+.ig-perfil-overlay.cam-overlay-alto {
+    background: rgba(0, 0, 0, 0.4);
+    padding: max(12px, calc(env(safe-area-inset-top) + 6px)) 0 0;
+}
+.cam-overlay.ig-perfil-overlay .cam-box.ig-perfil-box {
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    max-height: min(96vh, calc(var(--appvh, 1vh) * 96));
+    width: 100%;
+    max-width: 560px;
+    padding: 0 0 calc(18px + env(safe-area-inset-bottom));
+    box-shadow: none;
+    border: none;
+}
+.ig-perfil-top {
+    display: grid;
+    grid-template-columns: 44px 1fr 64px;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 8px;
+    background: #fff;
+    border-bottom: 1px solid #dbdbdb;
+    position: sticky; top: 0; z-index: 3;
+}
+.ig-perfil-title {
+    margin: 0; text-align: center;
+    font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; color: #262626;
+}
+.ig-perfil-x, .ig-perfil-top .perfil-voltar {
+    width: 40px; height: 40px; border: none; border-radius: 50%;
+    background: transparent; color: #262626; display: grid; place-items: center;
+    cursor: pointer; padding: 0; font-size: 1.7rem; line-height: 1;
+}
+.ig-perfil-x:active { background: #f2f2f2; }
+.ig-perfil-done {
+    border: none; background: transparent; color: #0095f6;
+    font-size: 0.95rem; font-weight: 650; cursor: pointer; padding: 10px 8px;
+    font-family: inherit; text-align: right;
+}
+.ig-perfil-done:active { opacity: 0.55; }
+.ig-perfil-done--ghost { width: 64px; visibility: hidden; pointer-events: none; }
+
+.ig-perfil-hero {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 24px 20px; background: #fff;
+}
+.ig-perfil-avatar.perfil-avatar {
+    width: 96px; height: 96px; font-size: 2.2rem; font-weight: 600;
+    background: #efefef;
+    color: #8e8e8e; box-shadow: none; margin-bottom: 14px;
+    border: 1px solid #dbdbdb;
+}
+.ig-perfil-hero .perfil-hero-nome {
+    font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em;
+    color: #262626; text-align: center;
+    white-space: normal; line-height: 1.25;
+    max-width: 100%; padding: 0 8px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ig-perfil-hero .perfil-hero-sub {
+    font-size: 0.84rem; color: #8e8e8e; margin-top: 4px; text-align: center;
+    font-weight: 450;
+}
+
+.ig-perfil-section-label {
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em;
+    text-transform: none; color: #8e8e8e;
+    padding: 18px 16px 8px;
+    background: #fafafa;
+    border-top: 1px solid #efefef;
+}
+
+/* Lista Instagram: sem “card”, só linhas */
+.ig-perfil-card {
+    margin: 0;
+    background: #fff;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    padding: 0 16px;
+    border-top: 1px solid #efefef;
+    border-bottom: 1px solid #efefef;
+}
+.ig-perfil-card--motorista {
+    padding: 14px 16px 16px;
+    background: #fff;
+}
+.ig-perfil-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-height: 0;
+    padding: 14px 0;
+    border-bottom: 1px solid #efefef;
+}
+.ig-perfil-row--last { border-bottom: none; }
+.ig-perfil-row--stack {
+    gap: 8px;
+}
+.ig-perfil-row label {
+    margin: 0; font-size: 0.78rem; font-weight: 600; color: #8e8e8e;
+    letter-spacing: 0.01em;
+}
+
+/* CRÍTICO: vence body.theme-dark input/select (fundo preto) */
+.theme-dark .ig-perfil-box input.ig-perfil-input,
+.theme-dark .ig-perfil-box select.ig-perfil-input,
+.theme-dark .ig-perfil-box textarea.ig-perfil-input,
+.ig-perfil-box input.ig-perfil-input,
+.ig-perfil-box select.ig-perfil-input,
+.ig-perfil-box textarea.ig-perfil-input {
+    width: 100%;
+    border: none !important;
+    outline: none;
+    background: transparent !important;
+    box-shadow: none !important;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #262626 !important;
+    padding: 0;
+    text-align: left;
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: 0;
+}
+.theme-dark .ig-perfil-box input.ig-perfil-input::placeholder,
+.ig-perfil-box input.ig-perfil-input::placeholder {
+    color: #c7c7c7 !important;
+    opacity: 1;
+}
+.theme-dark .ig-perfil-box input.ig-perfil-input:focus,
+.theme-dark .ig-perfil-box select.ig-perfil-input:focus,
+.ig-perfil-box input.ig-perfil-input:focus,
+.ig-perfil-box select.ig-perfil-input:focus {
+    background: transparent !important;
+    color: #262626 !important;
+    border: none !important;
+}
+.theme-dark .ig-perfil-box input.ig-perfil-input[readonly],
+.ig-perfil-box input.ig-perfil-input[readonly] {
+    color: #8e8e8e !important;
+}
+.theme-dark .ig-perfil-box .ig-perfil-row--stack .ig-perfil-input,
+.ig-perfil-box .ig-perfil-row--stack .ig-perfil-input {
+    text-align: left !important;
+    border: 1px solid #dbdbdb !important;
+    border-radius: 8px !important;
+    padding: 12px 12px !important;
+    background: #fafafa !important;
+    color: #262626 !important;
+}
+.theme-dark .ig-perfil-box select.ig-perfil-input,
+.ig-perfil-box select.ig-perfil-input {
+    background-color: transparent !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e8e' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right center !important;
+    padding-right: 18px !important;
+}
+
+.ig-perfil-hint {
+    margin: 10px 16px 0; font-size: 0.75rem; color: #8e8e8e; line-height: 1.4;
+    background: #fafafa; padding: 10px 16px 4px; margin-left: 0; margin-right: 0;
+}
+.ig-perfil-msg { margin: 8px 16px 0; min-height: 1.2em; color: #262626; }
+
+.ig-perfil-box .perfil-excluir-link {
+    display: block; width: 100%; margin: 0;
+    background: #fff; border: none; border-top: 1px solid #efefef; border-bottom: 1px solid #efefef;
+    border-radius: 0; text-align: center; padding: 16px;
+    font-size: 0.95rem; font-weight: 550;
+    color: #ed4956; font-family: inherit; cursor: pointer;
+    margin-top: 24px;
+}
+.ig-perfil-box .perfil-excluir-link:hover,
+.ig-perfil-box .perfil-excluir-link:active { background: #fffafa; text-decoration: none; }
+
+.ig-perfil-box .hab-actions { margin-top: 10px; flex-direction: column; gap: 8px; }
+.ig-perfil-box .hab-actions .btn {
+    width: 100%; border-radius: 10px; padding: 13px 16px;
+    font-size: 0.95rem; font-weight: 650;
+}
+.ig-perfil-box .hab-actions .btn-secondary {
+    background: #fff !important;
+    color: #262626 !important;
+    border: 1px solid #dbdbdb !important;
+}
+.ig-perfil-box .hab-status {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #262626;
+    padding: 12px 14px;
+    background: #fafafa;
+    border: 1px solid #efefef;
+    border-radius: 10px;
+}
+.ig-perfil-box .hab-status strong { color: #262626; font-weight: 650; }
+.ig-perfil-box .hab-status small { color: #8e8e8e; }
+.ig-perfil-box #btnExcluirConta { margin-top: 14px; width: 100%; }
+
 .perfil-hero { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
 .perfil-avatar {
     width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
@@ -3005,17 +3454,16 @@ body.aguardando-papel .navbar {
 }
 /* Botões de ação do perfil em largura total (padrão de app mobile) */
 .perfil-view .perfil-secao > .btn { width: 100%; margin-top: 12px; }
-/* Único item de navegação restante: link discreto, padrão dos apps grandes */
 .perfil-excluir-link {
     display: block; width: 100%; background: none; border: none; cursor: pointer;
     text-align: center; padding: 12px 0 4px; font-size: 0.85rem; font-weight: 700;
     color: #c0392b; font-family: inherit;
 }
 .perfil-excluir-link:hover, .perfil-excluir-link:active { text-decoration: underline; }
-.painel-claro .perfil-hero-nome { color: #26231b; }
-.painel-claro .perfil-hero-sub { color: #8a857a; }
-.painel-claro .perfil-secao-titulo { color: #8a857a; }
-.painel-claro .perfil-excluir-link { color: #b03a2e; }
+.painel-claro .perfil-hero-nome { color: #0f0f0f; }
+.painel-claro .perfil-hero-sub { color: #8e8e8e; }
+.painel-claro .perfil-secao-titulo { color: #8e8e8e; }
+.painel-claro .perfil-excluir-link { color: #ed4956; }
 
 /* Hub do perfil: navegação para sub-telas */
 .perfil-nav-btn {
@@ -3301,7 +3749,7 @@ body.aguardando-papel .navbar {
     }
     .nav-logo { height: 50px; }
     .nav-user { font-size: 0.88rem; }
-    .nav-menu { min-width: 190px; }
+    .nav-menu { min-width: 288px; }
 
     .card {
         padding: 18px 14px;

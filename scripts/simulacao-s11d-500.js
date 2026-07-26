@@ -380,21 +380,30 @@ async function testeControleRateLimitPadrao() {
     })));
     console.log(`  ${comProposta1.length}/${paresCarona.length} propostas criadas; ${comProposta1.filter((p) => p.viagemId).length} viagens iniciadas.`);
 
-    // Achado: carona com vagas>1 fica "concluida" (fechada) já no 1º aceite —
-    // um 2º passageiro tenta pegar uma das vagas restantes e deve falhar.
+    // Guarda de regressão: carona com vagas>1 tem de continuar aceitando um 2º
+    // passageiro depois do 1º aceite (o decremento de assentos foi corrigido em
+    // PR #172 — ver docs/relatorio-simulacao-s11d-500.md, achado nº 2).
+    //
+    // O candidato PRECISA ser um passageiro sem viagem: quem já embarcou leva
+    // 400 "Você já está em uma viagem", e a checagem passaria a medir esse
+    // bloqueio em vez da vaga. Antes esta busca pegava o primeiro passageiro da
+    // lista — quase sempre um que já tinha viagem — e o número não significava
+    // nada.
     const caronasComSobra = driversCarona.filter((d) => d.caronaId && d.vagas > 1 &&
       paresCarona.some((p) => p.parceiro === d && p.viagemId));
+    const livres = todosPax.filter((p) => p.token && !p.viagemId);
     let vagaSobrandoTestada = 0, vagaSobrandoAindaDisponivel = 0;
-    await Promise.all(caronasComSobra.slice(0, 40).map((d) => limit(async () => {
-      const outroPax = todosPax.find((p) => p.token && p.parceiro !== d && p.id !== d.id);
-      if (!outroPax) return;
+    // Sequencial: cada carona consome um passageiro livre distinto.
+    for (const d of caronasComSobra.slice(0, 40)) {
+      const outroPax = livres.shift();
+      if (!outroPax) break;
       vagaSobrandoTestada++;
       const { status } = await api("POST", "/api/propostas", {
         token: outroPax.token, passo: "checar_vaga_sobrando_apos_1o_aceite",
         body: { carona_id: d.caronaId, selfie_url: SELFIE, selfie_em: nowISO() },
       });
       if (status === 200) vagaSobrandoAindaDisponivel++;
-    })));
+    }
     console.log(`  vagas restantes testadas após 1º aceite: ${vagaSobrandoTestada} caronas (vagas>1); ainda aceitavam nova proposta: ${vagaSobrandoAindaDisponivel}`);
 
     /* ================= 7) MODO AMARELO: motorista vê pedido e oferece ================= */
