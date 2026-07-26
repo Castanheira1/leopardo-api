@@ -773,7 +773,12 @@
             ? favCatalogoLocais.filter((l) => locCoincideFiltro(l, filtro))
             : favCatalogoLocais;
         if (!visiveis.length) {
-            lista.innerHTML = '<div class="fav-vazio">Nenhum local encontrado.</div>';
+            // Catálogo do projeto ainda vazio (só o S11D está calibrado) é
+            // diferente de "o filtro não achou nada" — dizer "Nenhum local
+            // encontrado" fazia o usuário caçar um filtro que não existe.
+            lista.innerHTML = favCatalogoLocais.length
+                ? '<div class="fav-vazio">Nenhum local encontrado com esse filtro.</div>'
+                : `<div class="fav-vazio">Os locais de ${esc(favProjeto?.nome || 'seu projeto')} ainda não foram cadastrados.<br>Use a busca do mapa para marcar o destino.</div>`;
             return;
         }
         const origem = origemParaLocais();
@@ -5923,6 +5928,24 @@
             return msg('Sem resposta do servidor. Tente "Cancelar viagem" ou aguarde e tente de novo.', 'error');
         }
         const d = await r.json().catch(() => ({}));
+        // 409: a viagem já foi encerrada (o passageiro cancelou, ou outra aba
+        // finalizou). Não é erro do motorista e não adianta tentar de novo —
+        // fecha a tela da viagem em vez de insistir no "toque para finalizar".
+        if (r.status === 409) {
+            if (viagemView) {
+                viagemView.finalizando = false;
+                viagemView.autoFinalizarTimer = null;
+                // Qualquer valor != 'em_andamento' já fecha a tela; o servidor
+                // só manda `status` no guard, não na corrida com o UPDATE.
+                viagemView.status = d.status || 'encerrada';
+                atualizarCabecalhoViagem();
+                limparRotaViagem();
+            }
+            viagensAbertas.delete(viagemKey(viagemId));
+            msg(d.error || 'Esta viagem já foi encerrada.', d.status === 'cancelada' ? 'error' : 'info', 7000);
+            sairDaViagem();
+            return;
+        }
         if (!r.ok) {
             if (viagemView) {
                 viagemView.finalizando = false;
