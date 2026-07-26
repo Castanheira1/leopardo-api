@@ -120,7 +120,10 @@ body {
 .nav-menu-wrap { position: relative; flex-shrink: 0; z-index: 80; }
 .nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation; position: relative; z-index: 81; }
 .nav-menu {
-    /* fixed é aplicado no JS ao abrir — overflow:hidden do dashboard cortava o painel */
+    /* fixed é aplicado no JS ao abrir — overflow:hidden do dashboard cortava o painel.
+       O JS TAMBÉM move este bloco para o <body>: dentro do .nav-menu-wrap /
+       .modo-bar (z-index 80, contexto de empilhamento) o 10050 abaixo não vale
+       na página e o toast/overlays ficavam por cima, engolindo os toques. */
     position: fixed; right: 12px; top: 110px;
     background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);

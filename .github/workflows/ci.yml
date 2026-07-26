@@ -64,6 +64,7 @@ jobs:
           node tests/map-markers.test.js
           node tests/sessao-mapa.test.js
           node tests/ui-sheet.test.js
+          node tests/ui-menu.test.js
           node tests/viagem-pulso-pax.test.js
           node tests/encadeamento-perna.test.js
           node tests/rota-pista.test.js
