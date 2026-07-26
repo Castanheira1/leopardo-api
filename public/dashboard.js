@@ -472,17 +472,43 @@
     function _buscaVisivel(menuAberto) {
         document.querySelectorAll('.map-search-wrap, .map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
     }
+    // Menu em position:fixed: .dashboard/.container têm overflow:hidden e
+    // cortavam o painel Instagram (parecia que o hambúrguer “não abria”).
+    function _posicionarMenu(m, btn) {
+        if (!m || !btn) return;
+        const r = btn.getBoundingClientRect();
+        const margem = 8;
+        const maxH = Math.max(180, window.innerHeight - r.bottom - margem - 12);
+        m.style.position = 'fixed';
+        m.style.top = Math.round(r.bottom + margem) + 'px';
+        m.style.right = Math.round(Math.max(margem, window.innerWidth - r.right)) + 'px';
+        m.style.left = 'auto';
+        m.style.bottom = 'auto';
+        m.style.maxHeight = maxH + 'px';
+        m.style.zIndex = '10050';
+    }
     function toggleMenu(e) {
-        if (e) e.stopPropagation();
+        if (e) { e.preventDefault(); e.stopPropagation(); }
         const m = document.getElementById('navMenu');
+        const btn = document.getElementById('btnMenu');
+        if (!m) return;
         const aberto = m.style.display !== 'block';
+        if (aberto) _posicionarMenu(m, btn);
         m.style.display = aberto ? 'block' : 'none';
         _buscaVisivel(aberto);
     }
-    function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; _buscaVisivel(false); }
+    function fecharMenu() {
+        const m = document.getElementById('navMenu');
+        if (m) m.style.display = 'none';
+        _buscaVisivel(false);
+    }
     document.addEventListener('click', (e) => {
-        if (document.getElementById('navMenu').style.display === 'block'
+        if (document.getElementById('navMenu')?.style.display === 'block'
             && !e.target.closest('.nav-menu-wrap')) fecharMenu();
+    });
+    window.addEventListener('resize', () => {
+        const m = document.getElementById('navMenu');
+        if (m && m.style.display === 'block') _posicionarMenu(m, document.getElementById('btnMenu'));
     });
 
     /* -------- painéis (listas/solicitações) abertos pelo menu -------- */
