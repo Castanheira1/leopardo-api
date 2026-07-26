@@ -70,6 +70,21 @@ jobs:
           node tests/viagem-finalizar-status.test.js
           node tests/rota-pista.test.js
 
+      # Os testes acima leem o front como TEXTO e cobram expressões regulares.
+      # Isso nunca provou que o dedo alcança o botão: três correções seguidas do
+      # menu e do "Escolher local" passaram neles com o app quebrado na mão do
+      # usuário. Este abre o dashboard num Chromium de verdade, em tamanhos de
+      # celular, e mede quem recebe o toque no centro de cada controle.
+      - name: Chromium para o teste de toque
+        run: npx playwright install --with-deps chromium
+
+      - name: Toque real na UI (Chromium)
+        # OBRIGATORIO=1: sem navegador o teste falha em vez de se pular sozinho —
+        # um teste que some do CI é pior que teste nenhum.
+        env:
+          UI_TOQUE_OBRIGATORIO: "1"
+        run: node tests/ui-toque.test.js
+
       - name: Aplicar schema.sql no Postgres de teste
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f schema.sql
 
