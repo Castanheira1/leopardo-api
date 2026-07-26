@@ -474,13 +474,32 @@
     }
     // Menu em position:fixed: .dashboard/.container têm overflow:hidden e
     // cortavam o painel Instagram (parecia que o hambúrguer “não abria”).
+    //
+    // E position:fixed sozinho NÃO bastava: .modo-bar e .nav-menu-wrap têm
+    // z-index (80), e cada um cria um CONTEXTO DE EMPILHAMENTO. Dentro dele o
+    // z-index:10050 do menu vale só entre irmãos — na página inteira o menu
+    // continuava pintado no nível 80, ou seja, ABAIXO do toast (#message, 9990)
+    // e de qualquer overlay (.cam-overlay/.papel-overlay, 9998-9999). O painel
+    // aparecia, mas quem recebia o toque era o que estava por cima: tocar em
+    // "Locais" (ou no próprio hambúrguer, com um overlay na tela) não fazia
+    // nada. Movendo o menu para o <body> ele sai da armadilha e o 10050 vale.
+    function _portalMenu(m) {
+        if (m && m.parentElement !== document.body) document.body.appendChild(m);
+    }
     function _posicionarMenu(m, btn) {
         if (!m || !btn) return;
+        _portalMenu(m);
         const r = btn.getBoundingClientRect();
         const margem = 8;
-        const maxH = Math.max(180, window.innerHeight - r.bottom - margem - 12);
+        const vh = window.innerHeight;
+        // Com os avisos de cadastro na tela a barra desce e sobrava uma fresta
+        // de ~180px: só 2 itens visíveis e "Locais" fora da área rolável. Se não
+        // couber abaixo do botão, o painel sobe até caber inteiro na tela.
+        const maxH = Math.max(180, Math.min(Math.round(vh * 0.78), 640, vh - 2 * margem));
+        let top = r.bottom + margem;
+        if (top + maxH > vh - margem) top = Math.max(margem, vh - margem - maxH);
         m.style.position = 'fixed';
-        m.style.top = Math.round(r.bottom + margem) + 'px';
+        m.style.top = Math.round(top) + 'px';
         m.style.right = Math.round(Math.max(margem, window.innerWidth - r.right)) + 'px';
         m.style.left = 'auto';
         m.style.bottom = 'auto';
@@ -503,8 +522,17 @@
         _buscaVisivel(false);
     }
     document.addEventListener('click', (e) => {
-        if (document.getElementById('navMenu')?.style.display === 'block'
-            && !e.target.closest('.nav-menu-wrap')) fecharMenu();
+        if (document.getElementById('navMenu')?.style.display !== 'block') return;
+        // O menu vive no <body> (fora do .nav-menu-wrap): tocar nele não é
+        // "tocar fora". Sem esta checagem o clique no item fechava o menu e o
+        // toque era descartado antes de a ação rodar.
+        if (e.target.closest('#navMenu')) {
+            // Item escolhido: fecha o menu para não ficar por cima do painel
+            // que ele mesmo abriu (agora o menu está acima dos overlays).
+            if (e.target.closest('.ig-settings-row')) fecharMenu();
+            return;
+        }
+        if (!e.target.closest('.nav-menu-wrap')) fecharMenu();
     });
     window.addEventListener('resize', () => {
         const m = document.getElementById('navMenu');
