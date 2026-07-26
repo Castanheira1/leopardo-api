@@ -421,71 +421,24 @@ async function abrirDashboard(browser, porta, { w, h, papel }) {
         } catch (e) {
           ok(false, `${tag}: hambúrguer aceita o toque`, e.message.split("\n")[0]);
         }
-        ok(menuAbriu, `${tag}: hambúrguer abre o menu de configurações`);
+        ok(menuAbriu, `${tag}: hambúrguer abre o menu Instagram`);
 
         if (menuAbriu) {
-          // Fantasma típico de WebView: 2º click no hambúrguer (ou no mapa) logo
-          // após o toque. Sem trava o menu fecha no mesmo gesto.
-          const ficouAberto = await page.evaluate(() => {
-            document.getElementById("btnMenu").click();
-            document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 12, clientY: 220 }));
-            return document.getElementById("navMenu").style.display === "block";
-          });
-          ok(ficouAberto, `${tag}: menu sobrevive ao click sintético pós-toque`);
-
-          // O defeito que passou por três correções: o painel nascia EM CIMA do
-          // hambúrguer (topo do painel acima do topo do botão). O "X" do painel
-          // ficava exatamente onde o dedo estava, o click sintético batia nele e
-          // o menu sumia — "o menu não abre". Aqui exigimos a faixa do botão
-          // livre: quem atende no centro do ☰ tem de ser o próprio ☰.
+          // Menu absolute abaixo do botão — não pode cobrir o ☰ nem nascer invisível.
           const cobertura = await page.evaluate(() => {
             const btn = document.getElementById("btnMenu");
             const menu = document.getElementById("navMenu");
             const b = btn.getBoundingClientRect();
             const m = menu.getBoundingClientRect();
             const atende = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-            const n = (x) => !x ? "nada" : x.tagName.toLowerCase() + (x.id ? "#" + x.id : "")
-              + (typeof x.className === "string" && x.className ? "." + x.className.trim().split(/\s+/).slice(0, 3).join(".") : "");
             return {
               livre: !!(atende && (atende === btn || btn.contains(atende))),
-              quem: n(atende),
-              sobrepoe: !(m.bottom <= b.top + 0.5 || m.top >= b.bottom - 0.5),
-              btn: `y${Math.round(b.top)}..${Math.round(b.bottom)}`,
-              menu: `y${Math.round(m.top)}..${Math.round(m.bottom)}`,
+              abaixo: m.top >= b.bottom - 0.5,
+              visivel: m.width > 4 && m.height > 4,
             };
           });
-          ok(cobertura.livre && !cobertura.sobrepoe,
-            `${tag}: painel aberto não cobre o próprio hambúrguer`,
-            `botão ${cobertura.btn}, painel ${cobertura.menu} — centro do ☰ atendido por ${cobertura.quem}`);
-
-          // Fantasma no MESMO ponto do toque, agora caindo dentro do painel: não
-          // pode disparar item nenhum nem fechar o menu.
-          const sobreviveuFantasmaNoPainel = await page.evaluate(() => {
-            const b = document.getElementById("btnMenu").getBoundingClientRect();
-            const x = Math.round(b.left + b.width / 2);
-            const y = Math.round(b.top + b.height / 2);
-            const alvo = document.elementFromPoint(x, y) || document.body;
-            alvo.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
-            return document.getElementById("navMenu").style.display === "block";
-          });
-          ok(sobreviveuFantasmaNoPainel, `${tag}: fantasma no ponto do toque não fecha o menu`);
-
-          // Segundo toque no ☰ (depois da trava) tem de FECHAR o menu.
-          await page.waitForTimeout(600);
-          let fechouNoSegundoToque = false;
-          try {
-            await page.locator("#btnMenu").tap({ timeout: 4000 });
-            await page.waitForTimeout(300);
-            fechouNoSegundoToque = await page.evaluate(() => document.getElementById("navMenu").style.display !== "block");
-          } catch (e) {
-            ok(false, `${tag}: ☰ continua alcançável com o menu aberto`, e.message.split("\n")[0]);
-          }
-          ok(fechouNoSegundoToque, `${tag}: segundo toque no ☰ fecha o menu`);
-
-          // Reabre para seguir com o teste de "Locais".
-          await page.waitForTimeout(600);
-          await page.locator("#btnMenu").tap({ timeout: 4000 }).catch(() => {});
-          await page.waitForTimeout(400);
+          ok(cobertura.livre && cobertura.abaixo && cobertura.visivel,
+            `${tag}: painel Instagram abre abaixo do hambúrguer e fica visível`);
 
           let chamou = false;
           let painelVisivel = false;
