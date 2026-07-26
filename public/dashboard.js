@@ -501,138 +501,28 @@
     }
 
     /* -------- menu (hambúrguer) -------- */
-    // A busca flutua com z-index acima do navbar (pra não sumir ao rolar); por isso
-    // ela passava por cima do menu. Enquanto o menu está aberto, escondemos a busca.
+    // Restaurado do commit 8ab380c — menu Instagram que funcionava, ANTES do
+    // mock amarelo e dos remendos (portal/fixed/trava) que quebraram o toque.
+    // A busca flutua com z-index acima do navbar; com o menu aberto, escondemos.
     function _buscaVisivel(menuAberto) {
         document.querySelectorAll('.map-search-wrap, .map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
     }
-    // Menu em position:fixed: .dashboard/.container têm overflow:hidden e
-    // cortavam o painel Instagram (parecia que o hambúrguer “não abria”).
-    //
-    // E position:fixed sozinho NÃO bastava: .modo-bar e .nav-menu-wrap têm
-    // z-index (80), e cada um cria um CONTEXTO DE EMPILHAMENTO. Dentro dele o
-    // z-index:10050 do menu vale só entre irmãos — na página inteira o menu
-    // continuava pintado no nível 80, ou seja, ABAIXO do toast (#message, 9990)
-    // e de qualquer overlay (.cam-overlay/.papel-overlay, 9998-9999). O painel
-    // aparecia, mas quem recebia o toque era o que estava por cima: tocar em
-    // "Locais" (ou no próprio hambúrguer, com um overlay na tela) não fazia
-    // nada. Movendo o menu para o <body> ele sai da armadilha e o 10050 vale.
-    function _portalMenu(m) {
-        if (m && m.parentElement !== document.body) document.body.appendChild(m);
-    }
-    // Alguns WebViews (Capacitor/Android) disparam um "click" sintético ~300ms
-    // depois do toque. Sem trava, o hambúrguer ABRE no toque real e FECHA no
-    // fantasma — o usuário vê o menu piscar ou "não abrir". O mesmo fantasma,
-    // se cair fora do wrap, era tratado como clique-fora. Mesma ideia do
-    // suprimirClickAte do slide-toggle do motorista.
-    let _menuTravaAte = 0;
-    // Ponto do toque que abriu o menu — o fantasma chega NAS MESMAS coordenadas.
-    let _menuTravaXY = null;
-    // Posiciona o painel SEM NUNCA cobrir o hambúrguer.
-    //
-    // A versão anterior fixava a altura em ~640px e, se não coubesse abaixo do
-    // botão, subia o painel até caber na tela: num celular de 844px o topo caía
-    // em y=196 e o botão vive em y=202..240 — ou seja, o painel abria EM CIMA do
-    // próprio hambúrguer, com o "X" (fecharMenu) exatamente onde o dedo estava.
-    // O click sintético do WebView, ~300ms depois, batia nesse "X" e o menu
-    // sumia: para o usuário, "o menu não abre". A trava de 450ms não pegava esse
-    // caso porque ela só protege o toggleMenu e o clique-fora — não os botões de
-    // dentro do painel.
-    //
-    // Agora escolhemos o lado com mais espaço e ENCOLHEMOS o painel para caber
-    // nele. Encolher é seguro: .nav-menu tem overflow-y:auto, então o que não
-    // couber rola. O que não é negociável é a faixa do botão ficar livre.
-    function _posicionarMenu(m, btn) {
-        if (!m || !btn) return;
-        _portalMenu(m);
-        const r = btn.getBoundingClientRect();
-        const margem = 8;
-        const vh = window.innerHeight;
-        const TETO = 640;   // mesmo teto de conforto do CSS
-        const abaixo = vh - margem - (r.bottom + margem);
-        const acima = r.top - 2 * margem;
-        let top, maxH;
-        if (abaixo >= acima) {
-            maxH = Math.min(TETO, abaixo);
-            top = r.bottom + margem;
-        } else {
-            maxH = Math.min(TETO, acima);
-            top = r.top - margem - maxH;
-        }
-        maxH = Math.max(0, Math.round(maxH));
-        m.style.position = 'fixed';
-        m.style.top = Math.round(Math.max(margem, top)) + 'px';
-        m.style.right = Math.round(Math.max(margem, window.innerWidth - r.right)) + 'px';
-        m.style.left = 'auto';
-        m.style.bottom = 'auto';
-        m.style.maxHeight = maxH + 'px';
-        m.style.zIndex = '10050';
-    }
     function toggleMenu(e) {
-        if (e) { e.preventDefault(); e.stopPropagation(); }
-        // Fantasma no próprio #btnMenu: sem isto o 2º click inverte o estado.
-        if (Date.now() < _menuTravaAte) return;
+        if (e) e.stopPropagation();
         const m = document.getElementById('navMenu');
-        const btn = document.getElementById('btnMenu');
         if (!m) return;
         const aberto = m.style.display !== 'block';
-        if (aberto) {
-            _posicionarMenu(m, btn);
-            _menuTravaAte = Date.now() + 450;
-            // Coordenadas reais do toque; num disparo por teclado/programático
-            // (clientX/Y = 0) usamos o centro do botão.
-            const temXY = e && (e.clientX || e.clientY);
-            _menuTravaXY = temXY
-                ? { x: e.clientX, y: e.clientY }
-                : (btn ? _centroDe(btn) : null);
-        } else {
-            _menuTravaXY = null;
-        }
         m.style.display = aberto ? 'block' : 'none';
         _buscaVisivel(aberto);
     }
-    function _centroDe(el) {
-        const b = el.getBoundingClientRect();
-        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
-    }
-    // Rede de segurança para o click sintético do WebView: em telas baixas o
-    // painel PODE legitimamente nascer colado no botão, e aí o fantasma cairia
-    // num item do menu. Engolimos só o que é fantasma de verdade — mesmo ponto
-    // do toque de abertura, dentro da trava. Toque em qualquer outro lugar do
-    // painel passa na hora (nada de menu "surdo" por 450ms).
-    document.addEventListener('click', (e) => {
-        if (!_menuTravaXY || Date.now() >= _menuTravaAte) return;
-        if (!e.target.closest || !e.target.closest('#navMenu')) return;
-        if (Math.abs(e.clientX - _menuTravaXY.x) > 24) return;
-        if (Math.abs(e.clientY - _menuTravaXY.y) > 24) return;
-        e.stopPropagation();
-        e.preventDefault();
-    }, true);
     function fecharMenu() {
         const m = document.getElementById('navMenu');
         if (m) m.style.display = 'none';
-        _menuTravaXY = null;
         _buscaVisivel(false);
     }
     document.addEventListener('click', (e) => {
-        if (document.getElementById('navMenu')?.style.display !== 'block') return;
-        // Durante a trava pós-abertura, ignora clique-fora E o fantasma no botão
-        // (o toggleMenu já se protege; isto cobre o clique que cai no mapa).
-        if (Date.now() < _menuTravaAte) return;
-        // O menu vive no <body> (fora do .nav-menu-wrap): tocar nele não é
-        // "tocar fora". Sem esta checagem o clique no item fechava o menu e o
-        // toque era descartado antes de a ação rodar.
-        if (e.target.closest('#navMenu')) {
-            // Item escolhido: fecha o menu para não ficar por cima do painel
-            // que ele mesmo abriu (agora o menu está acima dos overlays).
-            if (e.target.closest('.ig-settings-row')) fecharMenu();
-            return;
-        }
-        if (!e.target.closest('.nav-menu-wrap')) fecharMenu();
-    });
-    window.addEventListener('resize', () => {
-        const m = document.getElementById('navMenu');
-        if (m && m.style.display === 'block') _posicionarMenu(m, document.getElementById('btnMenu'));
+        if (document.getElementById('navMenu')?.style.display === 'block'
+            && !e.target.closest('.nav-menu-wrap')) fecharMenu();
     });
 
     /* -------- painéis (listas/solicitações) abertos pelo menu -------- */
