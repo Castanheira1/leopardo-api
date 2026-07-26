@@ -1176,14 +1176,6 @@ html.teclado-aberto {
     justify-content: center;
     margin: 0 0 12px;
 }
-/* No sheet do motorista, "Limpar destino" fica ABAIXO do resumo (km · km/h · °C)
-   pra não competir com o gesto da alça. */
-.acao-sheet-ofe .limpar-rota-bar {
-    margin: 2px 0 12px;
-}
-.acao-sheet-ofe .alcance-info {
-    margin: 4px 0 8px;
-}
 /* "Limpar destino": padrão Claude — amarelinho claro e suave por dentro,
    texto escuro e contorno dourado fraco (igual ao banner "Recebendo todas as
    chamadas"). As regras :hover/:active próprias vencem o verde do
@@ -3145,21 +3137,23 @@ body.aguardando-papel .navbar {
     background: #fff;
 }
 .ig-perfil-row {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-    min-height: 0;
-    padding: 14px 0;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    min-height: 48px;
+    padding: 11px 0;
     border-bottom: 1px solid #efefef;
 }
 .ig-perfil-row--last { border-bottom: none; }
 .ig-perfil-row--stack {
+    grid-template-columns: 1fr;
     gap: 8px;
+    align-items: stretch;
+    min-height: 0;
 }
 .ig-perfil-row label {
-    margin: 0; font-size: 0.78rem; font-weight: 600; color: #8e8e8e;
-    letter-spacing: 0.01em;
+    margin: 0; font-size: 0.95rem; font-weight: 450; color: #262626;
 }
 
 /* CRÍTICO: vence body.theme-dark input/select (fundo preto) */
@@ -3175,11 +3169,11 @@ body.aguardando-papel .navbar {
     background: transparent !important;
     box-shadow: none !important;
     font: inherit;
-    font-size: 1rem;
-    font-weight: 500;
+    font-size: 0.95rem;
+    font-weight: 450;
     color: #262626 !important;
     padding: 0;
-    text-align: left;
+    text-align: right;
     appearance: none;
     -webkit-appearance: none;
     border-radius: 0;
