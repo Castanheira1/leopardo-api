@@ -40,6 +40,16 @@ ok(
   "handler de clique-fora reconhece o menu portado (#navMenu)"
 );
 
+// 2b) Ghost click do WebView: sem trava o menu abre e fecha no mesmo gesto.
+ok(
+  /_menuTravaAte\s*=\s*Date\.now\(\)\s*\+\s*\d+/.test(js),
+  "ao abrir, trava toggle/clique-fora contra o click sintético do WebView"
+);
+ok(
+  /if\s*\(\s*Date\.now\(\)\s*<\s*_menuTravaAte\s*\)\s*return/.test(js),
+  "toggleMenu e clique-fora respeitam a trava pós-abertura"
+);
+
 // 3) O menu tem de ficar acima do toast (9990) e dos overlays (9998/9999).
 const zMenu = Number((css.match(/\.nav-menu\s*\{[\s\S]*?z-index:\s*(\d+)/) || [])[1] || 0);
 ok(zMenu > 9999, `.nav-menu acima dos overlays (z-index ${zMenu} > 9999)`);

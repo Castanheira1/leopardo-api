@@ -420,15 +420,31 @@ async function abrirDashboard(browser, porta, { w, h, papel }) {
         ok(menuAbriu, `${tag}: hambúrguer abre o menu de configurações`);
 
         if (menuAbriu) {
+          // Fantasma típico de WebView: 2º click no hambúrguer (ou no mapa) logo
+          // após o toque. Sem trava o menu fecha no mesmo gesto.
+          const ficouAberto = await page.evaluate(() => {
+            document.getElementById("btnMenu").click();
+            document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 12, clientY: 220 }));
+            return document.getElementById("navMenu").style.display === "block";
+          });
+          ok(ficouAberto, `${tag}: menu sobrevive ao click sintético pós-toque`);
+
           let chamou = false;
+          let painelVisivel = false;
           try {
             await page.locator("#navMenu .ig-settings-row", { hasText: "Catálogo do canteiro" }).tap({ timeout: 4000 });
-            await page.waitForTimeout(400);
-            chamou = await page.evaluate(() => !!window.__abriuLocais);
+            await page.waitForTimeout(500);
+            const st = await page.evaluate(() => ({
+              chamou: !!window.__abriuLocais,
+              painel: document.getElementById("painelFavoritos")?.style.display === "flex",
+            }));
+            chamou = st.chamou;
+            painelVisivel = st.painel;
           } catch (e) {
             ok(false, `${tag}: item "Locais" aceita o toque`, e.message.split("\n")[0]);
           }
           ok(chamou, `${tag}: menu → "Locais" abre o catálogo`);
+          ok(painelVisivel, `${tag}: painel de locais fica visível (display:flex)`);
           await page.evaluate(() => { try { fecharPainel("painelFavoritos"); fecharMenu(); } catch (_) {} });
           await page.waitForTimeout(250);
         }
@@ -437,14 +453,21 @@ async function abrirDashboard(browser, porta, { w, h, papel }) {
         if (cen.papel === "passageiro") {
           await page.evaluate(() => { window.__abriuLocais = false; });
           let chamou = false;
+          let painelVisivel = false;
           try {
             await page.locator("#btnCtaPedir").tap({ timeout: 4000 });
-            await page.waitForTimeout(400);
-            chamou = await page.evaluate(() => !!window.__abriuLocais);
+            await page.waitForTimeout(500);
+            const st = await page.evaluate(() => ({
+              chamou: !!window.__abriuLocais,
+              painel: document.getElementById("painelFavoritos")?.style.display === "flex",
+            }));
+            chamou = st.chamou;
+            painelVisivel = st.painel;
           } catch (e) {
             ok(false, `${tag}: CTA "Escolher local" aceita o toque`, e.message.split("\n")[0]);
           }
           ok(chamou, `${tag}: CTA "Escolher local" abre o catálogo`);
+          ok(painelVisivel, `${tag}: CTA deixa o painel de locais visível`);
         }
 
         await ctx.close();
