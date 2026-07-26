@@ -783,10 +783,53 @@ const DESTINO = { lat: -1.400000, lng: -48.440000 };
       eq(json.status, "concluida", "status viagem");
       assert(Number(json.distancia_km) > 0, "distância deveria ser > 0");
     });
+    await test("finalizar DE NOVO a viagem concluída → 409 (não recalcula km)", async () => {
+      const antes = (await api("GET", `/api/viagens/${viagemId}`, { token: tokDriver })).json;
+      const { status } = await api("POST", `/api/viagens/${viagemId}/finalizar`, { token: tokDriver });
+      eq(status, 409, "status");
+      const depois = (await api("GET", `/api/viagens/${viagemId}`, { token: tokDriver })).json;
+      eq(String(depois.distancia_km), String(antes.distancia_km), "km não pode mudar");
+      eq(depois.finalizada_em, antes.finalizada_em, "finalizada_em não pode mudar");
+    });
     await test("GET /api/viagens lista a viagem para o passageiro", async () => {
       const { status, json } = await api("GET", "/api/viagens", { token: tokPax });
       eq(status, 200, "status");
       assert(json.some((v) => v.id === viagemId), "viagem não listada");
+    });
+    // Regressão: o auto-finalizar do motorista ao chegar no destino ressuscitava
+    // uma viagem que o passageiro já tinha cancelado pelo escape — ela voltava a
+    // 'concluida', com km e deslocamento_valido, e entrava no rateio.
+    await test("viagem CANCELADA não pode ser finalizada → 409 e continua cancelada", async () => {
+      const pg = pgTeste();
+      // Snapshot/restore: os testes de admin/rateio adiante contam viagens
+      // concluídas — esta fixture volta como estava no fim.
+      const antes = (await pg.query(
+        "SELECT status, distancia_km, deslocamento_valido FROM viagens WHERE id = $1",
+        [viagemId]
+      )).rows[0];
+      try {
+        await pg.query(
+          `UPDATE viagens SET status = 'cancelada', distancia_km = 0,
+                  deslocamento_valido = FALSE WHERE id = $1`,
+          [viagemId]
+        );
+        const { status, json } = await api("POST", `/api/viagens/${viagemId}/finalizar`, { token: tokDriver });
+        eq(status, 409, "status");
+        eq(json.status, "cancelada", "status devolvido no erro");
+        const { rows } = await pg.query(
+          "SELECT status, distancia_km, deslocamento_valido FROM viagens WHERE id = $1",
+          [viagemId]
+        );
+        eq(rows[0].status, "cancelada", "status no banco");
+        eq(Number(rows[0].distancia_km), 0, "km não pode ser gravado");
+        eq(rows[0].deslocamento_valido, false, "cancelada não pode entrar no rateio");
+      } finally {
+        await pg.query(
+          "UPDATE viagens SET status = $2, distancia_km = $3, deslocamento_valido = $4 WHERE id = $1",
+          [viagemId, antes.status, antes.distancia_km, antes.deslocamento_valido]
+        );
+        await pg.end();
+      }
     });
 
     /* =================== MOTORISTA ONLINE: VISIBILIDADE DE PEDIDOS ===================
