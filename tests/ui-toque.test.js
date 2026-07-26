@@ -160,7 +160,11 @@ function fakeMaps() {
     fitBounds() { setTimeout(() => disparar(this, "idle"), 10); }
     getBounds() { return new LatLngBounds(); }
     getDiv() { return this.el; }
-    setMapTypeId() {}
+    // getMapTypeId FALTAVA: o onclick do botão de satélite ("mundo") começa por
+    // ele, então o toque explodia em TypeError dentro da página e o teste seguia
+    // verde — o botão nunca foi exercitado de verdade aqui.
+    setMapTypeId(t) { this._tipo = t; }
+    getMapTypeId() { return this._tipo || "roadmap"; }
     setHeading() {}
     setTilt() {}
     getProjection() {
@@ -429,6 +433,60 @@ async function abrirDashboard(browser, porta, { w, h, papel }) {
           });
           ok(ficouAberto, `${tag}: menu sobrevive ao click sintético pós-toque`);
 
+          // O defeito que passou por três correções: o painel nascia EM CIMA do
+          // hambúrguer (topo do painel acima do topo do botão). O "X" do painel
+          // ficava exatamente onde o dedo estava, o click sintético batia nele e
+          // o menu sumia — "o menu não abre". Aqui exigimos a faixa do botão
+          // livre: quem atende no centro do ☰ tem de ser o próprio ☰.
+          const cobertura = await page.evaluate(() => {
+            const btn = document.getElementById("btnMenu");
+            const menu = document.getElementById("navMenu");
+            const b = btn.getBoundingClientRect();
+            const m = menu.getBoundingClientRect();
+            const atende = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+            const n = (x) => !x ? "nada" : x.tagName.toLowerCase() + (x.id ? "#" + x.id : "")
+              + (typeof x.className === "string" && x.className ? "." + x.className.trim().split(/\s+/).slice(0, 3).join(".") : "");
+            return {
+              livre: !!(atende && (atende === btn || btn.contains(atende))),
+              quem: n(atende),
+              sobrepoe: !(m.bottom <= b.top + 0.5 || m.top >= b.bottom - 0.5),
+              btn: `y${Math.round(b.top)}..${Math.round(b.bottom)}`,
+              menu: `y${Math.round(m.top)}..${Math.round(m.bottom)}`,
+            };
+          });
+          ok(cobertura.livre && !cobertura.sobrepoe,
+            `${tag}: painel aberto não cobre o próprio hambúrguer`,
+            `botão ${cobertura.btn}, painel ${cobertura.menu} — centro do ☰ atendido por ${cobertura.quem}`);
+
+          // Fantasma no MESMO ponto do toque, agora caindo dentro do painel: não
+          // pode disparar item nenhum nem fechar o menu.
+          const sobreviveuFantasmaNoPainel = await page.evaluate(() => {
+            const b = document.getElementById("btnMenu").getBoundingClientRect();
+            const x = Math.round(b.left + b.width / 2);
+            const y = Math.round(b.top + b.height / 2);
+            const alvo = document.elementFromPoint(x, y) || document.body;
+            alvo.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+            return document.getElementById("navMenu").style.display === "block";
+          });
+          ok(sobreviveuFantasmaNoPainel, `${tag}: fantasma no ponto do toque não fecha o menu`);
+
+          // Segundo toque no ☰ (depois da trava) tem de FECHAR o menu.
+          await page.waitForTimeout(600);
+          let fechouNoSegundoToque = false;
+          try {
+            await page.locator("#btnMenu").tap({ timeout: 4000 });
+            await page.waitForTimeout(300);
+            fechouNoSegundoToque = await page.evaluate(() => document.getElementById("navMenu").style.display !== "block");
+          } catch (e) {
+            ok(false, `${tag}: ☰ continua alcançável com o menu aberto`, e.message.split("\n")[0]);
+          }
+          ok(fechouNoSegundoToque, `${tag}: segundo toque no ☰ fecha o menu`);
+
+          // Reabre para seguir com o teste de "Locais".
+          await page.waitForTimeout(600);
+          await page.locator("#btnMenu").tap({ timeout: 4000 }).catch(() => {});
+          await page.waitForTimeout(400);
+
           let chamou = false;
           let painelVisivel = false;
           try {
@@ -468,6 +526,41 @@ async function abrirDashboard(browser, porta, { w, h, papel }) {
           }
           ok(chamou, `${tag}: CTA "Escolher local" abre o catálogo`);
           ok(painelVisivel, `${tag}: CTA deixa o painel de locais visível`);
+          await page.evaluate(() => { try { fecharPainel("painelFavoritos"); } catch (_) {} });
+          await page.waitForTimeout(250);
+        }
+
+        // Botão de "mundo" (satélite/camadas) do mapa: alterna de verdade.
+        // Só cobramos onde ele está visível — no aperto das telas baixas o CSS
+        // esconde o botão de propósito para o CTA continuar alcançável.
+        const btnMundo = cen.papel === "passageiro" ? "#btnTipoMapaPed" : "#btnTipoMapaOfe";
+        const mundoVisivel = await page.evaluate((s) => {
+          const el = document.querySelector(s);
+          if (!el) return false;
+          const r = el.getBoundingClientRect();
+          const cs = getComputedStyle(el);
+          return r.width > 4 && r.height > 4 && cs.visibility !== "hidden" && cs.display !== "none";
+        }, btnMundo);
+        if (mundoVisivel) {
+          let erroNaPagina = null;
+          const pegaErro = (e) => { erroNaPagina = e.message.split("\n")[0]; };
+          page.on("pageerror", pegaErro);
+          const antes = await page.evaluate(() => localStorage.getItem("tipoMapaV2"));
+          let tocou = true;
+          try {
+            await page.locator(btnMundo).tap({ timeout: 4000 });
+            await page.waitForTimeout(400);
+          } catch (e) {
+            tocou = false;
+            ok(false, `${tag}: botão de mundo aceita o toque`, e.message.split("\n")[0]);
+          }
+          const depois = await page.evaluate(() => localStorage.getItem("tipoMapaV2"));
+          page.off("pageerror", pegaErro);
+          if (tocou) {
+            ok(!erroNaPagina, `${tag}: botão de mundo não estoura erro na página`, erroNaPagina);
+            ok(depois && depois !== antes, `${tag}: botão de mundo alterna satélite/mapa leve`,
+              `tipoMapaV2 ${antes} -> ${depois}`);
+          }
         }
 
         await ctx.close();

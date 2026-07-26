@@ -58,15 +58,31 @@ ok(
   "o z-index alto também é aplicado inline ao abrir"
 );
 
-// 4) Com os avisos de cadastro na tela a barra desce; o painel precisa subir
-//    para caber inteiro, senão sobra uma fresta e "Locais" fica fora do alcance.
+// 4) O painel escolhe o lado com mais espaço e ENCOLHE para caber nele — nunca
+//    invade a faixa do hambúrguer.
+//
+//    A regra antiga era outra: altura fixa de ~640px e, se não coubesse abaixo
+//    do botão, o painel subia até caber na tela (`top + maxH > vh - margem`).
+//    Num celular de 844px isso punha o topo do painel em y=196 com o botão em
+//    y=202..240 — o painel abria EM CIMA do hambúrguer, com o "X" bem onde o
+//    dedo estava, e o click sintético do WebView fechava o menu no mesmo gesto.
+//    Por isso a expressão antiga é cobrada como AUSENTE aqui.
+//
+//    Quem prova a regra de verdade é tests/ui-toque.test.js, que mede num
+//    Chromium real se o centro do ☰ continua atendido pelo próprio ☰.
 ok(
-  /top \+ maxH > vh - margem/.test(js),
-  "painel sobe quando não cabe abaixo do botão (não abre uma fresta)"
+  !/top \+ maxH > vh - margem/.test(js),
+  "painel não é mais empurrado para cima do botão quando não cabe abaixo"
 );
 ok(
-  !/maxH = Math\.max\(180, window\.innerHeight - r\.bottom/.test(js),
-  "altura não é mais só o espaço abaixo do botão"
+  /const abaixo = vh - margem - \(r\.bottom \+ margem\)/.test(js)
+    && /const acima = r\.top - 2 \* margem/.test(js)
+    && /if \(abaixo >= acima\)/.test(js),
+  "altura vem do espaço livre do lado escolhido (abaixo vs acima)"
+);
+ok(
+  /overflow-y:\s*auto/.test(css.match(/\.nav-menu\s*\{[\s\S]*?\}/)?.[0] || ""),
+  "encolher é seguro: .nav-menu rola o que não couber"
 );
 
 // 5) Os itens que o usuário reclamou continuam existindo e ligados.
