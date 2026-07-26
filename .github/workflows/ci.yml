@@ -66,6 +66,7 @@ jobs:
           node tests/ui-sheet.test.js
           node tests/viagem-pulso-pax.test.js
           node tests/encadeamento-perna.test.js
+          node tests/viagem-finalizar-status.test.js
           node tests/rota-pista.test.js
 
       - name: Aplicar schema.sql no Postgres de teste
