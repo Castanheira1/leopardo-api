@@ -526,20 +526,42 @@
     // se cair fora do wrap, era tratado como clique-fora. Mesma ideia do
     // suprimirClickAte do slide-toggle do motorista.
     let _menuTravaAte = 0;
+    // Ponto do toque que abriu o menu — o fantasma chega NAS MESMAS coordenadas.
+    let _menuTravaXY = null;
+    // Posiciona o painel SEM NUNCA cobrir o hambúrguer.
+    //
+    // A versão anterior fixava a altura em ~640px e, se não coubesse abaixo do
+    // botão, subia o painel até caber na tela: num celular de 844px o topo caía
+    // em y=196 e o botão vive em y=202..240 — ou seja, o painel abria EM CIMA do
+    // próprio hambúrguer, com o "X" (fecharMenu) exatamente onde o dedo estava.
+    // O click sintético do WebView, ~300ms depois, batia nesse "X" e o menu
+    // sumia: para o usuário, "o menu não abre". A trava de 450ms não pegava esse
+    // caso porque ela só protege o toggleMenu e o clique-fora — não os botões de
+    // dentro do painel.
+    //
+    // Agora escolhemos o lado com mais espaço e ENCOLHEMOS o painel para caber
+    // nele. Encolher é seguro: .nav-menu tem overflow-y:auto, então o que não
+    // couber rola. O que não é negociável é a faixa do botão ficar livre.
     function _posicionarMenu(m, btn) {
         if (!m || !btn) return;
         _portalMenu(m);
         const r = btn.getBoundingClientRect();
         const margem = 8;
         const vh = window.innerHeight;
-        // Com os avisos de cadastro na tela a barra desce e sobrava uma fresta
-        // de ~180px: só 2 itens visíveis e "Locais" fora da área rolável. Se não
-        // couber abaixo do botão, o painel sobe até caber inteiro na tela.
-        const maxH = Math.max(180, Math.min(Math.round(vh * 0.78), 640, vh - 2 * margem));
-        let top = r.bottom + margem;
-        if (top + maxH > vh - margem) top = Math.max(margem, vh - margem - maxH);
+        const TETO = 640;   // mesmo teto de conforto do CSS
+        const abaixo = vh - margem - (r.bottom + margem);
+        const acima = r.top - 2 * margem;
+        let top, maxH;
+        if (abaixo >= acima) {
+            maxH = Math.min(TETO, abaixo);
+            top = r.bottom + margem;
+        } else {
+            maxH = Math.min(TETO, acima);
+            top = r.top - margem - maxH;
+        }
+        maxH = Math.max(0, Math.round(maxH));
         m.style.position = 'fixed';
-        m.style.top = Math.round(top) + 'px';
+        m.style.top = Math.round(Math.max(margem, top)) + 'px';
         m.style.right = Math.round(Math.max(margem, window.innerWidth - r.right)) + 'px';
         m.style.left = 'auto';
         m.style.bottom = 'auto';
@@ -557,13 +579,39 @@
         if (aberto) {
             _posicionarMenu(m, btn);
             _menuTravaAte = Date.now() + 450;
+            // Coordenadas reais do toque; num disparo por teclado/programático
+            // (clientX/Y = 0) usamos o centro do botão.
+            const temXY = e && (e.clientX || e.clientY);
+            _menuTravaXY = temXY
+                ? { x: e.clientX, y: e.clientY }
+                : (btn ? _centroDe(btn) : null);
+        } else {
+            _menuTravaXY = null;
         }
         m.style.display = aberto ? 'block' : 'none';
         _buscaVisivel(aberto);
     }
+    function _centroDe(el) {
+        const b = el.getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }
+    // Rede de segurança para o click sintético do WebView: em telas baixas o
+    // painel PODE legitimamente nascer colado no botão, e aí o fantasma cairia
+    // num item do menu. Engolimos só o que é fantasma de verdade — mesmo ponto
+    // do toque de abertura, dentro da trava. Toque em qualquer outro lugar do
+    // painel passa na hora (nada de menu "surdo" por 450ms).
+    document.addEventListener('click', (e) => {
+        if (!_menuTravaXY || Date.now() >= _menuTravaAte) return;
+        if (!e.target.closest || !e.target.closest('#navMenu')) return;
+        if (Math.abs(e.clientX - _menuTravaXY.x) > 24) return;
+        if (Math.abs(e.clientY - _menuTravaXY.y) > 24) return;
+        e.stopPropagation();
+        e.preventDefault();
+    }, true);
     function fecharMenu() {
         const m = document.getElementById('navMenu');
         if (m) m.style.display = 'none';
+        _menuTravaXY = null;
         _buscaVisivel(false);
     }
     document.addEventListener('click', (e) => {
