@@ -501,27 +501,21 @@
     }
 
     /* -------- menu (hambúrguer) -------- */
-    // Restaurado do commit 8ab380c — menu Instagram que funcionava, ANTES do
-    // mock amarelo e dos remendos (portal/fixed/trava) que quebraram o toque.
-    // A busca flutua com z-index acima do navbar; com o menu aberto, escondemos.
+    // A busca flutua com z-index acima do navbar (pra não sumir ao rolar); por isso
+    // ela passava por cima do menu. Enquanto o menu está aberto, escondemos a busca.
     function _buscaVisivel(menuAberto) {
         document.querySelectorAll('.map-search-wrap, .map-search-float').forEach((el) => { el.style.visibility = menuAberto ? 'hidden' : ''; });
     }
     function toggleMenu(e) {
         if (e) e.stopPropagation();
         const m = document.getElementById('navMenu');
-        if (!m) return;
         const aberto = m.style.display !== 'block';
         m.style.display = aberto ? 'block' : 'none';
         _buscaVisivel(aberto);
     }
-    function fecharMenu() {
-        const m = document.getElementById('navMenu');
-        if (m) m.style.display = 'none';
-        _buscaVisivel(false);
-    }
+    function fecharMenu() { document.getElementById('navMenu').style.display = 'none'; _buscaVisivel(false); }
     document.addEventListener('click', (e) => {
-        if (document.getElementById('navMenu')?.style.display === 'block'
+        if (document.getElementById('navMenu').style.display === 'block'
             && !e.target.closest('.nav-menu-wrap')) fecharMenu();
     });
 

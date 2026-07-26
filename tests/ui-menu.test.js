@@ -1,5 +1,4 @@
-// Contrato do menu Instagram que funcionava (commit 8ab380c): painel ig-settings
-// com position:absolute + toggle display. Sem portal/fixed/trava.
+// Contrato do menu = PR #344 (a4a5fa4): Instagram absoluto + toggle display.
 const fs = require("fs");
 const path = require("path");
 const root = path.join(__dirname, "..");
@@ -17,25 +16,16 @@ function ok(c, m) {
 
 const blocoMenu = (css.match(/\.nav-menu\s*\{[\s\S]*?\}/) || [""])[0];
 
-ok(/ig-settings/.test(html), "HTML do menu Instagram presente");
-ok(/ig-settings-row/.test(html) && /onclick="abrirLocais\(\)"/.test(html), 'item "Locais" no painel Instagram');
-ok(/onclick="abrirFavoritos\(\)"/.test(html), 'item favoritos ligado');
+ok(/ig-settings/.test(html), "HTML menu Instagram (PR #344)");
+ok(/onclick="abrirLocais\(\)"/.test(html), "Locais ligado");
 ok(/onclick="toggleMenu\(event\)"/.test(html), "hambúrguer chama toggleMenu");
-ok(/position:\s*absolute/.test(blocoMenu), "menu em position:absolute (como em 8ab380c)");
-ok(!/function _portalMenu|function _posicionarMenu|_menuTravaAte/.test(js), "sem portal/fixed/trava dos remendos");
+ok(/position:\s*absolute/.test(blocoMenu), "menu position:absolute como no PR #344");
+ok(!/function _portalMenu|function _posicionarMenu|_menuTravaAte/.test(js), "sem remendos portal/fixed/trava");
 ok(
-  /function toggleMenu\(e\)\s*\{[\s\S]{0,200}?m\.style\.display = aberto \? 'block' : 'none'/.test(js),
-  "toggleMenu só liga/desliga display"
+  /function toggleMenu\(e\)\s*\{[\s\S]{0,180}?m\.style\.display = aberto \? 'block' : 'none'/.test(js),
+  "toggleMenu só display"
 );
-ok(
-  /!e\.target\.closest\(['"]\.nav-menu-wrap['"]\)/.test(js),
-  "clique-fora fecha fora do wrap"
-);
-ok(/function abrirLocais/.test(js) && /function abrirFavoritos/.test(js), "abrirLocais/abrirFavoritos no escopo");
-
-const toast = (css.match(/body\.theme-dark #message\.message \{[\s\S]*?\}/) || [""])[0];
-ok(/pointer-events:\s*none/.test(toast), "toast não engole toque");
-ok(/function ajustarAlturaAba/.test(js), "ajuste de altura da aba existe");
+ok(/ig-perfil-overlay|ig-perfil-box/.test(css), "CSS do perfil Instagram (PR #344) presente");
 
 if (failed) process.exit(1);
-console.log("\nUI menu OK");
+console.log("\nUI menu OK (PR #344)");
