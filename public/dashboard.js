@@ -520,6 +520,12 @@
     function _portalMenu(m) {
         if (m && m.parentElement !== document.body) document.body.appendChild(m);
     }
+    // Alguns WebViews (Capacitor/Android) disparam um "click" sintético ~300ms
+    // depois do toque. Sem trava, o hambúrguer ABRE no toque real e FECHA no
+    // fantasma — o usuário vê o menu piscar ou "não abrir". O mesmo fantasma,
+    // se cair fora do wrap, era tratado como clique-fora. Mesma ideia do
+    // suprimirClickAte do slide-toggle do motorista.
+    let _menuTravaAte = 0;
     function _posicionarMenu(m, btn) {
         if (!m || !btn) return;
         _portalMenu(m);
@@ -542,11 +548,16 @@
     }
     function toggleMenu(e) {
         if (e) { e.preventDefault(); e.stopPropagation(); }
+        // Fantasma no próprio #btnMenu: sem isto o 2º click inverte o estado.
+        if (Date.now() < _menuTravaAte) return;
         const m = document.getElementById('navMenu');
         const btn = document.getElementById('btnMenu');
         if (!m) return;
         const aberto = m.style.display !== 'block';
-        if (aberto) _posicionarMenu(m, btn);
+        if (aberto) {
+            _posicionarMenu(m, btn);
+            _menuTravaAte = Date.now() + 450;
+        }
         m.style.display = aberto ? 'block' : 'none';
         _buscaVisivel(aberto);
     }
@@ -557,6 +568,9 @@
     }
     document.addEventListener('click', (e) => {
         if (document.getElementById('navMenu')?.style.display !== 'block') return;
+        // Durante a trava pós-abertura, ignora clique-fora E o fantasma no botão
+        // (o toggleMenu já se protege; isto cobre o clique que cai no mapa).
+        if (Date.now() < _menuTravaAte) return;
         // O menu vive no <body> (fora do .nav-menu-wrap): tocar nele não é
         // "tocar fora". Sem esta checagem o clique no item fechava o menu e o
         // toque era descartado antes de a ação rodar.
@@ -722,11 +736,19 @@
 
     async function abrirPainelLocais() {
         fecharMenu();
+        // Sheet colapsado esconde o CTA; ao abrir Locais por outro caminho
+        // (menu) expandimos pra tela de trás não ficar "muda" ao fechar o painel.
+        document.querySelectorAll('.acao-sheet.collapsed').forEach((s) => s.classList.remove('collapsed'));
         const titulo = document.getElementById('favTitulo');
         const subtitulo = document.getElementById('favSubtitulo');
         const filtro = document.getElementById('favFiltro');
         const lista = document.getElementById('listaFavoritos');
-        document.getElementById('painelFavoritos').style.display = 'flex';
+        const painel = document.getElementById('painelFavoritos');
+        // Garante que o overlay está no <body> e acima de qualquer sheet/mapa
+        // (mesmo truque do menu — evita painel "abrir" sem receber toque).
+        if (painel && painel.parentElement !== document.body) document.body.appendChild(painel);
+        painel.style.display = 'flex';
+        painel.style.zIndex = '10040';
         lista.innerHTML = '<div class="fav-vazio">Carregando…</div>';
 
         if (favModoPainel === 'pessoais') {
