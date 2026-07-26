@@ -116,10 +116,9 @@ body {
     flex-shrink: 0;
 }
 
-/* Menu (hambúrguer) — Configurações estilo Instagram (como em 8ab380c).
-   absolute no wrap + toggle display. Sem portal/fixed/z-index 80. */
+/* Menu (hambúrguer) — Configurações estilo Instagram */
 .nav-menu-wrap { position: relative; flex-shrink: 0; }
-.nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation; }
+.nav-menu-btn { background: #EAD298; color: #0F3D3E; border: none; border-radius: 10px; width: 44px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .nav-menu {
     position: absolute; right: 0; top: calc(100% + 8px);
     background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
@@ -129,10 +128,6 @@ body {
     max-height: min(78vh, 640px); overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
-/* Não cortar o painel Instagram que desce sobre o mapa. */
-.theme-dark .modo-bar,
-.theme-dark .modo-bar-direita,
-.theme-dark .dashboard { overflow: visible; }
 /* Compat: itens antigos (se algum JS ainda usar) */
 .nav-menu-item { display: block; width: 100%; text-align: left; padding: 14px 18px; background: none; border: none; color: #111; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
 .nav-menu-item:hover { background: #f5f5f5; color: #111; }
@@ -3178,21 +3173,23 @@ body.aguardando-papel .navbar {
     background: #fff;
 }
 .ig-perfil-row {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-    min-height: 0;
-    padding: 14px 0;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    min-height: 48px;
+    padding: 11px 0;
     border-bottom: 1px solid #efefef;
 }
 .ig-perfil-row--last { border-bottom: none; }
 .ig-perfil-row--stack {
+    grid-template-columns: 1fr;
     gap: 8px;
+    align-items: stretch;
+    min-height: 0;
 }
 .ig-perfil-row label {
-    margin: 0; font-size: 0.78rem; font-weight: 600; color: #8e8e8e;
-    letter-spacing: 0.01em;
+    margin: 0; font-size: 0.95rem; font-weight: 450; color: #262626;
 }
 
 /* CRÍTICO: vence body.theme-dark input/select (fundo preto) */
@@ -3208,11 +3205,11 @@ body.aguardando-papel .navbar {
     background: transparent !important;
     box-shadow: none !important;
     font: inherit;
-    font-size: 1rem;
-    font-weight: 500;
+    font-size: 0.95rem;
+    font-weight: 450;
     color: #262626 !important;
     padding: 0;
-    text-align: left;
+    text-align: right;
     appearance: none;
     -webkit-appearance: none;
     border-radius: 0;
