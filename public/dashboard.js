@@ -61,6 +61,39 @@
         return !!document.querySelector('.tab-content.active .acao-sheet:not(.collapsed)');
     }
     /** Restaura sheet/botão se a tela ficou "limpa" (altura 0 / teclado residual). */
+    // Prende a aba ativa ao espaço que REALMENTE sobra na tela.
+    //
+    // O piso do CSS (`min-height: min(70svh, 520px)`) é medido contra a JANELA,
+    // não contra o que resta depois da navbar e dos avisos de cadastro. Numa tela
+    // de 640px com um aviso aberto ele pedia 448px para um espaço de 392px: a aba
+    // estourava 56px para baixo e levava junto o rodapé do sheet — o CTA
+    // "Escolher local"/"Solicitar carona" ficava fora do alcance do dedo.
+    //
+    // Só ENCOLHE (nunca estica além do CSS) e só escreve quando muda de verdade,
+    // senão o ResizeObserver que chama isto entraria em laço.
+    function ajustarAlturaAba() {
+        if (document.documentElement.classList.contains('teclado-aberto')) return;
+        const tab = document.querySelector('.tab-content.active');
+        if (!tab) return;
+        const h = window.visualViewport?.height || window.innerHeight || 700;
+        const disponivel = Math.round(h - tab.getBoundingClientRect().top);
+        if (disponivel < 160) return;   // medida ainda não confiável
+        const atual = Math.round(tab.getBoundingClientRect().height);
+        if (atual <= disponivel + 2 && !tab.style.minHeight) {
+            // Cabe e o CSS está no comando: nada a fazer.
+            return;
+        }
+        if (atual <= disponivel + 2 && tab.style.minHeight === disponivel + 'px') return;
+        // min-height VENCE max-height no CSS: para encolher a aba é preciso
+        // sobrescrever o próprio piso, não só pôr um teto.
+        tab.style.minHeight = disponivel + 'px';
+        tab.style.maxHeight = disponivel + 'px';
+        const stage = tab.querySelector('.map-stage');
+        if (stage && Math.round(stage.getBoundingClientRect().height) > disponivel) {
+            stage.style.minHeight = disponivel + 'px';
+        }
+    }
+
     function garantirUiAcaoVisivel(abrirCta) {
         limparEstadoTeclado();
         // --appvh já no primeiro paint (não espera visualViewport/Maps).
@@ -74,6 +107,7 @@
                 stage.style.minHeight = Math.round(Math.min(h * 0.62, 520)) + 'px';
             }
         }
+        ajustarAlturaAba();
         document.querySelectorAll('.tab-content.active .acao-sheet').forEach((sheet) => {
             // Busca rodando ("Procurando motorista…"): o sheet fica oculto pelo
             // CSS — não força visível por cima, senão sobra um pedaço na tela.
@@ -7469,6 +7503,18 @@
             document.documentElement.style.setProperty('--sheet-kbd', '0px');
         } catch (_) {}
         instalarGuardaVoltar(fecharCamadaVoltar);
+        // Os avisos de cadastro entram DEPOIS (quando /api/perfil responde) e
+        // empurram a aba para baixo. Sem re-medir, a conta de ajustarAlturaAba
+        // ficaria presa no valor de antes deles — com o CTA fora da tela.
+        try {
+            const alvo = document.querySelector('.container');
+            if (alvo && window.ResizeObserver) {
+                new ResizeObserver(() => ajustarAlturaAba()).observe(alvo);
+                document.querySelectorAll('#avisoTelefone, #avisoCadastro').forEach((el) => {
+                    new ResizeObserver(() => ajustarAlturaAba()).observe(el);
+                });
+            }
+        } catch (_) { /* sem ResizeObserver: sobra o ajuste dos pontos normais */ }
         setTimeout(esconderBootSplash, 8000);
         carregarMaps().catch(() => {
             msg('Mapa indisponível no momento. Verifique a conexão e tente de novo.', 'error', 9000);
