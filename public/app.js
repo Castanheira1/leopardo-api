@@ -419,7 +419,10 @@ function forcarMapaRaster(map) {
 let _mapsConfigCache = null;
 async function obterConfigMaps() {
     if (_mapsConfigCache?.mapsApiKey) return _mapsConfigCache;
-    const cfg = await (await fetch('/api/config')).json();
+    const url = (window.VapPlatform && VapPlatform.apiUrl)
+        ? VapPlatform.apiUrl('/api/config')
+        : '/api/config';
+    const cfg = await (await fetch(url)).json();
     _mapsConfigCache = cfg;
     return cfg;
 }
@@ -649,6 +652,15 @@ function foraDaRota(pos, path) {
     return !p || p.distKm > FORA_DA_ROTA_KM;
 }
 
+const MAPS_BOOT_SCRIPT_MS = 40000;
+const MAPS_BOOT_IMPORT_MS = 20000;
+
+function _avisarMapsPronto() {
+    try {
+        window.dispatchEvent(new Event('vap-maps-ready'));
+    } catch (_) { /* IE antigo */ }
+}
+
 /**
  * Bootstrap do Maps com timeout + retry.
  * Rede fraca/QUIC costuma derrubar o 1º script; o 2º/3º costuma passar.
@@ -659,7 +671,11 @@ function instalarMapsBootstrap(apiKey) {
 
     const carregarScript = (tentativa) => new Promise((resolve, reject) => {
         try {
-            // Remove script morto de tentativas anteriores
+            if (window.google?.maps?.importLibrary) {
+                resolve(window.google);
+                return;
+            }
+            // Remove script morto de tentativas anteriores (só se ainda não subiu)
             document.querySelectorAll('script[data-vap-maps-boot]').forEach((s) => {
                 try { s.remove(); } catch (_) {}
             });
@@ -692,7 +708,7 @@ function instalarMapsBootstrap(apiKey) {
                 a.setAttribute('data-vap-maps-boot', '1');
                 a.async = true;
                 a.defer = true;
-                e.set('libraries', [...r] + '');
+                if (r.size) e.set('libraries', [...r].join(','));
                 for (const k in g) {
                     e.set(k.replace(/[A-Z]/g, (t) => '_' + t[0].toLowerCase()), g[k]);
                 }
@@ -701,8 +717,13 @@ function instalarMapsBootstrap(apiKey) {
                 if (tentativa > 0) e.set('_vap', String(Date.now()));
                 a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
                 const tmo = setTimeout(() => {
+                    if (window.google?.maps?.importLibrary) {
+                        clearTimeout(tmo);
+                        f();
+                        return;
+                    }
                     n(new Error('Maps bootstrap timeout'));
-                }, 14000);
+                }, MAPS_BOOT_SCRIPT_MS);
                 d[q] = () => { clearTimeout(tmo); f(); };
                 a.onerror = () => {
                     clearTimeout(tmo);
@@ -720,21 +741,21 @@ function instalarMapsBootstrap(apiKey) {
 
     window.__vapMapsBootstrap = (async () => {
         let lastErr = null;
-        // 2 tentativas (3× em rede lenta = 40s+ de espera e parece “travado”)
-        for (let t = 0; t < 2; t++) {
+        for (let t = 0; t < 3; t++) {
             try {
                 if (window.google?.maps?.importLibrary) return window.google;
                 await carregarScript(t);
                 await Promise.race([
                     window.google.maps.importLibrary('maps'),
-                    _sleepMaps(10000).then(() => { throw new Error('importLibrary maps timeout'); }),
+                    _sleepMaps(MAPS_BOOT_IMPORT_MS).then(() => { throw new Error('importLibrary maps timeout'); }),
                 ]);
                 return window.google;
             } catch (err) {
                 lastErr = err;
                 console.warn('Maps bootstrap tentativa', t + 1, err?.message || err);
+                if (window.google?.maps?.importLibrary) return window.google;
                 try { delete window.google?.maps?.[('__ib__' + t)]; } catch (_) {}
-                await _sleepMaps(400 * (t + 1));
+                await _sleepMaps(600 * (t + 1));
             }
         }
         window.__vapMapsBootstrap = null;
@@ -784,17 +805,12 @@ async function carregarMapsOnce() {
     _mapId = cfg.mapsMapId || 'DEMO_MAP_ID';
     await instalarMapsBootstrap(cfg.mapsApiKey);
 
-    // Caminho rápido: só maps + marker (abre mapa/carro). routes/places em paralelo depois.
+    // Só a lib "maps" bloqueia — marker/places/routes não podem segurar o buscador.
     let mapsLib;
-    let markerLib;
     try {
-        [mapsLib, markerLib] = await Promise.all([
-            _importLibComTimeout('maps', 10000),
-            _importLibComTimeout('marker', 10000),
-        ]);
-    } catch (_) {
         mapsLib = await _importLibComTimeout('maps', 12000);
-        markerLib = await _importLibComTimeout('marker', 12000);
+    } catch (_) {
+        mapsLib = await _importLibComTimeout('maps', 18000);
     }
 
     _RenderingType = mapsLib.RenderingType
@@ -804,12 +820,17 @@ async function carregarMapsOnce() {
     if (_RenderingType && !window.google.maps.RenderingType) {
         try { window.google.maps.RenderingType = _RenderingType; } catch (_) {}
     }
-    _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
-    _PinElement = markerLib.PinElement;
 
-    // Não bloqueia o 1º paint do mapa
+    _importLibComTimeout('marker', 15000).then((markerLib) => {
+        if (markerLib?.AdvancedMarkerElement) _AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+        if (markerLib?.PinElement) _PinElement = markerLib.PinElement;
+    }).catch((e) => {
+        console.warn('marker lib (fundo):', e?.message || e);
+    });
+
     _carregarLibsExtrasEmFundo();
 
+    _avisarMapsPronto();
     return window.google;
 }
 
@@ -817,14 +838,18 @@ function carregarMaps() {
     if (_mapsPromise) return _mapsPromise;
     _mapsPromise = (async () => {
         let lastErr = null;
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < 3; i++) {
             try {
                 return await carregarMapsOnce();
             } catch (err) {
                 lastErr = err;
                 console.warn('carregarMaps tentativa', i + 1, err?.message || err);
+                if (window.google?.maps?.importLibrary) {
+                    _avisarMapsPronto();
+                    return window.google;
+                }
                 window.__vapMapsBootstrap = null;
-                await _sleepMaps(500 * (i + 1));
+                await _sleepMaps(700 * (i + 1));
             }
         }
         throw lastErr || new Error('Não foi possível carregar o Google Maps');
@@ -1400,7 +1425,13 @@ function criarRotaControle(map, polylineOptions = {}) {
 
 // Autocomplete moderno (PlaceAutocompleteElement) no lugar do input legado.
 async function ligarPlaceAutocomplete(inputEl, { map, onPlace, onFocus } = {}) {
-    const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
+    if (!inputEl) throw new Error('input de destino ausente');
+    await carregarMaps();
+    const placesLib = await Promise.race([
+        google.maps.importLibrary('places'),
+        _sleepMaps(20000).then(() => { throw new Error('Places API timeout'); }),
+    ]);
+    const { PlaceAutocompleteElement } = placesLib;
     const wrap = document.createElement('div');
     wrap.className = 'map-search-wrap';
     inputEl.parentNode.insertBefore(wrap, inputEl);

@@ -409,6 +409,37 @@
         atualizarHintDestinoPed();
         return false;
     }
+    function reiniciarMapaAtivoSePreciso() {
+        if (document.hidden) return;
+        const tabPed = document.getElementById('tabPedir')?.classList.contains('active');
+        const tabOfe = document.getElementById('tabOferecer')?.classList.contains('active');
+        if (tabPed && !selPed) {
+            tentarInitMapaComRetries(initMapPedir, 'initMapPedir')
+                .finally(() => garantirUiAcaoVisivel(true));
+        }
+        if (tabOfe && !selOfe) {
+            tentarInitMapaComRetries(initMapOferecer, 'initMapOferecer')
+                .finally(() => garantirUiAcaoVisivel(true));
+        }
+    }
+    async function tentarInitMapaComRetries(initFn, label, maxTentativas = 5) {
+        let delay = 900;
+        for (let i = 0; i < maxTentativas; i++) {
+            try {
+                return await initFn();
+            } catch (err) {
+                console.error(label + ' falhou:', err);
+                if (i === maxTentativas - 1) {
+                    msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
+                    throw err;
+                }
+                await new Promise((r) => setTimeout(r, delay));
+                delay = Math.min(Math.round(delay * 1.7), 10000);
+            }
+        }
+    }
+    window.addEventListener('vap-maps-ready', reiniciarMapaAtivoSePreciso);
+
     function showTab(id, btn) {
         limparEstadoTeclado();
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -427,16 +458,8 @@
         if (id === 'tabPedir') {
             if (pedidoFleet.timer) { clearInterval(pedidoFleet.timer); pedidoFleet.timer = null; }
             if (!selPed) {
-                initMapPedir().catch(async (err) => {
-                    console.error('initMapPedir falhou:', err);
-                    try {
-                        await new Promise((r) => setTimeout(r, 1200));
-                        await initMapPedir();
-                    } catch (e2) {
-                        console.error('initMapPedir retry:', e2);
-                        msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
-                    }
-                }).finally(() => garantirUiAcaoVisivel(true));
+                tentarInitMapaComRetries(initMapPedir, 'initMapPedir')
+                    .finally(() => garantirUiAcaoVisivel(true));
             } else {
                 iniciarFrotaAoVivo(selPed.map);
                 selPed.recentrar();
@@ -448,16 +471,8 @@
         if (id === 'tabOferecer') {
             if (fleet.timer) { clearInterval(fleet.timer); fleet.timer = null; }
             if (!selOfe) {
-                initMapOferecer().catch(async (err) => {
-                    console.error('initMapOferecer falhou:', err);
-                    try {
-                        await new Promise((r) => setTimeout(r, 1200));
-                        await initMapOferecer();
-                    } catch (e2) {
-                        console.error('initMapOferecer retry:', e2);
-                        msg('Mapa instável na rede. Troque de aba e volte para tentar de novo.', 'error', 9000);
-                    }
-                }).finally(() => garantirUiAcaoVisivel(true));
+                tentarInitMapaComRetries(initMapOferecer, 'initMapOferecer')
+                    .finally(() => garantirUiAcaoVisivel(true));
             } else {
                 if (motoristaOnlineModo) refreshModoMotoristaOnline();
                 else { selOfe.recentrar(); }
@@ -1806,6 +1821,23 @@
             map = novoMapa(mapId, { center: origem, zoom: ZOOM_FOCO_ORIGEM });
         }
 
+        const inputEl = document.getElementById(inputId);
+        const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
+        // Buscador sobe logo após o mapa existir — não espera GPS, pulso nem rota.
+        let pacDestino = null;
+        let onPlaceAutocomplete = null;
+        const pacPronto = inputEl
+            ? ligarPlaceAutocomplete(inputEl, {
+                map,
+                onFocus: () => {
+                    const sheet = document.getElementById(sheetId);
+                    if (sheet) sheet.classList.add('collapsed');
+                },
+                onPlace: (p) => { if (onPlaceAutocomplete) onPlaceAutocomplete(p); },
+            }).then((pac) => { pacDestino = pac; return pac; })
+                .catch((e) => { console.warn('autocomplete places:', e?.message || e); return null; })
+            : Promise.resolve(null);
+
         // Seu marcador: motorista vê o CARRINHO; passageiro vê o MESMO pulso (radar por
         // sexo) que o motorista vê de quem pede carona — no lugar do bonequinho. Para o
         // passageiro o marcador fica invisível (só serve de "pega" para arrastar) e o
@@ -2041,6 +2073,18 @@
             }
         }
 
+        onPlaceAutocomplete = (p) => {
+            if (p.geometry) {
+                setDestino(
+                    { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() },
+                    p.name || p.formatted_address
+                );
+                if (inputEl) inputEl.value = '';
+                const sheet = document.getElementById(sheetId);
+                if (sheet) sheet.classList.add('collapsed');
+            }
+        };
+
         // Tocar num LUGAR nomeado do mapa (POI: portaria, hospital, britador…) usa o
         // NOME dele como destino — muito mais fácil que decorar o endereço de rua.
         // O destino também pode ser definido pela busca "Para onde vamos".
@@ -2062,30 +2106,6 @@
                 setDestino({ lat: e.latLng.lat(), lng: e.latLng.lng() });
             }
         });
-
-        const inputEl = document.getElementById(inputId);
-        const sheetId = mapId === 'mapPed' ? 'acaoSheetPed' : 'acaoSheetOfe';
-        // Places NÃO bloqueia o mapa: autocomplete sobe em paralelo (rede lenta).
-        let pacDestino = null;
-        const pacPronto = ligarPlaceAutocomplete(inputEl, {
-            map,
-            onFocus: () => {
-                const sheet = document.getElementById(sheetId);
-                if (sheet) sheet.classList.add('collapsed');
-            },
-            onPlace: (p) => {
-                if (p.geometry) {
-                    setDestino(
-                        { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() },
-                        p.name || p.formatted_address
-                    );
-                    inputEl.value = '';
-                    const sheet = document.getElementById(sheetId);
-                    if (sheet) sheet.classList.add('collapsed');
-                }
-            },
-        }).then((pac) => { pacDestino = pac; return pac; })
-            .catch((e) => { console.warn('autocomplete places:', e?.message || e); return null; });
 
         async function focarBuscaDestino() {
             const sheet = document.getElementById(sheetId);
@@ -7376,7 +7396,7 @@
         } catch (_) {}
         instalarGuardaVoltar(fecharCamadaVoltar);
         setTimeout(esconderBootSplash, 8000);
-        carregarMaps().catch(() => {});
+        carregarMaps().then(() => reiniciarMapaAtivoSePreciso()).catch(() => {});
         iniciarTransmissaoPassageiro();
 
         // 1) Viagem em andamento → volta direto nela (papel certo).
