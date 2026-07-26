@@ -322,10 +322,20 @@ async function reverterRecursosDaViagem(v) {
     }
   }
   if (v.pedido_id) {
-    await pool.query(
-      "UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'",
-      [v.pedido_id]
-    );
+    // Já embarcou / ia pro destino: cancelar o pedido. Reabrir virava "fantasma"
+    // no mapa de outros motoristas depois do escape do passageiro (#340).
+    const jaEmbarcou = !!(v.embarque_em || v.fase === "destino");
+    if (jaEmbarcou) {
+      await pool.query(
+        "UPDATE pedidos SET status = 'cancelado' WHERE id = $1 AND status IN ('aberto', 'atendido')",
+        [v.pedido_id]
+      );
+    } else {
+      await pool.query(
+        "UPDATE pedidos SET status = 'aberto' WHERE id = $1 AND status <> 'cancelado'",
+        [v.pedido_id]
+      );
+    }
   }
 }
 
