@@ -102,7 +102,7 @@ app.post("/api/propostas", verificarAuth, async (req, res) => {
          WHERE pedido_id = $1 AND status IN ('aguardando', 'ofertada') AND exclusiva LIMIT 1`,
         [pedido_id]
       )).rows[0];
-      if (temFila) return res.status(400).json({ error: "Este pedido está usando busca automática por proximidade" });
+      if (temFila) return res.status(400).json({ error: "Este pedido está na fila: só o motorista da vez pode aceitar. Aguarde a oferta." });
       para_usuario_id = ped.passageiro_id;
     }
 

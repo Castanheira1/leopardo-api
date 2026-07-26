@@ -49,7 +49,8 @@ async function emitirTokenSessao(user) {
 const verificarAuth = async (req, res, next) => {
   const auth = req.headers.authorization || "";
   const tokenHeader = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  const token = tokenHeader || req.query.token;
+  // Só Bearer — token em query vazava em logs/Referer e não é usado pelo app.
+  const token = tokenHeader;
   if (!token) return res.status(401).json({ error: "Token não fornecido" });
   try {
     const payload = jwt.verify(token, JWT_SECRET);

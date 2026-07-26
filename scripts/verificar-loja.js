@@ -50,6 +50,18 @@ for (const f of ["public/politica-privacidade.html", "public/termos-de-uso.html"
   if (exists(f)) ok(path.basename(f));
   else { fail(f + " ausente"); issues++; }
 }
+const polHtml = read("public/politica-privacidade.html");
+if (/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(polHtml) || /CPF:/i.test(polHtml)) {
+  fail("politica-privacidade.html ainda expõe CPF — use CNPJ da empresa");
+  issues++;
+} else {
+  ok("política sem CPF público");
+}
+if (/\[RAZÃO SOCIAL|\[00\.000\.000\/0001-00\]|\[DOMINIO\]/.test(polHtml)) {
+  warn("política ainda tem placeholders [CNPJ/razão/domínio] — preencha antes de cobrar");
+} else {
+  ok("política com dados do controlador preenchidos");
+}
 
 console.log("\n4. Firebase / Push");
 const gsAndroid = exists("android/app/google-services.json");
