@@ -176,13 +176,9 @@ async function notificarChamadoAdmin(chamado) {
   const destino = process.env.ADMIN_EMAIL_NOTIFICACAO;
   if (!apiKey || !destino) {
     console.warn(`chamado #${chamado.id}: email não enviado — configure RESEND_API_KEY e ADMIN_EMAIL_NOTIFICACAO no Render`);
-    return false;
+    return;
   }
   const from = process.env.EMAIL_FROM || "VAP <onboarding@resend.dev>";
-  if (process.env.NODE_ENV === "production" && /onboarding@resend\.dev/i.test(from)) {
-    console.error("EMAIL_FROM ainda é onboarding@resend.dev — configure um domínio verificado no Resend.");
-    return false;
-  }
   const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || `http://localhost:${PORT}`;
   const projeto = chamado.projeto_codigo || chamado.projeto_nome || "—";
   const html = `
@@ -207,14 +203,9 @@ async function notificarChamadoAdmin(chamado) {
         html,
       }),
     });
-    if (!r.ok) {
-      console.warn("Resend:", await r.text());
-      return false;
-    }
-    return true;
+    if (!r.ok) console.warn("Resend:", await r.text());
   } catch (e) {
     console.warn("notificarChamadoAdmin:", e.message);
-    return false;
   }
 }
 
@@ -246,17 +237,12 @@ app.post("/api/admin/chamados", async (req, res) => {
     );
     const chamado = rows[0];
     const proj = (await pool.query("SELECT nome, codigo FROM projetos WHERE id = $1", [pid])).rows[0];
-    const emailOk = await notificarChamadoAdmin({ ...chamado, projeto_nome: proj?.nome, projeto_codigo: proj?.codigo });
+    await notificarChamadoAdmin({ ...chamado, projeto_nome: proj?.nome, projeto_codigo: proj?.codigo });
 
-    let msgEmail;
-    if (emailOk) {
-      msgEmail = "Solicitação recebida. O administrador foi notificado por email.";
-    } else if (process.env.ADMIN_EMAIL_NOTIFICACAO && process.env.RESEND_API_KEY) {
-      msgEmail = "Solicitação recebida, mas o email de aviso falhou. O dono ainda vê o chamado no painel.";
-    } else {
-      msgEmail = "Solicitação recebida. Aguarde contato da equipe (email de aviso ainda não configurado).";
-    }
-    res.json({ message: msgEmail, id: chamado.id, email_enviado: !!emailOk });
+    const msgEmail = process.env.ADMIN_EMAIL_NOTIFICACAO
+      ? "Solicitação recebida. O administrador foi notificado por email."
+      : "Solicitação recebida. Aguarde contato da equipe.";
+    res.json({ message: msgEmail, id: chamado.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

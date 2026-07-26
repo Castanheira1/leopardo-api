@@ -3,25 +3,17 @@ require("dotenv").config();
 const path = require("path");
 const app = require("../app");
 const { pool } = require("../db");
-const { VAPID_PUBLIC, pushConfigurado } = require("../push");
-const pushMod = require("../push");
+const { VAPID_PUBLIC } = require("../push");
 const { verificarAuth } = require("../auth");
 
 /* ============================ CONFIG ============================ */
 app.get("/api/config", (req, res) => {
   // routesGoogle: front NÃO deve spamar /api/rotas quando false (linha reta local).
   const routesGoogle = /^(1|true|yes|on)$/i.test(String(process.env.GOOGLE_ROUTES_ENABLED || ""));
-  const emailFrom = process.env.EMAIL_FROM || "";
-  const emailPronto = Boolean(process.env.RESEND_API_KEY)
-    && Boolean(emailFrom)
-    && !/onboarding@resend\.dev/i.test(emailFrom);
   res.json({
     mapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
     mapsMapId: process.env.GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID",
     pushPublicKey: VAPID_PUBLIC,
-    pushWeb: pushConfigurado,
-    pushFcm: !!pushMod.fcmConfigurado,
-    emailPronto,
     routesGoogle,
   });
 });
@@ -34,20 +26,12 @@ const VERSAO_APP = require("../../package.json").version;
 app.get("/api/health", async (req, res) => {
   let db = false;
   try { await pool.query("SELECT 1"); db = true; } catch (_) {}
-  const emailFrom = process.env.EMAIL_FROM || "";
-  const emailPronto = Boolean(process.env.RESEND_API_KEY)
-    && Boolean(emailFrom)
-    && !/onboarding@resend\.dev/i.test(emailFrom);
   res.status(db ? 200 : 503).json({
     ok: db,
     db,
     versao: VERSAO_APP,
     uptime_s: Math.round((Date.now() - INICIO_PROCESSO) / 1000),
     agora: new Date().toISOString(),
-    push_web: pushConfigurado,
-    push_fcm: !!pushMod.fcmConfigurado,
-    email: emailPronto,
-    maps: Boolean(process.env.GOOGLE_MAPS_API_KEY),
   });
 });
 

@@ -78,7 +78,7 @@ function instalarAvisoTrocaSessao(usuarioAtual) {
 }
 
 /* -------------------- LGPD: portão de consentimento -------------------- */
-const POLITICA_VERSAO = '1.2';
+const POLITICA_VERSAO = '1.0';
 async function verificarConsentimentoLGPD() {
     try {
         if (!localStorage.getItem('token')) return;
@@ -149,9 +149,7 @@ function mostrarToast(texto, tipo = 'success') {
     if (!m) {
         m = document.createElement('div');
         m.id = 'message';
-        // pointer-events:none — o toast é aviso, não pode engolir o toque de
-        // um botão que ele cubra (ver body.theme-dark #message.message).
-        m.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;pointer-events:none;';
+        m.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;';
         document.body.appendChild(m);
     }
     m.className = 'message ' + tipo;
@@ -318,12 +316,7 @@ async function registrarPushWeb(silencioso) {
     if (Notification.permission === 'default' && silencioso) return;
 
     const cfg = await (await fetch('/api/config')).json();
-    if (!cfg.pushPublicKey) {
-        if (!silencioso && typeof mostrarToast === 'function') {
-            mostrarToast('Avisos push desligados no servidor (faltam chaves VAPID). Você ainda usa o app normalmente.', 'error');
-        }
-        return;   // servidor sem VAPID: push desligado
-    }
+    if (!cfg.pushPublicKey) return;   // servidor sem VAPID: push desligado
 
     if (Notification.permission === 'default') {
         const p = await Notification.requestPermission();

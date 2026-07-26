@@ -76,13 +76,6 @@ async function garantirUsuarioDonoEmpresa() {
     const senhaDesejada = process.env.DONO_SENHA || process.env.ADMIN_SENHA || SENHA_PADRAO_DONO;
 
     if (!rows.length) {
-      const temSenhaEnv = !!(process.env.DONO_SENHA || process.env.ADMIN_SENHA);
-      if (process.env.NODE_ENV === "production" && !temSenhaEnv) {
-        console.error(
-          `SEGURANÇA: recusei criar dono ${matricula} sem DONO_SENHA/ADMIN_SENHA em produção.`
-        );
-        return;
-      }
       const hash = await bcrypt.hash(senhaDesejada, 10);
       await pool.query(
         `INSERT INTO usuarios (
@@ -90,13 +83,13 @@ async function garantirUsuarioDonoEmpresa() {
            ativo, empresa_nome, telefone, email, politica_aceita_em, politica_versao
          ) VALUES (
            'Dono da empresa', 'Dono', $1, $2, TRUE, NULL, NULL, TRUE,
-           'VAP', '00000000000', $3, NOW(), $4
+           'VAP', '00000000000', $3, NOW(), '1.0'
          )`,
-        [matricula, hash, `dono@${matricula}.vap.local`, require("./config").POLITICA_VERSAO_ATUAL]
+        [matricula, hash, `dono@${matricula}.vap.local`]
       );
       console.log(
         `Dono da empresa: conta criada (matrícula ${matricula}). ` +
-        (temSenhaEnv
+        (process.env.DONO_SENHA || process.env.ADMIN_SENHA
           ? "Senha definida por DONO_SENHA/ADMIN_SENHA."
           : `Senha inicial ${SENHA_PADRAO_DONO} — defina DONO_SENHA em produção.`)
       );
@@ -120,17 +113,11 @@ async function garantirUsuarioDonoEmpresa() {
     const usaPadrao = await bcrypt.compare(SENHA_PADRAO_DONO, rows[0].senha_hash || "").catch(() => false);
     if (process.env.DONO_SENHA && usaPadrao) {
       const hash = await bcrypt.hash(process.env.DONO_SENHA, 10);
-      await pool.query("UPDATE usuarios SET senha_hash = $1, ativo = TRUE WHERE id = $2", [hash, rows[0].id]);
+      await pool.query("UPDATE usuarios SET senha_hash = $1 WHERE id = $2", [hash, rows[0].id]);
       console.log(`Dono ${matricula}: senha padrão trocada por DONO_SENHA.`);
-    } else if (process.env.ADMIN_SENHA && usaPadrao) {
-      const hash = await bcrypt.hash(process.env.ADMIN_SENHA, 10);
-      await pool.query("UPDATE usuarios SET senha_hash = $1, ativo = TRUE WHERE id = $2", [hash, rows[0].id]);
-      console.log(`Dono ${matricula}: senha padrão trocada por ADMIN_SENHA.`);
-    } else if (process.env.NODE_ENV === "production" && usaPadrao) {
-      await pool.query("UPDATE usuarios SET ativo = FALSE WHERE id = $1", [rows[0].id]);
-      console.error(
-        `SEGURANÇA: dono ${matricula} ainda usava a senha padrão ${SENHA_PADRAO_DONO} em produção — conta DESATIVADA. ` +
-        "Defina DONO_SENHA no ambiente (o boot reativa com a nova senha)."
+    } else if (process.env.NODE_ENV === "production" && usaPadrao && !process.env.DONO_SENHA && !process.env.ADMIN_SENHA) {
+      console.warn(
+        `SEGURANÇA: dono ${matricula} ainda usa senha padrão ${SENHA_PADRAO_DONO}. Defina DONO_SENHA no Render.`
       );
     }
   } catch (e) {

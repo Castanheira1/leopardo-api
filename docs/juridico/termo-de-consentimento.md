@@ -1,7 +1,7 @@
 # TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS PESSOAIS
 ### Aplicativo VAP — caronas entre colaboradores
 
-**Versão 1.2 — vigente desde 25/07/2026**
+**Versão 1.0 — vigente desde 03/07/2026**
 
 > **Observação para publicação:** substitua os campos entre colchetes `[ ]` pelos
 > dados reais antes de usar. Este termo acompanha a *Política de Privacidade* do
@@ -11,8 +11,7 @@
 
 ## 1. Partes
 
-**Controlador dos dados:** **[RAZÃO SOCIAL]** (CNPJ **[CNPJ]**), responsável pelo
-aplicativo VAP (doravante "Controlador").
+**Controlador dos dados:** Wanderlei Ribeiro de Castro Castanheira, CPF 035.320.691-13, pessoa física responsável pelo aplicativo VAP (doravante "Controlador"). Assim que a pessoa jurídica for constituída, este termo será atualizado com a razão social e o CNPJ correspondentes.
 
 **Titular dos dados:** você, colaborador(a) usuário(a) do aplicativo, identificado(a)
 pela matrícula informada no cadastro (doravante "Titular").
@@ -63,15 +62,10 @@ d) **Comunicação operacional e recuperação de senha** por email.
 
 O Titular **consente expressamente** com:
 
-- o uso da sua **selfie ao vivo** e da **foto do veículo** para fins de segurança
+- [ ] o uso da sua **selfie ao vivo** e da **foto do veículo** para fins de segurança
   das caronas;
-- a coleta da sua **localização (GPS)** em tempo real durante o uso e o registro
+- [ ] a coleta da sua **localização (GPS)** em tempo real durante o uso e o registro
   do **trajeto** das viagens.
-
-> **Aceite eletrônico:** o aceite deste termo no aplicativo (checkbox no cadastro ou
-> portão de consentimento) equivale à marcação de consentimento para os itens acima.
-> Não há caixas impressas a preencher — o registro eletrônico (`politica_aceita_em` e
-> `politica_versao`) comprova o consentimento.
 
 Este consentimento é condição para o uso do aplicativo, dada a natureza de segurança
 do serviço. Sem ele, não é possível ofertar nem solicitar caronas.
@@ -118,8 +112,8 @@ tratamento; acessar, corrigir e atualizar seus dados; solicitar anonimização, 
 ou eliminação de dados desnecessários ou tratados em desconformidade; pedir
 portabilidade; obter informação sobre compartilhamento; e **revogar este consentimento**.
 
-Para exercer, contate o Encarregado (DPO): **[NOME DO DPO]** — **dpo@[DOMINIO]**.
-Canal geral de suporte: **contato@[DOMINIO]**.
+Para exercer, contate o Encarregado (DPO): **Wanderlei Ribeiro de Castro Castanheira** —
+**castanheira.wrc@gmail.com**.
 
 **Revogação:** a revogação do consentimento impede o uso do aplicativo, por ser o
 consentimento indispensável às finalidades de segurança do serviço. Os dados já
@@ -140,7 +134,7 @@ minha localização (GPS) para a segurança das caronas.
 | **Nome:** | ______________________________________ |
 | **Matrícula:** | ____________________ |
 | **Data do aceite:** | ____ / ____ / ________ |
-| **Versão aceita:** | 1.2 |
+| **Versão aceita:** | 1.0 |
 
 _Aceite eletrônico: registrado automaticamente pelo aplicativo no momento do cadastro
 (ou do primeiro acesso, para contas anteriores), com data, hora e versão — campos

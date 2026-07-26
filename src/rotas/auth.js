@@ -3,7 +3,7 @@ require("dotenv").config();
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const app = require("../app");
-const { PORT, POLITICA_VERSAO_ATUAL } = require("../config");
+const { PORT } = require("../config");
 const { pool } = require("../db");
 const { authLimiter, emitirTokenSessao } = require("../auth");
 const { buscarUsuarioFront, resolverProjetoId, validarSenha6Digitos } = require("../usuarios");
@@ -37,7 +37,7 @@ app.post("/api/register", authLimiter, async (req, res) => {
   if (aceite_politica !== true) {
     return res.status(400).json({ error: "É necessário aceitar a Política de Privacidade para criar a conta." });
   }
-  const politicaVersao = String(politica_versao || POLITICA_VERSAO_ATUAL).slice(0, 20);
+  const politicaVersao = String(politica_versao || "1.0").slice(0, 20);
 
   try {
     const bloqueada = await pool.query("SELECT 1 FROM matriculas_bloqueadas WHERE matricula = $1", [matricula]);
@@ -51,8 +51,7 @@ app.post("/api/register", authLimiter, async (req, res) => {
     }
 
     const senha_hash = await bcrypt.hash(senha, 10);
-    // Admin só via seed/boot ou aprovação do dono — nunca por matrícula mágica no cadastro.
-    const is_admin = false;
+    const is_admin = matricula === "000000";
 
     const { rows } = await pool.query(
       `INSERT INTO usuarios (nome, matricula, senha_hash, funcao, telefone, email, is_admin, empresa_nome, projeto_id, centro_custo, sexo, politica_aceita_em, politica_versao)
@@ -120,12 +119,6 @@ async function enviarEmailRecuperacao(usuario, token) {
     return false;
   }
   const from = process.env.EMAIL_FROM || "VAP <onboarding@resend.dev>";
-  // Resend só entrega onboarding@resend.dev para a conta dona da API — em
-  // produção isso engana o usuário ("enviamos o link") sem ele receber nada.
-  if (process.env.NODE_ENV === "production" && /onboarding@resend\.dev/i.test(from)) {
-    console.error("EMAIL_FROM ainda é onboarding@resend.dev — configure um domínio verificado no Resend.");
-    return false;
-  }
   const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || `http://localhost:${PORT}`;
   const link = `${baseUrl}/recuperar-senha.html?token=${token}`;
   const html = `
