@@ -359,6 +359,9 @@
         document.getElementById('motStatsNum').textContent = n
             ? `${n} motorista${n > 1 ? 's' : ''} online`
             : 'Nenhum motorista online agora';
+        card.classList.toggle('mot-stats--vazio', n === 0);
+        const labTxt = document.getElementById('motStatsLabTxt');
+        if (labTxt) labTxt.textContent = n === 0 ? 'Status agora' : 'Motoristas por perto';
         const dists = (todos || []).map((it) => Number(it.dist)).filter((d) => isFinite(d) && d >= 0);
         const dEl = document.getElementById('motStatsDist');
         const eEl = document.getElementById('motStatsEta');
@@ -374,6 +377,29 @@
         // A lista detalhada respeita o estado que o usuário deixou (aberta/fechada).
         if (listas && !opts.semDestino) {
             listas.style.display = card.getAttribute('aria-expanded') === 'true' ? 'block' : 'none';
+        }
+    }
+
+    function marcarNavInferior(chave) {
+        document.querySelectorAll('.app-bottom-nav__item').forEach((el) => {
+            const on = el.getAttribute('data-nav') === chave;
+            el.classList.toggle('is-active', on);
+            if (on) el.setAttribute('aria-current', 'page');
+            else el.removeAttribute('aria-current');
+        });
+    }
+    function navInferior(destino) {
+        if (destino === 'perfil') {
+            marcarNavInferior('perfil');
+            abrirPerfil();
+            return;
+        }
+        if (destino === 'solicitar') {
+            marcarNavInferior('solicitar');
+            const papel = localStorage.getItem('papel');
+            if (papel === 'motorista') showTab('tabOferecer');
+            else if (papel === 'passageiro') showTab('tabPedir');
+            else abrirEscolhaPapel();
         }
     }
     function atualizarStatsMotoristas(indo, perto) {
@@ -1401,6 +1427,7 @@
     }
     function fecharPerfil() {
         document.getElementById('modalPerfil').style.display = 'none';
+        marcarNavInferior('solicitar');
     }
     async function salvarPerfil() {
         const tel = document.getElementById('perfilTelefone').value.trim();
