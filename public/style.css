@@ -3675,6 +3675,14 @@ body.aguardando-papel .navbar {
    O MAPA não é tocado — só a moldura em volta dele.
    ========================================================================== */
 
+/* Menu de Configurações: o teto dele não conhecia a barra de abas e o
+   último item encostava nela. Agora para com folga acima da barra
+   (cabeçalho ~152px + barra ~68px + respiro). Continua rolando por dentro. */
+.nav-menu {
+    max-height: min(70vh, 560px);
+    max-height: min(calc(100svh - 240px), 560px);
+}
+
 /* --- Faixa do papel: dourada, texto preto (Passageiro / Motorista) --- */
 .theme-dark .modo-bar {
     margin: 0 -16px;
