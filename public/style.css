@@ -3667,3 +3667,310 @@ body.aguardando-papel .navbar {
         margin-right: 12px;
     }
 }
+
+/* ==========================================================================
+   TELA DO APP — layout "mockup" (faixa dourada + sheet com ilustração + barra
+   inferior). Bloco único e no fim do arquivo de propósito: para desfazer, basta
+   apagar daqui pra baixo e reverter dashboard.html / dashboard.js.
+   O MAPA não é tocado — só a moldura em volta dele.
+   ========================================================================== */
+
+/* --- Faixa do papel: dourada, texto preto (Passageiro / Motorista) --- */
+.theme-dark .modo-bar {
+    margin: 0 -16px;
+    padding: 0 16px;
+    min-height: 52px;
+    background: #E3BC57;
+    gap: 8px;
+}
+.theme-dark .modo-titulo {
+    color: #1A1206;
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 52px;
+    letter-spacing: -0.01em;
+}
+.theme-dark .modo-bar .nav-menu-btn {
+    background: transparent;
+    color: #1A1206;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+}
+.theme-dark .modo-bar .nav-menu-btn:active { background: rgba(26, 18, 6, 0.12); }
+.theme-dark .modo-bar .modo-indicador { border-color: rgba(26, 18, 6, 0.35); }
+/* "Em andamento" legível sobre o dourado */
+.theme-dark .modo-bar .modo-acoes .btn-secondary {
+    background: rgba(26, 18, 6, 0.88);
+    border-color: rgba(26, 18, 6, 0.9);
+    color: #EAD298;
+}
+
+/* --- Busca do mapa: pílula branca mais alta, margens maiores --- */
+.map-search-wrap {
+    top: 12px;
+    width: calc(100% - 32px);
+    height: 54px;
+    border: none;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+}
+gmp-place-autocomplete.map-search-float { height: 54px; }
+.map-stage-controls { top: 78px; }
+.map-tipo-btn { width: 50px; height: 50px; }
+
+/* --- Botão "minha localização": flutua logo acima do sheet --- */
+.map-locate-btn {
+    position: absolute;
+    top: -64px;
+    right: max(14px, env(safe-area-inset-right, 0px));
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 50%;
+    background: #fff;
+    color: #1f2937;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.map-locate-btn:active { transform: scale(0.94); background: #f1f5f9; }
+.acao-sheet.collapsed .map-locate-btn { top: -60px; }
+
+/* --- Cabeçalho do sheet: título grande à esquerda + ilustração à direita --- */
+.acao-sheet { border-radius: 24px 24px 0 0; }
+.acao-sheet:not(.collapsed) .acao-grip { padding: 10px 0 2px; gap: 8px; }
+.acao-grip { align-items: stretch; }
+.acao-grip .acao-handle { align-self: center; }
+.sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+}
+.sheet-head--vazio { display: none; }
+.sheet-head-txt {
+    display: block;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.acao-sheet .sheet-head .acao-titulo {
+    display: block;
+    font-size: 1.45rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    color: #fff;
+}
+.acao-sheet .sheet-head .cam-hint {
+    margin: 4px 0 0;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+    text-align: left;
+    color: #9aa0a6;
+    font-size: 0.84rem;
+    line-height: 1.35;
+}
+.acao-sheet .sheet-head .cam-hint strong { color: #cfd2d6; font-weight: 600; }
+.sheet-head-art {
+    flex: 0 0 auto;
+    width: 92px;
+    display: block;
+}
+.sheet-head-art-img { width: 100%; height: auto; display: block; }
+/* Colapsado: só a alça + o título (sem texto de apoio nem ilustração) */
+.acao-sheet.collapsed .sheet-head .cam-hint,
+.acao-sheet.collapsed .sheet-head-art { display: none; }
+.acao-sheet.collapsed .sheet-head .acao-titulo { font-size: 1.05rem; text-align: center; }
+.acao-sheet.collapsed .sheet-head { justify-content: center; }
+
+/* --- Campos "Quando? / Quantas pessoas?": rótulo com ícone + caixa com seta --- */
+.acao-sheet .form-row-2col {
+    max-width: none;
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+    gap: 10px;
+}
+.acao-sheet .form-row-2col .form-group { margin-bottom: 6px; }
+.acao-sheet .form-group label,
+.acao-sheet .form-row-2col .form-group label {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    min-height: 0;
+    margin-bottom: 6px;
+    text-align: left;
+    color: #cfd2d6;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.acao-sheet .form-group label svg { flex-shrink: 0; color: #EAD298; }
+.campo-sel { position: relative; display: block; }
+.campo-sel::after {
+    content: '';
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin-top: -6px;
+    pointer-events: none;
+    background: no-repeat center/12px 12px
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa0a6' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+.acao-sheet .campo-sel input,
+.acao-sheet .form-row-2col .form-group .campo-sel input {
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 32px 10px 13px;
+    text-align: left;
+    background: #202226;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    color: #fff;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+}
+/* Seta própria no lugar do ícone nativo — o toque na seta ainda abre o calendário */
+.campo-sel input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 44px;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.campo-sel input[type="number"]::-webkit-outer-spin-button,
+.campo-sel input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* --- Card "Motoristas por perto": ícone dourado + valor + colunas --- */
+.mot-stats {
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 18px;
+}
+.mot-stats-head { gap: 10px; color: inherit; }
+.mot-stats-ico {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #E3BC57;
+    color: #1A1206;
+}
+.mot-stats-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
+.mot-stats-lab { color: #9aa0a6; font-size: 0.8rem; }
+.mot-stats-num { font-size: 0.85rem; }
+.mot-stats-chev { flex: 0 0 auto; color: #9aa0a6; }
+.mot-stats-cols {
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* --- CTA dourado em pílula, com o pin à direita --- */
+.btn-cta-sheet {
+    position: relative;
+    max-width: none;
+    border-radius: 999px;
+    font-size: 1.08rem;
+    font-weight: 800;
+}
+.btn-cta-pin::after {
+    content: '';
+    position: absolute;
+    right: 22px;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    margin-top: -11px;
+    pointer-events: none;
+    background: no-repeat center/22px 22px
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230F3D3E'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z'/%3E%3C/svg%3E");
+}
+.btn-cta-sheet:disabled::after { opacity: 0.45; }
+.acao-sheet-footer { padding: 12px 0 14px; }
+
+/* --- Barra inferior do app --- */
+.app-tabbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    background: #0b0b0d;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    z-index: 45;
+}
+.app-tab {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 2px;
+    border: none;
+    background: transparent;
+    color: #8b9096;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.app-tab-ico {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 30px;
+    border-radius: 12px;
+}
+.app-tab-lab { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.01em; }
+.app-tab--on { color: #EAD298; }
+.app-tab--on .app-tab-ico { background: rgba(234, 210, 152, 0.16); }
+.app-tab:active .app-tab-ico { background: rgba(255, 255, 255, 0.08); }
+
+/* Altura: a barra inferior come ~68px — os mínimos do palco/sheet recuam
+   na mesma medida para o CTA nunca ficar cortado em telas curtas. */
+body.theme-dark .tab-content.active { min-height: min(62svh, 460px); }
+body.theme-dark .map-stage { min-height: min(52svh, 380px); }
+
+/* Moldura de iPhone no PC: a curva de baixo passa a ser da barra de abas */
+@media (min-width: 1024px) {
+    body.app-mobile.theme-dark .container { border-radius: 0; }
+    body.app-mobile .map-stage,
+    body.app-mobile .viagem-wrap,
+    body.app-mobile .acao-sheet,
+    body.app-mobile .viagem-sheet {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+    body.app-mobile .app-tabbar {
+        border-radius: 0 0 var(--phone-inner-r) var(--phone-inner-r);
+    }
+}
