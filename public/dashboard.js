@@ -466,6 +466,52 @@
         }
     }
 
+    /* -------- barra inferior do app (Solicitar / Viagens / Mensagens / Perfil) -------- */
+    // Rótulo da 1ª aba acompanha o papel: passageiro pede, motorista oferece.
+    function aplicarPapelNaUi(papel) {
+        const tit = document.getElementById('modoTitulo');
+        if (tit) tit.textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
+        const lab = document.getElementById('tabbarInicioLab');
+        if (lab) lab.textContent = papel === 'motorista' ? 'Oferecer' : 'Solicitar';
+    }
+    function tabbarIr(qual) {
+        fecharMenu();
+        if (qual === 'inicio') return voltarParaAtividadeAtual();
+        if (qual === 'viagens') { window.location.href = 'historico.html'; return; }
+        if (qual === 'mensagens') return abrirConversaViagem();
+        if (qual === 'perfil') return abrirPerfil();
+    }
+    // "Mensagens" = conversa da viagem em andamento (WhatsApp do outro lado).
+    // Fora de viagem não há com quem falar — avisa em vez de abrir nada.
+    async function abrirConversaViagem() {
+        const vv = viagemView;
+        if (!vv || vv.status !== 'em_andamento') {
+            msg('As mensagens abrem durante a viagem — é lá que você fala com o motorista ou o passageiro.', 'error', 7000);
+            return;
+        }
+        let tel = vv.contatoTelefone;
+        if (!tel) {
+            try {
+                const r = await fetchWithAuth('/api/viagens/' + vv.id);
+                if (r?.ok) {
+                    const v = await r.json();
+                    tel = (vv.ehMotorista ? v.passageiro_telefone : v.motorista_telefone) || '';
+                    if (tel) vv.contatoTelefone = tel;
+                }
+            } catch (_) {}
+        }
+        if (!tel) { msg('Contato indisponível nesta viagem.', 'error'); return; }
+        const alvo = (vv.contatoNome || '').trim().split(/\s+/)[0] || '';
+        abrirWhatsApp(tel, `Olá${alvo ? ' ' + alvo : ''}! Aqui é ${user?.nome || ''} — sobre nossa carona no VAP.`);
+    }
+    // Botão de recentralizar do mapa de pedir/oferecer (o de viagem é o próprio).
+    function recentrarMapaAtivo() {
+        const noPedir = document.getElementById('tabPedir')?.classList.contains('active');
+        const sel = noPedir ? selPed : selOfe;
+        if (sel?.recentrar) sel.recentrar();
+        else msg('Mapa ainda carregando — tente de novo em instantes.', 'error', 4000);
+    }
+
     /* -------- menu (hambúrguer) -------- */
     // A busca flutua com z-index acima do navbar (pra não sumir ao rolar); por isso
     // ela passava por cima do menu. Enquanto o menu está aberto, escondemos a busca.
@@ -1260,7 +1306,7 @@
         document.getElementById('telaPapel').style.display = 'none';
         esconderBootSplash();
         limparEstadoTeclado();
-        document.getElementById('modoTitulo').textContent = papel === 'motorista' ? 'Motorista' : 'Passageiro';
+        aplicarPapelNaUi(papel);
         document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'flex' : 'none';
         document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'flex' : 'none';
         document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'flex' : 'none';
@@ -3786,6 +3832,10 @@
         const tituloSheet = document.querySelector('#acaoSheetOfe .acao-titulo');
         if (tituloSheet) tituloSheet.textContent = motoristaOnlineModo ? '' : 'Ficar online';
         if (hint) hint.style.display = motoristaOnlineModo ? 'none' : '';
+        // Online: título e texto de apoio somem — o cabeçalho inteiro (com a
+        // ilustração) sai junto, senão sobraria só o desenho solto no sheet.
+        const headOfe = document.querySelector('#acaoSheetOfe .sheet-head');
+        if (headOfe) headOfe.classList.toggle('sheet-head--vazio', !!motoristaOnlineModo);
         if (btn) {
             btn.textContent = motoristaOnlineModo ? 'Ficar offline' : 'Ficar online';
             btn.classList.toggle('btn-danger', motoristaOnlineModo);
@@ -4922,6 +4972,9 @@
             embarqueReal: (v.fase === 'destino' && embarque) ? { ...embarque } : null,
             chegadaDestino: false, chegadaDestinoDesde: null, autoFinalizarTimer: null,
             passageiroSexo: v.passageiro_sexo || (ehMotorista ? null : user?.sexo) || null,
+            // Contato do "outro lado" — alimenta a aba Mensagens (WhatsApp da viagem).
+            contatoNome: (ehMotorista ? v.passageiro_nome : v.motorista_nome) || '',
+            contatoTelefone: (ehMotorista ? v.passageiro_telefone : v.motorista_telefone) || '',
             posMotorista: null,
             velMotoristaKmh: null,
             velMotoristaEm: 0,
@@ -7181,8 +7234,7 @@
                         localStorage.setItem('papel', papel);
                         document.body.classList.remove('aguardando-papel');
                         document.getElementById('telaPapel').style.display = 'none';
-                        document.getElementById('modoTitulo').textContent =
-                            papel === 'motorista' ? 'Motorista' : 'Passageiro';
+                        aplicarPapelNaUi(papel);
                     }
                     const ok = await abrirViagem(idLocal);
                     return !!ok;
@@ -7203,8 +7255,7 @@
             // já detecta viagem e fica em tabViagem se view existir).
             document.body.classList.remove('aguardando-papel');
             document.getElementById('telaPapel').style.display = 'none';
-            document.getElementById('modoTitulo').textContent =
-                papel === 'motorista' ? 'Motorista' : 'Passageiro';
+            aplicarPapelNaUi(papel);
             document.getElementById('navAtivar').style.display = papel === 'motorista' ? 'flex' : 'none';
             document.getElementById('menuPainelPas').style.display = papel === 'passageiro' ? 'flex' : 'none';
             document.getElementById('menuPainelMot').style.display = papel === 'motorista' ? 'flex' : 'none';

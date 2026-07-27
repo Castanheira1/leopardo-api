@@ -28,6 +28,8 @@
         <div class="nav-container">
             <img src="/logo-vap.png" class="nav-logo" alt="VAP — Conectando Pessoas">
             <span id="userName" class="nav-user"></span>
+            <!-- Menu só na faixa dourada (um lugar só). Este vão mantém a
+                 saudação centralizada entre o logo e a borda. -->
             <span class="nav-spacer" aria-hidden="true"></span>
         </div>
     </nav>
@@ -132,7 +134,7 @@
             <!-- ============ PEDIR CARONA (passageiro) ============ -->
             <div id="tabPedir" class="tab-content">
                 <div class="map-stage">
-                    <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos">
+                    <input id="destPedInput" class="map-search-hidden" placeholder="Para onde vamos?">
                     <div id="mapPed" class="map-stage-map"></div>
                     <div class="map-stage-controls" id="mapPedControls">
                         <button type="button" class="map-tipo-btn" id="btnTipoMapaPed" aria-label="Alternar satélite ou mapa leve" title="Alternar satélite ou mapa leve">
@@ -147,9 +149,22 @@
                     </div>
                     <!-- Aberto por padrão: botão visível no 1º paint (sem esperar Maps). -->
                     <div id="acaoSheetPed" class="acao-sheet acao-sheet-ped">
+                        <button type="button" class="map-locate-btn" onclick="recentrarMapaAtivo()" aria-label="Minha localização" title="Minha localização">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6"/></svg>
+                        </button>
                         <div class="acao-grip" id="gripPed">
                             <span class="acao-handle" aria-hidden="true"></span>
-                            <span class="acao-titulo">Solicitar carona</span>
+                            <div class="sheet-head">
+                                <span class="sheet-head-txt">
+                                    <span class="acao-titulo">Solicitar carona</span>
+                                    <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
+                                        Motoristas online aparecem no mapa.<br>Escolha <strong>para onde vamos</strong> para ver sua rota e pedir carona.
+                                    </p>
+                                </span>
+                                <span class="sheet-head-art" aria-hidden="true">
+                                    <img src="/ilustracao-carona.png" class="sheet-head-art-img" alt="" decoding="async">
+                                </span>
+                            </div>
                         </div>
                         <div id="limparRotaPedWrap" class="limpar-rota-bar dest-faixa-wrap" style="display:none;">
                             <div class="dest-faixa" role="status">
@@ -161,17 +176,14 @@
                             </div>
                         </div>
                         <div class="acao-sheet-body">
-                        <p id="hintEscolherDestino" class="cam-hint hint-destino-obrigatorio">
-                            Motoristas online aparecem no mapa. Escolha <strong>para onde vamos</strong> para ver sua rota e pedir carona.
-                        </p>
                         <div class="form-row form-row-2col" id="formPedRow">
                             <div class="form-group" id="horaPedWrap">
-                                <label>Quando?</label>
-                                <input type="datetime-local" id="horaPed" step="300" aria-label="Data e hora da carona">
+                                <label><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M4 10h16"/></svg> Quando?</label>
+                                <span class="campo-sel"><input type="datetime-local" id="horaPed" step="300" aria-label="Data e hora da carona"></span>
                             </div>
                             <div class="form-group" id="pessoasPedWrap">
-                                <label>Quantas pessoas?</label>
-                                <input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric" onchange="atualizarListaMotoristasPorPessoas()" oninput="atualizarListaMotoristasPorPessoas()">
+                                <label><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.9-3 3-4.6 5.5-4.6S13.6 16 14.5 19"/><path d="M16 6.2a3 3 0 0 1 0 5.6M17.6 14.8c2 .6 3.4 2.1 4 4.2"/></svg> Quantas pessoas?</label>
+                                <span class="campo-sel"><input type="number" id="pessoasPed" min="1" max="6" value="1" inputmode="numeric" onchange="atualizarListaMotoristasPorPessoas()" oninput="atualizarListaMotoristasPorPessoas()"></span>
                             </div>
                         </div>
                         <p id="hintPedidoImediato" class="cam-hint" style="display:none;margin:0 0 8px;">
@@ -182,10 +194,13 @@
                              completa atualiza. Toque abre a lista detalhada (com destino). -->
                         <button type="button" class="mot-stats" id="motStatsCard" style="display:none;" onclick="toggleListaMotoristas()" aria-expanded="false">
                             <span class="mot-stats-head">
-                                <span class="mot-stats-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg> Motoristas por perto</span>
-                                <svg class="mot-stats-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                                <span class="mot-stats-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg></span>
+                                <span class="mot-stats-main">
+                                    <span class="mot-stats-lab">Motoristas por perto</span>
+                                    <span class="mot-stats-num" id="motStatsNum">—</span>
+                                </span>
+                                <svg class="mot-stats-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                             </span>
-                            <span class="mot-stats-num" id="motStatsNum">—</span>
                             <span class="mot-stats-cols">
                                 <span class="mot-stats-col"><small>Mais próximo</small><b id="motStatsDist">—</b></span>
                                 <span class="mot-stats-col"><small>Tempo estimado</small><b id="motStatsEta">—</b></span>
@@ -205,7 +220,7 @@
                         </div>
                         </div>
                         <div class="acao-sheet-footer">
-                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet" onclick="ctaPedirClick()">Escolher local</button>
+                            <button id="btnCtaPedir" type="button" class="btn btn-primary btn-block btn-cta-sheet btn-cta-pin" onclick="ctaPedirClick()">Escolher local</button>
                         </div>
                     </div>
                 </div>
@@ -222,9 +237,22 @@
                         </button>
                     </div>
                     <div id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe">
+                        <button type="button" class="map-locate-btn" onclick="recentrarMapaAtivo()" aria-label="Minha localização" title="Minha localização">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6"/></svg>
+                        </button>
                         <div class="acao-grip" id="gripOfe">
                             <span class="acao-handle" aria-hidden="true"></span>
-                            <span class="acao-titulo">Ficar online</span>
+                            <div class="sheet-head">
+                                <span class="sheet-head-txt">
+                                    <span class="acao-titulo">Ficar online</span>
+                                    <p id="hintMotoristaOnline" class="cam-hint">
+                                        Informe as <strong>vagas</strong> e <strong>arraste para ficar online</strong>.<br>Passageiros só veem você depois de escolherem o destino deles. Destino no mapa é opcional.
+                                    </p>
+                                </span>
+                                <span class="sheet-head-art" aria-hidden="true">
+                                    <img src="/ilustracao-carona.png" class="sheet-head-art-img" alt="" decoding="async">
+                                </span>
+                            </div>
                         </div>
                         <div id="limparRotaOfeWrap" class="limpar-rota-bar" style="display:none;">
                             <button type="button" id="btnLimparOfe" class="btn btn-secondary btn-sm btn-limpar-rota">Limpar destino</button>
@@ -250,15 +278,10 @@
                             <span id="alcanceInfoTemp">—°C</span>
                         </button>
                         <div class="acao-sheet-body">
-                        <p id="hintMotoristaOnline" class="cam-hint" style="margin:0 0 10px;">
-                            Informe as <strong>vagas</strong> e <strong>arraste para ficar online</strong>.
-                            Passageiros só veem você depois de escolherem o destino deles.
-                            Destino no mapa é opcional.
-                        </p>
                         <div class="form-row" id="vagasOfeWrap">
                             <div class="form-group">
-                                <label>Vagas no carro</label>
-                                <input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric">
+                                <label><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.9-3 3-4.6 5.5-4.6S13.6 16 14.5 19"/><path d="M16 6.2a3 3 0 0 1 0 5.6M17.6 14.8c2 .6 3.4 2.1 4 4.2"/></svg> Vagas no carro</label>
+                                <span class="campo-sel"><input type="number" id="vagasOfe" min="1" max="6" value="1" inputmode="numeric"></span>
                             </div>
                         </div>
                         <div id="statusMotoristaOnline" class="ios-banner" style="display:none;" role="status" aria-live="polite">
@@ -319,6 +342,28 @@
         </div>
         <div id="message" class="message" style="display:none;"></div>
     </div>
+
+    <!-- Barra inferior do app (estilo Uber): a tela operacional, histórico,
+         conversa da viagem e perfil. Fica FORA do .container para o mapa/sheet
+         calcularem a altura certinho — o CTA nunca fica escondido atrás dela. -->
+    <nav class="app-tabbar" id="appTabbar" aria-label="Navegação do app">
+        <button type="button" class="app-tab app-tab--on" id="tabbarInicio" onclick="tabbarIr('inicio')" aria-current="page">
+            <span class="app-tab-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2v-2H5v2H3z"/><circle cx="7.5" cy="16" r="1.2" fill="currentColor"/><circle cx="16.5" cy="16" r="1.2" fill="currentColor"/></svg></span>
+            <span class="app-tab-lab" id="tabbarInicioLab">Solicitar</span>
+        </button>
+        <button type="button" class="app-tab" onclick="tabbarIr('viagens')">
+            <span class="app-tab-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.2V12l3.2 2.2"/></svg></span>
+            <span class="app-tab-lab">Viagens</span>
+        </button>
+        <button type="button" class="app-tab" onclick="tabbarIr('mensagens')">
+            <span class="app-tab-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 11.4c0 4-3.8 7.2-8.5 7.2-1 0-2-.15-2.9-.42L4 20l1.5-3.5C4.1 15.2 3.5 13.4 3.5 11.4c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2z"/></svg></span>
+            <span class="app-tab-lab">Mensagens</span>
+        </button>
+        <button type="button" class="app-tab" onclick="tabbarIr('perfil')">
+            <span class="app-tab-ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 19.5c1.6-3.7 4.2-5.3 7.2-5.3s5.6 1.6 7.2 5.3"/></svg></span>
+            <span class="app-tab-lab">Perfil</span>
+        </button>
+    </nav>
 
     <!-- Perfil / configurações (estilo Instagram) -->
     <div id="modalPerfil" class="cam-overlay cam-overlay-alto ig-perfil-overlay" style="display:none;">
