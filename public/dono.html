@@ -1092,7 +1092,9 @@
 </div>
 
 <script>
-checkAuth(true, { superOnly: true, redirectAdmin: 'admin.html' });
+(async function () {
+    const ok = await bootAuth(true, { superOnly: true, redirectAdmin: 'admin.html' });
+    if (!ok) return;
 
 const SECOES = {
     'sec-visao': { titulo: 'Visão executiva', sub: 'Aderência, custo e operação' },
@@ -2027,6 +2029,7 @@ iniTopoData();
 iniTopoSaude();
 irSecao('sec-visao');
 instalarGuardaVoltar(() => false);
+})();
 </script>
 </body>
 </html>
