@@ -111,7 +111,9 @@
 
     <script src="app.js"></script>
     <script>
-    checkAuth();
+    (async function () {
+        const ok = await bootAuth();
+        if (!ok) return;
 
     async function carregar() {
         const r = await fetchWithAuth('/api/viagens');
@@ -174,6 +176,7 @@
 
     instalarGuardaVoltar(fecharCamadaVoltar, { bloquearSaida: false });
     carregar();
+    })();
     </script>
 </body>
 </html>

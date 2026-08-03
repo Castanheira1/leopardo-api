@@ -20,10 +20,19 @@ function aplicarSaudacaoUsuario(el, nome) {
 // opts.superOnly: só dono (user.super_admin do servidor; fallback matrícula 900000).
 //   Admin de canteiro (000000) NÃO é dono → redirectAdmin || admin.html.
 // opts.redirectAdmin: destino se superOnly falhar.
+/** Aguarda a sessão durável (Preferences no nativo) antes de checkAuth. */
+async function bootAuth(adminOnly = false, opts = {}) {
+    if (window.VapPlatform?.authReady) {
+        try { await VapPlatform.authReady; } catch (_) {}
+    }
+    checkAuth(adminOnly, opts);
+    return !!(localStorage.getItem('token') && localStorage.getItem('user'));
+}
+
 function checkAuth(adminOnly = false, opts = {}) {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || 'null');
-    if (!token || !user) { location.href = 'index.html'; return; }
+    if (!token || !user) { location.replace('index.html'); return; }
     if (adminOnly && !user.is_admin) {
         avisoProximaPagina('Acesso restrito a administradores.');
         location.href = 'dashboard.html';
@@ -191,9 +200,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!navigator.onLine) aoFicarOffline();
 })();
 
-function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+async function logout() {
+    const keys = ['token', 'user', 'papel', 'viagemAtiva'];
+    keys.forEach((k) => {
+        try { localStorage.removeItem(k); } catch (_) {}
+    });
+    // No nativo o removeItem espelha em Preferences de forma assíncrona.
+    // Se redirecionar antes de limpar, o index.html reidrata a sessão morta
+    // e o usuário entra em loop login → dashboard → 401 → login.
+    if (window.VapPlatform?.prefRemove) {
+        try {
+            await Promise.all(keys.map((k) => VapPlatform.prefRemove(k)));
+        } catch (_) {}
+    }
     location.replace('index.html');
 }
 
@@ -228,7 +247,7 @@ function instalarGuardaVoltar(fecharCamada, opts = {}) {
 
 async function fetchWithAuth(url, options = {}) {
     const token = localStorage.getItem('token');
-    if (!token) { logout(); return; }
+    if (!token) { await logout(); return; }
 
     const headers = { 'Authorization': `Bearer ${token}` };
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
@@ -243,7 +262,8 @@ async function fetchWithAuth(url, options = {}) {
             if (d && d.error) msg401 = d.error;
         } catch (_) {}
         avisoProximaPagina(msg401);
-        logout();
+        await logout();
+        return;
     }
     return resp;
 }
