@@ -1116,19 +1116,21 @@ html.teclado-aberto {
     overflow-y: auto;
     touch-action: pan-y;
 }
-/* Colapsado: alça + título (a alça NUNCA some). Botão/conteúdo ao puxar pra cima. */
-.acao-sheet.collapsed .acao-sheet-body,
-.acao-sheet.collapsed .acao-sheet-footer,
-.acao-sheet.collapsed .limpar-rota-bar {
-    display: none !important;
+/* Colapsado (contrato PR #237): esconde SÓ o corpo (lista/campos).
+   A alça, a barra "Limpar rota"/faixa de destino e o RODAPÉ com Pedir/Oferecer
+   ficam ancorados na base — sempre visíveis e tocáveis. Sem transform que
+   jogue o botão pra fora da tela. */
+.acao-sheet.collapsed {
+    transform: none;
+    background: rgba(22, 23, 25, 0.96);
+}
+.acao-sheet.collapsed .acao-sheet-body {
+    display: none;
 }
 .acao-sheet.collapsed .acao-grip {
-    padding: 12px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 0 8px;
     gap: 6px;
-    min-height: 52px;
-}
-.acao-sheet.collapsed {
-    background: rgba(22, 23, 25, 0.96);
+    min-height: 0;
 }
 .acao-sheet:not(.collapsed) .acao-grip {
     gap: 6px;
@@ -1165,11 +1167,11 @@ html.teclado-aberto {
     height: 6px;
     background: rgba(234, 210, 152, 0.75);
 }
-/* Sheet colapsado com a faixa de resumo (km · km/h · °C) ou a barra de alcance:
-   sobe um pouco — sem colar na borda de baixo da tela. */
+/* Sheet colapsado com faixa de resumo/alcance: o rodapé (CTA) já dá a folga
+   de baixo — só um respiro curto entre o resumo e o botão. */
 .acao-sheet.collapsed .alcance-wrap,
 .acao-sheet.collapsed .alcance-info {
-    margin-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    margin-bottom: 4px;
 }
 .limpar-rota-bar {
     display: flex;
