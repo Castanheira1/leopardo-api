@@ -24,5 +24,18 @@ const swVer = Number((sw.match(/VERSION = "v(\d+)"/) || [])[1] || 0);
 ok(swVer >= 249, `sw versionado >= v249 (atual v${swVer})`);
 ok(/id="acaoSheetPed" class="acao-sheet acao-sheet-ped"/.test(h), "sheet ped aberto no HTML");
 ok(/id="acaoSheetOfe" class="acao-sheet acao-sheet-ofe"/.test(h), "sheet ofe aberto no HTML");
+// Contrato PR #237: colapsado esconde só o corpo — footer (Pedir/Oferecer) NÃO some.
+ok(
+  /\.acao-sheet\.collapsed\s+\.acao-sheet-body\s*\{\s*display:\s*none/.test(css),
+  "collapsed esconde so o body"
+);
+ok(
+  !/\.acao-sheet\.collapsed[^{]*\.acao-sheet-footer[\s\S]{0,120}?display:\s*none/.test(css),
+  "collapsed NAO esconde o footer (PR #237)"
+);
+ok(
+  !/\.acao-sheet\.collapsed\s+\.acao-sheet-body\s*,\s*\.acao-sheet\.collapsed\s+\.acao-sheet-footer/.test(css),
+  "collapsed nao agrupa footer com body no display:none"
+);
 if (failed) process.exit(1);
 console.log("\nUI sheet OK");
